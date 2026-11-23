@@ -3,7 +3,7 @@ import type { AgentForm } from "./form";
 import { View } from "nsh";
 import { colors, Empty, Label, row } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
-import { space, weight } from "../../../components/tokens";
+import { icon, space, weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
@@ -95,15 +95,15 @@ export function AgentPlugins(props: { form: AgentForm }) {
                       : list.filter((entry) => entry !== item().name),
                   )
                 }
-                size={16}
+                size={icon.md}
                 markSize={phoneEditor() ? 10 : 12}
-                indicatorStyle={{ margin: phoneEditor() ? 6 : 4 }}
+                indicatorStyle={{ margin: phoneEditor() ? space[8] : space[4] }}
                 style={{
                   ...row,
                   alignItems: "flex-start",
                   paddingHorizontal: space[16],
                   paddingVertical: space[8],
-                  gap: 10,
+                  gap: space[8],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   cursor: ready() || checked() ? "pointer" : "default",

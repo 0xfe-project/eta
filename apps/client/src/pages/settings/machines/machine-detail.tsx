@@ -147,7 +147,7 @@ export function MachineDetail(props: {
                           ...row,
                           flex: 1,
                           minWidth: 0,
-                          gap: 6,
+                          gap: space[4],
                           justifyContent: "flex-end",
                         }}
                       >
@@ -297,7 +297,7 @@ export function MachineDetail(props: {
             <Button
               label={uiText("remove2")}
               size={props.phone ? control.md : undefined}
-              style={props.phone ? { paddingHorizontal: 10 } : undefined}
+              style={props.phone ? { paddingHorizontal: space[12] } : undefined}
               onPress={() => removing.set(true)}
             />
           </View>

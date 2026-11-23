@@ -144,8 +144,8 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
               width: 240,
               height: space[24],
               ...textStyle(type("small")),
-              paddingHorizontal: 10,
-              paddingVertical: 3,
+              paddingHorizontal: space[12],
+              paddingVertical: space[4],
               borderColor: c().strong,
             })}
           </View>
@@ -153,7 +153,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
       >
         <View
           style={{
-            gap: 6,
+            gap: space[4],
             paddingHorizontal: space[16],
             paddingVertical: space[12],
             borderBottomWidth: 1,
@@ -265,7 +265,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
       </If>
       <If when={command() ? enrollment() : undefined}>
         {(item) => (
-          <View style={{ padding: space[16], gap: 10 }}>
+          <View style={{ padding: space[16], gap: space[8] }}>
             <Label>{uiText("runTheCommandInThatMachines")}</Label>
             <If when={commandOptions()}>
               <Field
@@ -360,7 +360,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
               gap: space[4],
             }}
           >
-            <View style={{ ...row, gap: 10, height: 22 }}>
+            <View style={{ ...row, gap: space[8], height: 22 }}>
               <PaneBack label={uiText("machineBack")} onPress={props.onClose} />
               <Label weight={weight.strong}>{title()}</Label>
             </View>
@@ -385,7 +385,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
               triggerStyle={{
                 width: 160,
                 height: space[24],
-                paddingLeft: 10,
+                paddingLeft: space[12],
                 paddingRight: space[8],
               }}
             >

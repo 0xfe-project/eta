@@ -74,7 +74,7 @@ export function ExternalAgentList(props: {
               <View
                 style={{
                   ...row,
-                  gap: 10,
+                  gap: space[8],
                   paddingHorizontal: space[16],
                   paddingVertical: space[8],
                   borderBottomWidth: 1,

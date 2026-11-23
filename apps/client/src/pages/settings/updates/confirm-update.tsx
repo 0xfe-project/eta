@@ -25,7 +25,7 @@ export function ConfirmHostUpdate(props: {
           error.set("");
         }}
       >
-        <View style={{ padding: space[16], gap: 10 }}>
+        <View style={{ padding: space[16], gap: space[8] }}>
           <Label variant="small" tone="mutedInk">
             {uiText("etaDownloadsTheReleaseBacksUp")}
           </Label>

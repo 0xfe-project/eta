@@ -188,8 +188,10 @@ function RuntimeDetail(props: {
   return (
     <View
       style={{
-        gap: 10,
-        paddingLeft: props.phone ? 54 : 50,
+        gap: space[8],
+        // Under the title: the row's inset, the icon's box and the gap after it.
+        paddingLeft:
+          space[16] + (props.phone ? control.md : space[24]) + space[8],
         paddingRight: space[16],
         paddingTop: space[2],
         paddingBottom: space[12],
@@ -378,7 +380,7 @@ function MachineRuntimes(props: {
     <View
       style={{
         ...row,
-        gap: 10,
+        gap: space[8],
         paddingHorizontal: space[16],
         paddingVertical: space[8],
         borderBottomWidth: 1,

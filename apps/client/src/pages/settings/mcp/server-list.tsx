@@ -74,7 +74,7 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
             else={
               <Empty
                 icon="plug"
-                iconSize={24}
+                iconSize={icon.lg}
                 title={uiText("mcpEmptyTitle")}
                 titleWeight={weight.regular}
                 description={uiText("mcpEmptyHint")}

@@ -107,7 +107,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
               {quietPeriod({
                 width: 160,
                 height: space[24],
-                paddingLeft: 10,
+                paddingLeft: space[12],
                 paddingRight: space[8],
               })}
             </View>
@@ -115,7 +115,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
         >
           <View
             style={{
-              gap: 6,
+              gap: space[4],
               paddingHorizontal: space[16],
               paddingVertical: space[8],
               borderBottomWidth: 1,
@@ -123,7 +123,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
             }}
           >
             <Label>{uiText("archiveFinishedTasksAfterTheyAre")}</Label>
-            {quietPeriod({ height: space[32], paddingHorizontal: 10 })}
+            {quietPeriod({ height: space[32], paddingHorizontal: space[12] })}
             <Label variant="small" tone="muted">
               {uiText("autoArchivePhoneHint")}
             </Label>
@@ -207,7 +207,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
           else={
             <Empty
               icon="archive"
-              iconSize={24}
+              iconSize={icon.lg}
               title={uiText("archivedTasksEmpty")}
               titleWeight={weight.regular}
               description={uiText("archivedTasksEmptyHint")}
@@ -254,7 +254,7 @@ function ArchivedTaskRow(props: {
         ...row,
         minHeight: space[40],
         flexShrink: 0,
-        gap: 10,
+        gap: space[8],
         paddingHorizontal: space[16],
         paddingVertical: space[8],
         borderBottomWidth: 1,
@@ -270,7 +270,7 @@ function ArchivedTaskRow(props: {
           justifyContent: "center",
         }}
       >
-        <TaskGlyph status={props.task.status} size={14} />
+        <TaskGlyph status={props.task.status} size={icon.md} />
       </View>
       <Label
         variant="small"

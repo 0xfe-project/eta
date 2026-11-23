@@ -46,7 +46,7 @@ export function SettingsNavigation(props: {
       >
         <View
           style={{
-            padding: props.phone ? 0 : 6,
+            padding: props.phone ? 0 : space[8],
             gap: props.phone ? 0 : space[2],
           }}
         >
@@ -60,8 +60,8 @@ export function SettingsNavigation(props: {
                 style={{
                   ...row,
                   height: props.phone ? 48 : 30,
-                  paddingHorizontal: props.phone ? 16 : 10,
-                  gap: props.phone ? 12 : 10,
+                  paddingHorizontal: props.phone ? space[16] : space[12],
+                  gap: props.phone ? space[12] : space[8],
                   borderBottomWidth: props.phone ? 1 : 0,
                   borderColor: c().border,
                   backgroundColor:
@@ -89,7 +89,7 @@ export function SettingsNavigation(props: {
                 </Label>
                 <If when={props.phone}>
                   <View style={{ flex: 1 }} />
-                  <View style={{ ...row, gap: 6 }}>
+                  <View style={{ ...row, gap: space[4] }}>
                     <If when={props.summary(item()[0]).tone}>
                       <StatusDot
                         color={c()[props.summary(item()[0]).tone!]}

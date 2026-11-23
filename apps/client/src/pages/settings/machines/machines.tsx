@@ -76,7 +76,7 @@ function MachineRow(props: {
         ...row,
         height: props.phone ? space[16] : space[20],
         width: props.phone ? undefined : machineUpdate.state() ? 160 : 100,
-        gap: 6,
+        gap: space[4],
       }}
     >
       <StatusDot
@@ -137,10 +137,11 @@ function MachineRow(props: {
           style={{
             ...row,
             alignItems: "flex-start",
-            gap: 10,
+            gap: space[8],
             paddingLeft: space[16],
             // Room for the menu: its trigger is 24 wide, the phone's button 28 (its minWidth wins).
-            paddingRight: 16 + (props.phone ? 28 : 24) + 10,
+            paddingRight:
+              space[16] + (props.phone ? control.md : control.sm) + space[8],
             paddingVertical: space[8],
             cursor: "pointer",
           }}
@@ -239,7 +240,9 @@ function MachineRow(props: {
             <View
               testID="machine-update-failure"
               style={{
-                paddingLeft: props.phone ? 54 : 50,
+                // Under the title: the row's inset, the icon's box and the gap after it.
+                paddingLeft:
+                  space[16] + (props.phone ? control.md : space[24]) + space[8],
                 paddingRight: space[16],
                 paddingBottom: space[8],
                 gap: space[8],
@@ -367,7 +370,7 @@ export function Machines(props: {
               <Button
                 label={uiText("connectPhone")}
                 size={phone() ? control.md : undefined}
-                style={phone() ? { paddingHorizontal: 10 } : undefined}
+                style={phone() ? { paddingHorizontal: space[12] } : undefined}
                 onPress={() => pairing.set(true)}
               />
             </If>
@@ -376,7 +379,11 @@ export function Machines(props: {
                 label={uiText("addMachine")}
                 icon="plus"
                 size={phone() ? control.md : undefined}
-                style={phone() ? { paddingHorizontal: 10, gap: 6 } : undefined}
+                style={
+                  phone()
+                    ? { paddingHorizontal: space[12], gap: space[4] }
+                    : undefined
+                }
                 onPress={() => adding.set(true)}
               />
             </If>

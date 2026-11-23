@@ -85,12 +85,12 @@ export function ClientUpdateConfirm(props: { onClose: () => void }) {
       dismissible={!update.restarting()}
       onClose={props.onClose}
     >
-      <View style={{ ...grow, padding: space[20], gap: 10 }}>
+      <View style={{ ...grow, padding: space[20], gap: space[8] }}>
         <Label weight={weight.regular}>
           {uiText("updateTheDesktopAppTo", { version: version() })}
         </Label>
         <SmoothScroll style={grow}>
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: space[8] }}>
             <Label variant="small" tone="mutedInk">
               {local()
                 ? uiText("etaQuitsSwapsInTheNew")
@@ -141,7 +141,7 @@ function ChannelSelect(props: { phone: boolean }) {
     <View
       style={{
         ...(props.phone ? {} : row),
-        gap: props.phone ? 4 : 14,
+        gap: props.phone ? space[4] : space[12],
       }}
     >
       <View
@@ -176,15 +176,15 @@ function ChannelSelect(props: { phone: boolean }) {
             color: c().ink,
             fontSize: type("small").size,
             minHeight: 29,
-            paddingHorizontal: 10,
+            paddingHorizontal: space[12],
           }}
           trigger={
             <View
               style={{
                 ...row,
                 height: props.phone ? space[32] : space[24],
-                gap: 6,
-                paddingHorizontal: 10,
+                gap: space[4],
+                paddingHorizontal: space[12],
                 borderWidth: 1,
                 borderColor: c().strong,
                 backgroundColor: c().canvas,
@@ -216,7 +216,7 @@ export function ClientAppUpdate(props: { phone: boolean }) {
     <View
       style={{
         padding: space[16],
-        gap: 9,
+        gap: space[8],
         borderTopWidth: 1,
         borderColor: c().border,
       }}
@@ -253,7 +253,7 @@ export function ClientAppUpdate(props: { phone: boolean }) {
       </If>
       <If when={update.offer()}>
         {(offer) => (
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: space[4] }}>
             <View style={{ ...row, gap: space[8] }}>
               <Label variant="small" style={{ flex: 1 }}>
                 {uiText("versionAvailable", { version: offer().version })}

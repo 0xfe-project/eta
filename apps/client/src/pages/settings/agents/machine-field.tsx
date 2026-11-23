@@ -10,7 +10,7 @@ import {
 } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
 import { StatusDot } from "../../../components/status-dot";
-import { control, space, weight } from "../../../components/tokens";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { EditorRow } from "./editor-row";
@@ -66,11 +66,11 @@ export function MachineField(props: { form: AgentForm }) {
                 label={item().title}
                 checked={picked()}
                 onChange={() => machineId.set(item().id)}
-                size={16}
+                size={icon.md}
                 style={{
                   ...row,
                   minHeight: 55,
-                  paddingHorizontal: 22,
+                  paddingHorizontal: space[24],
                   gap: space[16],
                   borderBottomWidth: 1,
                   borderColor: c().border,
@@ -81,7 +81,7 @@ export function MachineField(props: { form: AgentForm }) {
                   <Label weight={weight.regular} lines={1}>
                     {item().title}
                   </Label>
-                  <View style={{ ...row, gap: 5 }}>
+                  <View style={{ ...row, gap: space[4] }}>
                     <If when={item().id}>
                       <StatusDot
                         color={item().online ? c().green : c().strong}

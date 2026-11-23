@@ -200,7 +200,7 @@ export function TaskSettings(props: { phone?: boolean }) {
             triggerStyle={{
               width: 160,
               height: space[24],
-              paddingLeft: 10,
+              paddingLeft: space[12],
               paddingRight: space[8],
             }}
           >

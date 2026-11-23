@@ -96,7 +96,7 @@ export function StatusLane(props: { status?: EntityStatus; width?: number }) {
         ...row,
         width: props.width ?? 100,
         height: space[20],
-        gap: 6,
+        gap: space[4],
         flexShrink: 0,
       }}
     >
@@ -117,7 +117,7 @@ export function StatusLane(props: { status?: EntityStatus; width?: number }) {
 /** The phone's status line under an entity's name: a 6px square and a short label. */
 export function StatusLine(props: { status: EntityStatus }) {
   return (
-    <View style={{ ...row, height: space[16], gap: 6, flexShrink: 0 }}>
+    <View style={{ ...row, height: space[16], gap: space[4], flexShrink: 0 }}>
       <StatusDot color={props.status.color} />
       <Label variant="small" tone="mutedInk" lines={1}>
         {props.status.label}
@@ -143,7 +143,7 @@ export function PaneBack(props: {
       icon="arrowLeft"
       iconOnly
       tone="ghost"
-      iconSize={tablet() ? 14 : 16}
+      iconSize={icon.md}
       labelTone={tablet() ? "ink" : "mutedInk"}
       size={16}
       disabled={props.disabled}
@@ -160,7 +160,12 @@ export function PaneBack(props: {
 export function WarningLine(props: { text: string; outline?: boolean }) {
   return (
     <View
-      style={{ ...row, alignSelf: "stretch", gap: 6, alignItems: "flex-start" }}
+      style={{
+        ...row,
+        alignSelf: "stretch",
+        gap: space[4],
+        alignItems: "flex-start",
+      }}
     >
       <View style={{ height: space[16], justifyContent: "center" }}>
         <Icon
@@ -213,7 +218,7 @@ export function EntityRow(props: {
         ...row,
         alignItems: "flex-start",
         flexShrink: 0,
-        gap: 10,
+        gap: space[8],
         paddingHorizontal: space[16],
         paddingVertical: space[8],
         borderBottomWidth: 1,
@@ -234,7 +239,7 @@ export function EntityRow(props: {
           alignItems: "flex-start",
           flex: 1,
           minWidth: 0,
-          gap: 10,
+          gap: space[8],
           cursor: props.onPress ? "pointer" : undefined,
         }}
       >

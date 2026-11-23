@@ -118,7 +118,7 @@ export function ModelSourceList(props: {
               />
             }
             meta={
-              <View style={{ ...row, gap: 10 }}>
+              <View style={{ ...row, gap: space[8] }}>
                 <Label variant="small" tone="muted">
                   {modelCount(item())}
                 </Label>

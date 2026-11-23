@@ -177,7 +177,7 @@ function ChoiceRow<T extends string>(props: {
           triggerStyle={{
             width: props.phone ? "100%" : 160,
             height: props.phone ? space[32] : space[24],
-            paddingLeft: props.phone ? 12 : 10,
+            paddingLeft: space[12],
             paddingRight: props.phone ? space[12] : space[8],
           }}
         >
@@ -250,7 +250,7 @@ function FontRow(props: {
           width: props.phone ? "100%" : 200,
           height: props.phone ? space[32] : space[24],
           ...textStyle(type("small")),
-          paddingHorizontal: props.phone ? 12 : 10,
+          paddingHorizontal: space[12],
           paddingVertical: space[2],
           borderColor: invalid() ? c().red : c().strong,
         }}
