@@ -11,7 +11,11 @@ test("connected toolkits are a group after the plugins: one card each, named fro
   expect(app.count("id:composio-connected-item")).toBe(2);
   expect(app.count("id:composio-connected")).toBe(2);
   // The line under the group's title was asked to go.
-  expect(app.shows("Each connected toolkit is a plugin")).toBe(false);
+  expect(
+    app.shows(
+      "Each connected toolkit is a plugin: switch it here, and tick it for the agents that may use it.",
+    ),
+  ).toBe(false);
   expect(app.shows("Gmail")).toBe(true);
   expect(app.shows("ghost")).toBe(true);
   // The plugins are still there, and nothing was asked of Composio's list over the network.
