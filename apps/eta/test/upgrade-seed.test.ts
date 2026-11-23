@@ -144,6 +144,7 @@ describe("the seeds a release upgrades", () => {
       "0064-market-cache",
       "0065-plugin-icon",
       "0066-plugin-token-header",
+      "0067-cursor-credential",
     ]);
   });
 

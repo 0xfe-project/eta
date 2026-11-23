@@ -149,7 +149,8 @@ export class PluginRows {
              COALESCE((SELECT updated_at FROM plugin_config WHERE plugin = ?), 0),
              COALESCE((SELECT MAX(updated_at) FROM plugin_header WHERE plugin = ?), 0),
              COALESCE((SELECT MAX(updated_at) FROM plugin_env WHERE plugin = ?), 0),
-             COALESCE((SELECT MAX(updated_at) FROM plugin_token_header WHERE plugin = ?), 0)
+             COALESCE((SELECT MAX(updated_at) FROM plugin_token_header WHERE plugin = ?), 0),
+             COALESCE((SELECT updated_at FROM cursor_credential), 0)
            ) AS at`,
         )
         .get(plugin, plugin, plugin, plugin)?.at ?? 0
@@ -249,6 +250,27 @@ export class PluginRows {
             now,
           );
     })();
+  }
+
+  /* ------------------------------------------------------ cursor credential */
+
+  /** The Cursor credential saved for the host; undefined when there is none or its blob does not open. */
+  cursorCredential(): string | undefined {
+    const row = this.#db
+      .query<{ sealed: Uint8Array }, []>(
+        "SELECT sealed FROM cursor_credential WHERE id = 1",
+      )
+      .get();
+    return row === null ? undefined : unseal(this.#key, row.sealed);
+  }
+
+  saveCursorCredential(value: string): void {
+    this.#db
+      .query(
+        `INSERT INTO cursor_credential (id, sealed, updated_at) VALUES (1, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET sealed = excluded.sealed, updated_at = excluded.updated_at`,
+      )
+      .run(seal(this.#key, value), Date.now());
   }
 
   /* -------------------------------------------------------------------- env */
