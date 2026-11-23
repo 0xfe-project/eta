@@ -53,6 +53,9 @@ let lastCatalog: MarketCatalog | undefined;
 const POLL_MS = 3000;
 const POLL_LIMIT = 60;
 
+/** How many Composio toolkits the market draws at first, and each time Show more is pressed. */
+const BATCH = 48;
+
 export function Market(props: {
   layout: Layout;
   tabs: () => JSX.Element;
@@ -108,6 +111,13 @@ export function Market(props: {
           .includes(needle),
     );
   };
+  /** How many of the matching toolkits are drawn. A new search starts again from the first batch. */
+  const drawn = signal(BATCH);
+  effect(() => {
+    query();
+    untracked(() => drawn.set(BATCH));
+  });
+  const shownToolkits = () => toolkits().slice(0, drawn());
   const currentToolkit = () =>
     allToolkits().find((item) => toolkitKey(item) === detail());
   /** A Composio source with no key, or whose key was refused: an answer of its own, not a failure of the market. */
@@ -648,7 +658,7 @@ export function Market(props: {
                 gap: 12,
               }}
             >
-              <Each of={toolkits()} key={toolkitKey}>
+              <Each of={shownToolkits()} key={toolkitKey}>
                 {(item) => (
                   <View
                     role="button"
@@ -699,6 +709,15 @@ export function Market(props: {
                   </View>
                 )}
               </Each>
+              <If when={toolkits().length > drawn()}>
+                <View style={{ width: "100%", alignItems: "center" }}>
+                  <Button
+                    label={uiText("marketShowMore")}
+                    tone="ghost"
+                    onPress={() => drawn.update((n) => n + BATCH)}
+                  />
+                </View>
+              </If>
               <Each of={entries()} key={key}>
                 {(item) => (
                   <View

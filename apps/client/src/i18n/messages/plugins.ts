@@ -59,6 +59,7 @@ export const pluginsMessages = {
   ],
   marketSearch: ["Search plugins", "搜索插件"],
   marketNothingFound: ["Nothing found", "没有找到"],
+  marketShowMore: ["Show more", "显示更多"],
   marketInstalled: ["Installed", "已安装"],
   marketUnsupported: ["Format not supported", "格式不支持"],
   marketCommitLatest: [

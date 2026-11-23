@@ -23,10 +23,10 @@ test("only the first batch of toolkits is drawn, and Show more adds the next bat
 test("a picture is only asked for by a card that is drawn", async () => {
   const app = await open("./fixtures/market-batches.tsx", OPEN);
   await app.waitFor("text:logos:48 calls:48");
-  expect(app.shows("logos:48 calls:48")).toBe(true);
+  expect(app.shows("text:logos:48 calls:48")).toBe(true);
   await app.press("label:Show more");
   await app.waitFor("text:logos:96 calls:96");
-  expect(app.shows("logos:96 calls:96")).toBe(true);
+  expect(app.shows("text:logos:96 calls:96")).toBe(true);
 });
 
 test("a search looks through every toolkit, not only the drawn ones", async () => {
