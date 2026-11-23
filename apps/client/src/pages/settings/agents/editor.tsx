@@ -14,6 +14,7 @@ import {
   BackButton,
   CloseButton,
 } from "../../../components/navigation-buttons";
+import { weight } from "../../../components/tokens";
 
 import { localizedText, uiText } from "../../../i18n";
 import { createAgentForm } from "./form";
@@ -130,13 +131,13 @@ export function AgentEditor(props: AgentEditorProps) {
               <Label
                 variant={creating ? "body" : "subtitle"}
                 style={{ flex: 1 }}
-                weight={500}
+                weight={weight.regular}
               >
                 {title()}
               </Label>
             }
           >
-            <Label weight={600} lines={1} style={{ flex: 1 }}>
+            <Label weight={weight.strong} lines={1} style={{ flex: 1 }}>
               {title()}
             </Label>
           </If>
@@ -215,7 +216,9 @@ export function AgentEditor(props: AgentEditorProps) {
                     >
                       <Label
                         variant="small"
-                        weight={tab() === entry() ? 600 : 400}
+                        weight={
+                          tab() === entry() ? weight.strong : weight.regular
+                        }
                         tone={tab() === entry() ? "ink" : "mutedInk"}
                       >
                         {tabLabel(entry())}
@@ -265,7 +268,7 @@ export function AgentEditor(props: AgentEditorProps) {
               tone="muted"
               style={{ letterSpacing: 0.8 }}
             >{`${step()}/2`}</Label>
-            <Label variant="small" weight={600}>
+            <Label variant="small" weight={weight.strong}>
               {step() === 1
                 ? localizedText("Name and model", "名称与模型")
                 : uiText("instructions")}

@@ -19,6 +19,7 @@ import {
 import { UserFace } from "../../components/agent-face";
 import { chatText, shownMentions } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { formatLocale, localizedText, uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { reportBody, RoutineHistory } from "./history";
@@ -276,7 +277,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
           tone="primary"
           icon="play"
           size={36}
-          labelWeight={600}
+          labelWeight={weight.strong}
           style={{ paddingHorizontal: 16, gap: 6 }}
           disabled={!props.canRetry}
           onPress={props.onRetry}
@@ -403,7 +404,7 @@ export function RoutineReport(props: RoutineReportProps) {
                 when={failed()}
                 else={
                   <>
-                    <Label variant="subtitle" weight={600}>
+                    <Label variant="subtitle" weight={weight.strong}>
                       {props.run.title ?? uiText("report")}
                     </Label>
                     <chatText.View
@@ -426,7 +427,7 @@ export function RoutineReport(props: RoutineReportProps) {
                   <StatusDot color={c().red} />
                   <Label
                     variant="subtitle"
-                    weight={600}
+                    weight={weight.strong}
                     tone={props.phone ? "muted" : "mutedInk"}
                   >
                     {uiText("noReport")}
@@ -469,7 +470,7 @@ export function RoutineReport(props: RoutineReportProps) {
                     <UserFace size={20} />
                     <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
                       <View style={{ ...row, alignItems: "baseline", gap: 8 }}>
-                        <Label variant="small" weight={600}>
+                        <Label variant="small" weight={weight.strong}>
                           {uiText("me")}
                         </Label>
                         <Label variant="small" tone="muted">

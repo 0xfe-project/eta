@@ -19,6 +19,7 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { SkillFileTree } from "./file-tree";
 import { SkillFile, skillFileLink } from "./reader";
@@ -478,7 +479,7 @@ export function SkillDetail(props: {
           </View>
           <View style={{ ...row, gap: 4, minHeight: 24 }}>
             <Label variant="small" tone="muted">{`${crumbs()}  /`}</Label>
-            <Label variant="small" weight={600}>
+            <Label variant="small" weight={weight.strong}>
               {props.skill.name}
             </Label>
             {reload()}

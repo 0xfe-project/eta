@@ -24,6 +24,7 @@ import {
   SmoothScroll,
   textFaces,
 } from "../../../components";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { SkillDetail } from "./detail";
@@ -410,7 +411,7 @@ export function Skills(props: {
             description={emptyCopy().hint}
             icon="book"
             iconSize={32}
-            titleWeight={500}
+            titleWeight={weight.regular}
             titleTone="ink"
             descriptionWidth={emptyWidth()}
             style={emptyStyle}
@@ -515,7 +516,7 @@ export function Skills(props: {
                       gap: tablet() || phone() ? 2 : 4,
                     }}
                   >
-                    <Label weight={tablet() || phone() ? 400 : 500} lines={1}>
+                    <Label weight={weight.regular} lines={1}>
                       {entry().name}
                     </Label>
                     <Label

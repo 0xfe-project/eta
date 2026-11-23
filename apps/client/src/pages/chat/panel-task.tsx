@@ -15,6 +15,7 @@ import {
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
@@ -119,7 +120,7 @@ export function PanelTask(props: {
             <SmoothScroll style={grow} scrollbar={false}>
               <Label
                 variant="subtitle"
-                weight={700}
+                weight={weight.strong}
                 style={{
                   paddingTop: 12,
                   paddingBottom: 7,
@@ -156,7 +157,7 @@ export function PanelTask(props: {
                 <AgentFace id={item().createdBy.agentId ?? "user"} size={20} />
                 <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                   <View style={{ ...row, gap: 8 }}>
-                    <Label variant="small" weight={600}>
+                    <Label variant="small" weight={weight.strong}>
                       {actorLabel(item().createdBy, host.agent)}
                     </Label>
                     <Label variant="caption" tone="muted">
@@ -228,7 +229,11 @@ export function PanelTask(props: {
                   }}
                 >
                   <StatusDot color={c().blue} />
-                  <Label variant="caption" weight={600} style={{ flex: 1 }}>
+                  <Label
+                    variant="caption"
+                    weight={weight.strong}
+                    style={{ flex: 1 }}
+                  >
                     {uiText("agentIsWorking", {
                       name: state.executor()?.name ?? uiText("agent"),
                     })}
@@ -256,7 +261,7 @@ export function PanelTask(props: {
                         borderColor: c().ink,
                       }}
                     />
-                    <Label variant="caption" weight={600}>
+                    <Label variant="caption" weight={weight.strong}>
                       {uiText("stop")}
                     </Label>
                   </View>
@@ -321,7 +326,12 @@ function Edges(props: {
             }}
           >
             <TaskGlyph status={edge().status} size={12} />
-            <Label variant="small" weight={600} lines={1} style={{ flex: 1 }}>
+            <Label
+              variant="small"
+              weight={weight.strong}
+              lines={1}
+              style={{ flex: 1 }}
+            >
               {edge().title}
             </Label>
             <Label variant="caption" tone="muted">

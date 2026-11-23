@@ -3,6 +3,7 @@ import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../components";
 import { chatText, shownMentions } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { clockDistance, feedTime, runHistory, scheduleLabel } from "./schedule";
@@ -147,7 +148,7 @@ export function LatestReportCard(props: {
           {feedTime(props.run.startedAt)}
         </Label>
         <View style={{ gap: 8 }}>
-          <Label variant="subtitle" weight={600}>
+          <Label variant="subtitle" weight={weight.strong}>
             {runTitle(props.run)}
           </Label>
           <If when={props.run.report}>
@@ -184,7 +185,7 @@ export function LatestReportCard(props: {
           focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
           style={{ ...row, gap: 6, cursor: "pointer" }}
         >
-          <Label variant="small" weight={600}>
+          <Label variant="small" weight={weight.strong}>
             {uiText("readReport")}
           </Label>
           <Icon name="arrowRight" size={12} />
@@ -258,7 +259,7 @@ export function EarlierReportCard(props: {
         when={missed()}
         else={
           <>
-            <Label weight={600} lines={1}>
+            <Label weight={weight.strong} lines={1}>
               {runTitle(props.run)}
             </Label>
             <Label
@@ -273,7 +274,7 @@ export function EarlierReportCard(props: {
         <If when={props.compact}>
           <View style={{ ...row, gap: 8 }}>
             <StatusDot color={c().red} />
-            <Label weight={600} tone="muted">
+            <Label weight={weight.strong} tone="muted">
               {uiText("noReport")}
             </Label>
             <Label tone="muted" lines={1} style={{ flex: 1, minWidth: 0 }}>
@@ -285,7 +286,7 @@ export function EarlierReportCard(props: {
         <If when={!props.compact}>
           <View style={{ ...row, gap: 8 }}>
             <StatusDot color={c().red} />
-            <Label weight={600} tone="muted">
+            <Label weight={weight.strong} tone="muted">
               {uiText("noReport")}
             </Label>
           </View>

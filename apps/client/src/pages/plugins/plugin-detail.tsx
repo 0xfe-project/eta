@@ -13,6 +13,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
@@ -111,7 +112,7 @@ export function PluginDetail(props: DetailProps) {
             }}
           >
             <View style={{ ...row, flex: 1, minWidth: 0, gap: 8 }}>
-              <Label weight={600} lines={1} style={{ flexShrink: 1 }}>
+              <Label weight={weight.strong} lines={1} style={{ flexShrink: 1 }}>
                 {props.item.name}
               </Label>
               <Label variant="small" tone="muted" lines={1}>
@@ -181,7 +182,7 @@ export function PluginDetail(props: DetailProps) {
                 <View style={{ ...row, gap: 8 }}>
                   <Label
                     variant="subtitle"
-                    weight={600}
+                    weight={weight.strong}
                     lines={1}
                     style={{ flexShrink: 1 }}
                   >

@@ -137,7 +137,7 @@ export function TaskDetail(props: {
                       more.set(false);
                       action().run();
                     }}
-                    activeStyle={{ backgroundColor: `${c().selected}80` }}
+                    activeStyle={{ backgroundColor: c().selectedSoft }}
                     style={{
                       ...row,
                       height: 48,

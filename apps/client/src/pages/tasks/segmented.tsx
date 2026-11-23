@@ -1,6 +1,7 @@
 import type { TextVariant } from "../../components";
 import { View } from "nsh";
 import { colors, Label, row } from "../../components";
+import { weight } from "../../components/tokens";
 
 /** One bordered group of choices, the chosen one filled: Board / List / Plan, Overview / Plan. */
 export function Segmented<T extends string>(props: {
@@ -52,7 +53,9 @@ export function Segmented<T extends string>(props: {
             >
               <Label
                 variant={props.labelVariant ?? "small"}
-                weight={active() && props.boldActive ? 600 : 400}
+                weight={
+                  active() && props.boldActive ? weight.strong : weight.regular
+                }
                 tone={active() ? "buttonInk" : "muted"}
               >
                 {option().label}

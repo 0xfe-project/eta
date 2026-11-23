@@ -25,6 +25,7 @@ import {
   touchScreen,
 } from "../../components/menu";
 import { CloseButton } from "../../components/navigation-buttons";
+import { shadow, weight } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -176,7 +177,7 @@ export function InviteAgents(props: {
             paddingHorizontal: 14,
           }}
         >
-          <Label weight={500}>{title()}</Label>
+          <Label weight={weight.regular}>{title()}</Label>
           <CloseButton
             size={18}
             iconSize={14}
@@ -329,7 +330,7 @@ export function InviteAgents(props: {
             borderWidth: 1,
             borderColor: c().strong,
             backgroundColor: c().canvas,
-            boxShadow: [{ x: 0, y: 8, blur: 24, color: "#0000001f" }],
+            boxShadow: [shadow.popover],
           }}
         >
           {content()}

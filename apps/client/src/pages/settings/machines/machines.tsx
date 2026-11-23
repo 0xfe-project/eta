@@ -17,6 +17,7 @@ import {
 } from "../../../components";
 import { MenuRule } from "../../../components/menu";
 import { StatusDot } from "../../../components/status-dot";
+import { weight } from "../../../components/tokens";
 import { uiText, useText } from "../../../i18n";
 import { relativeTime, useHost } from "../../../services/host";
 import { SectionHeader } from "../section";
@@ -156,7 +157,7 @@ function MachineRow(props: {
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             <Label
-              weight={500}
+              weight={weight.regular}
               tone={props.item.status === "offline" ? "muted" : "ink"}
             >
               {props.item.name}

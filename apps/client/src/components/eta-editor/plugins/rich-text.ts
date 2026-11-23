@@ -1,6 +1,7 @@
 import type { TextTheme } from "../look";
 import type { TextPlugin } from "../plugin";
 import { markdown, StarterKit } from "nsh/base";
+import { weight } from "../../tokens";
 
 /**
  * Formatted text, written as Markdown is: `# ` a heading, `- ` / `1. ` / `[ ] ` a list, `> ` a
@@ -47,7 +48,7 @@ const heading = (
 ) => ({
   fontSize: theme.face(variant).size,
   lineHeight: theme.face(variant).prose,
-  fontWeight: 600,
+  fontWeight: weight.strong,
   marginTop: above,
 });
 
@@ -88,7 +89,7 @@ function proseStyles(theme: TextTheme) {
       borderColor: c.border,
       marginVertical: 6,
     },
-    strong: { fontWeight: 600 },
+    strong: { fontWeight: weight.strong },
     emphasis: { fontStyle: "italic" as const },
     strikethrough: { textDecorationLine: "line-through" as const },
     code: {

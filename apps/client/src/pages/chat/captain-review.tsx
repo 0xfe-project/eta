@@ -10,6 +10,7 @@ import {
   row,
 } from "../../components";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -120,7 +121,11 @@ export function CaptainReview(props: {
       <View
         style={{ ...row, gap: 8, paddingVertical: 5, paddingHorizontal: 10 }}
       >
-        <Label variant="small" weight={500} style={{ flexShrink: 0 }}>
+        <Label
+          variant="small"
+          weight={weight.regular}
+          style={{ flexShrink: 0 }}
+        >
           {uiText("captainReviewTitle")}
         </Label>
         <Label

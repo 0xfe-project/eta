@@ -3,6 +3,7 @@ import { Scroll, signal, View } from "nsh";
 import { Button, colors, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -189,7 +190,7 @@ export function ComposerRecipients(props: {
                         variant="small"
                         lines={1}
                         tone={selected() ? "ink" : "mutedInk"}
-                        weight={selected() ? 600 : 400}
+                        weight={selected() ? weight.strong : weight.regular}
                       >
                         {running()
                           ? uiText("memberWriting", { name: name() })

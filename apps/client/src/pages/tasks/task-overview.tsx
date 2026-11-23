@@ -27,6 +27,7 @@ import {
   shownMentions,
 } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { relativeTime, useHost } from "../../services/host";
@@ -88,7 +89,7 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
             onPress={() => log.set(entry())}
           >
             <View style={{ flex: 1, gap: 2 }}>
-              <Label variant="small" weight={600}>
+              <Label variant="small" weight={weight.strong}>
                 {uiText(review() ? "taskDeliveredTurn" : "taskIsWorking", {
                   name: executor()?.name ?? uiText("executor"),
                 })}
@@ -219,7 +220,7 @@ export function RunLine(props: {
             <If when={!props.tablet && review()}>
               <StatusDot color={c().warning} />
             </If>
-            <Label variant="caption" weight={600}>
+            <Label variant="caption" weight={weight.strong}>
               {uiText(review() ? "taskDeliveredTurn" : "taskIsWorking", {
                 name: executor()?.name ?? uiText("executor"),
               })}
@@ -247,7 +248,7 @@ export function RunLine(props: {
                 style={{ ...row, gap: 4, cursor: "pointer" }}
               >
                 <Icon name="stop" size={props.tablet ? 12 : 10} />
-                <Label variant="caption" weight={600}>
+                <Label variant="caption" weight={weight.strong}>
                   {uiText("stop")}
                 </Label>
               </View>
@@ -333,7 +334,7 @@ function DesktopOverview(props: {
                   >
                     <Label
                       variant={parent() ? "title" : "subtitle"}
-                      weight={parent() ? 600 : 700}
+                      weight={weight.strong}
                     >
                       {item().title}
                     </Label>
@@ -354,7 +355,7 @@ function DesktopOverview(props: {
                     paddingHorizontal: 8,
                     borderColor: c().ink,
                     ...textStyle(type("subtitle")),
-                    fontWeight: 600,
+                    fontWeight: weight.strong,
                   }}
                 />
               </If>
@@ -396,7 +397,7 @@ function DesktopOverview(props: {
                     }
                   >
                     <If when={!opensWithHeading()}>
-                      <Label variant="subtitle" weight={700}>
+                      <Label variant="subtitle" weight={weight.strong}>
                         {uiText("goal")}
                       </Label>
                     </If>
@@ -433,7 +434,7 @@ function DesktopOverview(props: {
               }
             >
               <View style={{ gap: 6 }}>
-                <Label weight={600}>{uiText("description")}</Label>
+                <Label weight={weight.strong}>{uiText("description")}</Label>
                 <chatText.View
                   plugins={[shownMentions()]}
                   text={{ text: item().description, mentions: agentMentions() }}
@@ -600,7 +601,11 @@ export function TaskOverview(props: {
                   <If
                     when={phone()}
                     else={
-                      <Label variant="title" weight={600} style={{ flex: 1 }}>
+                      <Label
+                        variant="title"
+                        weight={weight.strong}
+                        style={{ flex: 1 }}
+                      >
                         {item().title}
                       </Label>
                     }
@@ -609,7 +614,7 @@ export function TaskOverview(props: {
                       title={item().title}
                       state={props.state}
                       variant="subtitle"
-                      weight={600}
+                      weight={weight.strong}
                     />
                   </If>
                 </View>
@@ -673,7 +678,7 @@ export function TaskOverview(props: {
                   }}
                 >
                   <If when={!phone() || !opensWithHeading()}>
-                    <Label weight={600}>
+                    <Label weight={weight.strong}>
                       {item().children?.length
                         ? uiText("description")
                         : uiText("goal")}
@@ -962,7 +967,7 @@ export function TitleInPlace(props: {
           paddingHorizontal: 8,
           borderColor: c().ink,
           ...textStyle(type(props.variant)),
-          fontWeight: 600,
+          fontWeight: weight.strong,
         }}
       />
     </If>

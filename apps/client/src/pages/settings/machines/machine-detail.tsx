@@ -15,6 +15,7 @@ import {
   SmoothScroll,
 } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, relativeTime, useHost } from "../../../services/host";
 import { TaskGlyph } from "../../tasks/status";
@@ -208,7 +209,9 @@ export function MachineDetail(props: {
                 when={props.phone}
                 else={
                   <View style={rowStyle()}>
-                    <Label weight={600}>{uiText("runningOnThisMachine")}</Label>
+                    <Label weight={weight.strong}>
+                      {uiText("runningOnThisMachine")}
+                    </Label>
                     <Label variant="small" tone="muted">
                       {active().length}
                     </Label>

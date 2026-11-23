@@ -2,6 +2,7 @@ import type { CaptainIdentityView } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, focusRing, Label, row } from "../components";
 import { AgentFace } from "../components/agent-face";
+import { weight } from "../components/tokens";
 import { uiText, useText } from "../i18n";
 import { messageTime } from "../pages/chat/message-time";
 import { useHost } from "../services/host";
@@ -49,7 +50,7 @@ export function CaptainCard(props: { onPress: () => void }) {
         <CaptainFace size={24} />
         <View style={{ flex: 1, gap: 1 }}>
           <View style={{ ...row, gap: 8 }}>
-            <Label weight={500}>{text("captain")}</Label>
+            <Label weight={weight.regular}>{text("captain")}</Label>
             <Label variant="caption" tone="muted">
               {text(host.captain()?.status === "working" ? "working" : "idle")}
             </Label>

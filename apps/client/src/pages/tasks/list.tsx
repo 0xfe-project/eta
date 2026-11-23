@@ -2,6 +2,7 @@ import type { BoardTaskView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { signal, View } from "nsh";
 import { colors, grow, Icon, Label, row, SmoothScroll } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { ownerLine } from "./creator";
@@ -97,7 +98,7 @@ export function PhoneTaskList(props: {
               >
                 <Label
                   variant="caption"
-                  weight={600}
+                  weight={weight.strong}
                   tone={group().name === "Needs you" ? "warning" : "mutedInk"}
                   style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
                 >
@@ -166,7 +167,7 @@ export function PhoneTaskList(props: {
                         role="button"
                         accessibilityLabel={entry().title}
                         onPress={() => props.onOpen(entry().id)}
-                        activeStyle={{ backgroundColor: `${c().selected}80` }}
+                        activeStyle={{ backgroundColor: c().selectedSoft }}
                         style={{
                           ...row,
                           height: 56,
@@ -361,15 +362,11 @@ export function TabletTaskList(props: {
             onPress={() => props.onOpen(task().id)}
             hoverStyle={{
               backgroundColor:
-                task().id === props.selected
-                  ? c().selected
-                  : `${c().selected}80`,
+                task().id === props.selected ? c().selected : c().selectedSoft,
             }}
             activeStyle={{
               backgroundColor:
-                task().id === props.selected
-                  ? c().selected
-                  : `${c().selected}80`,
+                task().id === props.selected ? c().selected : c().selectedSoft,
             }}
             style={{
               ...row,
@@ -432,7 +429,7 @@ export function TaskTableRow(props: {
       role="button"
       accessibilityLabel={props.item.title}
       onPress={props.onOpen}
-      hoverStyle={{ backgroundColor: `${c().selected}80` }}
+      hoverStyle={{ backgroundColor: c().selectedSoft }}
       focusVisibleStyle={{ backgroundColor: `${c().selected}99` }}
       style={{
         ...row,

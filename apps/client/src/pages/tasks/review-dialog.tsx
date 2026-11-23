@@ -9,6 +9,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { TaskGlyph } from "./status";
 
@@ -93,7 +94,7 @@ export function TaskReviewDialog(props: {
             </Label>
             <Label variant="small">→</Label>
             <TaskGlyph status="done" />
-            <Label variant="small" weight={600}>
+            <Label variant="small" weight={weight.strong}>
               {uiText("completed")}
             </Label>
           </View>

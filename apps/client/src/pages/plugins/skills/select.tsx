@@ -3,6 +3,7 @@ import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../../components";
 import { canHover } from "../../../components/menu";
 import { LayoutSelect } from "../../../components/select";
+import { shadow } from "../../../components/tokens";
 
 /**
  * The skills page's device and project pickers: the design's select menu, as
@@ -35,7 +36,7 @@ export function SkillSelect(props: {
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
-        boxShadow: [{ x: 0, y: 8, blur: 24, color: "#0000001f" }],
+        boxShadow: [shadow.popover],
       }}
       itemStyle={{ minHeight: 28, paddingHorizontal: 0 }}
       renderItem={(entry) => {

@@ -7,6 +7,7 @@ import { signal, View } from "nsh";
 import { Button, colors, grow, Label, Modal, row } from "../../components";
 import { BackButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { LetterBox } from "./section";
@@ -92,7 +93,7 @@ export function ExternalAgentDetail(props: {
           <BackButton size={40} iconSize={16} onPress={props.onClose} />
           <View style={{ ...row, flex: 1, minWidth: 0, gap: 4 }}>
             <LetterBox name={props.agent.label} />
-            <Label weight={600} lines={1} style={{ flex: 1 }}>
+            <Label weight={weight.strong} lines={1} style={{ flex: 1 }}>
               {props.agent.label}
             </Label>
           </View>

@@ -11,6 +11,7 @@ import type { Layout } from "../../components";
 import { signal, View } from "nsh";
 import { Caption, colors, Icon, Label, row } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clock, useHost } from "../../services/host";
 import {
@@ -237,7 +238,7 @@ function WideUsage(props: {
           <Icon name={props.open ? "down" : "right"} size={10} tone="muted" />
           <Label
             variant={props.tablet ? "body" : "subtitle"}
-            weight={props.tablet ? 600 : 700}
+            weight={weight.strong}
           >
             {uiText("usageTitle")}
           </Label>
@@ -649,7 +650,7 @@ function Figure(props: {
       <View style={{ ...row, gap: 4, alignItems: "baseline" }}>
         <Label
           variant={props.strong ? "subtitle" : "body"}
-          weight={props.strong ? 700 : 400}
+          weight={props.strong ? weight.strong : weight.regular}
           tone={props.tone ?? "ink"}
         >
           {props.value}
@@ -739,7 +740,7 @@ function Cell(props: {
   return (
     <Label
       variant={props.variant ?? "small"}
-      weight={props.strong ? 500 : 400}
+      weight={weight.regular}
       tone={props.tone ?? "ink"}
       lines={1}
       style={{
@@ -815,7 +816,7 @@ function PhoneUsage(props: {
                 onPress={() => exact.set(!exact())}
                 style={{ cursor: "pointer" }}
               >
-                <Label variant="subtitle" weight={700}>
+                <Label variant="subtitle" weight={weight.strong}>
                   {uiText("usageTok", { count: tokens(sum().total) })}
                 </Label>
               </View>

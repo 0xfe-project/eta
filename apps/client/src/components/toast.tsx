@@ -4,6 +4,7 @@ import { screenInsets } from "./safe-area";
 import { StatusDot } from "./status-dot";
 import { Label } from "./text";
 import { colors, row, Screen } from "./theme";
+import { shadow, weight } from "./tokens";
 
 // A short app-wide note that goes by itself ("Updated to 0.9.1"). A native dialog (Settings on a
 // computer or tablet) is a layer over the window that nothing in the root can draw above, so each
@@ -85,7 +86,7 @@ export function ToastLayer(props: { phone?: boolean }) {
                 borderWidth: 1,
                 borderColor: c().border,
                 backgroundColor: c().canvas,
-                boxShadow: [{ x: 0, y: 4, blur: 16, color: "#0a0a0a14" }],
+                boxShadow: [shadow.float],
                 cursor: "pointer",
               }}
             >
@@ -93,7 +94,7 @@ export function ToastLayer(props: { phone?: boolean }) {
                 <StatusDot color={c()[toast().tone ?? "green"]} />
               </View>
               <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                <Label variant="small" weight={500}>
+                <Label variant="small" weight={weight.regular}>
                   {toast().title}
                 </Label>
                 <If when={toast().body}>

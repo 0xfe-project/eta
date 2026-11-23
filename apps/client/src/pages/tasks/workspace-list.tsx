@@ -11,6 +11,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskTableRow } from "./list";
@@ -134,7 +135,7 @@ export function TaskWorkspaceList(props: {
                       }}
                     >
                       <TaskGlyph status={group().parent.status} size={12} />
-                      <Label variant="small" weight={600} lines={1}>
+                      <Label variant="small" weight={weight.strong} lines={1}>
                         {group().parent.title}
                       </Label>
                       <Label

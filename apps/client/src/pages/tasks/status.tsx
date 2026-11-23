@@ -2,6 +2,7 @@ import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import { Image, View } from "nsh";
 import { Caption, colors, focusRing, Icon, Label, row } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { UsageLine } from "./usage";
 
@@ -354,7 +355,7 @@ export function TaskSummary(props: {
           </Label>
           <Label
             variant="small"
-            weight={500}
+            weight={weight.regular}
             lines={1}
             style={{ flex: 1, minWidth: 0 }}
           >

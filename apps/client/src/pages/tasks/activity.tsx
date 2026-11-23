@@ -23,6 +23,7 @@ import {
 } from "../../components";
 import { AgentFace, UserFace } from "../../components/agent-face";
 import { canHover, touchScreen } from "../../components/menu";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { taskMoment } from "./facts";
@@ -517,7 +518,7 @@ export function TaskActivity(props: {
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <If when={message.head}>
             <View style={{ ...row, gap: 8, alignItems: "baseline" }}>
-              <Label variant="small" weight={600}>
+              <Label variant="small" weight={weight.strong}>
                 {name(message.entry.actor)}
               </Label>
               <Label variant="caption" tone="muted">
@@ -552,10 +553,7 @@ export function TaskActivity(props: {
         <Caption text={uiText("activity")} />
       </If>
       <If when={props.heading === "desktop" || props.heading === "tablet"}>
-        <Label
-          weight={props.heading === "tablet" ? 600 : 700}
-          style={{ paddingBottom: 4 }}
-        >
+        <Label weight={weight.strong} style={{ paddingBottom: 4 }}>
           {uiText("activity")}
         </Label>
       </If>

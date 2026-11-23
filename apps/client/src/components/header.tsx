@@ -7,7 +7,7 @@ import { BackButton } from "./navigation-buttons";
 import { StatusDot } from "./status-dot";
 import { Label } from "./text";
 import { colors, row } from "./theme";
-import { sizes } from "./tokens";
+import { sizes, weight } from "./tokens";
 
 export function Header(props: {
   title: string;
@@ -105,7 +105,9 @@ export function Header(props: {
       {props.leading}
       <View style={{ minWidth: 0, flexShrink: 1 }}>
         <Label
-          weight={props.titleWeight ?? (props.dialog ? 500 : 600)}
+          weight={
+            props.titleWeight ?? (props.dialog ? weight.regular : weight.strong)
+          }
           variant={titleVariant()}
           lines={1}
         >

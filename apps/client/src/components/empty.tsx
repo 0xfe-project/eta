@@ -4,6 +4,7 @@ import type { light, TextVariant } from "./theme";
 import { View } from "nsh";
 import { Icon, Label } from "./text";
 import { grow } from "./theme";
+import { weight } from "./tokens";
 
 /**
  * The design's empty and error state: an icon, a `body` title and a `small`
@@ -44,7 +45,7 @@ export function Empty(props: {
       </If>
       <Label
         variant={props.titleVariant ?? "body"}
-        weight={props.titleWeight ?? (props.description ? 500 : 400)}
+        weight={props.titleWeight ?? weight.regular}
         tone={props.titleTone ?? (props.description ? "ink" : "muted")}
         style={{ textAlign: "center" }}
       >

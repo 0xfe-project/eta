@@ -2,6 +2,7 @@ import type { JSX, ViewRef, ViewStyle } from "nsh";
 import { Image, View, windowSize } from "nsh";
 import { ActionMenu, Button, colors, Icon, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { tintedLogo } from "./models/logos";
 
@@ -56,7 +57,11 @@ export function SectionHeader(props: {
             gap: 8,
           }}
         >
-          <Label weight={600} lines={1} tone={props.muted ? "muted" : "ink"}>
+          <Label
+            weight={weight.strong}
+            lines={1}
+            tone={props.muted ? "muted" : "ink"}
+          >
             {props.title}
           </Label>
           <If when={props.count !== undefined}>
@@ -248,7 +253,7 @@ export function EntityRow(props: {
         </If>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <Label
-            weight={500}
+            weight={weight.regular}
             tone={props.titleTone ?? "ink"}
             style={
               props.strike ? { textDecorationLine: "line-through" } : undefined
@@ -334,7 +339,7 @@ export function LetterBox(props: {
       <If
         when={props.logo}
         else={
-          <Label variant="small" weight={600}>
+          <Label variant="small" weight={weight.strong}>
             {props.name.slice(0, 1).toUpperCase()}
           </Label>
         }
