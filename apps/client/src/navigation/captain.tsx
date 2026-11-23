@@ -1,4 +1,3 @@
-import type { CaptainIdentityView } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, focusRing, Label, row } from "../components";
 import { AgentFace } from "../components/agent-face";
@@ -21,15 +20,7 @@ export function CaptainCard(props: { onPress: () => void }) {
   const text = useText();
   const host = useHost();
   const c = colors();
-  const lastReply = () => {
-    const id = host.section<CaptainIdentityView>(
-      "captain",
-      "identity",
-    )?.conversationId;
-    return id
-      ? host.conversations().find((item) => item.id === id)?.lastMessageAt
-      : undefined;
-  };
+  const lastReply = () => host.captainConversation()?.lastMessageAt;
   return (
     <View style={{ flexShrink: 0, padding: space[16] }}>
       <View

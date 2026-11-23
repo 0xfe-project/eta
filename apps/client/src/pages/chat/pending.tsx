@@ -573,10 +573,8 @@ export function Pending(props: {
                   value1: host.agent(entry().agentId)?.name ?? "Agent",
                   value2: entry().conversationId
                     ? ` · ${
-                        host
-                          .conversations()
-                          .find((item) => item.id === entry().conversationId)
-                          ?.name ?? "Conversation"
+                        host.conversation(entry().conversationId)?.name ??
+                        "Conversation"
                       }`
                     : "",
                 })}
@@ -619,10 +617,8 @@ export function Pending(props: {
                 detail={`${item().status === "blocked" ? "Needs your decision" : "For you to check"}${
                   item().conversationId
                     ? ` · ${
-                        host
-                          .conversations()
-                          .find((entry) => entry.id === item().conversationId)
-                          ?.name ?? "Conversation"
+                        host.conversation(item().conversationId)?.name ??
+                        "Conversation"
                       }`
                     : ""
                 }`}
