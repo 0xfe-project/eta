@@ -11,6 +11,7 @@ import type { AgentStore } from "../agents/store";
 import type { ProjectStore } from "../projects/store";
 import type { AttachmentStore } from "./attachments";
 import type { Engine } from "./engine";
+import type { ConversationPolicies } from "./policy";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { ConversationTargets } from "./targets";
 import type { Timeline } from "./timeline";
@@ -23,6 +24,7 @@ export interface ConversationsDeps {
   agents: AgentStore;
   projects: ProjectStore;
   conversations: ConversationStore;
+  policies: ConversationPolicies;
   timeline: Timeline;
   engine: Engine;
   attachments: AttachmentStore;
@@ -49,12 +51,18 @@ export function conversationsPlugin(
     return conversation;
   };
 
-  /** The private chat with the Captain agent. */
-  const isCaptains = (conversation: ConversationRecord): boolean =>
-    conversation.kind === "direct" &&
-    conversations
-      .participants(conversation.id)
-      .some((p) => agents.get(p.agentId)?.systemRole === "captain");
+  const policyOf = (conversation: ConversationRecord) =>
+    deps.policies.of(conversation.kind);
+
+  /** Who is in it is the conversation's to say: some kinds have their members fixed. */
+  const changeable = (conversation: ConversationRecord): ConversationRecord => {
+    const policy = policyOf(conversation);
+    if (!policy.canChangeMembers(conversation))
+      throw new Error(
+        policy.membersFixed ?? "who is in this conversation cannot be changed",
+      );
+    return conversation;
+  };
 
   const summary = (conversation: ConversationRecord): ConversationSummary =>
     summaryOf(views, conversation);
@@ -74,7 +82,13 @@ export function conversationsPlugin(
         publish(
           wire,
           "conversations",
-          { list: () => conversations.list().map(summary) },
+          {
+            list: () =>
+              conversations
+                .list()
+                .filter((conversation) => deps.policies.listed(conversation))
+                .map(summary),
+          },
           { eager: true },
         ),
 
@@ -125,10 +139,10 @@ export function conversationsPlugin(
               );
           }
           const archived = args.optionalBoolean("archived");
-          // Captain's conversation is the way to Captain: archived, Captain would leave the sidebar
-          // with nothing that brings it back.
-          if (archived === true && isCaptains(current))
-            throw new Error("Captain's conversation cannot be archived");
+          const refused = policyOf(current).updateRefusal(current, {
+            archived,
+          });
+          if (refused !== undefined) throw new Error(refused);
           const conversation = conversations.update(id, {
             name,
             goal: args.optionalString("goal"),
@@ -141,9 +155,9 @@ export function conversationsPlugin(
 
         wire.handle("conversations", "invite", (call) => {
           const args = new Args(call);
-          const conversation = existing(args.string("conversationId"));
-          if (conversation.kind === "direct")
-            throw new Error("a private chat is the agent and the user");
+          const conversation = changeable(
+            existing(args.string("conversationId")),
+          );
           // One agent (`agentId`) or a group of them (`agentIds`), never both. A group goes in
           // as one: every agent is checked first and the rows land in one transaction, so a
           // missing one leaves the conversation as it was. One already a member is no change,
@@ -166,10 +180,10 @@ export function conversationsPlugin(
 
         wire.handle("conversations", "remove", (call) => {
           const args = new Args(call);
-          const conversation = existing(args.string("conversationId"));
+          const conversation = changeable(
+            existing(args.string("conversationId")),
+          );
           const agentId = args.string("agentId");
-          if (conversation.kind === "direct")
-            throw new Error("a private chat is the agent and the user");
           // What the member was answering stops with it; its session stays, as a record.
           engine.stopMember(conversation.id, agentId);
           // A steward that leaves takes the role with it: the group has none until someone is

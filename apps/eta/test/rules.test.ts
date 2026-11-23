@@ -14,7 +14,6 @@ import {
 
 describe("routeUserMessage", () => {
   const base = {
-    kind: "group" as const,
     members: ["a", "b", "c"],
     steward: null,
   };
@@ -68,17 +67,6 @@ describe("routeUserMessage", () => {
     expect(
       routeUserMessage({ ...base, members: [], mentions: [] }).targets,
     ).toEqual([]);
-  });
-
-  it("sends a private chat to its agent whatever else is true", () => {
-    expect(
-      routeUserMessage({
-        kind: "direct",
-        members: ["a"],
-        mentions: [],
-        steward: "someone-else",
-      }),
-    ).toEqual({ targets: ["a"], named: [] });
   });
 });
 

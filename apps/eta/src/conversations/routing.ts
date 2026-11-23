@@ -8,8 +8,6 @@
  * steward. Agents may hand work to each other with `mention`, and a conversation must not be
  * able to wake itself for ever: the budget below caps what one user message can start.
  */
-import type { ConversationKind } from "@eta/client-contracts";
-
 /** How many agent-to-agent mentions one user message may start, across every branch of replies. */
 export const WAKE_BUDGET = 5;
 
@@ -20,8 +18,8 @@ export interface Routing {
   named: string[];
 }
 
+/** The group's rule (`group-policy.ts`); another kind of conversation has its own. */
 export function routeUserMessage(input: {
-  kind: ConversationKind;
   members: readonly string[];
   mentions: readonly string[];
   /** The conversation's steward, or null for none. */
@@ -31,11 +29,6 @@ export function routeUserMessage(input: {
     input.members.includes(id),
   );
   if (named.length > 0) return { targets: named, named };
-  // A private chat is the agent and the user: nobody else could be meant.
-  if (input.kind === "direct") {
-    const only = input.members[0];
-    return { targets: only === undefined ? [] : [only], named };
-  }
   if (input.steward !== null && input.members.includes(input.steward))
     return { targets: [input.steward], named };
   if (input.members.length === 1) return { targets: [...input.members], named };

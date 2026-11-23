@@ -3,7 +3,6 @@
  * What an upgrade does with the ones that named none, and what the host says to one that still
  * has none, or names a model the providers no longer have.
  */
-import type { ConversationSummary } from "@eta/client-contracts";
 import type { Database } from "bun:sqlite";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -204,9 +203,7 @@ describe("an agent the host cannot run", () => {
     const w = await world();
     const ada = await w.agent("Ada");
     w.host.db.query("UPDATE agent SET model = NULL WHERE id = ?").run(ada.id);
-    const { conversation } = (await w.client.call("agents", "direct", {
-      agentId: ada.id,
-    })) as { conversation: ConversationSummary };
+    const conversation = await w.group(ada.homeProjectId, [ada.id]);
     await w.watch(conversation.id);
     const sent = await w.send(conversation.id, "hello");
     const reply = await w.settled(conversation.id, sent.replies[0]!.id, [

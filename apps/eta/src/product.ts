@@ -69,7 +69,9 @@ import {
   RESTART_STOP_NOTE,
   RESTART_TEXT,
 } from "./conversations/engine";
+import { groupPolicy } from "./conversations/group-policy";
 import { conversationsPlugin } from "./conversations/plugin";
+import { ConversationPolicies } from "./conversations/policy";
 import { ConversationStore } from "./conversations/store";
 import { ConversationTargets } from "./conversations/targets";
 import { Timeline } from "./conversations/timeline";
@@ -289,6 +291,11 @@ export function createProduct(options: {
   const machines = new MachineStore(db);
   const projects = new ProjectStore(db);
   const conversations = new ConversationStore(db);
+  // The kinds of conversation: the group is the conversations module's own; Captain registers its
+  // own when its plugin starts (`captain/policy.ts`).
+  const policies = new ConversationPolicies([
+    groupPolicy({ agents, conversations }),
+  ]);
   const timeline = new Timeline(db);
   let wire: WireService | undefined;
 
@@ -391,7 +398,7 @@ export function createProduct(options: {
       // The report is on the routines page; Captain's chat gets a line that says so and links to
       // it. Its title, never its body's neighbour the handoff.
       reported: async (routine, run) => {
-        const { conversationId } = await made.captain!.direct();
+        const { conversationId } = await made.captain!.conversation();
         timeline.system(
           conversationId,
           `Routine "${routine.name}" reported: ${run.title ?? "(untitled)"}`,
@@ -665,6 +672,7 @@ export function createProduct(options: {
     machines,
     projects,
     conversations,
+    policies,
     timeline,
     changed,
     warn,
@@ -726,6 +734,7 @@ export function createProduct(options: {
     plugins,
     projects,
     conversations,
+    policies,
     timeline,
     attachments,
     inbox,
@@ -1076,12 +1085,12 @@ export function createProduct(options: {
         agentsPlugin(
           {
             ...shared,
+            policies,
             dataDir,
             db,
             engine,
             plugins,
             changed,
-            created,
             runtimes: options.runtimes,
             modelLevels: (model) => {
               const { provider, modelId } = parseModelId(model);
@@ -1180,14 +1189,25 @@ export function createProduct(options: {
       server.mount(
         "conversations",
         conversationsPlugin(
-          { ...shared, engine, attachments, targets, changed, created },
+          {
+            ...shared,
+            policies,
+            engine,
+            attachments,
+            targets,
+            changed,
+            created,
+          },
           applied("conversations"),
         ),
       );
       if (captainOn)
         server.mount(
           "captain",
-          captainPlugin({ service: captain, changed }, applied("captain")),
+          captainPlugin(
+            { service: captain, policies, conversations, changed },
+            applied("captain"),
+          ),
         );
       server.mount(
         "routines",
@@ -1246,7 +1266,9 @@ export function createProduct(options: {
             agents,
             conversations,
             engine,
-            createdConversation: created,
+            captain: captainOn
+              ? async () => await captain.conversation()
+              : undefined,
           },
           applied("email"),
         ),

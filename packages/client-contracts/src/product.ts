@@ -129,7 +129,12 @@ export interface ProjectView {
   updatedAt: number;
 }
 
-export type ConversationKind = "group" | "direct";
+/**
+ * `group`, or `captain` for Captain's own conversation, which is not a row of `conversations.list`
+ * and is reached through `captain.direct`. A host no longer sends `direct`: the private chats it
+ * stood for are groups of one now. It stays in the type for the clients that still check for it.
+ */
+export type ConversationKind = "group" | "captain" | "direct";
 
 /** `idle` unless one of the member's replies in the conversation is in flight. */
 export type MemberStatus =

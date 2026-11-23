@@ -70,8 +70,8 @@ export interface ProposalsDeps {
   changed: (conversationIds?: readonly string[]) => void;
   warn: (message: string) => void;
   identity: () => CaptainIdentityView | undefined;
-  /** Captain's direct chat, where it hears an outcome it cannot hear where it proposed. */
-  direct: () => Promise<{ conversationId: string }>;
+  /** Captain's conversation, where it hears an outcome it cannot hear where it proposed. */
+  conversation: () => Promise<{ conversationId: string }>;
   createOperation: (input: CaptainOperationRequest) => CaptainOperationView;
 }
 
@@ -190,7 +190,7 @@ export class CaptainProposals {
   }
 
   /**
-   * Where Captain hears how a proposal ended: the conversation it proposed from, or its direct
+   * Where Captain hears how a proposal ended: the conversation it proposed from, or its own
    * chat when it can no longer speak there (archived, or it is not a member any more).
    */
   async #outcomeConversation(
@@ -204,7 +204,9 @@ export class CaptainProposals {
       this.#deps.conversations
         .participants(origin.id)
         .some((member) => member.agentId === captainAgentId);
-    return reachable ? origin.id : (await this.#deps.direct()).conversationId;
+    return reachable
+      ? origin.id
+      : (await this.#deps.conversation()).conversationId;
   }
 }
 

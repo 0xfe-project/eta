@@ -4,7 +4,6 @@ import type { Engine } from "../conversations/engine";
 import type { ConversationStore } from "../conversations/store";
 import type { ProjectStore } from "../projects/store";
 import type { EmailService } from "./service";
-import { openDirect } from "../conversations/direct";
 import { Args, productPlugin, publish } from "../wire";
 import { renderAgentPayload } from "./payload";
 
@@ -14,7 +13,16 @@ export interface EmailPluginDeps {
   agents: AgentStore;
   conversations: ConversationStore;
   engine: Engine;
-  createdConversation: (conversationId: string) => void;
+  /**
+   * Captain's conversation, made if it is missing: an email handed over goes there. Absent on a
+   * host that runs without Captain, which then has nobody to hand an email to.
+   */
+  captain?:
+    | (() => Promise<{
+        conversationId: string;
+        agent: { id: string; name: string };
+      }>)
+    | undefined;
 }
 
 function accountInput(args: Args): EmailAccountInput {
@@ -37,7 +45,11 @@ function accountInput(args: Args): EmailAccountInput {
   return input;
 }
 
-function briefing(service: EmailService, threadIds: readonly string[]): string {
+function briefing(
+  service: EmailService,
+  threadIds: readonly string[],
+  handoff: string,
+): string {
   const sections = threadIds.map((threadId) => {
     const thread = service.store.thread(threadId);
     if (!thread) return "";
@@ -60,10 +72,18 @@ function briefing(service: EmailService, threadIds: readonly string[]): string {
               }`;
         return `### ${message.direction === "incoming" ? "Incoming" : "Outgoing"} · ${new Date(message.createdAt).toISOString()}\n${body}`;
       }),
-      "The user explicitly handed this email to you. Use `reply` to prepare a reply widget; it will not send until the user confirms.",
     ].join("\n\n");
   });
-  return sections.filter(Boolean).join("\n\n---\n\n");
+  return [
+    sections.filter(Boolean).join("\n\n---\n\n"),
+    [
+      `The user explicitly handed ${threadIds.length === 1 ? "this email" : "these emails"} to you.`,
+      handoff,
+      "You have no email tools: to get it answered, hand the work to an agent with assign_in_group, with what it needs from the email above.",
+    ]
+      .filter((line) => line !== "")
+      .join(" "),
+  ].join("\n\n");
 }
 
 export function emailPlugin(deps: EmailPluginDeps, applied: () => void) {
@@ -164,11 +184,10 @@ export function emailPlugin(deps: EmailPluginDeps, applied: () => void) {
           const threadIds = [...new Set(args.strings("threadIds"))];
           if (threadIds.length === 0)
             throw new Error("choose at least one email");
-          const agentId = args.string("agentId");
-          const agent = agents.get(agentId);
-          if (!agent) throw new Error("no such agent");
-          const projectId = args.string("projectId");
-          const project = projects.get(projectId);
+          // Who the user chose and where are what Captain is told; Captain takes the email.
+          const chosen = agents.get(args.string("agentId"));
+          if (!chosen) throw new Error("no such agent");
+          const project = projects.get(args.string("projectId"));
           if (!project) throw new Error("no such project");
           const existing = args.optionalString("sessionId");
           const first = service.store.thread(threadIds[0]!);
@@ -178,16 +197,20 @@ export function emailPlugin(deps: EmailPluginDeps, applied: () => void) {
               "assigning to an existing session is not supported; choose a project",
             );
           }
-          // Not told `changed`: the briefing sent next publishes the conversation, as it always did.
-          const conversation = openDirect(
-            { conversations, created: deps.createdConversation },
-            project,
-            agent,
-          );
+          if (deps.captain === undefined)
+            throw new Error("Captain is not running on this host");
+          const captain = await deps.captain();
+          const agent = captain.agent;
+          const agentId = agent.id;
+          const conversation = conversations.get(captain.conversationId)!;
+          const handoff =
+            chosen.id === agentId
+              ? ""
+              : `They picked ${chosen.name} (agent ${chosen.id}) in project ${project.name} (${project.id}) to work on it: hand the work there, or ask the user.`;
           const startedAt = Date.now();
           await engine.send({
             conversationId: conversation.id,
-            text: briefing(service, threadIds),
+            text: briefing(service, threadIds, handoff),
             mentions: [agentId],
             mode: "queue",
           });
@@ -204,7 +227,7 @@ export function emailPlugin(deps: EmailPluginDeps, applied: () => void) {
             threadIds,
             sessionId,
             agentId,
-            projectId,
+            projectId: conversation.projectId,
             createdAt: startedAt,
           });
           return {

@@ -95,7 +95,6 @@ function membersOf(db: Database, conversationId: string): string[] {
 function after(db: Database, conversationId: string): string[] {
   const conversation = new ConversationStore(db).get(conversationId)!;
   return routeUserMessage({
-    kind: conversation.kind,
     members: membersOf(db, conversationId),
     mentions: [],
     steward: conversation.stewardId,

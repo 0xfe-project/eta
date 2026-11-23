@@ -82,7 +82,7 @@ describe("captain identity", () => {
     );
     expect(
       w.client.section(`conversations.${direct.conversationId}`, "info"),
-    ).toMatchObject({ id: direct.conversationId, kind: "direct" });
+    ).toMatchObject({ id: direct.conversationId, kind: "captain" });
   });
 
   it("has its conversation as soon as the host starts, before anyone opens it", async () => {
@@ -105,7 +105,7 @@ describe("captain identity", () => {
              JOIN participant p ON p.conversation_id = c.id WHERE c.id = ?`,
         )
         .all(identity.conversationId!),
-    ).toEqual([{ kind: "direct", archived: 0, agent_id: identity.agentId }]);
+    ).toEqual([{ kind: "captain", archived: 0, agent_id: identity.agentId }]);
     const direct = (await w.client.call("captain", "direct", {})) as {
       conversationId: string;
     };
@@ -126,7 +126,7 @@ describe("captain identity", () => {
         conversationId,
         archived: true,
       }),
-    ).rejects.toThrow(/Captain's conversation cannot be archived/);
+    ).rejects.toThrow(/Captain's conversation cannot be changed/);
     expect(
       w.host.db
         .query<{ archived: number }, [string]>(
@@ -134,11 +134,13 @@ describe("captain identity", () => {
         )
         .get(conversationId)!.archived,
     ).toBe(0);
-    // Renaming it is still the user's.
-    await w.client.call("conversations", "update", {
-      conversationId,
-      name: "Bridge",
-    });
+    // Nor is it renamed: nothing about it is edited (`captain/policy.ts`).
+    await expect(
+      w.client.call("conversations", "update", {
+        conversationId,
+        name: "Bridge",
+      }),
+    ).rejects.toThrow(/Captain's conversation cannot be changed/);
 
     const ada = await w.agent("Ada");
     const project = await w.project();

@@ -1,4 +1,3 @@
-import type { ConversationKind } from "@eta/client-contracts";
 /**
  * The conversations and who takes part in them.
  *
@@ -16,7 +15,8 @@ type PendingSettings = Omit<SessionSettings, "model"> & {
 export interface ConversationRecord {
   id: string;
   projectId: string;
-  kind: ConversationKind;
+  /** What kind of conversation it is: `group`, or a kind another module registered (`policy.ts`). */
+  kind: string;
   name: string;
   goal: string;
   decided: string;
@@ -66,7 +66,7 @@ interface ParticipantRow {
 const conversationOf = (row: ConversationRow): ConversationRecord => ({
   id: row.id,
   projectId: row.project_id,
-  kind: row.kind as ConversationKind,
+  kind: row.kind,
   name: row.name,
   goal: row.goal,
   decided: row.decided,
@@ -121,23 +121,20 @@ export class ConversationStore {
       .map(conversationOf);
   }
 
-  /** The private chat with an agent in a project, if it has one. */
-  directOf(projectId: string, agentId: string): ConversationRecord | undefined {
-    const row = this.#db
-      .query<ConversationRow, [string, string]>(
-        `SELECT c.* FROM conversation c
-           JOIN participant p ON p.conversation_id = c.id
-          WHERE c.kind = 'direct' AND c.project_id = ? AND p.agent_id = ?
-          ORDER BY c.created_at LIMIT 1`,
+  /** The conversations of a kind, oldest first. */
+  ofKind(kind: string): ConversationRecord[] {
+    return this.#db
+      .query<ConversationRow, [string]>(
+        "SELECT * FROM conversation WHERE kind = ? ORDER BY created_at, id",
       )
-      .get(projectId, agentId);
-    return row === null ? undefined : conversationOf(row);
+      .all(kind)
+      .map(conversationOf);
   }
 
   /** Make a conversation with its first members, in one write. */
   create(input: {
     projectId: string;
-    kind: ConversationKind;
+    kind: string;
     name: string;
     agentIds: readonly string[];
     /** One of `agentIds`, or none. */
@@ -216,29 +213,6 @@ export class ConversationStore {
       )
       .run(seq, id).changes;
     return changed === 0 ? undefined : this.get(id);
-  }
-
-  /** Private chats the agent is in, put away. Returns the ones that moved. */
-  archiveDirectOf(agentId: string): string[] {
-    const ids = this.#db
-      .query<{ id: string }, [string]>(
-        `SELECT c.id FROM conversation c
-           JOIN participant p ON p.conversation_id = c.id
-          WHERE c.kind = 'direct' AND c.archived = 0 AND p.agent_id = ?`,
-      )
-      .all(agentId)
-      .map((row) => row.id);
-    for (const id of ids) this.update(id, { archived: true });
-    return ids;
-  }
-
-  /** Rename the private chats in a project, which carry their agent's name. */
-  renameDirect(projectId: string, name: string): void {
-    this.#db
-      .query(
-        "UPDATE conversation SET name = ?, updated_at = ? WHERE project_id = ? AND kind = 'direct'",
-      )
-      .run(name, Date.now(), projectId);
   }
 
   participants(conversationId: string): ParticipantRecord[] {

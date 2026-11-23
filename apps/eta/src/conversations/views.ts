@@ -4,6 +4,7 @@
  */
 import type {
   ConversationInfo,
+  ConversationKind,
   ConversationSummary,
   MemberView,
 } from "@eta/client-contracts";
@@ -49,7 +50,7 @@ export function summaryOf(
   return {
     id: conversation.id,
     projectId: conversation.projectId,
-    kind: conversation.kind,
+    kind: conversation.kind as ConversationKind,
     name: conversation.name,
     archived: conversation.archived,
     stewardId: conversation.stewardId,
@@ -71,7 +72,7 @@ export function infoOf(
   return {
     id: conversation.id,
     projectId: conversation.projectId,
-    kind: conversation.kind,
+    kind: conversation.kind as ConversationKind,
     name: conversation.name,
     goal: conversation.goal,
     decided: conversation.decided,
