@@ -33,7 +33,7 @@ const bar = (text: string) => `text:${text}`;
 const attachmentRequests = (app: App) =>
   app.requests().filter((request) => request.url.includes("/attachments/"));
 
-test("sent pictures are fetched once, with the host's token; a file that is not a picture stays its line", async () => {
+test("sent pictures are fetched once, with the host's token; a file that is not a picture is a chip that saves", async () => {
   const app = await desktop();
   await app.waitUntil(() => attachmentRequests(app).length === 2);
   const requests = attachmentRequests(app);
@@ -44,33 +44,33 @@ test("sent pictures are fetched once, with the host's token; a file that is not 
   );
   for (const request of requests)
     expect(request.headers.authorization).toBe("Bearer secret");
-  expect(app.shows("text:[notes.txt · 1.0 KB]")).toBe(true);
+  expect(app.shows("label:Save notes.txt · 1.0 KB")).toBe(true);
   expect(app.shows("label:View picture notes.txt · 1.0 KB")).toBe(false);
   expect(app.shows(shotChip)).toBe(true);
   // Opening and previewing read the copy the chip fetched: nothing is asked for again.
   await app.hover(shotChip);
-  await app.wait(300);
+  await app.wait(350);
   await app.press(shotChip);
   await app.waitFor(bar("1 / 2 · shot.png · 2.0 KB"));
   expect(attachmentRequests(app).length).toBe(2);
   expect(requests.some((request) => request.url.endsWith(NOTES))).toBe(false);
 });
 
-test("resting the mouse on a picture's chip shows the picture after 200ms, and leaving hides it", async () => {
+test("resting the mouse on a picture's chip shows the picture after 300ms, and leaving hides it", async () => {
   const app = await desktop();
   await app.waitUntil(() => attachmentRequests(app).length === 2);
   expect(app.shows(shot)).toBe(false);
   await app.hover(shotChip);
-  await app.wait(100);
-  expect(app.shows(shot)).toBe(false);
   await app.wait(200);
+  expect(app.shows(shot)).toBe(false);
+  await app.wait(150);
   expect(app.shows(shot)).toBe(true);
   expect(app.shows("text:shot.png · 2.0 KB")).toBe(true);
   await app.hover("label:Elsewhere");
   await app.waitUntil(() => !app.shows(shot));
   // A run's picture previews the same way.
   await app.hover("label:Open image 1 of 2");
-  await app.wait(300);
+  await app.wait(350);
   expect(app.shows("text:PNG · 1 KB")).toBe(true);
 });
 

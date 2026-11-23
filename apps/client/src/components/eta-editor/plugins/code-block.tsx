@@ -1,8 +1,7 @@
 import type { DocNode } from "@eta/client-contracts/composer-doc";
-import type { TextViewCodeBlock } from "nsh/base";
 import type { EtaEditorHandle } from "../editor";
 import type { TextTheme } from "../look";
-import type { TextPlugin, ViewContext } from "../plugin";
+import type { TextPlugin } from "../plugin";
 import {
   lineCount,
   normalizeNewlines,
@@ -17,7 +16,6 @@ import {
 import { uiText } from "../../../i18n";
 import { canHover } from "../../menu";
 import { colors, row, textFaces } from "../../theme";
-import { splitText } from "../look";
 import { blocksOf } from "../positions";
 import { oneStep } from "../step";
 
@@ -37,31 +35,29 @@ interface Box {
 const codeOf = (node: DocNode) =>
   (node.content ?? []).map((child) => child.text ?? "").join("");
 
+/** The height of a code block's head row: its language, and the keys or Copy. */
+const headHeight = (theme: { face: TextTheme["face"] }) =>
+  theme.face("caption").line + 8;
+
 /**
  * Code blocks: square, on the surface, in the monospace face, their language at the top right
  * (with ⌘⏎ to leave the block while editing; Copy where the text is only shown). Code copied
  * from an editor or an IDE pastes as a code block (`classifyClipboard`'s `code`); over
  * `FOLD_LINES` lines it comes folded, and "Show all N lines" under it opens it. Folding is the
- * editor's: the Markdown has the whole block. Shown, a code block is the same box with its language
- * and Copy.
+ * editor's: the Markdown has the whole block. Shown, a code block is the view's own (highlighted)
+ * in the same box, with the view's own Copy over its corner (no head row: the view's code block
+ * has no place for its language).
  */
 export function codeBlock(): TextPlugin {
   return {
     name: "codeBlock",
     view: {
-      renderCodeBlock: (code, view) => <CodeView code={code} view={view} />,
+      // The view's own code block (its highlighting) and its own Copy, over its top right corner
+      // while the pointer is over it (always on a touch screen).
+      codeBlockActions: [{ id: "copy", label: uiText("copyCode") }],
     },
     styles: {
       editor: (theme) => ({ nodes: foldStyles(theme) }),
-      // The view's box is `CodeView`'s own.
-      view: () => ({
-        codeBlock: {
-          borderWidth: 0,
-          padding: 0,
-          marginVertical: 0,
-          backgroundColor: "transparent",
-        },
-      }),
     },
     editor: {
       extensions: [
@@ -112,10 +108,6 @@ export function codeBlock(): TextPlugin {
   };
 }
 
-/** The height of a code block's head row: its language, and the keys or Copy. */
-const headHeight = (theme: { face: TextTheme["face"] }) =>
-  theme.face("caption").line + 8;
-
 function foldStyles(theme: TextTheme) {
   const small = theme.face("small");
   return {
@@ -132,68 +124,6 @@ function foldStyles(theme: TextTheme) {
 }
 
 /** A code block where the text is shown: the editor's box, its language and Copy over the code. */
-function CodeView(props: { code: TextViewCodeBlock; view: ViewContext }) {
-  const c = colors();
-  const type = textFaces();
-  const look = () => splitText(props.view.parts.codeBlock ?? {});
-  const caption = (value: string, tone: string) => (
-    <Text
-      style={{
-        fontSize: type("caption").size,
-        lineHeight: type("caption").line,
-        color: tone,
-      }}
-    >
-      {value}
-    </Text>
-  );
-  return (
-    <View
-      style={{
-        ...look().box,
-        position: "relative",
-        paddingTop: headHeight(props.view.theme) + 8,
-      }}
-    >
-      <View
-        style={{
-          ...row,
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: 0,
-          height: type("caption").line + 8,
-          paddingHorizontal: 12,
-          gap: 8,
-          borderBottomWidth: 1,
-          borderColor: c().border,
-        }}
-      >
-        <View style={{ flex: 1 }}>
-          {caption(props.code.language || uiText("codeKind"), c().faint)}
-        </View>
-        <View
-          role="button"
-          accessibilityLabel={uiText("copyCode")}
-          onPress={() => void Clipboard.writeText(props.code.code)}
-          hoverStyle={{ opacity: 0.7 }}
-          style={{ cursor: "pointer" }}
-        >
-          {caption(uiText("copyAction"), c().muted)}
-        </View>
-      </View>
-      <Text
-        style={{
-          color: c().ink,
-          ...look().text,
-        }}
-      >
-        {props.code.code}
-      </Text>
-    </View>
-  );
-}
-
 /** Over each code block: its language and what the keys do (Copy where it is only shown), and the
  * fold's bar. Placed by the blocks' boxes, in the text's own layer, so it scrolls with them. */
 function CodeBlockChrome(props: { editor: EtaEditorHandle }) {

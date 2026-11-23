@@ -57,6 +57,8 @@ export function ConversationTimeline(props: {
   revealer?: (reveal: (replyId: string | null) => void) => void;
   /** Quote what the reader selected in a reply into the composer. */
   onQuote: (conversationId: string, text: string) => void;
+  /** A mention's press in a message: its member, by agent id. */
+  onMember?: (agentId: string) => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -317,6 +319,7 @@ export function ConversationTimeline(props: {
                 onSelectionChange={(event, reply) =>
                   select(message(), event, reply)
                 }
+                onMember={props.onMember}
               />
             );
             return onWindows ? <View onWheel={glide.onWheel}>{row}</View> : row;

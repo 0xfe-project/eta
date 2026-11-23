@@ -9,6 +9,7 @@ import { fileSize } from "@eta/client-contracts/composer-draft";
 import { computed, effect, Picker, signal } from "nsh";
 import { defineExtension, insertContent } from "nsh/base";
 import { uiText } from "../../../i18n";
+import { AttachmentFiles } from "../../../services/attachment-files";
 import { Host } from "../../../services/host";
 import {
   isPicture,
@@ -161,24 +162,49 @@ function ShownFileChip(props: {
   );
 }
 
+/** A file (not a picture) sent with a text, where the text is shown: its name and size; a press
+ * saves the host's copy (the share sheet, the app's storage, or a browser's download). */
+function SavedFileChip(props: {
+  file: { id: string; name: string; contentType: string; size: number };
+}) {
+  const files = AttachmentFiles();
+  return (
+    <Chip
+      label={props.file.name}
+      icon="file"
+      detail={fileSize(props.file.size)}
+      status={files?.busy() === props.file.id ? uiText("saving") : undefined}
+      accessibilityLabel={uiText("saveFile", {
+        name: props.file.name,
+        size: fileSize(props.file.size),
+      })}
+      onPress={files ? () => void files.save(props.file) : undefined}
+    />
+  );
+}
+
 const attachmentView: TextPlugin["view"] = {
   extensions: [standIn(DOC_NODES.file)],
   renderCustom: {
-    [DOC_NODES.file]: (node) => (
-      <ShownFileChip
-        file={{
-          id: node.attributes?.id ?? "",
-          name: node.attributes?.name ?? "",
-          contentType: node.attributes?.contentType ?? "",
-          size: Number(node.attributes?.size ?? 0),
-        }}
-      />
-    ),
+    [DOC_NODES.file]: (node) => {
+      const file = {
+        id: node.attributes?.id ?? "",
+        name: node.attributes?.name ?? "",
+        contentType: node.attributes?.contentType ?? "",
+        size: Number(node.attributes?.size ?? 0),
+      };
+      // A picture is the `pictures` plugin's where the system has it.
+      return isPicture(file) ? (
+        <ShownFileChip file={file} />
+      ) : (
+        <SavedFileChip file={file} />
+      );
+    },
   },
 };
 
 /** The files of a text shown, with no editor: what `attachment` shows, for a place that only
- * shows texts (sent messages). */
+ * shows texts (sent messages). A file saves on a press; a picture is the `pictures` plugin's. */
 export function shownFiles(): TextPlugin {
   return { name: "attachment", view: attachmentView };
 }

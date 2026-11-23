@@ -12,9 +12,13 @@ test("a shown text has its mentions, folded pastes and files as blocks, as the e
   await app.waitFor("label:View");
   // Once in the editor, once where it is shown.
   await app.waitUntil(() => app.count("label:Mention Ada") === 2);
-  expect(app.count("label:Pasted · 24 lines")).toBe(1);
-  expect(app.count("label:File notes.pdf")).toBe(2);
+  expect(app.count("label:Unfold pasted text (24 lines)")).toBe(2);
+  // In the editor a file is its name; shown, a press saves it.
+  expect(app.count("label:File notes.pdf")).toBe(1);
+  expect(app.count("label:Save notes.pdf · 47.1 KB")).toBe(1);
   expect(app.count("label:Copy code")).toBe(1);
+  // Each line of a paragraph is a line where it is shown too, in a quote as well.
+  expect(app.texts()).toContain("Keep the old flag\nuntil week 3.");
 });
 
 test("a plugin's editor half and view half both take effect", async () => {

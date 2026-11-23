@@ -17,13 +17,14 @@ import {
   Header,
   Icon,
   Label,
-  Markdown,
   Modal,
   row,
   sizes,
   SmoothScroll,
 } from "../../components";
+import { chatText, shownMentions } from "../../components/eta-editor";
 import { uiText } from "../../i18n";
+import { useAgentMentions } from "../../services/agent-mentions";
 import { follow, useHost } from "../../services/host";
 import { RoutineEditor } from "./editor";
 import { PhoneRoutineRow } from "./history";
@@ -38,6 +39,7 @@ export function Routines(props: {
   onCaptain: () => void;
   onBack?: () => void;
 }) {
+  const agentMentions = useAgentMentions();
   const host = useHost();
   const c = colors();
   const selected = signal(props.initialId ?? "");
@@ -522,7 +524,14 @@ export function Routines(props: {
         >
           <SmoothScroll style={grow}>
             <View style={{ padding: 16 }}>
-              <Markdown value={briefs()[0]?.text ?? ""} />
+              <chatText.View
+                plugins={[shownMentions()]}
+                text={{
+                  text: briefs()[0]?.text ?? "",
+                  mentions: agentMentions(),
+                }}
+                label={uiText("routineBrief")}
+              />
             </View>
           </SmoothScroll>
         </Modal>

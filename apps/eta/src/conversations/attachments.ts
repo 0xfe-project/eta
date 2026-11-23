@@ -487,9 +487,11 @@ export class AttachmentStore {
 }
 
 /**
- * `GET /attachments/<id>`: an attached picture's bytes, for the page that shows it, behind the
- * normal access. Only the image formats a browser draws as pictures: anything else (an SVG, a
- * page) served from this origin could run as the app. It never changes, so it is kept.
+ * `GET /attachments/<id>`: an attached file's bytes, behind the normal access. A picture in the
+ * image formats a browser draws comes as itself, for the page that shows it; any other file (an
+ * SVG, a page, a PDF) comes as opaque bytes to save (`application/octet-stream`, `attachment`),
+ * never as something a browser would show, since served from this origin it could run as the
+ * app. It never changes, so it is kept.
  */
 export function createAttachmentRoutes(
   attachments: AttachmentStore,
@@ -505,7 +507,7 @@ export function createAttachmentRoutes(
     const id = parts[2] ?? "";
     const record = UPLOAD_ID.test(id) ? attachments.get(id) : undefined;
     const bytes =
-      record === undefined || !IMAGE_TYPES.has(record.contentType)
+      record === undefined
         ? undefined
         : await readFile(attachments.pathOf(record)).catch(() => undefined);
     if (record === undefined || bytes === undefined)
@@ -513,9 +515,17 @@ export function createAttachmentRoutes(
         status: 404,
         headers: { "cache-control": "no-store" },
       });
+    const picture = IMAGE_TYPES.has(record.contentType);
     return new Response(request.method === "HEAD" ? null : bytes, {
       headers: {
-        "content-type": record.contentType,
+        "content-type": picture
+          ? record.contentType
+          : "application/octet-stream",
+        ...(picture
+          ? {}
+          : {
+              "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(record.name)}`,
+            }),
         "content-length": String(bytes.byteLength),
         "cache-control": "private, max-age=31536000, immutable",
         "content-security-policy": "sandbox",

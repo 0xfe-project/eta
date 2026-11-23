@@ -121,7 +121,7 @@ const TEXT_KEYS = new Set([
   "letterSpacing",
 ]);
 
-export function splitText(style: TextStyle): {
+function splitText(style: TextStyle): {
   box: TextStyle;
   text: TextStyle;
 } {
