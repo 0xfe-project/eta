@@ -55,6 +55,58 @@ export function pluginsPlugin(
       throw new Error(`${server} has no URL to sign in to`);
     return { url, headers };
   };
+  /**
+   * One connection test of a plugin server, and what it says about sign-in kept in `asked`. A manual
+   * test and the check after an install both go through here. `wire` is only for the push.
+   */
+  const probe = async (
+    wire: { pushNow?: (target: string) => void },
+    name: string,
+    server: string,
+  ) => {
+    const plan = plugins.testPlan(name, server);
+    if ("result" in plan) return plan.result;
+    const result = await testConnection(
+      {
+        ...plan.entry,
+        name: server,
+        source: "plugin-test",
+        hash: "plugin-test",
+      },
+      plan.secrets,
+      undefined,
+      (plan.entry as { url?: string }).url === undefined
+        ? undefined
+        : mcp?.storedAuthProvider((plan.entry as { url: string }).url),
+    );
+    const url = (plan.entry as { url?: string }).url;
+    if (url !== undefined) {
+      if (result.status === "needs_login")
+        asked.set(url, mcp?.signInStamp(url) ?? "");
+      else if (result.status === "ok") asked.delete(url);
+      wire.pushNow?.("plugins");
+    }
+    return result;
+  };
+  /**
+   * After a plugin is added, ask each of its remote servers once whether it wants a sign-in, so the
+   * card says so without a test being pressed. Never a stdio server (that would run the plugin's
+   * command before the user chose to), and never waited for: the install has already succeeded.
+   * A plugin that is off or needs setup is skipped by `testPlan`, silently.
+   */
+  const checkLogins = (
+    wire: { pushNow?: (target: string) => void },
+    name: string,
+  ) => {
+    const view = plugins.view().find((one) => one.name === name);
+    for (const server of view?.servers ?? [])
+      if (server.url !== undefined)
+        probe(wire, name, server.name).catch((error: unknown) =>
+          console.warn(
+            `plugins: login check of ${name}/${server.name} failed: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
+  };
   const cursorLogin = deps.cursorLogin ?? new CursorLogin();
   const logos = new Logos(
     deps.icons === undefined ? {} : { store: deps.icons },
@@ -225,6 +277,7 @@ export function pluginsPlugin(
             args.optionalString("rev") ?? "",
             args.optionalString("path") ?? "",
           );
+          checkLogins(wire, name);
           return { result: { name } };
         }),
         wire.handle("plugins", "update", async (call) => {
@@ -311,35 +364,18 @@ export function pluginsPlugin(
             args.string("source"),
             args.string("sha"),
           );
+          checkLogins(wire, name);
           return { result: { name } };
         }),
         wire.handle("plugins", "testServer", async (call) => {
           const args = new Args(call);
-          const name = args.string("name");
-          const server = args.string("server");
-          const plan = plugins.testPlan(name, server);
-          if ("result" in plan) return { result: plan.result };
-          const result = await testConnection(
-            {
-              ...plan.entry,
-              name: server,
-              source: "plugin-test",
-              hash: "plugin-test",
-            },
-            plan.secrets,
-            undefined,
-            (plan.entry as { url?: string }).url === undefined
-              ? undefined
-              : mcp?.storedAuthProvider((plan.entry as { url: string }).url),
-          );
-          const url = (plan.entry as { url?: string }).url;
-          if (url !== undefined) {
-            if (result.status === "needs_login")
-              asked.set(url, mcp?.signInStamp(url) ?? "");
-            else if (result.status === "ok") asked.delete(url);
-            wire.pushNow?.("plugins");
-          }
-          return { result };
+          return {
+            result: await probe(
+              wire,
+              args.string("name"),
+              args.string("server"),
+            ),
+          };
         }),
         wire.handle("plugins", "loginServer", async (call) => {
           const args = new Args(call);

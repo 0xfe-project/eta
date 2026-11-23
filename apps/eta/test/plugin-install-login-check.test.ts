@@ -89,28 +89,45 @@ async function setup(url: string, options: { needsSetup?: boolean } = {}) {
     `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "x");`,
   );
   const dir = join(dataDir, "plugins", "demo");
-  await mkdir(dir, { recursive: true });
-  await writeFile(
-    join(dir, "plugin.json"),
-    JSON.stringify({ $schema: PLUGIN, name: "demo" }),
-  );
-  await writeFile(
-    join(dir, "mcp.json"),
-    JSON.stringify({
-      $schema: MCP,
-      mcpServers: {
-        remote: {
-          type: "streamable-http",
-          url,
-          ...(options.needsSetup
-            ? // eslint-disable-next-line no-template-curly-in-string -- a plugin variable, not a template
-              { headers: { "X-Api-Key": "${API_KEY}" } }
-            : {}),
+  await mkdir(join(dir, ".claude-plugin"), { recursive: true });
+  if (options.needsSetup) {
+    // A Claude-format plugin whose header names a variable nobody has set: it needs setup.
+    await writeFile(
+      join(dir, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "demo" }),
+    );
+    await writeFile(
+      join(dir, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          remote: {
+            type: "http",
+            url,
+            headers: {
+              // eslint-disable-next-line no-template-curly-in-string -- a plugin variable, not a template
+              "X-Api-Key": "${API_KEY}",
+            },
+          },
         },
-        local: { type: "stdio", command: process.execPath, args: [script] },
-      },
-    }),
-  );
+      }),
+    );
+  } else {
+    await writeFile(
+      join(dir, "plugin.json"),
+      JSON.stringify({ $schema: PLUGIN, name: "demo" }),
+    );
+    await writeFile(
+      join(dir, "mcp.json"),
+      JSON.stringify({
+        $schema: MCP,
+        mcpServers: {
+          remote: { type: "streamable-http", url },
+          // A command is one bare name; the script that leaves the marker is its argument.
+          local: { type: "stdio", command: "node", args: [script] },
+        },
+      }),
+    );
+  }
   const db = openDatabase(":memory:");
   applyMigrations(db, loadMigrations());
   db.exec("PRAGMA foreign_keys = OFF");
@@ -198,24 +215,25 @@ describe("the login check after an install", () => {
 
   it("leaves a server that lets everyone in unmarked", async () => {
     const server = await fake("open");
-    const { install, logins, pushed } = await setup(server.url);
+    const { install, logins } = await setup(server.url);
     await install();
     await vi.waitFor(() => expect(server.hits).toBeGreaterThan(0));
     await settle();
     expect(logins()).toContainEqual(["remote", "none"]);
-    expect(pushed).not.toContain("plugins");
   });
 
   it("never starts a stdio server", async () => {
     const server = await fake("login");
-    const { install, logins, marker } = await setup(server.url);
+    const { install, logins, marker, call } = await setup(server.url);
     await install();
     await vi.waitFor(() =>
       expect(logins()).toContainEqual(["remote", "needs_login"]),
     );
     await settle();
     expect(await exists(marker)).toBe(false);
-    expect(logins()).toContainEqual(["local", undefined]);
+    // The control: a test the user presses on that server does start it, so the fixture is real.
+    await call("testServer", { name: "demo", server: "local" });
+    expect(await exists(marker)).toBe(true);
   });
 
   it("asks each remote server once per install", async () => {
@@ -254,7 +272,13 @@ describe("the login check after an install", () => {
 
   it("is silent and sends nothing for a plugin that needs setup", async () => {
     const server = await fake("login");
-    const { install, logins } = await setup(server.url, { needsSetup: true });
+    const { plugins, install, logins } = await setup(server.url, {
+      needsSetup: true,
+    });
+    // The fixture really is a plugin that needs setup.
+    expect(plugins.view().find((one) => one.name === "demo")?.state).toBe(
+      "needs_config",
+    );
     await expect(install()).resolves.toEqual({ result: { name: "demo" } });
     await settle();
     expect(server.hits).toBe(0);

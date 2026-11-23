@@ -74,10 +74,23 @@ export const authStyle = (
 /** Alpha of the badge's edge, as the hex suffix of a #rrggbb token (about 33%). */
 export const BADGE_EDGE_ALPHA = "55";
 
-/** The login a card shows, from its servers' states: only with evidence, never for headers-only servers. */
+/**
+ * The login a card shows, from its servers' states: only with evidence, never for headers-only
+ * servers. A Cursor server with no Cursor sign-in is the one local fact that needs no test (the
+ * same condition the server's own badge uses).
+ */
 export function cardLogin(
   item: PluginView,
 ): "needs_login" | "signed_in" | "expired" | undefined {
+  if (
+    item.servers.some(
+      (server) =>
+        server.cursorServer === true &&
+        server.cursorSignedIn !== true &&
+        server.login !== "signed_in",
+    )
+  )
+    return "needs_login";
   const oauth = item.servers.filter(
     (server) =>
       server.login !== undefined &&
