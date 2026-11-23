@@ -100,7 +100,7 @@ export function ComposioConnected(props: {
   const rows = () => props.layout !== "desktop";
   const actions = (item: Connected) => (
     <If when={manage()}>
-      <View style={{ ...row, flexGrow: 1, justifyContent: "flex-end", gap: 4 }}>
+      <View style={{ ...row, flexShrink: 0, gap: 4 }}>
         <Button
           label={uiText("composioReconnect")}
           tone="ghost"
@@ -121,15 +121,15 @@ export function ComposioConnected(props: {
    * The last line of a card: the switch at the left, the buttons at the right. On a desktop card it is
    * the real card's bottom row (36 high, a line above it, 8 below the line, 4 between), 10 under the
    * description: the 24-high buttons sit in the 28 under the line, so they start 10 below it too; a row of the
-   * phone and tablet layouts has no line. When both do not fit on one line the buttons drop to the
-   * next line and stay at the right.
+   * phone and tablet layouts has no line. It never wraps: the buttons keep their width and the
+   * switch's words give way (cut short, whole in the tooltip).
    */
   const footer = (item: Connected, divided = false) => (
     <View
       style={{
         ...row,
-        flexWrap: "wrap",
         alignItems: "center",
+        justifyContent: "flex-end",
         gap: 4,
         minHeight: divided ? 36 : 24,
         ...(divided
@@ -144,9 +144,7 @@ export function ComposioConnected(props: {
     >
       <If when={viewOf(item.slug)}>
         {(view) => (
-          <View style={{ flexShrink: 1, minWidth: 0 }}>
-            <ComposioPluginSwitch view={view()} onChanged={plugins.read} />
-          </View>
+          <ComposioPluginSwitch view={view()} onChanged={plugins.read} />
         )}
       </If>
       {actions(item)}

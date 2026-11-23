@@ -2,6 +2,10 @@ import { expect, open, test } from "nsh/test";
 
 const DESKTOP = { width: 1100, height: 700 };
 const PHONE = { width: 420, height: 800 };
+const isFaint = (app: {
+  viewStyle: (selector: string) => { opacity: number } | null;
+}) =>
+  (app.viewStyle("id:composio-connected-item >> nth=0")?.opacity ?? 1) < 0.6;
 const TABLET = { width: 900, height: 700 };
 
 test("connected toolkits are a group after the plugins: one card each, named from the kept list or by their slug", async () => {
@@ -153,15 +157,17 @@ test("a connected toolkit that checked out has a switch for every agent; one tha
 test("the switch of a toolkit is the user's switch for every agent: it asks setEnabled for its plugin name and shows it off", async () => {
   const app = await open("./fixtures/plugins-composio-virtual.tsx", DESKTOP);
   await app.waitFor("id:composio-plugin-switch");
-  expect(app.count("id:composio-plugin-off")).toBe(0);
+  // A card switched off is shown fainter; the words after the switch may be cut to nothing in it.
+  const faint = () => isFaint(app);
+  expect(faint()).toBe(false);
   await app.press("label:Enabled: @composio/gmail");
   await app.waitFor("text:called:setEnabled:@composio/gmail:false");
-  await app.waitFor("id:composio-plugin-off");
+  await app.waitUntil(faint);
   await app.press("label:Enabled: @composio/gmail");
   await app.waitFor(
     "text:called:setEnabled:@composio/gmail:false called:setEnabled:@composio/gmail:true",
   );
-  await app.waitFor("id:composio-plugin-off", { state: "gone" });
+  await app.waitUntil(() => !faint());
 });
 
 test("on a phone the rows have the switch too", async () => {
@@ -203,6 +209,6 @@ test("the bottom row of a card stays one line, the switch and both buttons, also
   };
   expect(oneLine()).toBe(true);
   await app.press("label:Enabled: @composio/gmail");
-  await app.waitFor("id:composio-plugin-off");
+  await app.waitUntil(() => isFaint(app));
   expect(oneLine()).toBe(true);
 });
