@@ -19,6 +19,9 @@ import { Plugins } from "../src/plugins/service";
 const PNG = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3,
 ]);
+const ICO = Buffer.from([
+  0, 0, 1, 0, 1, 0, 16, 16, 0, 0, 1, 0, 32, 0, 4, 0, 0, 0, 22, 0, 0, 0, 1, 2, 3, 4,
+]);
 const OWN = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9,
 ]);
@@ -36,14 +39,15 @@ afterEach(async () => {
 });
 
 /** A site with an icon (or none, or a server error), counting what it was asked. */
-async function site(mode: { icon: boolean; broken?: boolean }) {
+async function site(mode: { icon: boolean; broken?: boolean; ico?: boolean }) {
   let hits = 0;
   const server = http.createServer((req, res) => {
     hits++;
     if (mode.broken) return void res.writeHead(500).end();
     if (mode.icon && req.url === "/")
-      return void res.end('<link rel="icon" href="/i.png"/>');
+      return void res.end(`<link rel="icon" href="/i.${mode.ico ? "ico" : "png"}"/>`);
     if (mode.icon && req.url === "/i.png") return void res.end(PNG);
+    if (mode.icon && req.url === "/i.ico") return void res.end(ICO);
     res.writeHead(404).end();
   });
   servers.push(server);
@@ -100,6 +104,19 @@ describe("an installed plugin's icon after a restart", () => {
     );
     expect(restarted.requests).toBe(0);
     expect(server.hits).toBe(before);
+  });
+
+  it("is read from the database for an ico too, and no site is asked", async () => {
+    const home = await site({ icon: true, ico: true });
+    const db = database();
+    const first = await boot(db).find(null, `${home.url}/`, null);
+    expect(first?.type).toBe("image/x-icon");
+    const before = home.hits;
+
+    const restarted = boot(db);
+    expect(await restarted.find(null, `${home.url}/`, null)).toEqual(first);
+    expect(restarted.requests).toBe(0);
+    expect(home.hits).toBe(before);
   });
 
   it("keeps 'no icon' for a while, then asks again", async () => {
