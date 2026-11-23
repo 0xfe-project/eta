@@ -751,3 +751,50 @@ describe("the connected toolkits", () => {
     }
   });
 });
+
+describe("the kept list", () => {
+  it("keeps what each toolkit says, not only its slug: after a restart the card has its description, sign-in type and logo", async () => {
+    const first = open();
+    first.composio.setKey(KEY);
+    handler = () =>
+      json({
+        items: [item("github"), item("hackernews", { no_auth: true })],
+        next_cursor: null,
+      });
+    const fresh = await composioOf(first.market);
+    requests.length = 0;
+    const again = first.start();
+    const kept = await composioOf(again.market, "cached");
+    expect(kept.toolkits).toEqual(fresh.toolkits);
+    expect(kept.toolkits?.map((one) => one.auth)).toEqual(["oauth", "none"]);
+    // The picture is looked up in the kept list too, with no call to Composio.
+    expect(again.composio.logoOf("github")).toBe(
+      "https://assets.composio.dev/logos/github.png",
+    );
+    expect(requests).toHaveLength(0);
+  });
+
+  it("checks the kept list again: a bad slug is dropped and an address that is not https is not kept", async () => {
+    const { db, composio, start } = open();
+    composio.setKey(KEY);
+    handler = () => json({ items: [item("github")], next_cursor: null });
+    await composioOf(open().market);
+    const { market } = start();
+    await composioOf(market);
+    const row = db
+      .query<{ body: string }, []>(
+        "SELECT body FROM market_catalog_cache WHERE url = 'composio:toolkits'",
+      )
+      .get();
+    const list = JSON.parse(row!.body) as Record<string, unknown>[];
+    list[0] = { ...list[0], logo: "http://assets.composio.dev/x.png" };
+    list.push({ ...list[0], slug: "bad slug" });
+    db.query(
+      "UPDATE market_catalog_cache SET body = ? WHERE url = 'composio:toolkits'",
+    ).run(JSON.stringify(list));
+    const again = start();
+    const kept = await composioOf(again.market, "cached");
+    expect(kept.toolkits?.map((one) => one.slug)).toEqual(["github"]);
+    expect(kept.toolkits?.[0]?.logo).toBeNull();
+  });
+});
