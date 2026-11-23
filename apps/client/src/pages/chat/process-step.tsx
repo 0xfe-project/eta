@@ -37,88 +37,87 @@ export function ProcessStep(props: { value: RunBlock }) {
     return step.name + (detail ? ` · ${detail}` : "");
   };
   return (
+    <If
+      when={tool()}
+      else={
         <If
-          when={tool()}
+          when={props.value.type === "steer"}
           else={
-            <If
-              when={props.value.type === "steer"}
-              else={
-                <TextStep
-                  id={props.value.id}
-                  kind={props.value.type === "thinking" ? "thinking" : "note"}
-                  text={
-                    props.value.type === "thinking" ||
-                    props.value.type === "text"
-                      ? props.value.text
-                      : ""
-                  }
-                />
+            <TextStep
+              id={props.value.id}
+              kind={props.value.type === "thinking" ? "thinking" : "note"}
+              text={
+                props.value.type === "thinking" || props.value.type === "text"
+                  ? props.value.text
+                  : ""
               }
-            >
-              {/* Where the run took words inserted into it: a trace, not the words again. */}
-              <View
-                style={{
-                  paddingVertical: 3,
-                  paddingHorizontal: 10,
-                  borderBottomWidth: 1,
-                  borderColor: c().border,
-                  alignItems: "center",
-                }}
-              >
-                <Label variant="caption" tone="faint">
-                  {uiText("insertReceived")}
-                </Label>
-              </View>
-            </If>
+            />
           }
         >
-          {(step) => (
-            <View>
-              <View
-                role={step().output ? "button" : undefined}
-                onPress={step().output ? toggle : undefined}
-                style={{
-                  ...row,
-                  minHeight: 33,
-                  paddingHorizontal: 10,
-                  gap: 8,
-                  borderBottomWidth: 1,
-                  borderColor: c().border,
-                }}
-              >
-                <Label variant="small" lines={1} style={{ flex: 1 }}>
-                  {title()}
-                </Label>
-                <Caption
-                  text={
-                    step().status === "running"
-                      ? uiText("inProgress")
-                      : step().status === "completed"
-                        ? uiText("done")
-                        : uiText("failed")
-                  }
-                  style={
-                    step().status === "running"
-                      ? {
-                          backgroundColor: c().button,
-                          color: c().buttonInk,
-                          paddingHorizontal: 8,
-                          paddingVertical: 2,
-                          letterSpacing: 1,
-                          fontWeight: 600,
-                        }
-                      : { letterSpacing: 1, color: c().faint }
-                  }
-                />
-              </View>
-              <If when={expanded() && step().output}>
-                <View style={{ padding: 8, backgroundColor: c().surface }}>
-                  <ToolOutput text={step().output ?? ""} tone="muted" />
-                </View>
-              </If>
-            </View>
-          )}
+          {/* Where the run took words inserted into it: a trace, not the words again. */}
+          <View
+            style={{
+              paddingVertical: 3,
+              paddingHorizontal: 10,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+              alignItems: "center",
+            }}
+          >
+            <Label variant="caption" tone="faint">
+              {uiText("insertReceived")}
+            </Label>
+          </View>
         </If>
+      }
+    >
+      {(step) => (
+        <View>
+          <View
+            role={step().output ? "button" : undefined}
+            onPress={step().output ? toggle : undefined}
+            style={{
+              ...row,
+              minHeight: 33,
+              paddingHorizontal: 10,
+              gap: 8,
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <Label variant="small" lines={1} style={{ flex: 1 }}>
+              {title()}
+            </Label>
+            <Caption
+              text={
+                step().status === "running"
+                  ? uiText("inProgress")
+                  : step().status === "completed"
+                    ? uiText("done")
+                    : uiText("failed")
+              }
+              style={
+                step().status === "running"
+                  ? {
+                      backgroundColor: c().button,
+                      color: c().buttonInk,
+                      paddingHorizontal: 8,
+                      paddingVertical: 2,
+                      letterSpacing: 1,
+                      fontWeight: 600,
+                    }
+                  : { letterSpacing: 1, color: c().faint }
+              }
+            />
+          </View>
+          <If when={expanded() && step().output}>
+            <View style={{ padding: 8, backgroundColor: c().surface }}>
+              <ToolOutput text={step().output ?? ""} tone="muted" />
+            </View>
+          </If>
+        </View>
+      )}
+    </If>
   );
 }
 
