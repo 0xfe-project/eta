@@ -7,9 +7,14 @@
  * Each library is opened on first use, so this module loads anywhere. Every layout below is the
  * 64-bit one: there is no other Windows build.
  */
+import type { Pointer } from "bun:ffi";
 import { Buffer } from "node:buffer";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   ptr as addressOf,
+  cc,
   dlopen,
   FFIType,
   read,
@@ -69,6 +74,10 @@ const kernel32 = load(() =>
     AssignProcessToJobObject: { args: [ptr, ptr], returns: i32 },
     CloseHandle: { args: [ptr], returns: i32 },
     CreateJobObjectW: { args: [ptr, ptr], returns: ptr },
+    FormatMessageW: {
+      args: [u32, ptr, u32, u32, ptr, u32, ptr],
+      returns: u32,
+    },
     GetConsoleMode: { args: [ptr, ptr], returns: i32 },
     GetCurrentProcess: { args: [], returns: ptr },
     GetLastError: { args: [], returns: u32 },
@@ -76,6 +85,7 @@ const kernel32 = load(() =>
     LocalFree: { args: [ptr], returns: ptr },
     OpenProcess: { args: [u32, i32, u32], returns: ptr },
     SetConsoleMode: { args: [ptr, u32], returns: i32 },
+    SetLastError: { args: [u32], returns: FFIType.void },
     SetInformationJobObject: { args: [ptr, u32, ptr, u32], returns: i32 },
     TerminateJobObject: { args: [ptr, u32], returns: i32 },
   }),
@@ -87,13 +97,16 @@ const secur32 = load(() =>
   }),
 );
 
-/** A Win32 failure, with the code the callers tell apart. */
+/** A Win32 failure, with the code the callers tell apart and the call that failed. */
 export class WindowsError extends Error {
   readonly code: number;
+  /** The function that failed, like `CreateServiceW`; absent for a message written for a person. */
+  readonly call: string | undefined;
 
-  constructor(what: string, code: number) {
-    super(`${what}: Windows error ${code}`);
+  constructor(message: string, code: number, call?: string) {
+    super(message);
     this.code = code;
+    this.call = call;
   }
 }
 
@@ -106,6 +119,33 @@ const ERROR_SERVICE_NOT_ACTIVE = 1062;
 const ERROR_SERVICE_DOES_NOT_EXIST = 1060;
 const ERROR_SERVICE_LOGON_FAILED = 1069;
 const ERROR_SERVICE_MARKED_FOR_DELETE = 1072;
+
+/** The names of the codes these calls are known to give, as `winerror.h` spells them. */
+const ERROR_NAMES: Readonly<Record<number, string>> = {
+  2: "ERROR_FILE_NOT_FOUND",
+  5: "ERROR_ACCESS_DENIED",
+  6: "ERROR_INVALID_HANDLE",
+  87: "ERROR_INVALID_PARAMETER",
+  122: "ERROR_INSUFFICIENT_BUFFER",
+  1051: "ERROR_DEPENDENT_SERVICES_RUNNING",
+  1052: "ERROR_INVALID_SERVICE_CONTROL",
+  1053: "ERROR_SERVICE_REQUEST_TIMEOUT",
+  1056: "ERROR_SERVICE_ALREADY_RUNNING",
+  1057: "ERROR_INVALID_SERVICE_ACCOUNT",
+  1058: "ERROR_SERVICE_DISABLED",
+  1060: "ERROR_SERVICE_DOES_NOT_EXIST",
+  1061: "ERROR_SERVICE_CANNOT_ACCEPT_CTRL",
+  1062: "ERROR_SERVICE_NOT_ACTIVE",
+  1063: "ERROR_FAILED_SERVICE_CONTROLLER_CONNECT",
+  1069: "ERROR_SERVICE_LOGON_FAILED",
+  1072: "ERROR_SERVICE_MARKED_FOR_DELETE",
+  1073: "ERROR_SERVICE_EXISTS",
+  1078: "ERROR_DUPLICATE_SERVICE_NAME",
+  1115: "ERROR_SHUTDOWN_IN_PROGRESS",
+  1326: "ERROR_LOGON_FAILURE",
+  1327: "ERROR_ACCOUNT_RESTRICTION",
+  1385: "ERROR_LOGON_TYPE_NOT_GRANTED",
+};
 
 const SC_MANAGER_CONNECT = 0x1;
 const SC_MANAGER_ALL_ACCESS = 0xf003f;
@@ -166,13 +206,203 @@ function wideAt(address: number): string {
 const out = (): BigUint64Array => new BigUint64Array(1);
 const handleIn = (slot: BigUint64Array): number => Number(slot[0]);
 
+/**
+ * Calls a Win32 function and reads its `GetLastError` in native code, at once. Read with a second
+ * `bun:ffi` call it is not the call's: a garbage collection or a turn of the event loop in between
+ * runs Windows calls of Bun's own on this thread, and those set it, mostly to 0 (#367). The error is
+ * cleared first, so a 0 here means the call failed without saying why.
+ */
+const SHIM = String.raw`
+typedef unsigned long long u64;
+typedef u64 (*win32_call)(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64);
+static unsigned int (*get_last_error)(void);
+static void (*set_last_error)(unsigned int);
+
+void bind_errors(void *get, void *set) {
+  get_last_error = (unsigned int (*)(void))get;
+  set_last_error = (void (*)(unsigned int))set;
+}
+
+static u64 invoke(void *f, unsigned int *code, u64 a0, u64 a1, u64 a2, u64 a3, u64 a4, u64 a5,
+                  u64 a6, u64 a7, u64 a8, u64 a9, u64 a10, u64 a11, u64 a12) {
+  set_last_error(0);
+  u64 result = ((win32_call)f)(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12);
+  *code = get_last_error();
+  return result;
+}
+
+void *call_pointer(void *f, unsigned int *code, u64 a0, u64 a1, u64 a2, u64 a3, u64 a4, u64 a5,
+                   u64 a6, u64 a7, u64 a8, u64 a9, u64 a10, u64 a11, u64 a12) {
+  return (void *)invoke(f, code, a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12);
+}
+
+int call_int(void *f, unsigned int *code, u64 a0, u64 a1, u64 a2, u64 a3, u64 a4, u64 a5,
+             u64 a6, u64 a7, u64 a8, u64 a9, u64 a10, u64 a11, u64 a12) {
+  return (int)invoke(f, code, a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12);
+}
+`;
+
+type Arg = number | Pointer | null | NodeJS.TypedArray;
+type Native = (...args: never[]) => unknown;
+
+/** Where a `dlopen`ed function is: Bun puts it on the function, and its types leave it out. */
+const pointerOf = (fn: Native): Pointer =>
+  (fn as unknown as { ptr: Pointer }).ptr;
+
+/** Every Win32 function here takes at most this many arguments: the rest are passed as 0. */
+const SHIM_ARGS = 13;
+
+/**
+ * The shim, compiled by Bun's TinyCC. In the 64-bit Windows convention the caller owns the
+ * arguments, so a function called with more than it takes ignores the rest. Undefined when it does
+ * not compile; the codes are then read the old way, and may be lost.
+ */
+const shim = load(() => {
+  let dir: string | undefined;
+  try {
+    dir = mkdtempSync(join(tmpdir(), "eta-ffi-"));
+    const source = join(dir, "last-error.c");
+    writeFileSync(source, SHIM);
+    const call = {
+      args: Array.from<FFIType>({ length: SHIM_ARGS + 2 }).fill(ptr),
+    };
+    const { symbols } = cc({
+      source,
+      symbols: {
+        bind_errors: { args: [ptr, ptr], returns: FFIType.void },
+        call_pointer: { ...call, returns: ptr },
+        call_int: { ...call, returns: i32 },
+      },
+    });
+    const { GetLastError, SetLastError } = kernel32().symbols;
+    symbols.bind_errors(pointerOf(GetLastError), pointerOf(SetLastError));
+    return symbols;
+  } catch {
+    return undefined;
+  } finally {
+    if (dir !== undefined) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // A file in the temporary folder.
+      }
+    }
+  }
+});
+
+/** What a call gave back, 0 for a null handle, and its error, read when it returned. */
+interface Called {
+  value: number;
+  code: number;
+}
+
+const codeSlot = new Uint32Array(1);
+
+function invoke(
+  returns: "pointer" | "int",
+  fn: Native,
+  args: readonly Arg[],
+): Called {
+  const native = shim();
+  if (native === undefined) {
+    const value = (fn as (...given: Arg[]) => number | null)(...args) ?? 0;
+    return { value, code: lastCode() };
+  }
+  const padded = [...args];
+  while (padded.length < SHIM_ARGS) padded.push(0);
+  codeSlot[0] = 0;
+  const call = returns === "pointer" ? native.call_pointer : native.call_int;
+  const value =
+    (call as (...given: Arg[]) => number | null)(
+      pointerOf(fn),
+      codeSlot,
+      ...padded,
+    ) ?? 0;
+  return { value, code: codeSlot[0] as number };
+}
+
+/** A function that returns a handle, null when it fails. */
+const callHandle = (fn: Native, ...args: Arg[]): Called =>
+  invoke("pointer", fn, args);
+/** A function that returns a `BOOL`, 0 when it fails. */
+const callBool = (fn: Native, ...args: Arg[]): Called =>
+  invoke("int", fn, args);
+
 function lastCode(): number {
   const { GetLastError: code } = kernel32().symbols;
   return code();
 }
 
-function fail(what: string, code: number = lastCode()): never {
-  throw new WindowsError(what, code);
+/** What Windows says a code is, in its own language: for the codes not in ERROR_NAMES. */
+function systemText(code: number): string {
+  const FORMAT_MESSAGE_FROM_SYSTEM = 0x1000;
+  const FORMAT_MESSAGE_IGNORE_INSERTS = 0x200;
+  try {
+    const text = new Uint16Array(512);
+    const length = kernel32().symbols.FormatMessageW(
+      FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+      null,
+      code,
+      0,
+      text,
+      text.length,
+      null,
+    );
+    return Buffer.from(text.buffer, 0, length * 2)
+      .toString("utf16le")
+      .trim()
+      .replace(/\.$/, "");
+  } catch {
+    return "";
+  }
+}
+
+/** `1072 ERROR_SERVICE_MARKED_FOR_DELETE`, or the number with what Windows calls it. */
+function explainCode(code: number): string {
+  if (code === 0) return "0 (the call failed without setting an error code)";
+  const name = ERROR_NAMES[code];
+  if (name !== undefined) return `${code} ${name}`;
+  const text = systemText(code);
+  return text === "" ? String(code) : `${code} (${text})`;
+}
+
+/** `CreateServiceW(io.eta.host) failed: 1072 ERROR_SERVICE_MARKED_FOR_DELETE` */
+export const callFailed = (
+  call: string,
+  code: number,
+  subject?: string,
+): WindowsError =>
+  new WindowsError(
+    `${call}${subject === undefined ? "" : `(${subject})`} failed: ${explainCode(code)}`,
+    code,
+    call,
+  );
+
+function fail(call: string, code: number, subject?: string): never {
+  throw callFailed(call, code, subject);
+}
+
+/** The handle `fn` gives, or a WindowsError naming `call`. */
+function handleFrom(
+  call: string,
+  subject: string | undefined,
+  fn: Native,
+  ...args: Arg[]
+): number {
+  const { value, code } = callHandle(fn, ...args);
+  if (value === 0) fail(call, code, subject);
+  return value;
+}
+
+/** Calls a `BOOL` function, and fails with a WindowsError naming `call` when it does. */
+function succeed(
+  call: string,
+  subject: string | undefined,
+  fn: Native,
+  ...args: Arg[]
+): void {
+  const { value, code } = callBool(fn, ...args);
+  if (value === 0) fail(call, code, subject);
 }
 
 interface ServiceStatus {
@@ -210,32 +440,46 @@ function withService<T>(
 ): T {
   const { CloseServiceHandle, OpenSCManagerW, OpenServiceW } =
     advapi32().symbols;
-  const manager = OpenSCManagerW(null, null, SC_MANAGER_CONNECT);
-  if (manager === null) fail("OpenSCManager");
+  const manager = handleFrom(
+    "OpenSCManagerW",
+    undefined,
+    OpenSCManagerW,
+    null,
+    null,
+    SC_MANAGER_CONNECT,
+  );
   try {
-    const service = OpenServiceW(manager, wide(name), access);
-    if (service === null) fail(name);
+    const service = handleFrom(
+      "OpenServiceW",
+      name,
+      OpenServiceW,
+      manager,
+      wide(name),
+      access,
+    );
     try {
-      return action(service as never);
+      return action(service);
     } finally {
-      CloseServiceHandle(service);
+      CloseServiceHandle(service as never);
     }
   } finally {
-    CloseServiceHandle(manager);
+    CloseServiceHandle(manager as never);
   }
 }
 
 function statusOf(service: number): ServiceStatus {
   const fields = new Uint32Array(SERVICE_STATUS_PROCESS_SIZE / 4);
   const needed = new Uint32Array(1);
-  const ok = advapi32().symbols.QueryServiceStatusEx(
-    service as never,
+  succeed(
+    "QueryServiceStatusEx",
+    undefined,
+    advapi32().symbols.QueryServiceStatusEx,
+    service,
     STATUS_PROCESS_INFO,
     fields,
     SERVICE_STATUS_PROCESS_SIZE,
     needed,
   );
-  if (ok === 0) fail("QueryServiceStatusEx");
   return {
     state: fields[1] as number,
     exitCode: fields[3] as number,
@@ -248,13 +492,15 @@ function accountOf(service: number): string {
   const needed = new Uint32Array(1);
   QueryServiceConfigW(service as never, null, 0, needed);
   const buffer = new BigUint64Array(Math.ceil((needed[0] as number) / 8));
-  const ok = QueryServiceConfigW(
-    service as never,
+  succeed(
+    "QueryServiceConfigW",
+    undefined,
+    QueryServiceConfigW,
+    service,
     buffer,
     buffer.byteLength,
     needed,
   );
-  if (ok === 0) fail("QueryServiceConfig");
   // lpServiceStartName in QUERY_SERVICE_CONFIGW.
   return wideAt(Number(buffer[6]));
 }
@@ -287,16 +533,20 @@ export function queryService(name: string): ServiceAnswer {
 /** Asks Windows to start it; `queryService` says how that went. */
 export function startService(name: string): void {
   withService(name, SERVICE_START, (service) => {
-    if (advapi32().symbols.StartServiceW(service as never, 0, null) !== 0)
-      return;
-    const code = lastCode();
-    if (code === ERROR_SERVICE_ALREADY_RUNNING) return;
+    const { value, code } = callBool(
+      advapi32().symbols.StartServiceW,
+      service,
+      0,
+      null,
+    );
+    if (value !== 0 || code === ERROR_SERVICE_ALREADY_RUNNING) return;
     if (code === ERROR_SERVICE_LOGON_FAILED)
       throw new WindowsError(
         `${name} cannot log on: the password has changed since it was installed. Run uninstall-service and install-service again in an Administrator terminal`,
         code,
+        "StartServiceW",
       );
-    fail(name, code);
+    fail("StartServiceW", code, name);
   });
 }
 
@@ -304,20 +554,18 @@ export function startService(name: string): void {
 export function stopService(name: string): void {
   withService(name, SERVICE_STOP, (service) => {
     const ignored = new Uint32Array(7);
-    if (
-      advapi32().symbols.ControlService(
-        service as never,
-        SERVICE_CONTROL_STOP,
-        ignored,
-      ) !== 0
-    )
-      return;
-    const code = lastCode();
+    const { value, code } = callBool(
+      advapi32().symbols.ControlService,
+      service,
+      SERVICE_CONTROL_STOP,
+      ignored,
+    );
+    if (value !== 0) return;
     if (
       code !== ERROR_SERVICE_NOT_ACTIVE &&
       code !== ERROR_SERVICE_CANNOT_ACCEPT_CTRL
     )
-      fail(name, code);
+      fail("ControlService", code, name);
   });
 }
 
@@ -328,28 +576,47 @@ export function currentUser(): { account: string; sid: string } {
     advapi32().symbols;
   const size = new Uint32Array([256]);
   const name = new Uint16Array(256);
-  if (secur32().symbols.GetUserNameExW(NAME_SAM_COMPATIBLE, name, size) === 0)
-    fail("GetUserNameEx");
+  succeed(
+    "GetUserNameExW",
+    undefined,
+    secur32().symbols.GetUserNameExW,
+    NAME_SAM_COMPATIBLE,
+    name,
+    size,
+  );
   const account = Buffer.from(name.buffer, 0, (size[0] as number) * 2).toString(
     "utf16le",
   );
   const token = out();
-  if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, token) === 0)
-    fail("OpenProcessToken");
+  succeed(
+    "OpenProcessToken",
+    undefined,
+    OpenProcessToken,
+    GetCurrentProcess() as number,
+    TOKEN_QUERY,
+    token,
+  );
   try {
     const user = new BigUint64Array(16);
     const needed = new Uint32Array(1);
-    const ok = GetTokenInformation(
-      handleIn(token) as never,
+    succeed(
+      "GetTokenInformation",
+      "TokenUser",
+      GetTokenInformation,
+      handleIn(token),
       TOKEN_USER,
       user,
       user.byteLength,
       needed,
     );
-    if (ok === 0) fail("GetTokenInformation");
     const text = out();
-    if (ConvertSidToStringSidW(Number(user[0]) as never, text) === 0)
-      fail("ConvertSidToStringSid");
+    succeed(
+      "ConvertSidToStringSidW",
+      undefined,
+      ConvertSidToStringSidW,
+      Number(user[0]),
+      text,
+    );
     const sid = wideAt(handleIn(text));
     kernel32().symbols.LocalFree(handleIn(text) as never);
     return { account, sid };
@@ -362,19 +629,27 @@ export function isElevated(): boolean {
   const { CloseHandle, GetCurrentProcess } = kernel32().symbols;
   const { GetTokenInformation, OpenProcessToken } = advapi32().symbols;
   const token = out();
-  if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, token) === 0)
-    fail("OpenProcessToken");
+  succeed(
+    "OpenProcessToken",
+    undefined,
+    OpenProcessToken,
+    GetCurrentProcess() as number,
+    TOKEN_QUERY,
+    token,
+  );
   try {
     const elevated = new Uint32Array(1);
     const needed = new Uint32Array(1);
-    const ok = GetTokenInformation(
-      handleIn(token) as never,
+    succeed(
+      "GetTokenInformation",
+      "TokenElevation",
+      GetTokenInformation,
+      handleIn(token),
       TOKEN_ELEVATION,
       elevated,
       4,
       needed,
     );
-    if (ok === 0) fail("GetTokenInformation");
     return elevated[0] !== 0;
   } finally {
     CloseHandle(handleIn(token) as never);
@@ -391,7 +666,8 @@ export function checkPassword(account: string, password: Uint8Array): void {
   const domain = at < 0 ? "." : account.slice(0, at);
   const user = at < 0 ? account : account.slice(at + 1);
   const token = out();
-  const ok = advapi32().symbols.LogonUserW(
+  const { value, code } = callBool(
+    advapi32().symbols.LogonUserW,
     wide(user),
     wide(domain),
     password,
@@ -399,17 +675,21 @@ export function checkPassword(account: string, password: Uint8Array): void {
     LOGON_PROVIDER_DEFAULT,
     token,
   );
-  if (ok !== 0) {
+  if (value !== 0) {
     kernel32().symbols.CloseHandle(handleIn(token) as never);
     return;
   }
-  const code = lastCode();
   if (code === ERROR_LOGON_FAILURE)
-    fail(`that is not the password of ${account}`, code);
+    throw new WindowsError(
+      `that is not the password of ${account}`,
+      code,
+      "LogonUserW",
+    );
   if (code === ERROR_ACCOUNT_RESTRICTION)
     throw new WindowsError(
       `${account} has no password, and Windows does not start services with an empty one. Set one, or use the password of the Microsoft account it signs in with`,
       code,
+      "LogonUserW",
     );
 }
 
@@ -435,8 +715,13 @@ function withPolicy<T>(
   const { ConvertStringSidToSidW, LsaClose, LsaOpenPolicy } =
     advapi32().symbols;
   const binary = out();
-  if (ConvertStringSidToSidW(wide(sid), binary) === 0)
-    fail("ConvertStringSidToSid");
+  succeed(
+    "ConvertStringSidToSidW",
+    sid,
+    ConvertStringSidToSidW,
+    wide(sid),
+    binary,
+  );
   const attributes = new BigUint64Array(6);
   attributes[0] = BigInt(attributes.byteLength);
   const policy = out();
@@ -535,20 +820,24 @@ function secure(service: number, descriptor: string): void {
   const { ConvertStringSecurityDescriptorToSecurityDescriptorW, ...symbols } =
     advapi32().symbols;
   const parsed = out();
-  const ok = ConvertStringSecurityDescriptorToSecurityDescriptorW(
+  succeed(
+    "ConvertStringSecurityDescriptorToSecurityDescriptorW",
+    undefined,
+    ConvertStringSecurityDescriptorToSecurityDescriptorW,
     wide(descriptor),
     SDDL_REVISION_1,
     parsed,
     null,
   );
-  if (ok === 0) fail("ConvertStringSecurityDescriptor");
   try {
-    const set = symbols.SetServiceObjectSecurity(
-      service as never,
+    succeed(
+      "SetServiceObjectSecurity",
+      undefined,
+      symbols.SetServiceObjectSecurity,
+      service,
       DACL_SECURITY_INFORMATION,
-      handleIn(parsed) as never,
+      handleIn(parsed),
     );
-    if (set === 0) fail("SetServiceObjectSecurity");
   } finally {
     kernel32().symbols.LocalFree(handleIn(parsed) as never);
   }
@@ -561,44 +850,59 @@ function restartOnFailure(service: number, delayMs: number): void {
   actions[0] = 86_400n;
   actions[3] = 1n;
   actions[4] = BigInt(addressOf(action));
-  const ok = advapi32().symbols.ChangeServiceConfig2W(
-    service as never,
+  succeed(
+    "ChangeServiceConfig2W",
+    "SERVICE_CONFIG_FAILURE_ACTIONS",
+    advapi32().symbols.ChangeServiceConfig2W,
+    service,
     SERVICE_CONFIG_FAILURE_ACTIONS,
     actions,
   );
-  if (ok === 0) fail("ChangeServiceConfig2");
 }
 
 function describeService(service: number, text: string): void {
   const description = wide(text);
   const pointer = BigUint64Array.of(BigInt(addressOf(description)));
-  const ok = advapi32().symbols.ChangeServiceConfig2W(
-    service as never,
+  succeed(
+    "ChangeServiceConfig2W",
+    "SERVICE_CONFIG_DESCRIPTION",
+    advapi32().symbols.ChangeServiceConfig2W,
+    service,
     SERVICE_CONFIG_DESCRIPTION,
     pointer,
   );
-  if (ok === 0) fail("ChangeServiceConfig2");
 }
 
 /**
  * Creates the service, or points the one there at the new command, keeping its account and password.
- * Takes an Administrator. False when a deleted one of this name has not gone yet: try again.
+ * Takes an Administrator. A WindowsError, returned and not thrown, when a deleted one of this name
+ * has not gone yet: try again, and say that error if it never goes.
  */
-export function registerService(registration: Registration): boolean {
+export function registerService(
+  registration: Registration,
+): WindowsError | undefined {
   const { account, command, display, name, password, sid } = registration;
   const { ChangeServiceConfigW, CloseServiceHandle, CreateServiceW } =
     advapi32().symbols;
   const { OpenSCManagerW, OpenServiceW } = advapi32().symbols;
-  const manager = OpenSCManagerW(null, null, SC_MANAGER_ALL_ACCESS);
-  if (manager === null) fail("OpenSCManager");
+  const manager = handleFrom(
+    "OpenSCManagerW",
+    undefined,
+    OpenSCManagerW,
+    null,
+    null,
+    SC_MANAGER_ALL_ACCESS,
+  );
   try {
     // A failure action that restarts takes the right to start, as well as to change.
     const access = SERVICE_CHANGE_CONFIG | SERVICE_START | WRITE_DAC;
-    let service = OpenServiceW(manager, wide(name), access);
-    if (service === null) {
-      const code = lastCode();
-      if (code !== ERROR_SERVICE_DOES_NOT_EXIST) fail(name, code);
-      service = CreateServiceW(
+    const opened = callHandle(OpenServiceW, manager, wide(name), access);
+    let service = opened.value;
+    if (service === 0) {
+      if (opened.code !== ERROR_SERVICE_DOES_NOT_EXIST)
+        fail("OpenServiceW", opened.code, name);
+      const created = callHandle(
+        CreateServiceW,
         manager,
         wide(name),
         wide(display),
@@ -613,13 +917,15 @@ export function registerService(registration: Registration): boolean {
         wide(account),
         password ?? null,
       );
-      if (service === null) {
-        const created = lastCode();
-        if (created === ERROR_SERVICE_MARKED_FOR_DELETE) return false;
-        fail(name, created);
+      if (created.value === 0) {
+        const error = callFailed("CreateServiceW", created.code, name);
+        if (created.code === ERROR_SERVICE_MARKED_FOR_DELETE) return error;
+        throw error;
       }
+      service = created.value;
     } else {
-      const ok = ChangeServiceConfigW(
+      const changed = callBool(
+        ChangeServiceConfigW,
         service,
         SERVICE_NO_CHANGE,
         SERVICE_NO_CHANGE,
@@ -632,19 +938,22 @@ export function registerService(registration: Registration): boolean {
         null,
         null,
       );
-      if (ok === 0) fail(name);
+      if (changed.value === 0) {
+        CloseServiceHandle(service as never);
+        fail("ChangeServiceConfigW", changed.code, name);
+      }
     }
     try {
-      describeService(service as never, display);
-      secure(service as never, serviceDescriptor(sid));
+      describeService(service, display);
+      secure(service, serviceDescriptor(sid));
       if (registration.automatic)
-        restartOnFailure(service as never, registration.restartMs);
+        restartOnFailure(service, registration.restartMs);
     } finally {
-      CloseServiceHandle(service);
+      CloseServiceHandle(service as never);
     }
-    return true;
+    return undefined;
   } finally {
-    CloseServiceHandle(manager);
+    CloseServiceHandle(manager as never);
   }
 }
 
@@ -652,7 +961,7 @@ export function registerService(registration: Registration): boolean {
 export function deleteService(name: string): void {
   try {
     withService(name, DELETE, (service) => {
-      if (advapi32().symbols.DeleteService(service as never) === 0) fail(name);
+      succeed("DeleteService", name, advapi32().symbols.DeleteService, service);
     });
   } catch (error) {
     const gone =
@@ -691,30 +1000,48 @@ export function stdinIsConsole(): boolean {
  */
 export function createKillJob(): number {
   const { CreateJobObjectW, SetInformationJobObject } = kernel32().symbols;
-  const job = CreateJobObjectW(null, null);
-  if (job === null) fail("CreateJobObject");
+  const job = handleFrom(
+    "CreateJobObjectW",
+    undefined,
+    CreateJobObjectW,
+    null,
+    null,
+  );
   const limits = new DataView(new ArrayBuffer(JOB_LIMITS_SIZE));
   limits.setUint32(JOB_LIMIT_FLAGS_OFFSET, JOB_LIMIT_KILL_ON_JOB_CLOSE, true);
-  const ok = SetInformationJobObject(
+  succeed(
+    "SetInformationJobObject",
+    undefined,
+    SetInformationJobObject,
     job,
     JOB_EXTENDED_LIMIT_INFORMATION,
     new Uint8Array(limits.buffer),
     JOB_LIMITS_SIZE,
   );
-  if (ok === 0) fail("SetInformationJobObject");
-  return job as never;
+  return job;
 }
 
 export function assignToJob(job: number, pid: number): void {
   const { AssignProcessToJobObject, CloseHandle, OpenProcess } =
     kernel32().symbols;
-  const process = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
-  if (process === null) fail("OpenProcess");
+  const process = handleFrom(
+    "OpenProcess",
+    String(pid),
+    OpenProcess,
+    PROCESS_SET_QUOTA | PROCESS_TERMINATE,
+    0,
+    pid,
+  );
   try {
-    if (AssignProcessToJobObject(job as never, process) === 0)
-      fail("AssignProcessToJobObject");
+    succeed(
+      "AssignProcessToJobObject",
+      String(pid),
+      AssignProcessToJobObject,
+      job,
+      process,
+    );
   } finally {
-    CloseHandle(process);
+    CloseHandle(process as never);
   }
 }
 
@@ -740,8 +1067,14 @@ export function registerControls(
 ): (state: number, checkpoint: number) => void {
   const { RegisterServiceCtrlHandlerExW, SetServiceStatus } =
     advapi32().symbols;
-  const status = RegisterServiceCtrlHandlerExW(name, handler as never, null);
-  if (status === null) fail("RegisterServiceCtrlHandlerEx");
+  const status = handleFrom(
+    "RegisterServiceCtrlHandlerExW",
+    undefined,
+    RegisterServiceCtrlHandlerExW,
+    name,
+    handler,
+    null,
+  );
   return (state, checkpoint) => {
     const fields = new Uint32Array([
       SERVICE_WIN32_OWN_PROCESS,
@@ -756,6 +1089,6 @@ export function registerControls(
       checkpoint,
       state === SERVICE_STOP_PENDING ? STOP_WAIT_HINT_MS : 0,
     ]);
-    SetServiceStatus(status, fields);
+    SetServiceStatus(status as never, fields);
   };
 }
