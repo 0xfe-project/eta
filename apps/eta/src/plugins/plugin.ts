@@ -437,14 +437,14 @@ export function pluginsPlugin(
               repo,
               args.optionalString("ref") ?? "HEAD",
               args.optionalString("path") ?? "",
-              args.optionalString("homepage") ?? null,
+              args.nullableString("homepage") ?? null,
             );
             return { result: found };
           }
           return {
             result: await logos.find(
               args.optionalString("own") ?? null,
-              args.optionalString("homepage") ?? null,
+              args.nullableString("homepage") ?? null,
               args.optionalString("origin") ?? null,
             ),
           };
