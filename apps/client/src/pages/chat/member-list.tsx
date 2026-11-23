@@ -22,7 +22,6 @@ export function ConversationMembers(props: {
   members: MemberView[];
   group: boolean;
   info?: ConversationInfo;
-  phone: boolean;
   expandedSession: string;
   onToggleSteps: (session: string) => void;
   onInspect: (member: { id: string; session: string }) => void;
@@ -183,10 +182,7 @@ export function ConversationMembers(props: {
                 entry().sessionId && props.expandedSession === entry().sessionId
               }
             >
-              <MemberStepsLedger
-                session={entry().sessionId!}
-                phone={props.phone}
-              />
+              <MemberStepsLedger session={entry().sessionId!} />
             </If>
           </View>
         )}
