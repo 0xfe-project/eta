@@ -245,9 +245,15 @@ jobs:
             macos)
               codesign --verify --deep "$out/Eta.app"
               test -x "$out/Eta.app/Contents/Resources/nsh/eta-bootstrap"
-              mkdir -p "$RUNNER_TEMP/eta-dmg"
-              ditto "$out/Eta.app" "$RUNNER_TEMP/eta-dmg/Eta.app"
-              hdiutil create -volname Eta -srcfolder "$RUNNER_TEMP/eta-dmg" -format UDZO "$RUNNER_TEMP/try/$DESKTOP"
+              # appdmg lays the window out from apps/client/dmg.json: the app and a link to
+              # /Applications at 180,190 and 480,190 in a 660x400 window, on the background beside
+              # them. Its files sit in the spec's own directory, which is how it resolves them.
+              dmg="$RUNNER_TEMP/eta-dmg"
+              mkdir -p "$dmg"
+              ditto "$out/Eta.app" "$dmg/Eta.app"
+              cp apps/client/dmg.json apps/client/dmg/background.png "$dmg/"
+              iconutil -c icns apps/desktop/icon.iconset -o "$dmg/Eta.icns"
+              bunx appdmg@0.6.6 "$dmg/dmg.json" "$RUNNER_TEMP/try/$DESKTOP"
               ;;
             linux)
               test -x "$out/Eta/nsh/eta-bootstrap"
