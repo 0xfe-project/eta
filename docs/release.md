@@ -81,7 +81,7 @@ git tag desktop-v0.2.0 origin/main
 git push origin desktop-v0.2.0
 ```
 
-The `desktop-v*` workflow packages `apps/client` with Native Shell v0.6.0. It strips `desktop-v` from the tag and passes the result as the app version. A suffix marks a prerelease. The host release keeps GitHub's Latest label.
+The `desktop-v*` workflow packages `apps/client` with the Native Shell build pinned in `.github/actions/setup-nsh/action.yml` — currently the `nightly` tag, because no stable release contains the Windows IME fix from longbridge/nsh#2497 yet. It strips `desktop-v` from the tag and passes the result as the app version. A suffix marks a prerelease. The host release keeps GitHub's Latest label.
 
 The workflow opens a draft, runs CI and builds on each target's own runner. It checks that every desktop package includes the local host launcher, then publishes the draft with `SHA256SUMS`.
 
@@ -136,7 +136,7 @@ macOS checks the new app's code signature before swapping it in (`codesign --ver
 
 ### Local packages and store uploads
 
-Install Native Shell v0.6.0, then package for your desktop from the repository root.
+Install the Native Shell build that CI pins (the `nightly` tag for now; see the note on the desktop workflow above), then package for your desktop from the repository root.
 
 ```sh
 bun run client:package --target macos --out dist/macos
