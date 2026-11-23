@@ -5,9 +5,11 @@ import type {
   AgentRuntimeInfo,
   LlmAccounts,
   LlmModel,
+  ModelThinking,
   ProvidersView,
 } from "@eta/client-contracts";
 import {
+  etaModelThinking,
   keyMissing,
   LLM_PROVIDER_ID,
   providerLabel,
@@ -25,6 +27,8 @@ export interface Model {
   contextWindow?: number | undefined;
   /** Not while its provider lacks a key it cannot run without. */
   available: boolean;
+  /** The thinking levels it declares; absent for a runtime's model (the runtime list says). */
+  thinking?: ModelThinking | undefined;
 }
 
 function modelsOf(view: ProvidersView): Model[] {
@@ -37,6 +41,7 @@ function modelsOf(view: ProvidersView): Model[] {
         name: model.name ?? model.id,
         contextWindow: model.contextWindow,
         available: !keyMissing(provider),
+        thinking: etaModelThinking(model),
       }),
     ),
   );
@@ -55,6 +60,7 @@ const gatewayModels = (
     name: model.name,
     contextWindow: model.contextWindow,
     available: model.available,
+    thinking: etaModelThinking(model),
   }));
 
 /** A runtime's models: `runtime:modelId`, under the runtime's name. */

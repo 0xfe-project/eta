@@ -143,8 +143,35 @@ describe("reasoning declared by the endpoint's /models", () => {
       { id: "b", supported_parameters: ["reasoning"] },
     ]);
     expect(models).toEqual([
-      { id: "a", reasoningEfforts: ["medium", "high"] },
+      // Levels it can be asked for say it reasons, even without `reasoning: true`.
+      { id: "a", reasoning: true, reasoningEfforts: ["medium", "high"] },
       { id: "b", reasoning: true },
+    ]);
+  });
+
+  it("keeps a declared none as the model's off switch", async () => {
+    const { models } = await list([
+      { id: "a", reasoning: true, reasoning_levels: ["none", "high"] },
+      {
+        id: "b",
+        supported_reasoning_levels: [{ effort: "none" }, { effort: "low" }],
+      },
+      { id: "c", reasoning: true, reasoning_levels: ["high", "max"] },
+    ]);
+    expect(models).toEqual([
+      {
+        id: "a",
+        reasoning: true,
+        reasoningEfforts: ["high"],
+        thinkingMode: "both",
+      },
+      {
+        id: "b",
+        reasoning: true,
+        reasoningEfforts: ["low"],
+        thinkingMode: "both",
+      },
+      { id: "c", reasoning: true, reasoningEfforts: ["high", "max"] },
     ]);
   });
 
@@ -157,13 +184,19 @@ describe("reasoning declared by the endpoint's /models", () => {
     ]);
   });
 
-  it("writes nothing when the entry declares no reasoning", async () => {
+  it("writes nothing when the entry says nothing about reasoning", async () => {
     const { models } = await list([
       { id: "a" },
-      { id: "b", reasoning: false, supported_parameters: ["tools"] },
       { id: "c", reasoning_levels: "high", supported_reasoning_levels: [] },
     ]);
-    expect(models).toEqual([{ id: "a" }, { id: "b" }, { id: "c" }]);
+    expect(models).toEqual([{ id: "a" }, { id: "c" }]);
+  });
+
+  it("keeps a reasoning: false said outright", async () => {
+    const { models } = await list([
+      { id: "b", reasoning: false, supported_parameters: ["tools"] },
+    ]);
+    expect(models).toEqual([{ id: "b", reasoning: false }]);
   });
 });
 

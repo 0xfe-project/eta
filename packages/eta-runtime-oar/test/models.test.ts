@@ -29,8 +29,36 @@ describe("effortFor", () => {
     expect(effortFor("ultra", undefined)).toBe("ultra");
   });
 
-  it("asks nothing at `off`", () => {
+  it("asks nothing at `off`, unless the model lists an off switch", () => {
     expect(effortFor("off", ULTRA)).toBeUndefined();
+    expect(effortFor("off", ["none", "low", "high"])).toBe("none");
+  });
+});
+
+describe("a model whose levels the runtime could not say", () => {
+  it("passes the level as it is", () => {
+    const catalog = {
+      peek: () => ({
+        id: "codex",
+        label: "Codex",
+        status: "available",
+        models: [
+          {
+            id: "gpt-astra",
+            name: "Astra",
+            default: true,
+            efforts: [],
+            effortsUnknown: true,
+          },
+        ],
+      }),
+    } as unknown as RuntimeCatalog;
+    const model = runtimeModels("codex", catalog).getModel(
+      "codex",
+      "gpt-astra",
+    );
+    // Not held to `off` as a model without an effort setting is.
+    expect(thinkingLevelsFor(model)).toContain("high");
   });
 });
 

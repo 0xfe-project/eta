@@ -13,9 +13,30 @@ import { LIST_KEYS } from "../ext-support/keys";
 import { renderWithHost } from "../ext-support/render-with-host";
 import { KEYS } from "../ui-support/render";
 
+/**
+ * `m1` thinks at levels it does not name; `m2` names the five every picker used to offer; `x1`
+ * names only high and max (#799's endpoint model); `p1` says nothing about thinking.
+ */
 const PROVIDERS = [
-  { id: "local", models: ["m1", "m2"] },
-  { id: "other", models: ["x1"] },
+  {
+    id: "local",
+    models: [
+      { id: "m1", reasoning: true },
+      {
+        id: "m2",
+        reasoning: true,
+        reasoningEfforts: ["minimal", "low", "medium", "high"],
+        thinkingMode: "both",
+      },
+    ],
+  },
+  {
+    id: "other",
+    models: [
+      { id: "x1", reasoning: true, reasoningEfforts: ["high", "max"] },
+      "p1",
+    ],
+  },
 ];
 
 function markedLine(r: HostRendered): string {
@@ -99,7 +120,7 @@ describe("/model", () => {
     await r.waitFor("Model for Bob");
     const screen = r.screen();
     // Each provider's models under its name; eta's own loop has no default to offer first.
-    const order = ["local", "m1", "m2", "other", "x1"];
+    const order = ["local", "m1", "m2", "other", "x1", "p1"];
     const at = order.map((text) => screen.indexOf(text));
     expect(at.every((index) => index >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
@@ -237,6 +258,68 @@ describe("/model", () => {
       model: "local:m1",
       thinkingLevel: null,
     });
+    await r.close();
+  });
+
+  it("offers only the levels a model declares", async () => {
+    const { r } = await hostWith([{ name: "Ada" }]);
+    await r.runCommand("/model Ada");
+    await r.waitFor("Model for Ada");
+    await markLine(r, "x1");
+    await r.press(KEYS.enter);
+    await r.waitFor("Thinking for Ada");
+    for (const level of ["The model's own", "High", "max"])
+      expect(r.screen()).toContain(level);
+    for (const level of ["Off", "Minimal", "Low", "Medium", "xhigh", "ultra"])
+      expect(r.screen()).not.toContain(level);
+    await markLine(r, "max");
+    await r.press(KEYS.enter);
+    await r.waitFor("Ada now uses other / x1, thinking max");
+    expect(await agentNamed(r, "Ada")).toMatchObject({
+      model: "other:x1",
+      thinkingLevel: "max",
+    });
+    await r.close();
+  });
+
+  it("offers only Off to a model that says nothing about thinking, and says why", async () => {
+    const { r } = await hostWith([{ name: "Ada" }]);
+    await r.runCommand("/model Ada");
+    await r.waitFor("Model for Ada");
+    await markLine(r, "p1");
+    await r.press(KEYS.enter);
+    await r.waitFor("Thinking for Ada");
+    expect(r.screen()).toContain("declares no thinking levels");
+    expect(r.screen()).toContain("Off");
+    expect(r.screen()).not.toContain("High");
+    await r.close();
+  });
+
+  it("falls back to five levels where a model's are not known, and says so", async () => {
+    const { r } = await hostWith([{ name: "Ada", model: "local:m2" }]);
+    await r.runCommand("/model Ada");
+    await r.waitFor("Model for Ada");
+    await markLine(r, "m1");
+    await r.press(KEYS.enter);
+    await r.waitFor("Thinking for Ada");
+    expect(r.screen()).toContain("levels are not known");
+    for (const level of ["Off", "Minimal", "Low", "Medium", "High"])
+      expect(r.screen()).toContain(level);
+    expect(r.screen()).not.toContain("xhigh");
+    await r.close();
+  });
+
+  it("shows the agent's level a new model does not take, and starts on the model's own", async () => {
+    const { r } = await hostWith([
+      { name: "Ada", model: "local:m2", thinkingLevel: "low" },
+    ]);
+    await r.runCommand("/model Ada");
+    await r.waitFor("Model for Ada");
+    await markLine(r, "x1");
+    await r.press(KEYS.enter);
+    await r.waitFor("Thinking for Ada");
+    expect(lineOf(r, "Low")).toContain("this model does not take it");
+    expect(markedLine(r)).toContain("The model's own");
     await r.close();
   });
 

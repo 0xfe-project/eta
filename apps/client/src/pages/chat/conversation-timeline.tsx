@@ -21,6 +21,7 @@ import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { Message } from "./message";
 import { questionRowIndex } from "./question-row";
+import { isSystemNotice, SystemNotice } from "./system-notice";
 import { TaskDraftDetail } from "./task-draft-detail";
 
 export function ConversationTimeline(props: {
@@ -292,35 +293,40 @@ export function ConversationTimeline(props: {
         >
           {(message) => {
             const row = (
-              <Message
-                item={message()}
-                onReadDraft={readDraft}
-                registerAction={registerAction}
-                additions={props.additions.get(message().id) ?? []}
-                canInsert={
-                  host.state().status === "open" &&
-                  props.recipients.has(message().id)
-                }
-                onInsert={() => props.onInsert(message())}
-                inserting={props.insertingId === message().id}
-                onInsertClose={props.onInsertClose}
-                insertPanel={props.insertPanel}
-                sameFailureAsNext={sameFailures().has(message().id)}
-                phone={phone()}
-                compact={props.compact}
-                captain={props.captain}
-                members={props.members}
-                onTask={props.onTask}
-                onPending={props.onPending}
-                onArtifact={props.onArtifact}
-                onWidgetDraft={(text) =>
-                  props.onWidgetDraft(message().conversationId, text)
-                }
-                onSelectionChange={(event, reply) =>
-                  select(message(), event, reply)
-                }
-                onMember={props.onMember}
-              />
+              <If
+                when={!isSystemNotice(message())}
+                else={<SystemNotice item={message()} phone={phone()} />}
+              >
+                <Message
+                  item={message()}
+                  onReadDraft={readDraft}
+                  registerAction={registerAction}
+                  additions={props.additions.get(message().id) ?? []}
+                  canInsert={
+                    host.state().status === "open" &&
+                    props.recipients.has(message().id)
+                  }
+                  onInsert={() => props.onInsert(message())}
+                  inserting={props.insertingId === message().id}
+                  onInsertClose={props.onInsertClose}
+                  insertPanel={props.insertPanel}
+                  sameFailureAsNext={sameFailures().has(message().id)}
+                  phone={phone()}
+                  compact={props.compact}
+                  captain={props.captain}
+                  members={props.members}
+                  onTask={props.onTask}
+                  onPending={props.onPending}
+                  onArtifact={props.onArtifact}
+                  onWidgetDraft={(text) =>
+                    props.onWidgetDraft(message().conversationId, text)
+                  }
+                  onSelectionChange={(event, reply) =>
+                    select(message(), event, reply)
+                  }
+                  onMember={props.onMember}
+                />
+              </If>
             );
             return onWindows ? <View onWheel={glide.onWheel}>{row}</View> : row;
           }}

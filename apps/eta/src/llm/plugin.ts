@@ -20,6 +20,7 @@ import type {
 import type { CatalogModel, Gateway } from "./gateway";
 import type { GatewayModels } from "./models";
 import { Args, productPlugin, publish } from "../wire";
+import { modelConfig } from "./models";
 import { LlmError } from "./problems";
 
 export interface LlmPluginDeps {
@@ -32,10 +33,19 @@ export interface LlmPluginDeps {
   quotaMs?: number | undefined;
 }
 
-/** What a client sees of a catalog entry: no model-layer facts. */
+/**
+ * What a client sees of a catalog entry: how it thinks, as the session's model layer states it
+ * (so a picker offers the levels a run sends), and no other model-layer facts.
+ */
 function view(model: CatalogModel): LlmModel {
   const { reasoningLevels: _levels, image: _image, ...rest } = model;
-  return rest;
+  const { reasoning, reasoningEfforts, thinkingMode } = modelConfig(model);
+  return {
+    ...rest,
+    ...(reasoning === undefined ? {} : { reasoning }),
+    ...(reasoningEfforts === undefined ? {} : { reasoningEfforts }),
+    ...(thinkingMode === undefined ? {} : { thinkingMode }),
+  };
 }
 
 export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {

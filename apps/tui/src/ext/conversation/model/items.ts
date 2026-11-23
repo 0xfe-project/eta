@@ -17,6 +17,7 @@ import {
   runStart,
   savedSteps,
   streamDrawn,
+  systemNoticeOf,
 } from "@eta/client-contracts";
 import { translatorFor } from "../../../i18n/messages";
 import { feedMessages } from "../feed/messages";
@@ -331,33 +332,33 @@ function liveItem(
   }
 }
 
-interface SystemData {
-  event?: unknown;
-  from?: unknown;
-  to?: unknown;
-  budget?: unknown;
-  title?: unknown;
-  reason?: unknown;
-}
-
 function systemText(context: Context, row: MessageView): string {
   const { t, input } = context;
-  const { event, from, to, budget, title, reason } = row.data as SystemData;
   const name = (id: string) => agentName(input.agents, id);
-  if (event === "steward") {
-    if (typeof to === "string" && typeof from === "string")
-      return t("stewardChanged", { to: name(to), from: name(from) });
-    if (typeof to === "string") return t("stewardSet", { to: name(to) });
-    if (typeof from === "string" && reason === "left")
-      return t("stewardLeft", { from: name(from) });
-    if (typeof from === "string")
-      return t("stewardCleared", { from: name(from) });
+  const notice = systemNoticeOf(row);
+  switch (notice.kind) {
+    case "stewardChanged":
+      return t("stewardChanged", {
+        to: name(notice.to),
+        from: name(notice.from),
+      });
+    case "stewardSet":
+      return t("stewardSet", { to: name(notice.to) });
+    case "stewardCleared":
+      return t("stewardCleared", { from: name(notice.from) });
+    case "stewardLeft":
+      return t("stewardLeft", { from: name(notice.from) });
+    case "wakeBudget":
+      return t("wakeBudget", { budget: notice.budget });
+    case "createdByCaptain":
+      return t("createdByCaptain");
+    case "routineReport":
+      return notice.title === null
+        ? t("routineReportUntitled", { name: notice.name })
+        : t("routineReport", { name: notice.name, title: notice.title });
+    case "text":
+      return notice.text;
   }
-  if (event === "wake_budget" && typeof budget === "number")
-    return t("wakeBudget", { budget });
-  if (event === "routine_report" && typeof title === "string" && title !== "")
-    return title;
-  return row.text;
 }
 
 function taskDraftText(context: Context, row: MessageView): string {

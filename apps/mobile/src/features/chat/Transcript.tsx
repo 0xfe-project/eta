@@ -2,7 +2,11 @@ import type { AttachmentView, MessageView } from "@eta/client-contracts";
 import type { ListRef } from "nsh";
 import type { Chat } from "./conversation";
 import type { Outgoing } from "./outbox";
-import { publishedRefs, withRealmCalls } from "@eta/client-contracts";
+import {
+  publishedRefs,
+  systemNoticeOf,
+  withRealmCalls,
+} from "@eta/client-contracts";
 import { computed, effect, List, signal, Text, untracked, View } from "nsh";
 import { t } from "../../i18n";
 import { open } from "../../nav/stack";
@@ -428,29 +432,33 @@ function TaskRow(props: { message: MessageView; chat: Chat }) {
 
 /** A system row: the host writes English for its agents, the page says the event in the reader's language. */
 function systemText(message: MessageView): string {
-  const { event, from, to, budget, reason } = message.data as {
-    event?: string;
-    from?: string | null;
-    to?: string | null;
-    budget?: number;
-    reason?: string;
-  };
-  if (event === "steward") {
-    if (typeof to === "string" && typeof from === "string")
+  const notice = systemNoticeOf(message);
+  switch (notice.kind) {
+    case "stewardChanged":
       return t("chat.system.stewardChanged", {
-        to: agentName(to),
-        from: agentName(from),
+        to: agentName(notice.to),
+        from: agentName(notice.from),
       });
-    if (typeof to === "string")
-      return t("chat.system.stewardSet", { to: agentName(to) });
-    if (typeof from === "string" && reason === "left")
-      return t("chat.system.stewardLeft", { from: agentName(from) });
-    if (typeof from === "string")
-      return t("chat.system.stewardCleared", { from: agentName(from) });
+    case "stewardSet":
+      return t("chat.system.stewardSet", { to: agentName(notice.to) });
+    case "stewardCleared":
+      return t("chat.system.stewardCleared", { from: agentName(notice.from) });
+    case "stewardLeft":
+      return t("chat.system.stewardLeft", { from: agentName(notice.from) });
+    case "wakeBudget":
+      return t("chat.system.wakeBudget", { budget: notice.budget });
+    case "createdByCaptain":
+      return t("chat.system.createdByCaptain");
+    case "routineReport":
+      return notice.title === null
+        ? t("chat.system.routineReportUntitled", { name: notice.name })
+        : t("chat.system.routineReport", {
+            name: notice.name,
+            title: notice.title,
+          });
+    case "text":
+      return notice.text;
   }
-  if (event === "wake_budget" && typeof budget === "number")
-    return t("chat.system.wakeBudget", { budget });
-  return message.text;
 }
 
 /**
@@ -586,7 +594,11 @@ export function Transcript(props: {
         .filter((item) => !arrived.has(item.id))
         .reverse()
         .map(
-          (item): Item => ({ key: item.id, type: "outgoing", outgoing: item }),
+          (item): Item => ({
+            key: item.id,
+            type: "outgoing",
+            outgoing: item,
+          }),
         ),
       ...chat
         .grouped()

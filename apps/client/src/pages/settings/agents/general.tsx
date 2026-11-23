@@ -1,6 +1,6 @@
-import type { ThinkingLevel } from "@eta/client-contracts";
 import type { TextVariant } from "../../../components";
 import type { AgentForm } from "./form";
+import { levelSupport } from "@eta/client-contracts";
 import { View } from "nsh";
 import { ActionItem, ActionMenu, Field, Label, row } from "../../../components";
 import { ModelSelect } from "../../../components/model-select";
@@ -15,16 +15,6 @@ import { PersonaField } from "./instructions";
 import { MachineField } from "./machine-field";
 
 const agentNameLimit = 100;
-const thinkingOptions: ThinkingLevel[] = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "ultra",
-];
 export function AgentGeneral(props: {
   form: AgentForm;
   onModelServices: () => void;
@@ -51,6 +41,9 @@ export function AgentGeneral(props: {
     model,
     chooseModel,
     thinking,
+    thinkingCleared,
+    levels,
+    chooseThinking,
     missingModel,
     noModels,
     avatar,
@@ -116,6 +109,41 @@ export function AgentGeneral(props: {
             {goToModelServices("small", "mutedInk")}
           </View>
         </If>
+      </If>
+    );
+  }
+  /**
+   * What the level picker has to say: a level the last model change cleared, a kept level the
+   * model does not take (warnings), else why the model offers what it does.
+   */
+  function thinkingHint() {
+    const level = thinking();
+    const warning = thinkingCleared()
+      ? uiText("thinkingCleared", { level: thinkingCleared()! })
+      : level && levelSupport(levels(), level) === "unsupported"
+        ? uiText("thinkingUnsupported", { level })
+        : undefined;
+    const basis = levels().basis;
+    const note =
+      basis === "unknown"
+        ? uiText("thinkingUnknown")
+        : basis === "undeclared"
+          ? uiText("thinkingUndeclared")
+          : basis === "none"
+            ? uiText("thinkingNone")
+            : undefined;
+    return (
+      <If
+        when={warning}
+        else={
+          <If when={note}>
+            <Label variant={creating ? "caption" : "small"} tone="muted">
+              {note}
+            </Label>
+          </If>
+        }
+      >
+        <WarningLine outline text={warning!} />
       </If>
     );
   }
@@ -253,6 +281,7 @@ export function AgentGeneral(props: {
         label={uiText("thinkingLevel")}
         stack={stacked()}
         phone={phoneEditor()}
+        hint={thinkingHint()}
       >
         <ActionMenu
           label={uiText("thinkingLevel")}
@@ -262,14 +291,14 @@ export function AgentGeneral(props: {
           <ActionItem
             label={uiText("modelDefault")}
             checked={!thinking()}
-            onSelect={() => thinking.set(null)}
+            onSelect={() => chooseThinking(null)}
           />
-          <Each of={thinkingOptions}>
+          <Each of={levels().levels}>
             {(option) => (
               <ActionItem
                 label={option()}
                 checked={thinking() === option()}
-                onSelect={() => thinking.set(option())}
+                onSelect={() => chooseThinking(option())}
               />
             )}
           </Each>

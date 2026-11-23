@@ -20,15 +20,30 @@ import { THINKING_LEVELS } from "@eta/core";
 const OPEN_NAMES: ReadonlySet<RuntimeId> = new Set(["claude", "codex", "grok"]);
 
 /**
+ * The levels a listed model takes, as `effortFor` reads them: undefined when they are not known
+ * (not listed, or the runtime could not say them), so a level is passed on as asked.
+ */
+export function listedEfforts(
+  model: RuntimeModel | undefined,
+): readonly string[] | undefined {
+  return model === undefined || model.effortsUnknown === true
+    ? undefined
+    : model.efforts;
+}
+
+/**
  * The effort a runtime is asked for at a thinking level: the level itself where the model takes
- * it, `minimal` falling back to `low`. `off` (and a level the model lacks) asks for nothing, and
- * the runtime runs its own default.
+ * it, `minimal` falling back to `low`. `off` is the runtime's `none` (or `off`) where the model
+ * lists one;
+ * otherwise `off` (and a level the model lacks) asks for nothing, and the runtime runs its own
+ * default.
  */
 export function effortFor(
   level: ThinkingLevel,
   efforts: readonly string[] | undefined,
 ): string | undefined {
-  if (level === "off") return undefined;
+  if (level === "off")
+    return ["none", "off"].find((word) => efforts?.includes(word) === true);
   if (efforts === undefined) return level;
   if (efforts.includes(level)) return level;
   if (level === "minimal" && efforts.includes("low")) return "low";
@@ -40,7 +55,7 @@ function modelOf(
   id: string,
   listed: RuntimeModel | undefined,
 ): Model<Api> {
-  const efforts = listed?.efforts;
+  const efforts = listedEfforts(listed);
   return {
     id,
     name: listed?.name ?? id,

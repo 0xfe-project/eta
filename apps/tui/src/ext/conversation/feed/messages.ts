@@ -16,6 +16,9 @@ export const feedMessages = defineMessages({
     stewardLeft: "{from} left the group; it has no steward now.",
     wakeBudget:
       "This message has used its {budget} wake-ups; later @mentions stay in the conversation and wake nobody until you write again.",
+    createdByCaptain: "Created by Captain",
+    routineReport: "Routine “{name}” sent a report: {title}",
+    routineReportUntitled: "Routine “{name}” sent a report",
     taskDraft: "Task draft: {title}",
     taskDraftBacklog:
       "Task draft: {title} (goes to the backlog when confirmed; does not run yet)",
@@ -37,6 +40,9 @@ export const feedMessages = defineMessages({
     stewardLeft: "{from} 退出了群，现在没有主理人。",
     wakeBudget:
       "这条消息已经用完 {budget} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
+    createdByCaptain: "由 Captain 创建",
+    routineReport: "定时任务「{name}」发来汇报：{title}",
+    routineReportUntitled: "定时任务「{name}」发来汇报",
     taskDraft: "任务草稿：{title}",
     taskDraftBacklog: "任务草稿：{title}（确认后放入积压，不会立即执行）",
     taskDraftDiscarded: "任务草稿：{title}（已丢弃）",

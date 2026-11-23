@@ -62,7 +62,7 @@ import { join } from "node:path";
 import { installedSessionCapabilities } from "@botiverse/oar";
 import { hostResultOf, HostTools, NO_RUN } from "@eta/runtime-kit";
 import { HostCalls } from "./host-calls";
-import { effortFor } from "./models";
+import { effortFor, listedEfforts } from "./models";
 import { Translator } from "./translate";
 
 export interface OarDelegateOptions {
@@ -576,7 +576,10 @@ export class OarDelegate implements RunDelegate {
     const listed = catalog
       .peek(runtime)
       ?.models.find((entry) => entry.id === model);
-    return { model, effort: effortFor(config.thinkingLevel, listed?.efforts) };
+    return {
+      model,
+      effort: effortFor(config.thinkingLevel, listedEfforts(listed)),
+    };
   }
 
   /** The runtime session for these settings: the open one, or one (re)opened for them. */

@@ -4,11 +4,13 @@ import type {
   AgentRuntime,
   AgentRuntimeInfo,
   MachineView,
+  ModelThinking,
   ThinkingLevel,
 } from "@eta/client-contracts";
 import type { ScrollRef } from "nsh";
 import type { SelectOption } from "../../ui/SelectSheet";
 import type { Model } from "./models";
+import { agentThinking, keptLevel } from "@eta/client-contracts";
 import { computed, effect, signal, Text, untracked, View } from "nsh";
 import { agents, machines } from "../../app/lists";
 import { t } from "../../i18n";
@@ -30,15 +32,6 @@ interface PersonaCard {
   description: string;
   custom: boolean;
 }
-
-/** What the pickers offer; `xhigh` and `max` only some models accept. */
-const THINKING_LEVELS = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-] as const satisfies readonly ThinkingLevel[];
 
 const INSTRUCTIONS_MAX = 10_000;
 
@@ -144,6 +137,27 @@ function useDraft() {
       model.set("");
   });
 
+  /** The levels the chosen model declares (`agentThinking`): what the thinking picker offers. */
+  const levels = (): ModelThinking => {
+    if (external())
+      return agentThinking(runtime(), model() || null, {
+        runtimes: runtimes(),
+      });
+    return (
+      (providerModels() ?? []).find((item) => item.id === model())?.thinking ??
+      agentThinking("eta", null, {})
+    );
+  };
+  /** The level a change of model cleared, because the new one does not take it. */
+  const thinkingCleared = signal<string | undefined>(undefined);
+  effect(() => {
+    const level = thinking();
+    if (level === "") return;
+    if (keptLevel(levels(), level as ThinkingLevel) !== null) return;
+    thinkingCleared.set(level);
+    thinking.set("");
+  });
+
   const checking = () => external() && runtimes() === undefined;
 
   const valid = (): boolean => {
@@ -180,6 +194,8 @@ function useDraft() {
     runtime,
     model,
     thinking,
+    thinkingCleared,
+    levels,
     persona,
     instructions,
     note,
@@ -319,8 +335,20 @@ export function NewAgentScreen() {
 
   const thinkingOptions = (): SelectOption<string>[] => [
     { value: sentinel, label: t("create.agent.thinkingDefault") },
-    ...THINKING_LEVELS.map((level) => ({ value: level, label: level })),
+    ...draft.levels().levels.map((level) => ({ value: level, label: level })),
   ];
+
+  /** Why the model offers the levels it does, where that is not its own declaration. */
+  const thinkingHint = () => {
+    const basis = draft.levels().basis;
+    return basis === "unknown"
+      ? t("create.agent.thinkingUnknown")
+      : basis === "undeclared"
+        ? t("create.agent.thinkingUndeclared")
+        : basis === "none"
+          ? t("create.agent.thinkingNone")
+          : undefined;
+  };
 
   const modelLabel = () => {
     const chosen = (draft.models() ?? []).find(
@@ -385,6 +413,7 @@ export function NewAgentScreen() {
         draft.modelError.set(undefined);
         break;
       case "thinking":
+        draft.thinkingCleared.set(undefined);
         draft.thinking.set(empty);
         break;
     }
@@ -464,6 +493,14 @@ export function NewAgentScreen() {
             testID="agent-thinking"
             label={t("create.agent.thinking")}
             value={draft.thinking() || t("create.agent.thinkingDefault")}
+            hint={thinkingHint()}
+            note={
+              draft.thinkingCleared() === undefined
+                ? undefined
+                : t("create.agent.thinkingCleared", {
+                    level: draft.thinkingCleared()!,
+                  })
+            }
             onPress={() => picking.set("thinking")}
           />
         </View>

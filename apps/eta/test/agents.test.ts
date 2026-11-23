@@ -101,12 +101,18 @@ describe("creating an agent", () => {
       instructions: "Count.",
       model: "fake:other",
     });
-    // `ultra` is a level like any other: kept whatever the model takes (the form says so).
-    const ultra = (await w.client.call("agents", "update", {
+    // A level the model takes is kept; `ultra` is one only a model that names it takes.
+    const high = (await w.client.call("agents", "update", {
       agentId: agent.id,
-      thinkingLevel: "ultra",
+      thinkingLevel: "high",
     })) as { agent: AgentView };
-    expect(ultra.agent.thinkingLevel).toBe("ultra");
+    expect(high.agent.thinkingLevel).toBe("high");
+    await expect(
+      w.client.call("agents", "update", {
+        agentId: agent.id,
+        thinkingLevel: "ultra",
+      }),
+    ).rejects.toThrow(/fake:other does not take thinking level ultra/);
     // A field that was not sent stays, and `null` clears one.
     const cleared = (await w.client.call("agents", "update", {
       agentId: agent.id,
@@ -135,6 +141,79 @@ describe("creating an agent", () => {
     await expect(
       w.client.call("agents", "update", { agentId: "nobody", name: "x" }),
     ).rejects.toThrow(/no such agent/);
+  });
+});
+
+describe("an agent's thinking level against what its model declares", () => {
+  /** `fake:flash` declares high and max (#799's endpoint model); `fake:silent` says nothing. */
+  const declaring = () => {
+    const { models } = scriptedModels(() => say("ok"));
+    return {
+      models: {
+        ...models,
+        getModel(provider: string, id: string) {
+          const model = models.getModel(provider, id);
+          if (model === undefined) return undefined;
+          if (id === "silent") return { ...model, id, reasoning: false };
+          if (id !== "flash") return { ...model, id };
+          return {
+            ...model,
+            id,
+            thinkingLevelMap: {
+              off: null,
+              minimal: null,
+              low: null,
+              medium: null,
+              high: "high",
+              xhigh: null,
+              max: "max",
+            },
+          };
+        },
+      } satisfies typeof models,
+    };
+  };
+
+  it("refuses a level the model does not declare, naming the ones it does", async () => {
+    const w = await world(declaring());
+    await expect(
+      w.agent("Ada", { model: "fake:flash", thinkingLevel: "ultra" }),
+    ).rejects.toThrow(
+      /fake:flash does not take thinking level ultra; it takes high, max/,
+    );
+    await expect(
+      w.agent("Ada", { model: "fake:silent", thinkingLevel: "high" }),
+    ).rejects.toThrow(/it takes off/);
+    const agent = await w.agent("Ada", {
+      model: "fake:flash",
+      thinkingLevel: "max",
+    });
+    expect(agent.thinkingLevel).toBe("max");
+  });
+
+  it("clears a level the new model does not take, and says so", async () => {
+    const w = await world(declaring());
+    const agent = await w.agent("Ada", {
+      model: "fake:other",
+      thinkingLevel: "low",
+    });
+    const moved = (await w.client.call("agents", "update", {
+      agentId: agent.id,
+      model: "fake:flash",
+    })) as { agent: AgentView; thinkingCleared?: string };
+    expect(moved.agent.thinkingLevel).toBeNull();
+    expect(moved.thinkingCleared).toBe("low");
+    // One the new model takes stays, and nothing is said.
+    await w.client.call("agents", "update", {
+      agentId: agent.id,
+      thinkingLevel: "high",
+    });
+    const kept = (await w.client.call("agents", "update", {
+      agentId: agent.id,
+      model: "fake:other",
+    })) as { agent: AgentView; thinkingCleared?: string };
+    expect(kept.agent.thinkingLevel).toBe("high");
+    expect(kept.thinkingCleared).toBeUndefined();
   });
 });
 

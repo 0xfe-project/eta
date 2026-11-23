@@ -11,6 +11,10 @@ export const chatMessages = {
   runTools: ["Tools", "工具"],
   runThinking: ["Thinking", "思考"],
   runThinkingLevel: ["Thinking {{level}}", "思考级别：{{level}}"],
+  runThinkingFellBack: [
+    "Thinking model default ({{level}} not supported by this model)",
+    "思考级别：模型默认（模型不支持 {{level}}）",
+  ],
   runUser: ["User", "用户"],
   runSummary: ["Summary", "摘要"],
   runGenericFailure: ["The run failed.", "本次运行失败。"],
@@ -392,4 +396,31 @@ export const chatMessages = {
   fileSaveFailed: ["Couldn't save {{name}}", "无法保存 {{name}}"],
   pictureUnnamed: ["image", "图片"],
   screenshotNamed: ["Screenshot {{index}}", "截图 {{index}}"],
+  // A system row, in the reader's language: the same sentences as apps/web, apps/mobile and the TUI.
+  systemStewardChanged: [
+    "{{to}} is now the steward, taking over from {{from}}.",
+    "{{to}} 成为主理人，接替 {{from}}。",
+  ],
+  systemStewardSet: ["{{to}} is now the steward.", "{{to}} 成为主理人。"],
+  systemStewardCleared: [
+    "{{from}} is no longer the steward.",
+    "{{from}} 不再是主理人。",
+  ],
+  systemStewardLeft: [
+    "{{from}} left the group; it has no steward now.",
+    "{{from}} 退出了群，现在没有主理人。",
+  ],
+  systemWakeBudget: [
+    "This message has used its {{budget}} wake-ups; later @mentions stay in the conversation and wake nobody until you write again.",
+    "这条消息已经用完 {{budget}} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
+  ],
+  systemCreatedByCaptain: ["Created by Captain", "由 Captain 创建"],
+  systemRoutineReport: [
+    "Routine “{{name}}” sent a report: {{title}}",
+    "定时任务「{{name}}」发来汇报：{{title}}",
+  ],
+  systemRoutineReportUntitled: [
+    "Routine “{{name}}” sent a report",
+    "定时任务「{{name}}」发来汇报",
+  ],
 } as const;
