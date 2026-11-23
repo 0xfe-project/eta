@@ -186,7 +186,7 @@ describe("the catalog", () => {
   it("starts with Cursor's and Anthropic's lists, and says so when there is none", async () => {
     expect(DEFAULT_SOURCES.map((x) => [x.name, x.enabled])).toEqual([
       ["Anthropic", true],
-      ["Cursor", false],
+      ["Cursor", true],
     ]);
     expect(DEFAULT_SOURCES[1]!.url).toBe(
       "https://raw.githubusercontent.com/cursor/plugins/HEAD/.cursor-plugin/marketplace.json",
@@ -754,20 +754,11 @@ describe("switching a source on and off", () => {
     return { urls, restore: () => void (globalThis.fetch = real) };
   }
 
-  it("on a fresh install reads Anthropic's list only; switching Cursor on brings its entries in, off takes them away", async () => {
+  it("on a fresh install reads both lists; switching Cursor off takes its entries away, on brings them back", async () => {
     const seen = recordFetches();
     try {
       const m = await market();
       let catalog = await m.raw.catalog();
-      expect(seen.urls).toEqual([DEFAULT_SOURCES[0]!.url]);
-      expect(catalog.sources.map((x) => x.source.name)).toEqual(["Anthropic"]);
-      expect(catalog.sources[0]!.entries!.map((e) => e.name)).toEqual([
-        "from-anthropic",
-      ]);
-
-      m.raw.setSourceEnabled(DEFAULT_SOURCES[1]!.url, true);
-      seen.urls.length = 0;
-      catalog = await m.raw.catalog();
       expect(seen.urls.sort()).toEqual(
         DEFAULT_SOURCES.map((x) => x.url).sort(),
       );
@@ -776,9 +767,23 @@ describe("switching a source on and off", () => {
       ).toEqual(["from-anthropic", "from-cursor"]);
 
       m.raw.setSourceEnabled(DEFAULT_SOURCES[1]!.url, false);
-      expect((await m.raw.catalog()).sources).toHaveLength(1);
+      seen.urls.length = 0;
+      catalog = await m.raw.catalog();
+      expect(seen.urls).toEqual([DEFAULT_SOURCES[0]!.url]);
+      expect(catalog.sources.map((x) => x.source.name)).toEqual(["Anthropic"]);
       // Off is not removed: the address and the name stay.
-      expect(m.raw.sources()).toEqual([DEFAULT_SOURCES[0], DEFAULT_SOURCES[1]]);
+      expect(m.raw.sources()).toEqual([
+        DEFAULT_SOURCES[0],
+        { ...DEFAULT_SOURCES[1]!, enabled: false },
+      ]);
+
+      m.raw.setSourceEnabled(DEFAULT_SOURCES[1]!.url, true);
+      seen.urls.length = 0;
+      catalog = await m.raw.catalog();
+      expect(seen.urls.sort()).toEqual(
+        DEFAULT_SOURCES.map((x) => x.url).sort(),
+      );
+      expect(catalog.sources).toHaveLength(2);
       expect(() =>
         m.raw.setSourceEnabled("https://nope.test/x.json", true),
       ).toThrow(/not in the list/);
@@ -791,7 +796,9 @@ describe("switching a source on and off", () => {
     const seen = recordFetches();
     try {
       const m = await market();
+      // Both defaults are on, so both are switched off to leave nothing to read.
       m.raw.setSourceEnabled(DEFAULT_SOURCES[0]!.url, false);
+      m.raw.setSourceEnabled(DEFAULT_SOURCES[1]!.url, false);
       seen.urls.length = 0;
       expect(await m.raw.catalog()).toEqual({ sources: [], proxy: "" });
       expect(seen.urls).toEqual([]);

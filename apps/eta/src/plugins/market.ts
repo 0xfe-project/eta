@@ -40,14 +40,14 @@ import { serverViews } from "./server-view";
 
 const CURSOR_URL =
   "https://raw.githubusercontent.com/cursor/plugins/HEAD/.cursor-plugin/marketplace.json";
-/** The two public lists the market starts with: Anthropic's is on, Cursor's is there to be switched on. */
+/** The two public lists the market starts with: both are on. */
 export const DEFAULT_SOURCES: readonly MarketSource[] = [
   {
     name: "Anthropic",
     url: "https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/.claude-plugin/marketplace.json",
     enabled: true,
   },
-  { name: "Cursor", url: CURSOR_URL, enabled: false },
+  { name: "Cursor", url: CURSOR_URL, enabled: true },
 ];
 export const SOURCES_KEY = "plugins.sources";
 export const PROXY_KEY = "plugins.githubProxy";
