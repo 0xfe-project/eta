@@ -67,16 +67,14 @@ export function ConversationTimeline(props: {
   const firstVisibleId = signal<string>();
   const phone = () => props.phone;
   const sameFailures = computed(() => sameFailureAsNext(props.rows));
-  // The owning conversation is keyed by id. Always read the current row, including a remote confirmation.
+  // The owning conversation is keyed by id. Always read the current row. Once it is a task card
+  // (confirmed here, whose row update may come before the reply, or in another window) the form
+  // has nothing left to confirm and closes; the card itself is the way to the task.
   const reading = signal<string>();
   const selected = () => {
     const id = reading();
     return id && props.accessible
-      ? props.rows.find(
-          (row) =>
-            row.id === id &&
-            (row.kind === "task_draft" || row.kind === "task_card"),
-        )
+      ? props.rows.find((row) => row.id === id && row.kind === "task_draft")
       : undefined;
   };
   const actions = new Map<string, () => void>();
@@ -142,7 +140,8 @@ export function ConversationTimeline(props: {
   function closeDraft() {
     const draft = reading();
     if (!draft) return;
-    const current = selected();
+    // The row, whether still a draft or by now the task's card: focus goes back to its action.
+    const current = props.rows.find((row) => row.id === draft);
     reading.set(undefined);
     if (top) {
       const { id, offset } = top;

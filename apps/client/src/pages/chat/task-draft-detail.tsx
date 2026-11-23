@@ -7,7 +7,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import { draftStatus } from "@eta/client-contracts";
-import { signal, View, windowSize } from "nsh";
+import { cleanup, signal, View, windowSize } from "nsh";
 import {
   Button,
   Caption,
@@ -22,6 +22,7 @@ import {
   textStyle,
 } from "../../components";
 import { sendShortcut } from "../../components/eta-editor";
+import { showToast } from "../../components/toast";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { createDescription, DescriptionBox } from "../tasks/description-box";
@@ -57,10 +58,21 @@ function FormRow(props: { label: string; children: JSX.Element }) {
   );
 }
 
+/** A task's title as a toast's second line: long ones are cut. */
+const TOAST_TITLE_MAX = 80;
+function toastTitle(title: string) {
+  const line = title.replace(/\s+/g, " ").trim();
+  return line.length > TOAST_TITLE_MAX
+    ? `${line.slice(0, TOAST_TITLE_MAX - 1).trimEnd()}…`
+    : line;
+}
+
 /**
  * The form behind a draft's "Edit and confirm", as apps/web's: the agent's
  * title, description and status, editable, and where it will run. Closing it in
  * any way leaves the draft as it was; only its confirm button creates the task.
+ * Once the task is made the form closes and a toast names it; a confirmation
+ * that fails keeps the form, with what was typed, and says why.
  */
 export function TaskDraftDetail(props: {
   message: MessageView;
@@ -79,8 +91,16 @@ export function TaskDraftDetail(props: {
   const title = signal(initialTitle.trim());
   const status = signal<TaskDraftStatus>(draftStatus(data()));
   const busy = signal(false);
+  /** Why the last confirmation failed, in the host's words. */
+  const failure = signal("");
+  // The row can become the task's card before the reply comes; the
+  // conversation closes the form then, and the reply only adds the toast.
+  let open = true;
+  cleanup(() => {
+    open = false;
+  });
   const discarded = () => data().discarded === true;
-  const pending = () => props.message.kind === "task_draft" && !discarded();
+  const pending = () => !discarded();
   const description = createDescription({
     text: data().description ?? "",
     agents: () =>
@@ -98,19 +118,39 @@ export function TaskDraftDetail(props: {
   async function confirm() {
     if (!canConfirm()) return;
     busy.set(true);
-    const result = await host.action(() =>
-      host.call<TaskResults["confirmDraft"]>("tasks", "confirmDraft", {
-        conversationId: props.message.conversationId,
-        messageId: props.message.id,
-        edits: {
-          title: title().trim(),
-          description: description.read(),
-          status: status(),
+    failure.set("");
+    let result: TaskResults["confirmDraft"];
+    try {
+      result = await host.call<TaskResults["confirmDraft"]>(
+        "tasks",
+        "confirmDraft",
+        {
+          conversationId: props.message.conversationId,
+          messageId: props.message.id,
+          edits: {
+            title: title().trim(),
+            description: description.read(),
+            status: status(),
+          },
         },
-      }),
-    );
+      );
+    } catch (problem) {
+      busy.set(false);
+      failure.set(problem instanceof Error ? problem.message : String(problem));
+      return;
+    }
     busy.set(false);
-    if (result) props.onClose();
+    const { task } = result;
+    showToast({
+      title: uiText(
+        task.status === "backlog"
+          ? "draftBackloggedToast"
+          : "draftCreatedToast",
+        { number: task.number },
+      ),
+      body: toastTitle(task.title),
+    });
+    if (open) props.onClose();
   }
   const executor = () => {
     const id = data().assignee || props.message.agentId;
@@ -184,11 +224,9 @@ export function TaskDraftDetail(props: {
               <View role="alert">
                 <Label>
                   {uiText(
-                    !discarded()
-                      ? "draftCreated"
-                      : data().autoHandled === "timeout"
-                        ? "draftDiscardedAuto"
-                        : "draftDiscarded",
+                    data().autoHandled === "timeout"
+                      ? "draftDiscardedAuto"
+                      : "draftDiscarded",
                   )}
                 </Label>
               </View>
@@ -267,6 +305,23 @@ export function TaskDraftDetail(props: {
           </If>
         </View>
       </SmoothScroll>
+      <If when={failure()}>
+        {(reason) => (
+          <View
+            role="alert"
+            style={{
+              paddingVertical: 8,
+              paddingHorizontal: props.phone ? 16 : 20,
+              backgroundColor: color().redFill,
+              flexShrink: 0,
+            }}
+          >
+            <Label variant="small" tone="red">
+              {uiText("draftConfirmFailed", { reason: reason() })}
+            </Label>
+          </View>
+        )}
+      </If>
       <View
         style={{
           ...row,

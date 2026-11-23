@@ -49,6 +49,55 @@ test("confirming takes the form's own button and sends what was edited", async (
   );
 });
 
+for (const width of [1440, 390]) {
+  test(`a confirmed draft's form closes and a toast names the task at ${width}px`, async () => {
+    const app = await open("./fixtures/draft-conversation.tsx", {
+      width,
+      height: 844,
+      locale: "en-US",
+    });
+    await app.press("label:Edit and confirm");
+    await app.press("label:Confirm and start");
+    await app.waitFor("text:Calls: 1");
+    // The row is the task's card before the host's reply comes: the form is
+    // gone already, and nothing in its place says the task was made.
+    expect(app.shows("text:Confirm task draft")).toBe(false);
+    expect(app.shows("label:Confirm and start")).toBe(false);
+    expect(app.texts().join(" ")).not.toContain("created as a task");
+    await app.press("label:Reply");
+    await app.waitFor("text:Task #7 created");
+    expect(app.texts()).toContain("Legacy title");
+    expect(app.shows("text:Confirm task draft")).toBe(false);
+  });
+}
+
+test("a draft confirmed into the backlog says so in its toast", async () => {
+  const app = await open("./fixtures/draft-conversation.tsx", {
+    locale: "en-US",
+  });
+  await app.press("label:Edit and confirm");
+  await app.press("label:Backlog");
+  await app.press("label:Create");
+  await app.press("label:Reply");
+  await app.waitFor("text:Task #7 added to Backlog");
+  expect(app.shows("text:Confirm task draft")).toBe(false);
+});
+
+test("a confirmation the host refuses keeps the form, what was typed, and says why", async () => {
+  const app = await open("./fixtures/draft-conversation.tsx", {
+    urlScheme: "eta://fixture/refused",
+    locale: "en-US",
+  });
+  await app.press("label:Edit and confirm");
+  await app.type("label:Title", " (edited)");
+  await app.press("label:Confirm and start");
+  await app.waitFor("text:Could not create the task: no such task: base");
+  expect(app.shows("text:Confirm task draft")).toBe(true);
+  expect(app.value("label:Title")).toBe("Legacy title (edited)");
+  expect(app.enabled("label:Confirm and start")).toBe(true);
+  expect(app.shows("text:Task #7 created")).toBe(false);
+});
+
 test("an empty title cannot be confirmed", async () => {
   const app = await open("./fixtures/draft-conversation.tsx", {
     urlScheme: "eta://fixture/empty",
