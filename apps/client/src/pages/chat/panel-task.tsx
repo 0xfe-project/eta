@@ -94,7 +94,7 @@ export function PanelTask(props: {
                   height: control.sm,
                   paddingHorizontal: 0,
                 }}
-                iconSize={icon.md}
+                iconSize={icon.sm}
               >
                 <ActionItem
                   label={uiText("edit")}
