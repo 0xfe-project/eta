@@ -1,6 +1,7 @@
 import type { JSX } from "nsh";
 import { View } from "nsh";
-import { Button, colors, Label, row } from "../../components";
+import { Button, colors, inCompact, Label, row } from "../../components";
+import { control, icon } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 /** Clear space left of the CaretLeft glyph inside its square: 72 of 256. */
@@ -18,13 +19,16 @@ export function TaskTopBar(props: {
   /** Left out while the task loads. */
   number?: number;
   inset: number;
-  /** A finger's 32pt back button, as tall as the phone's … button; 28pt under a pointer. */
+  /** A finger's 32pt back button, as tall as the phone's … button; 28pt under a pointer (24pt
+   * where compact). */
   touch?: boolean;
   background?: "canvas" | "surface";
   onBack: () => void;
   children?: JSX.Element;
 }) {
   const c = colors();
+  // In the conversation panel (compact) the bar's text, controls and glyphs are the panel's own.
+  const compact = inCompact();
   return (
     <View
       style={{
@@ -43,10 +47,10 @@ export function TaskTopBar(props: {
         label={uiText("tasks2")}
         accessibilityLabel={uiText("backToTasks")}
         icon="back"
-        iconSize={16}
+        iconSize={compact() ? icon.sm : icon.md}
         tone="ghost"
-        labelVariant="body"
-        size={props.touch ? 32 : 28}
+        labelVariant={compact() ? "small" : "body"}
+        size={props.touch ? control.lg : compact() ? control.sm : control.md}
         style={{ gap: 2, paddingLeft: backPadding, paddingRight: 6 }}
         onPress={props.onBack}
       />

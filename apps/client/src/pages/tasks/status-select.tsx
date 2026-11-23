@@ -1,7 +1,8 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { TaskDetailState } from "./task-detail-state";
 import { View } from "nsh";
-import { colors, Icon, Label, row } from "../../components";
+import { colors, Icon, inCompact, Label, row } from "../../components";
+import { control, icon } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { StatusOptions, TaskMenu } from "./menu";
 import { statusName, TaskGlyph, tones } from "./status";
@@ -41,6 +42,8 @@ export function StatusSelect(props: {
   const plain = () => !!props.compact && !tint();
   const ink = () => (tint() ? tones[props.item.status] : "ink");
   const busy = () => changing() !== undefined;
+  /** In the conversation panel: a 24px trigger with 12px glyphs. */
+  const dense = inCompact();
   const open = () => {
     statusError.set("");
     status.set(true);
@@ -58,7 +61,7 @@ export function StatusSelect(props: {
         onPress={pressable ? open : undefined}
         style={{
           ...row,
-          height: plain() ? 22 : 28,
+          height: plain() ? 22 : dense() ? control.sm : control.md,
           minWidth: plain() ? undefined : 128,
           maxWidth: "100%",
           paddingHorizontal: 8,
@@ -71,7 +74,7 @@ export function StatusSelect(props: {
         }}
       >
         <If when={!plain()}>
-          <TaskGlyph status={props.item.status} size={14} />
+          <TaskGlyph status={props.item.status} size={dense() ? icon.sm : 14} />
         </If>
         <Label
           variant={plain() ? "caption" : "small"}
@@ -82,7 +85,11 @@ export function StatusSelect(props: {
         >
           {statusName(props.item.status)}
         </Label>
-        <Icon name="down" size={plain() ? 10 : 14} tone={ink()} />
+        <Icon
+          name="down"
+          size={plain() ? 10 : dense() ? icon.sm : 14}
+          tone={ink()}
+        />
       </View>
     );
   };

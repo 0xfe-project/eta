@@ -10,9 +10,12 @@ import {
   densityDefaults,
   fontFamily,
   Fonts,
+  inCompact,
   monoFontFamily,
   textFaces,
+  textStyle,
 } from "./theme";
+import { weight } from "./tokens";
 
 export function Label(props: {
   children?: JSX.Element | string | number;
@@ -80,11 +83,14 @@ export function Markdown(props: {
   /** `small` text at its tight line height with `subtitle` headings, for a
    * narrow panel. */
   dense?: boolean;
-  /** The body's role: `body` by default, `small` with `dense`. Running text
-   * takes the role's `prose` line height, dense text its `line`. */
+  /** The body's role: `body` by default, `small` with `dense` or where the
+   * density is compact. Running text takes the role's `prose` line height,
+   * dense text its `line`. Where compact, headings, tables and code take the
+   * body's role too, so nothing in it is larger than its text. */
   variant?: TextVariant;
-  /** Compact headings (with `compactHeadings` or `dense`): role, weight and
-   * the space above and below, such as `small`/600 with 6 above. */
+  /** Compact headings (with `compactHeadings`, `dense` or a compact density):
+   * role, weight and the space above and below, such as `small`/600 with 6
+   * above. */
   heading?: {
     variant?: TextVariant;
     weight?: number;
@@ -96,13 +102,20 @@ export function Markdown(props: {
   const c = colors();
   const fonts = Fonts();
   const type = textFaces();
+  const compact = inCompact();
   const code = () => ({ fontFamily: monoFontFamily(fonts()) });
   const base = props.dense
     ? { weight: 600, space: 0, after: 0 }
-    : { weight: undefined, space: 16, after: 6 };
-  const body = () => type(props.variant ?? (props.dense ? "small" : "body"));
+    : { weight: compact() ? weight.strong : undefined, space: 16, after: 6 };
+  const variant = () =>
+    props.variant ?? (props.dense || compact() ? "small" : "body");
+  const body = () => type(variant());
+  /** Where compact: a table's cells and a code block in the body's size, at its tight line. */
+  const fit = () => (compact() ? textStyle(body()) : {});
   const heading = () => {
-    const face = type(props.heading?.variant ?? "subtitle");
+    const face = type(
+      props.heading?.variant ?? (compact() ? variant() : "subtitle"),
+    );
     return {
       fontSize: face.size,
       lineHeight: face.line,
@@ -111,7 +124,7 @@ export function Markdown(props: {
       marginBottom: props.heading?.after ?? base.after,
     };
   };
-  const headings = props.compactHeadings || props.dense;
+  const headings = () => props.compactHeadings || props.dense || compact();
   return (
     <TextView
       markdown={props.value}
@@ -128,11 +141,16 @@ export function Markdown(props: {
           color: c().ink,
         },
         paragraph: { marginTop: 0, marginBottom: 0 },
-        codeBlockCode: code(),
+        codeBlockCode: { ...code(), ...fit() },
         code: code(),
-        heading1: headings ? heading() : undefined,
-        heading2: headings ? heading() : undefined,
-        heading3: headings ? heading() : undefined,
+        heading1: headings() ? heading() : undefined,
+        heading2: headings() ? heading() : undefined,
+        heading3: headings() ? heading() : undefined,
+        heading4: compact() ? heading() : undefined,
+        heading5: compact() ? heading() : undefined,
+        heading6: compact() ? heading() : undefined,
+        tableCell: fit(),
+        tableHeaderCell: fit(),
         link: { color: c().blue },
       }}
       codeBlockActions={[{ id: "copy" }]}

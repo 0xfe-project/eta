@@ -15,6 +15,7 @@ import {
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
@@ -88,11 +89,12 @@ export function PanelTask(props: {
               <ActionMenu
                 label={uiText("taskActions")}
                 triggerStyle={{
-                  minWidth: 28,
-                  width: 28,
-                  height: 28,
+                  minWidth: control.sm,
+                  width: control.sm,
+                  height: control.sm,
                   paddingHorizontal: 0,
                 }}
+                iconSize={icon.md}
               >
                 <ActionItem
                   label={uiText("edit")}
@@ -117,12 +119,13 @@ export function PanelTask(props: {
               </ActionMenu>
             </TaskTopBar>
             <SmoothScroll style={grow} scrollbar={false}>
+              {/* The panel's section title: body 14 / 600 (compact), not the page's subtitle. */}
               <Label
-                variant="subtitle"
-                weight={700}
+                variant="body"
+                weight={weight.strong}
                 style={{
-                  paddingTop: 12,
-                  paddingBottom: 7,
+                  paddingTop: space[12],
+                  paddingBottom: space[8],
                   paddingHorizontal: inset,
                 }}
               >
