@@ -24,6 +24,7 @@ import {
   Button,
   Caption,
   colors,
+  Compact,
   focusRing,
   Icon,
   Label,
@@ -342,7 +343,7 @@ export function Message(props: {
                   </View>
                 }
               >
-                {props.insertPanel?.()}
+                <Compact>{props.insertPanel?.()}</Compact>
               </Popover>
             </If>
           </View>

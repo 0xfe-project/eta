@@ -2,7 +2,7 @@ import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import type { taskDropZones } from "./drag";
 import { View } from "nsh";
-import { colors, Icon, Label, row } from "../../components";
+import { colors, Compact, Icon, Label, row } from "../../components";
 import { border, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -92,304 +92,306 @@ export function BoardCard(props: {
     });
   }
   return (
-    <View
-      style={{
-        paddingRight: stacked() ? 3 : 0,
-        paddingBottom: stacked() ? 3 : 0,
-      }}
-    >
-      <If when={stacked()}>
-        <View
-          style={{
-            position: "absolute",
-            top: 3,
-            left: 3,
-            right: 0,
-            bottom: 0,
-            borderWidth: 1,
-            borderColor: c().strong,
-            backgroundColor: c().canvas,
-          }}
-        />
-      </If>
+    <Compact>
       <View
-        role="button"
-        accessibilityLabel={props.task.title}
-        onPressDown={props.draggable ? gesture.onPressDown : undefined}
-        onPanStart={props.draggable ? gesture.onPanStart : undefined}
-        onPanEnd={props.draggable ? gesture.onPanEnd : undefined}
-        onPress={() => props.onOpen()}
-        hoverStyle={{ borderColor: `${c().ink}4d` }}
-        activeStyle={{ borderColor: `${c().ink}4d` }}
         style={{
-          paddingVertical: tablet() ? 8 : 7.2,
-          paddingHorizontal: tablet() ? 8 : 9,
-          gap: tablet() ? (isParent() || cancelled() ? 4 : 3) : 3.6,
-          borderWidth: 1,
-          borderLeftWidth: props.task.status === "blocked" ? border.thick : 1,
-          borderColor: stacked() ? c().strong : c().border,
-          borderLeftColor:
-            props.task.status === "blocked"
-              ? c().red
-              : stacked()
-                ? c().strong
-                : c().border,
-          backgroundColor: c().canvas,
-          cursor: props.draggable ? "grab" : "pointer",
-          opacity: props.drag.active() === props.task.id ? 0.65 : 1,
+          paddingRight: stacked() ? 3 : 0,
+          paddingBottom: stacked() ? 3 : 0,
         }}
       >
-        <If when={parent()}>
-          {(entry) => (
-            <View style={{ ...row, gap: 6 }}>
-              <Label variant="small" tone="muted" lines={1}>
-                {entry().title}
-              </Label>
-              <Label variant="small" tone="muted">
-                ›
-              </Label>
-              <Label variant="small" tone="muted" style={{ flexShrink: 0 }}>
-                {uiText("step", {
-                  value1: stepOf(props.task, host.tasks()),
-                })}
-              </Label>
-            </View>
-          )}
+        <If when={stacked()}>
+          <View
+            style={{
+              position: "absolute",
+              top: 3,
+              left: 3,
+              right: 0,
+              bottom: 0,
+              borderWidth: 1,
+              borderColor: c().strong,
+              backgroundColor: c().canvas,
+            }}
+          />
         </If>
-        <View style={{ ...row, justifyContent: "space-between" }}>
-          <If
-            when={isParent()}
-            else={
-              <Label variant="small" tone="muted">
-                {`#${props.task.number}`}
-              </Label>
-            }
-          >
-            <If
-              when={!tablet()}
-              else={
-                <Label variant="small" tone="muted" style={{ flex: 1 }}>
-                  {`#${props.task.number} · ${uiText("taskSubtaskCount", {
-                    count: props.task.subtasks?.total ?? 0,
-                  })}`}
-                </Label>
-              }
-            >
+        <View
+          role="button"
+          accessibilityLabel={props.task.title}
+          onPressDown={props.draggable ? gesture.onPressDown : undefined}
+          onPanStart={props.draggable ? gesture.onPanStart : undefined}
+          onPanEnd={props.draggable ? gesture.onPanEnd : undefined}
+          onPress={() => props.onOpen()}
+          hoverStyle={{ borderColor: `${c().ink}4d` }}
+          activeStyle={{ borderColor: `${c().ink}4d` }}
+          style={{
+            paddingVertical: tablet() ? 8 : 7.2,
+            paddingHorizontal: tablet() ? 8 : 9,
+            gap: tablet() ? (isParent() || cancelled() ? 4 : 3) : 3.6,
+            borderWidth: 1,
+            borderLeftWidth: props.task.status === "blocked" ? border.thick : 1,
+            borderColor: stacked() ? c().strong : c().border,
+            borderLeftColor:
+              props.task.status === "blocked"
+                ? c().red
+                : stacked()
+                  ? c().strong
+                  : c().border,
+            backgroundColor: c().canvas,
+            cursor: props.draggable ? "grab" : "pointer",
+            opacity: props.drag.active() === props.task.id ? 0.65 : 1,
+          }}
+        >
+          <If when={parent()}>
+            {(entry) => (
               <View style={{ ...row, gap: 6 }}>
-                <SubtreeGlyph size={10} />
-                <Label variant="small" tone="mutedInk">
-                  {`#${props.task.number}`}
+                <Label variant="small" tone="muted" lines={1}>
+                  {entry().title}
                 </Label>
-                <Label variant="small" tone="mutedInk">
-                  ·
+                <Label variant="small" tone="muted">
+                  ›
                 </Label>
-                <Label variant="small" tone="mutedInk">
-                  {uiText("taskSubtaskCount", {
-                    count: props.task.subtasks?.total ?? 0,
+                <Label variant="small" tone="muted" style={{ flexShrink: 0 }}>
+                  {uiText("step", {
+                    value1: stepOf(props.task, host.tasks()),
                   })}
                 </Label>
               </View>
-            </If>
-            <View style={{ ...row, gap: space[4] }}>
-              <If when={!tablet()}>
-                <TaskGlyph status={props.task.status} size={10} />
-              </If>
-              <Label variant="small" tone={tones[props.task.status]}>
-                {uiText("taskAuto")}
-              </Label>
-            </View>
+            )}
           </If>
-          <If when={!isParent()}>
-            <If when={props.task.status === "in_review"}>
-              <If
-                when={!tablet()}
-                else={
-                  <Label variant="small" tone="warning" lines={1}>
-                    {uiText("forYouToCheck2")}
-                  </Label>
-                }
-              >
-                <Label
-                  variant="small"
-                  tone="warning"
-                  style={{
-                    backgroundColor: c().warningFill,
-                    paddingHorizontal: 5,
-                  }}
-                >
-                  {uiText("forYouToCheck")}
+          <View style={{ ...row, justifyContent: "space-between" }}>
+            <If
+              when={isParent()}
+              else={
+                <Label variant="small" tone="muted">
+                  {`#${props.task.number}`}
                 </Label>
-              </If>
-            </If>
-            <If when={props.task.status === "in_progress"}>
+              }
+            >
               <If
                 when={!tablet()}
                 else={
-                  <Label variant="small" tone="blue">
-                    {`■ ${runningFor(props.task)}`}
+                  <Label variant="small" tone="muted" style={{ flex: 1 }}>
+                    {`#${props.task.number} · ${uiText("taskSubtaskCount", {
+                      count: props.task.subtasks?.total ?? 0,
+                    })}`}
                   </Label>
                 }
               >
-                <View style={{ ...row, gap: space[4] }}>
-                  <View
-                    style={{ width: 6, height: 6, backgroundColor: c().blue }}
-                  />
-                  <Label variant="small" tone="blue">
-                    {runningFor(props.task)}
+                <View style={{ ...row, gap: 6 }}>
+                  <SubtreeGlyph size={10} />
+                  <Label variant="small" tone="mutedInk">
+                    {`#${props.task.number}`}
+                  </Label>
+                  <Label variant="small" tone="mutedInk">
+                    ·
+                  </Label>
+                  <Label variant="small" tone="mutedInk">
+                    {uiText("taskSubtaskCount", {
+                      count: props.task.subtasks?.total ?? 0,
+                    })}
                   </Label>
                 </View>
               </If>
+              <View style={{ ...row, gap: space[4] }}>
+                <If when={!tablet()}>
+                  <TaskGlyph status={props.task.status} size={10} />
+                </If>
+                <Label variant="small" tone={tones[props.task.status]}>
+                  {uiText("taskAuto")}
+                </Label>
+              </View>
             </If>
-            <If when={isWaiting(props.task)}>
-              <Icon
-                name="lock"
-                size={tablet() ? 10 : 11}
-                tone={tablet() ? "ink" : "mutedInk"}
-              />
-            </If>
-            <If
-              when={
-                !tablet() &&
-                (props.task.status === "done" ||
-                  props.task.status === "blocked")
-              }
-            >
-              <TaskGlyph status={props.task.status} size={11} />
-            </If>
-          </If>
-        </View>
-        <Label lines={4}>{props.task.title}</Label>
-        <If when={isParent()}>
-          <View style={{ ...row, gap: space[2], height: tablet() ? 3 : 4 }}>
-            <Each of={children()} key={(task) => task.id}>
-              {(task) => (
-                <View
-                  style={{
-                    flex: 1,
-                    height: tablet() ? 3 : 4,
-                    backgroundColor: progressColor(task().status, c()),
-                  }}
-                />
-              )}
-            </Each>
-          </View>
-          <If when={nowThen()}>
-            <View style={{ ...row, gap: 5, alignItems: "flex-start" }}>
-              <If when={!tablet()}>
-                <View
-                  style={{
-                    width: 5,
-                    height: 5,
-                    marginTop: 5,
-                    backgroundColor: c().blue,
-                  }}
+            <If when={!isParent()}>
+              <If when={props.task.status === "in_review"}>
+                <If
+                  when={!tablet()}
+                  else={
+                    <Label variant="small" tone="warning" lines={1}>
+                      {uiText("forYouToCheck2")}
+                    </Label>
+                  }
+                >
+                  <Label
+                    variant="small"
+                    tone="warning"
+                    style={{
+                      backgroundColor: c().warningFill,
+                      paddingHorizontal: 5,
+                    }}
+                  >
+                    {uiText("forYouToCheck")}
+                  </Label>
+                </If>
+              </If>
+              <If when={props.task.status === "in_progress"}>
+                <If
+                  when={!tablet()}
+                  else={
+                    <Label variant="small" tone="blue">
+                      {`■ ${runningFor(props.task)}`}
+                    </Label>
+                  }
+                >
+                  <View style={{ ...row, gap: space[4] }}>
+                    <View
+                      style={{ width: 6, height: 6, backgroundColor: c().blue }}
+                    />
+                    <Label variant="small" tone="blue">
+                      {runningFor(props.task)}
+                    </Label>
+                  </View>
+                </If>
+              </If>
+              <If when={isWaiting(props.task)}>
+                <Icon
+                  name="lock"
+                  size={tablet() ? 10 : 11}
+                  tone={tablet() ? "ink" : "mutedInk"}
                 />
               </If>
-              <Label
-                variant="small"
-                tone={tablet() ? "muted" : "mutedInk"}
-                lines={2}
-                style={{ flex: 1 }}
+              <If
+                when={
+                  !tablet() &&
+                  (props.task.status === "done" ||
+                    props.task.status === "blocked")
+                }
               >
-                {nowThen()}
-              </Label>
-            </View>
-          </If>
-          <View
-            style={{
-              ...row,
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-            }}
-          >
-            <Label variant="small" tone="muted" style={{ flex: 1 }}>
-              {summary()
-                .filter(([, count]) => count)
-                .map(([key, count]) => uiText(key, { count }))
-                .join(" · ")}
-            </Label>
-            <If when={!tablet()}>
-              <Label variant="small" tone="muted">
-                ›
-              </Label>
+                <TaskGlyph status={props.task.status} size={11} />
+              </If>
             </If>
           </View>
-        </If>
-        <If
-          when={
-            !isParent() && isWaiting(props.task)
-              ? props.task.waitingOn?.[0]
-              : undefined
-          }
-        >
-          {(dependency) => (
+          <Label lines={4}>{props.task.title}</Label>
+          <If when={isParent()}>
+            <View style={{ ...row, gap: space[2], height: tablet() ? 3 : 4 }}>
+              <Each of={children()} key={(task) => task.id}>
+                {(task) => (
+                  <View
+                    style={{
+                      flex: 1,
+                      height: tablet() ? 3 : 4,
+                      backgroundColor: progressColor(task().status, c()),
+                    }}
+                  />
+                )}
+              </Each>
+            </View>
+            <If when={nowThen()}>
+              <View style={{ ...row, gap: 5, alignItems: "flex-start" }}>
+                <If when={!tablet()}>
+                  <View
+                    style={{
+                      width: 5,
+                      height: 5,
+                      marginTop: 5,
+                      backgroundColor: c().blue,
+                    }}
+                  />
+                </If>
+                <Label
+                  variant="small"
+                  tone={tablet() ? "muted" : "mutedInk"}
+                  lines={2}
+                  style={{ flex: 1 }}
+                >
+                  {nowThen()}
+                </Label>
+              </View>
+            </If>
             <View
               style={{
                 ...row,
-                gap: tablet() ? 4 : 5,
-                marginTop: tablet() ? 0 : space[2],
-                paddingVertical: tablet() ? 1 : space[2],
-                paddingHorizontal: tablet() ? 4 : 6,
-                borderWidth: 1,
-                borderColor: c().strong,
+                alignItems: "flex-start",
+                justifyContent: "space-between",
               }}
             >
-              <Icon name="lock" size={tablet() ? 9 : 10} />
-              <Label
-                variant="small"
-                lines={1}
-                tone={tablet() ? "mutedInk" : "ink"}
-                style={{ flex: 1 }}
+              <Label variant="small" tone="muted" style={{ flex: 1 }}>
+                {summary()
+                  .filter(([, count]) => count)
+                  .map(([key, count]) => uiText(key, { count }))
+                  .join(" · ")}
+              </Label>
+              <If when={!tablet()}>
+                <Label variant="small" tone="muted">
+                  ›
+                </Label>
+              </If>
+            </View>
+          </If>
+          <If
+            when={
+              !isParent() && isWaiting(props.task)
+                ? props.task.waitingOn?.[0]
+                : undefined
+            }
+          >
+            {(dependency) => (
+              <View
+                style={{
+                  ...row,
+                  gap: tablet() ? 4 : 5,
+                  marginTop: tablet() ? 0 : space[2],
+                  paddingVertical: tablet() ? 1 : space[2],
+                  paddingHorizontal: tablet() ? 4 : 6,
+                  borderWidth: 1,
+                  borderColor: c().strong,
+                }}
               >
-                {uiText("waitsFor", { title: dependency().title })}
+                <Icon name="lock" size={tablet() ? 9 : 10} />
+                <Label
+                  variant="small"
+                  lines={1}
+                  tone={tablet() ? "mutedInk" : "ink"}
+                  style={{ flex: 1 }}
+                >
+                  {uiText("waitsFor", { title: dependency().title })}
+                </Label>
+              </View>
+            )}
+          </If>
+          <If when={cancelled()}>
+            {(edge) => (
+              <>
+                <Label variant="small" tone="mutedInk">
+                  {uiText("taskBlockedReason", { title: edge().title })}
+                </Label>
+                <BlockedAction
+                  label={uiText("stopWaitingStartNow")}
+                  stretch={tablet()}
+                  onPress={() => void startNow()}
+                />
+                <BlockedAction
+                  label={uiText("waitForAnother")}
+                  stretch={tablet()}
+                  onPress={props.onOpen}
+                />
+              </>
+            )}
+          </If>
+          <If when={!isParent() && !cancelled()}>
+            <View
+              style={{
+                ...row,
+                gap: space[4],
+                marginTop: space[2],
+                justifyContent: "space-between",
+              }}
+            >
+              <Label variant="small" tone="faint" lines={1}>
+                {ownerLine(props.task, host.agent)}
+              </Label>
+              <Label variant="small" tone="faint" lines={1}>
+                {footer()}
               </Label>
             </View>
-          )}
-        </If>
-        <If when={cancelled()}>
-          {(edge) => (
-            <>
-              <Label variant="small" tone="mutedInk">
-                {uiText("taskBlockedReason", { title: edge().title })}
-              </Label>
-              <BlockedAction
-                label={uiText("stopWaitingStartNow")}
-                stretch={tablet()}
-                onPress={() => void startNow()}
-              />
-              <BlockedAction
-                label={uiText("waitForAnother")}
-                stretch={tablet()}
-                onPress={props.onOpen}
-              />
-            </>
-          )}
-        </If>
-        <If when={!isParent() && !cancelled()}>
-          <View
-            style={{
-              ...row,
-              gap: space[4],
-              marginTop: space[2],
-              justifyContent: "space-between",
-            }}
-          >
-            <Label variant="small" tone="faint" lines={1}>
-              {ownerLine(props.task, host.agent)}
-            </Label>
-            <Label variant="small" tone="faint" lines={1}>
-              {footer()}
-            </Label>
-          </View>
-        </If>
-        <UsageLine
-          task={props.task}
-          model={!tablet()}
-          rate
-          style={{ justifyContent: "space-between" }}
-        />
+          </If>
+          <UsageLine
+            task={props.task}
+            model={!tablet()}
+            rate
+            style={{ justifyContent: "space-between" }}
+          />
+        </View>
       </View>
-    </View>
+    </Compact>
   );
 }
 

@@ -96,8 +96,9 @@ export interface DensityDefaults {
 
 /**
  * The defaults by density. `regular` is what each component took before densities existed, so
- * nothing changes where nothing says `compact` (no place does yet); moving `regular` onto the
- * named steps (an icon of 16, an avatar of 24) is a change of its own.
+ * nothing changes where nothing says `compact`; the parts that do say it with `<Compact>`
+ * (density.tsx) at their root. Moving `regular` onto the named steps (an icon of 16, an avatar of
+ * 24) is a change of its own.
  */
 export const densities: Record<DensityName, DensityDefaults> = {
   regular: {

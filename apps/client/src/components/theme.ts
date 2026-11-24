@@ -235,6 +235,13 @@ const typeScale: Record<TextVariant, Record<Layout, TextFace>> = {
   },
 };
 
+/** Whether the part of the app around is compact, inside a reactive scope, for a component whose
+ * regular look is not the regular defaults (a 28px control): `const compact = inCompact();`. */
+export function inCompact() {
+  const density = Density();
+  return () => density() === "compact";
+}
+
 /** The type scale in the current layout: `const type = textFaces();` then
  * `fontSize: type("small").size`, inside a reactive scope. */
 export function textFaces() {

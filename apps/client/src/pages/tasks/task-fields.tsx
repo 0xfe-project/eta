@@ -3,7 +3,15 @@ import type { JSX, TextStyle } from "nsh";
 import type { TaskDetailState } from "./task-detail-state";
 import { mentionLabel } from "@eta/client-contracts/composer-target";
 import { View } from "nsh";
-import { Button, colors, Icon, Label, row, textFaces } from "../../components";
+import {
+  Button,
+  colors,
+  Icon,
+  inCompact,
+  Label,
+  row,
+  textFaces,
+} from "../../components";
 import { CheckControl } from "../../components/check-control";
 import {
   chatText,
@@ -17,7 +25,8 @@ import {
 } from "../../components/eta-editor";
 import { touchScreen } from "../../components/menu";
 import { StatusDot } from "../../components/status-dot";
-import { icon, space, weight } from "../../components/tokens";
+import { densityDefaults } from "../../components/theme";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { ActorName } from "./creator";
@@ -134,7 +143,11 @@ function CommentBox(props: {
     props.state,
     props.origin,
   );
-  const line = () => type("body").prose;
+  // In the conversation panel (compact): small text, a 32px foot and a 24px button, as the
+  // panel's own rows; on a task's page the regular body text, 36 and 26.
+  const density = densityDefaults();
+  const compact = inCompact();
+  const line = () => type(density().editor).prose;
   const pad = 8;
   return (
     <>
@@ -158,7 +171,6 @@ function CommentBox(props: {
           editor={editor}
           label={uiText("comment")}
           placeholder={uiText("commentPlaceholder")}
-          variant="body"
           minHeight={line() + pad * 2}
           maxHeight={line() * 6 + pad * 2}
           clip
@@ -169,9 +181,9 @@ function CommentBox(props: {
             ...row,
             justifyContent: "flex-end",
             gap: space[8],
-            height: props.phone ? 44 : 36,
-            paddingLeft: 10,
-            paddingRight: 5,
+            height: props.phone ? control.touch : compact() ? space[32] : 36,
+            paddingLeft: compact() ? space[12] : 10,
+            paddingRight: compact() ? space[4] : 5,
           }}
         >
           <If when={!props.phone && !touchScreen}>
@@ -182,7 +194,7 @@ function CommentBox(props: {
           <Button
             label={uiText("comment")}
             accessibilityLabel={uiText("sendComment")}
-            size={props.phone ? 32 : 26}
+            size={props.phone ? control.lg : compact() ? control.sm : 26}
             labelTone={disabled() ? "muted" : "ink"}
             dimDisabled={props.state.posting()}
             disabled={disabled()}

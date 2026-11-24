@@ -65,7 +65,7 @@
       "src/pages/chat/member-steps.tsx": 4,
       "src/pages/chat/members.tsx": 22,
       "src/pages/chat/message.tsx": 31,
-      "src/pages/chat/panel-task.tsx": 10,
+      "src/pages/chat/panel-task.tsx": 9,
       "src/pages/chat/panel-tasks.tsx": 20,
       "src/pages/chat/pending.tsx": 16,
       "src/pages/chat/process-step.tsx": 9,

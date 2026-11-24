@@ -1,4 +1,5 @@
 export { ActionItem, ActionMenu, Button, Field } from "./controls";
+export { Compact } from "./density";
 export { Empty } from "./empty";
 export { Header } from "./header";
 export {
@@ -20,6 +21,7 @@ export {
   fontFamily,
   Fonts,
   grow,
+  inCompact,
   monoFontFamily,
   palette,
   Palette,

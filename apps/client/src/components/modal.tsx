@@ -1,6 +1,7 @@
 import type { JSX, ViewStyle } from "nsh";
 import { cleanup, keymap, Overlay, platform, View, windowSize } from "nsh";
 import { Dialog } from "nsh/base";
+import { Regular } from "./density";
 import { Header } from "./header";
 import { CloseButton } from "./navigation-buttons";
 import { screenInsets } from "./safe-area";
@@ -97,8 +98,9 @@ export function Modal(props: {
           : undefined,
     };
   };
+  // A dialog is drawn regular even when a compact part (a side panel, a menu) opens it.
   const panel = () => (
-    <>
+    <Regular>
       <View
         style={{ ...fill, ...backdropStyle() }}
         onPress={props.dismissible === false ? undefined : close}
@@ -193,7 +195,7 @@ export function Modal(props: {
         {props.children}
       </View>
       <ToastLayer phone={props.phone} />
-    </>
+    </Regular>
   );
   if (focused)
     return (
