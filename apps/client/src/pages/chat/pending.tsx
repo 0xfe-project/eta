@@ -441,7 +441,13 @@ export function Pending(props: {
     );
   }
   return (
-    <View style={{ ...grow, backgroundColor: c().canvas }}>
+    <View
+      style={{
+        ...grow,
+        // Standalone page keeps the canvas; inside the conversation panel it inherits the panel surface.
+        ...(props.conversationId ? {} : { backgroundColor: c().canvas }),
+      }}
+    >
       <If when={!props.conversationId}>
         <Header title={uiText("pending")} layout={props.layout}>
           <Label variant="caption" tone="muted">
