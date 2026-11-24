@@ -1,6 +1,7 @@
 import type { PluginView } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Empty, Icon, Label } from "../../components";
+import { icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export function PluginGlyph(props: { size: number }) {
@@ -55,12 +56,12 @@ export function NoPlugins(props: { width: number }) {
       title={uiText("noPluginsYet")}
       description={uiText("noPluginsHint")}
       icon="plugins"
-      iconSize={32}
+      iconSize={icon.xl}
       descriptionWidth={props.width}
       style={{
         flex: undefined,
         justifyContent: "flex-start",
-        paddingVertical: 40,
+        paddingVertical: space[40],
       }}
     />
   );

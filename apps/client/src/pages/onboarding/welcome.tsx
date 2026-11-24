@@ -1,7 +1,7 @@
 import { Image, View } from "nsh";
 import photo from "../../../assets/onboard.jpg";
 import { fill, Label, row } from "../../components";
-import { weight } from "../../components/tokens";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export function WelcomeStep(props: { phone: boolean }) {
@@ -38,7 +38,13 @@ export function WelcomeStep(props: { phone: boolean }) {
           Photo: Barnabas Davoti / Unsplash
         </Label>
       </View>
-      <View style={{ paddingHorizontal: 16, paddingVertical: 24, gap: 16 }}>
+      <View
+        style={{
+          paddingHorizontal: space[16],
+          paddingVertical: space[24],
+          gap: space[16],
+        }}
+      >
         <View style={{ gap: 6 }}>
           <Label
             variant="title"
@@ -51,13 +57,13 @@ export function WelcomeStep(props: { phone: boolean }) {
         </View>
         <View style={{ gap: 6 }}>
           <View style={{ ...row, gap: 10 }}>
-            <Label variant="small" tone="muted" style={{ width: 16 }}>
+            <Label variant="small" tone="muted" style={{ width: space[16] }}>
               1
             </Label>
             <Label>{uiText("connectAModel")}</Label>
           </View>
           <View style={{ ...row, gap: 10 }}>
-            <Label variant="small" tone="muted" style={{ width: 16 }}>
+            <Label variant="small" tone="muted" style={{ width: space[16] }}>
               2
             </Label>
             <Label>{uiText("installAgents")}</Label>

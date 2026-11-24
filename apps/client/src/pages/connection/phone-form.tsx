@@ -8,6 +8,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { ConnectionIntro, ConnectionMessage, PhoneHero } from "./visuals";
 
@@ -35,10 +36,10 @@ export function PhoneConnectionForm(props: {
           flexGrow: 1,
           minHeight: 190,
           justifyContent: "flex-end",
-          paddingHorizontal: 16,
-          paddingBottom: 24,
-          paddingTop: 16,
-          gap: 12,
+          paddingHorizontal: space[16],
+          paddingBottom: space[24],
+          paddingTop: space[16],
+          gap: space[12],
         }}
       >
         <If
@@ -61,10 +62,10 @@ export function PhoneConnectionForm(props: {
         <ConnectionMessage error={props.error} />
         <View
           style={{
-            paddingHorizontal: 16,
-            paddingTop: 16,
+            paddingHorizontal: space[16],
+            paddingTop: space[16],
             paddingBottom: 34,
-            gap: 8,
+            gap: space[8],
           }}
         >
           <View style={{ position: "relative" }}>
@@ -95,7 +96,7 @@ export function PhoneConnectionForm(props: {
                   bottom: 0,
                   minHeight: 52,
                   paddingVertical: 10,
-                  paddingHorizontal: 12,
+                  paddingHorizontal: space[12],
                   backgroundColor: c().button,
                 }}
               >
