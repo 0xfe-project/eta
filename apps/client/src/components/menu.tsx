@@ -1,8 +1,9 @@
 import type { JSX, ViewStyle } from "nsh";
 import type { Layout } from "./theme";
-import { context, platform, signal, View } from "nsh";
+import { context, platform, reduceMotion, signal, View } from "nsh";
 import { Menu, MenuItem, MenuSeparator, Popover, Sheet } from "nsh/base";
 import { Compact } from "./density";
+import { menuMotion } from "./motion";
 import { SmoothScroll } from "./smooth-scroll";
 import { colors, Screen } from "./theme";
 import { space } from "./tokens";
@@ -144,6 +145,8 @@ export function MenuFrame(props: {
     props.onOpenChange?.(next);
   };
   const close = () => change(false);
+  // A popup grows out of its trigger's corner and goes back into it.
+  const rise = () => menuMotion(props.align ?? "start", reduceMotion());
   const sheetStyle = (): ViewStyle => ({
     width: "100%",
     paddingBottom: space[8],
@@ -171,7 +174,11 @@ export function MenuFrame(props: {
       margin={props.margin}
       open={props.disabled ? false : props.open}
       onOpenChange={(event) => change(event.open)}
-      popupStyle={sheet() ? sheetStyle() : props.popupStyle}
+      popupStyle={
+        sheet() ? sheetStyle() : { ...props.popupStyle, ...rise().style }
+      }
+      popupStartingStyle={sheet() ? undefined : rise().starting}
+      popupEndingStyle={sheet() ? undefined : rise().ending}
       backdropStyle={{ backgroundColor: c().sheetScrim }}
       trigger={props.trigger}
     >
@@ -187,7 +194,9 @@ export function MenuFrame(props: {
       open={opened()}
       onOpenChange={(event) => change(event.open)}
       onPosition={(event) => room.set(event.available.height)}
-      popupStyle={props.popupStyle}
+      popupStyle={{ ...props.popupStyle, ...rise().style }}
+      popupStartingStyle={rise().starting}
+      popupEndingStyle={rise().ending}
       trigger={props.trigger}
     >
       <SmoothScroll
