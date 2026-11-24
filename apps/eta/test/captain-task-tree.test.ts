@@ -121,39 +121,46 @@ describe("captain and the task graph", () => {
       [...tools.keys()].filter((name) => name.startsWith("propose_task_")),
     ).toEqual([]);
   });
-  it("will not change or continue an archived task until told to, and says what a confirmed change undid", async () => {
+  it("changes or cancels an archived task as asked, and says in the result that it brought it back", async () => {
     const { w, make, use } = await setup();
-    const task = make("Away");
-    w.host.product.board.archive(task.id, { kind: "user", agentId: null });
+    const renamed = make("Away");
+    const continued = make("Also away");
+    const plain = make("On the board");
+    for (const task of [renamed, continued])
+      w.host.product.board.archive(task.id, { kind: "user", agentId: null });
 
     const listed = await use("captain_list_tasks", { archived: "only" });
     expect(listed.text).toContain('"archivedBy": "user"');
+    expect(listed.text).toContain('"archivedAt": ');
 
-    for (const [name, args] of [
-      ["update_task_fields", { taskId: task.id, title: "Renamed" }],
-      ["control_task", { taskId: task.id, action: "continue" }],
-    ] as const) {
-      const refused = await use(name, args);
-      expect(refused.isError).toBe(true);
-      expect(refused.text).toMatch(
-        /^#1 is archived: the user archived it by hand at /,
-      );
-      expect(refused.text).toContain(
-        `call ${name} again with confirmArchived: true`,
-      );
-    }
-    expect(w.host.product.board.find(task.id)).toMatchObject({ title: "Away" });
-    expect(w.host.product.board.find(task.id)!.archivedAt).not.toBeNull();
-
-    const done = await use("update_task_fields", {
-      taskId: task.id,
+    // No confirmation parameter: the call goes through as it is.
+    const updated = await use("update_task_fields", {
+      taskId: renamed.id,
       title: "Renamed",
-      confirmArchived: true,
     });
-    expect(done.isError).toBe(false);
-    expect(done.text).toMatch(
-      /^Task #1 updated\.\n\nNote: #1 was archived: .*brought it back onto the board\. .*archive_task puts it away again, once the user agrees\.$/,
+    expect(updated.isError).toBe(false);
+    expect(updated.text).toMatch(
+      /^Task #1 updated\.\n\nNote: #1 was archived: the user archived it by hand at \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC: they put it away on purpose\. This change brought it back onto the board; tell the user\. If they want it put away again, archive_task does that\.$/,
     );
-    expect(w.host.product.board.find(task.id)!.archivedAt).toBeNull();
+    expect(w.host.product.board.find(renamed.id)).toMatchObject({
+      title: "Renamed",
+      archivedAt: null,
+    });
+
+    const resumed = await use("control_task", {
+      taskId: continued.id,
+      action: "cancel",
+    });
+    expect(resumed.isError).toBe(false);
+    expect(resumed.text).toMatch(
+      /^Task #2 cancel: cancelled\.\n\nNote: #2 was archived: the user archived it by hand at .*This change brought it back onto the board; tell the user\./,
+    );
+    expect(w.host.product.board.find(continued.id)!.archivedAt).toBeNull();
+
+    const untouched = await use("update_task_fields", {
+      taskId: plain.id,
+      title: "Still on the board",
+    });
+    expect(untouched.text).toBe("Task #3 updated.");
   });
 });
