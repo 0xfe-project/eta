@@ -25,6 +25,12 @@ export const motion = {
   pageIn: 320,
   /** The same page going back off the one under it: a little quicker than it came. */
   pageOut: 260,
+  /** A popup menu growing from its trigger, and going back into it: the spec's menus are
+   * 350–500 ms on a phone, about 2/3 of that on the larger windows, the only ones with popups. */
+  menuIn: 240,
+  menuOut: 160,
+  /** How much smaller a popup menu starts than it ends. */
+  menuScale: 0.96,
   /** How far a dialog, sheet, drawer or page travels while it fades. */
   shift: space[16],
   /** In and out of a screen: `cubic-bezier(.32,.72,0,1)`, the spec's opening curve. */
@@ -61,6 +67,39 @@ export function fadeOut(from: MotionFrom, duration: number): MotionSpec {
     duration,
     easing: motion.close,
   };
+}
+
+/**
+ * A popup menu growing out of its trigger's corner and going back into it, as a popup's
+ * `popupStyle` (its transition), `popupStartingStyle` and `popupEndingStyle`: `align` is the
+ * trigger's edge the menu lines up with. With less motion asked for it has none of them: it comes
+ * and goes at once, as before.
+ */
+export function menuMotion(align: "start" | "end", reduced: boolean) {
+  if (reduced) return { style: {}, starting: undefined, ending: undefined };
+  const away: ViewStyle = {
+    opacity: 0,
+    transform: [{ translateY: -space[4] }, { scale: motion.menuScale }],
+  };
+  return {
+    style: {
+      transformOrigin: align === "end" ? "top right" : "top left",
+      transitionProperty: "opacity, transform",
+      transitionDuration: motion.menuIn,
+      transitionTimingFunction: curve(motion.open),
+    } satisfies ViewStyle,
+    starting: away,
+    ending: {
+      ...away,
+      transitionDuration: motion.menuOut,
+      transitionTimingFunction: curve(motion.close),
+    } satisfies ViewStyle,
+  };
+}
+
+/** A curve as a style's `cubic-bezier()`. */
+function curve(points: Easing) {
+  return `cubic-bezier(${(points as number[]).join(", ")})` as const;
 }
 
 /** A backdrop behind a dialog fading in or out. */
