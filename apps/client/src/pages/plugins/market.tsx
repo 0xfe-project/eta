@@ -28,6 +28,7 @@ import { follow, useHost } from "../../services/host";
 import { sheetEdge } from "./configure";
 import { PluginLogo, primeLogos } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 
 /**
  * The online market. Everything the catalog says is shown as text, never as markup. The detail shows
@@ -35,6 +36,12 @@ import { PluginName } from "./plugin-name";
  * user decided to drop the confirmation step; the host still pins the commit and refuses what it
  * does not support).
  */
+/** A market card is as wide as an installed plugin's card; the search field and the detail sheet's
+ * scrolling body have their own bounds. */
+const cardWidth = 268;
+const searchWidth = 480;
+const detailHeight = 440;
+
 /** The last list shown, kept for the session: the market opened again draws it on its first frame. */
 let lastCatalog: MarketCatalog | undefined;
 
@@ -253,8 +260,8 @@ export function Market(props: {
         backgroundColor: c().canvas,
         fontFamily: fontFamily(fonts().interface),
         ...textStyle(type("small")),
-        height: phone() ? 40 : 28,
-        paddingHorizontal: phone() ? 12 : 8,
+        height: phone() ? control.touch : control.md,
+        paddingHorizontal: phone() ? space[12] : space[8],
         borderWidth: 1,
         borderColor: c().strong,
         borderRadius: 0,
@@ -272,7 +279,7 @@ export function Market(props: {
   /** A labelled value; a value that is empty or only blanks is not shown at all, nor its label. */
   const line = (name: string, value: string | null | undefined) =>
     value === null || value === undefined || value.trim() === "" ? null : (
-      <View style={{ gap: 2 }}>
+      <View style={{ gap: space[2] }}>
         <Label variant="caption" tone="muted">
           {name}
         </Label>
@@ -283,7 +290,7 @@ export function Market(props: {
     );
   /** What the plugin would run, read from its pinned commit. Plain text; nothing here installs anything. */
   const previewBlock = (shown: MarketPreview) => (
-    <View testID="market-info" style={{ gap: 10 }}>
+    <View testID="market-info" style={{ gap: space[8] }}>
       <If when={shown.proxy}>
         {line(uiText("marketProxy"), shown.proxy ?? "")}
       </If>
@@ -294,7 +301,7 @@ export function Market(props: {
           ? shown.requires.join(", ")
           : uiText("marketNone"),
       )}
-      <Label variant="small" weight={500}>
+      <Label variant="small" weight={weight.regular}>
         {uiText("marketSummary", {
           skills: shown.skills.length,
           servers: shown.servers.length,
@@ -310,13 +317,13 @@ export function Market(props: {
         {(server) => (
           <View
             style={{
-              gap: 4,
-              padding: 8,
+              gap: space[4],
+              padding: space[8],
               borderWidth: 1,
               borderColor: c().border,
             }}
           >
-            <Label variant="small" weight={500}>
+            <Label variant="small" weight={weight.regular}>
               {server().name}
             </Label>
             <Label variant="small" style={{ userSelect: "text" }}>
@@ -384,26 +391,26 @@ export function Market(props: {
     panelStyle: phone() ? sheetEdge : undefined,
     overPhoneNavigation: phone(),
     compact: !phone(),
-    titleWeight: 500 as const,
+    titleWeight: weight.regular,
   });
-  const inset = () => (phone() ? { paddingHorizontal: 16 } : {});
+  const inset = () => (phone() ? { paddingHorizontal: space[16] } : {});
 
   return (
     <View style={grow}>
       <Header
         title={uiText("plugins")}
         layout={props.layout}
-        inset={phone() ? undefined : 10}
+        inset={phone() ? undefined : space[12]}
         onBack={phone() ? props.onBack : undefined}
       >
         <View style={{ flex: 1 }} />
-        <View style={{ ...row, gap: 12 }}>
+        <View style={{ ...row, gap: space[12] }}>
           <Button
             label={uiText("refreshPlugins")}
             icon="refresh"
             iconOnly
-            iconSize={16}
-            size={16}
+            iconSize={icon.md}
+            size={control.sm}
             style={{ paddingHorizontal: 0 }}
             tone="ghost"
             onPress={() => void load()}
@@ -414,15 +421,15 @@ export function Market(props: {
       <SmoothScroll style={grow} scrollbar={false}>
         <View
           style={{
-            paddingHorizontal: phone() ? 16 : 24,
-            paddingTop: 8,
-            paddingBottom: 16,
-            gap: 12,
+            paddingHorizontal: phone() ? space[16] : space[24],
+            paddingTop: space[8],
+            paddingBottom: space[16],
+            gap: space[12],
           }}
         >
           <If when={catalog() && !catalog()!.sources.length}>
-            <View style={{ gap: 8 }}>
-              <Label weight={500}>{uiText("marketNoSources")}</Label>
+            <View style={{ gap: space[8] }}>
+              <Label weight={weight.regular}>{uiText("marketNoSources")}</Label>
               <Label variant="small" tone="muted">
                 {uiText("marketNoSourcesHint")}
               </Label>
@@ -430,8 +437,8 @@ export function Market(props: {
           </If>
           <Each of={failed()} key={(item) => item.source.url}>
             {(item) => (
-              <View style={{ gap: 4 }}>
-                <Label weight={500}>
+              <View style={{ gap: space[4] }}>
+                <Label weight={weight.regular}>
                   {item().source.name || item().source.url}
                 </Label>
                 <Label variant="small" tone="muted">
@@ -464,7 +471,12 @@ export function Market(props: {
           </Each>
           <If when={updated() !== undefined}>
             <View
-              style={{ ...row, gap: 8, alignItems: "center", flexWrap: "wrap" }}
+              style={{
+                ...row,
+                gap: space[8],
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
             >
               <Label variant="small" tone="muted">
                 {uiText("marketUpdatedAt", { time: updated() ?? "" })}
@@ -477,7 +489,7 @@ export function Market(props: {
             </View>
           </If>
           <If when={all().length}>
-            <View style={{ maxWidth: 480 }}>
+            <View style={{ maxWidth: searchWidth }}>
               {field(uiText("marketSearch"), query, query.set)}
             </View>
             <If when={!entries().length}>
@@ -490,7 +502,7 @@ export function Market(props: {
                 ...row,
                 flexWrap: "wrap",
                 alignItems: "flex-start",
-                gap: 12,
+                gap: space[12],
               }}
             >
               <Each of={entries()} key={key}>
@@ -500,16 +512,16 @@ export function Market(props: {
                     accessibilityLabel={item().name}
                     onPress={() => detail.set(key(item()))}
                     style={{
-                      width: phone() ? undefined : 267,
+                      width: phone() ? undefined : cardWidth,
                       flex: phone() ? 1 : undefined,
-                      padding: 12,
-                      gap: 6,
+                      padding: space[12],
+                      gap: space[8],
                       backgroundColor: c().canvas,
                       borderWidth: 1,
                       borderColor: c().border,
                     }}
                   >
-                    <View style={{ ...row, gap: 8 }}>
+                    <View style={{ ...row, gap: space[8] }}>
                       <PluginLogo
                         name={item().name}
                         homepage={item().homepage}
@@ -537,7 +549,11 @@ export function Market(props: {
                     </Label>
                     {/* The marker sits at the card's bottom right, on the source's line, so it adds no row; the row is as tall as the marker either way. */}
                     <View
-                      style={{ ...row, gap: 8, minHeight: type("small").line }}
+                      style={{
+                        ...row,
+                        gap: space[8],
+                        minHeight: type("small").line,
+                      }}
                     >
                       <View style={grow}>
                         <Label variant="caption" tone="muted" lines={1}>
@@ -580,11 +596,11 @@ export function Market(props: {
           {...sheet(current()!.name, 512, () => detail.set(""))}
           hideHeader
         >
-          <SmoothScroll style={{ maxHeight: 440 }} scrollbar={false}>
-            <View style={{ gap: 10, paddingTop: 6, ...inset() }}>
+          <SmoothScroll style={{ maxHeight: detailHeight }} scrollbar={false}>
+            <View style={{ gap: space[12], paddingTop: space[8], ...inset() }}>
               <View
                 testID="market-detail-header"
-                style={{ ...row, gap: 12, alignItems: "center" }}
+                style={{ ...row, gap: space[12], alignItems: "center" }}
               >
                 <PluginLogo
                   name={current()!.name}
@@ -598,17 +614,17 @@ export function Market(props: {
                         }
                       : null
                   }
-                  size={40}
+                  size={avatar.xl}
                 />
                 <View
                   tooltip={hint(current()!.name, c)}
                   style={{ flex: 1, minWidth: 0 }}
                 >
-                  <Label variant="title" weight={600} lines={1}>
+                  <Label variant="title" weight={weight.strong} lines={1}>
                     {current()!.name}
                   </Label>
                 </View>
-                <CloseButton onPress={() => detail.set("")} iconSize={14} />
+                <CloseButton onPress={() => detail.set("")} />
               </View>
               <Label
                 variant="small"
@@ -667,8 +683,8 @@ export function Market(props: {
             style={{
               ...row,
               justifyContent: "flex-end",
-              paddingTop: 10,
-              paddingBottom: phone() ? 24 : 0,
+              paddingTop: space[12],
+              paddingBottom: phone() ? space[24] : 0,
               ...inset(),
             }}
           >
@@ -681,7 +697,7 @@ export function Market(props: {
               <Button
                 label={busy() ? uiText("adding") : uiText("marketInstall")}
                 tone="primary"
-                size={phone() ? 44 : 28}
+                size={phone() ? control.touch : control.md}
                 disabled={busy()}
                 onPress={() => void install(current()!)}
               />

@@ -3,6 +3,7 @@ import { View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { hint } from "../../components/controls";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -11,7 +12,7 @@ export function PluginName(props: { name: string }) {
   const c = colors();
   return (
     <View tooltip={hint(props.name, c)} style={{ minWidth: 0 }}>
-      <Label variant="subtitle" weight={600} lines={1}>
+      <Label variant="subtitle" weight={weight.strong} lines={1}>
         {props.name}
       </Label>
     </View>
@@ -27,7 +28,7 @@ export function PluginEnabled(props: { item: PluginView; compact?: boolean }) {
   return (
     <View
       tooltip={props.compact ? hint(words(), c) : undefined}
-      style={{ ...row, gap: 8, flexShrink: 0 }}
+      style={{ ...row, gap: space[8], flexShrink: 0 }}
     >
       <ToggleSwitch
         label={uiText("pluginSwitch")}

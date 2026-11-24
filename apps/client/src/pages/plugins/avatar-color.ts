@@ -1,4 +1,5 @@
 /** Muted fills the initial sits on. */
+// design-value: a plugin's identity colour, like a logo: hashed from its name and the same in both themes, not a UI colour of the palette
 const AVATAR_FILLS = [
   "#5B6EAE",
   "#3F8F8B",
@@ -32,5 +33,6 @@ const luminance = (hex: string): number => {
 };
 
 /** The text colour with the better contrast on a fill. */
+// design-value: black or white on an identity fill above, whichever reads; the same in both themes
 export const avatarInk = (fill: string): string =>
   luminance(fill) > 0.179 ? "#000000" : "#FFFFFF";

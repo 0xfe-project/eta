@@ -13,6 +13,7 @@ import {
   incomplete,
   looksSecret,
 } from "./headers-model";
+import { opacity, space, weight } from "../../components/tokens";
 
 interface Draft {
   id: number;
@@ -105,9 +106,9 @@ export function HeadersEditor(props: {
     });
   }
   return (
-    <View style={{ gap: 12, opacity: off() ? 0.5 : 1 }}>
-      <View style={{ gap: 8 }}>
-        <Label variant="small" weight={600}>
+    <View style={{ gap: space[12], opacity: off() ? opacity.disabled : 1 }}>
+      <View style={{ gap: space[8] }}>
+        <Label variant="small" weight={weight.strong}>
           {uiText("headersTitle")}
         </Label>
         <Label
@@ -120,7 +121,7 @@ export function HeadersEditor(props: {
       </View>
       <Each of={drafts()} key={(draft) => draft.id}>
         {(draft) => (
-          <View style={{ ...row, gap: 12, alignItems: "center" }}>
+          <View style={{ ...row, gap: space[12], alignItems: "center" }}>
             <View style={{ flex: 2, minWidth: 0 }}>
               <Field
                 label={uiText("headerName")}
@@ -186,7 +187,7 @@ export function HeadersEditor(props: {
           {problem()}
         </Label>
       </If>
-      <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
+      <View style={{ ...row, gap: space[8], flexWrap: "wrap" }}>
         <If when={!hasAuthorization()}>
           <Button
             label={uiText("headerAddBearer")}
@@ -204,7 +205,9 @@ export function HeadersEditor(props: {
           onPress={() => add(customHeaderRow())}
         />
       </View>
-      <View style={{ ...row, justifyContent: "flex-end", paddingTop: 4 }}>
+      <View
+        style={{ ...row, justifyContent: "flex-end", paddingTop: space[4] }}
+      >
         <Button
           label={uiText("headerSave")}
           tone="primary"

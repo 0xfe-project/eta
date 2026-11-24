@@ -5,6 +5,7 @@ import {
   Button,
   colors,
   Empty,
+  emptyWidth,
   fontFamily,
   Fonts,
   grow,
@@ -17,7 +18,12 @@ import {
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { control, icon, space, weight } from "../../components/tokens";
 import { emptyStyle } from "./section";
+
+/** How wide the source and proxy fields grow, and the hint above the proxy. */
+const fieldWidth = 560;
+const hintWidth = 760;
 
 /** An address the market may read: http or https, and not in the list already. */
 function sourceProblem(
@@ -112,26 +118,26 @@ export function PluginSettings(props: { phone?: boolean }) {
         backgroundColor: c().canvas,
         fontFamily: fontFamily(fonts().interface),
         ...textStyle(type("small")),
-        height: props.phone ? 40 : 28,
-        paddingHorizontal: props.phone ? 12 : 8,
+        height: props.phone ? control.touch : control.md,
+        paddingHorizontal: props.phone ? space[12] : space[8],
         borderWidth: 1,
         borderColor: c().strong,
         borderRadius: 0,
       }}
     />
   );
-  const inset = props.phone ? 16 : 24;
+  const inset = props.phone ? space[16] : space[24];
   return (
     <SmoothScroll style={grow} scrollbar={false}>
       <View
         style={{
           paddingHorizontal: inset,
-          paddingTop: 12,
-          paddingBottom: 16,
-          gap: 14,
+          paddingTop: space[12],
+          paddingBottom: space[16],
+          gap: space[12],
         }}
       >
-        <Label weight={500}>{uiText("pluginsSourcesTitle")}</Label>
+        <Label weight={weight.regular}>{uiText("pluginsSourcesTitle")}</Label>
         <Label variant="small" tone="muted">
           {uiText("pluginsSourcesHint")}
         </Label>
@@ -142,9 +148,13 @@ export function PluginSettings(props: { phone?: boolean }) {
               title={uiText("pluginsNoSources")}
               description={uiText("pluginsNoSourcesHint")}
               icon="plugins"
-              iconSize={24}
-              descriptionWidth={320}
-              style={{ ...emptyStyle, paddingVertical: 24, flexBasis: "auto" }}
+              iconSize={icon.lg}
+              descriptionWidth={emptyWidth.narrow}
+              style={{
+                ...emptyStyle,
+                paddingVertical: space[24],
+                flexBasis: "auto",
+              }}
             />
           }
         >
@@ -154,13 +164,13 @@ export function PluginSettings(props: { phone?: boolean }) {
                 <View
                   style={{
                     ...row,
-                    gap: 12,
-                    padding: 10,
+                    gap: space[12],
+                    padding: space[8],
                     borderBottomWidth: 1,
                     borderColor: c().border,
                   }}
                 >
-                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                     <Label lines={1}>{item().name || item().url}</Label>
                     <If when={item().name}>
                       <Label
@@ -191,7 +201,7 @@ export function PluginSettings(props: { phone?: boolean }) {
                     accessibilityLabel={uiText("pluginsRemoveSource", {
                       name: item().name || item().url,
                     })}
-                    size={props.phone ? 40 : 28}
+                    size={props.phone ? control.touch : control.md}
                     disabled={busy()}
                     onPress={() =>
                       void call("marketRemoveSource", { url: item().url })
@@ -202,7 +212,7 @@ export function PluginSettings(props: { phone?: boolean }) {
             </Each>
           </View>
         </If>
-        <View style={{ gap: 8, maxWidth: 560 }}>
+        <View style={{ gap: space[8], maxWidth: fieldWidth }}>
           {field(uiText("pluginsSourceName"), name, name.set)}
           {field(
             uiText("pluginsSourceUrl"),
@@ -220,20 +230,20 @@ export function PluginSettings(props: { phone?: boolean }) {
               label={uiText("pluginsAddSource")}
               tone="primary"
               icon="plus"
-              size={props.phone ? 44 : 28}
+              size={props.phone ? control.touch : control.md}
               disabled={busy()}
               onPress={() => void add()}
             />
           </View>
         </View>
 
-        <Label weight={500} style={{ paddingTop: 8 }}>
+        <Label weight={weight.regular} style={{ paddingTop: space[8] }}>
           {uiText("pluginsProxyTitle")}
         </Label>
-        <Label variant="small" tone="muted" style={{ maxWidth: 760 }}>
+        <Label variant="small" tone="muted" style={{ maxWidth: hintWidth }}>
           {uiText("pluginsProxyHint")}
         </Label>
-        <View style={{ gap: 8, maxWidth: 560 }}>
+        <View style={{ gap: space[8], maxWidth: fieldWidth }}>
           {field(
             uiText("pluginsProxy"),
             proxy,
@@ -248,7 +258,7 @@ export function PluginSettings(props: { phone?: boolean }) {
           <View style={{ ...row, justifyContent: "flex-end" }}>
             <Button
               label={uiText("pluginsProxySave")}
-              size={props.phone ? 44 : 28}
+              size={props.phone ? control.touch : control.md}
               disabled={busy()}
               onPress={() => void saveProxy()}
             />

@@ -88,7 +88,7 @@ export function mountSources(mode: "split" | "fail" | "reopen") {
         // Alpha answers a little later, so the first frame is what the host kept.
         if (args?.source === A)
           return new Promise<MarketCatalog>((done) =>
-            setTimeout(() => done({ proxy: "", sources: [alphaFresh] }), 300),
+            setTimeout(() => done({ proxy: "", sources: [alphaFresh] }), 2000),
           );
         if (args?.source === B)
           return mode === "fail"

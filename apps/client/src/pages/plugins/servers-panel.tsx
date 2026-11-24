@@ -8,6 +8,7 @@ import { openUrl, signal, View } from "nsh";
 import {
   Button,
   colors,
+  dialogWidth,
   Label,
   Modal,
   row,
@@ -22,6 +23,7 @@ import { HeadersEditor } from "./headers-editor";
 import { pluginText as text } from "./labels";
 import { MissingValues } from "./missing-values";
 import { authStyle } from "./plugin-status";
+import { control, space, weight } from "../../components/tokens";
 
 /** Whether the host sends the fields the servers panel reads (an older host does not). */
 const hostKnowsHeaders = (item: PluginView): boolean =>
@@ -148,7 +150,7 @@ function TestButton(props: { test: Test }) {
       label={props.test.busy() ? uiText("testing") : uiText("testConnection")}
       tone="plain"
       labelVariant="body"
-      size={28}
+      size={control.md}
       disabled={props.test.busy()}
       onPress={props.test.run}
     />
@@ -256,7 +258,7 @@ function LoginButton(props: {
           label={uiText("logoutButton")}
           tone="plain"
           labelVariant="body"
-          size={28}
+          size={control.md}
           disabled={busy()}
           onPress={() => call("logoutServer")}
         />
@@ -272,7 +274,7 @@ function LoginButton(props: {
           label={uiText("loginButton")}
           tone="plain"
           labelVariant="body"
-          size={28}
+          size={control.md}
           disabled={busy()}
           onPress={() => call("loginServer")}
         />
@@ -292,6 +294,9 @@ const counted = (
       ? uiText(`${key}1` as never, { n: "1" })
       : uiText(`${key}s` as never, { n: String(n) });
 
+/** How tall a folded list of tools grows before it scrolls, and the servers dialog's body. */
+const listHeight = 420;
+const bodyHeight = 560;
 const MAX_CHIPS = 12;
 const LONG_TOOL_TEXT = 140;
 /** A long list shows this many cards, and a link for the rest; the region still scrolls past it. */
@@ -341,13 +346,13 @@ function ItemCard(props: {
     <View
       testID={`${props.kind}-card:${props.item.name}`}
       style={{
-        gap: 6,
-        padding: 12,
+        gap: space[8],
+        padding: space[12],
         borderWidth: 1,
         borderColor: c().border,
       }}
     >
-      <Label variant="body" weight={600} lines={1}>
+      <Label variant="body" weight={weight.strong} lines={1}>
         {props.item.name}
       </Label>
       <If when={props.item.description}>
@@ -368,14 +373,14 @@ function ItemCard(props: {
         </If>
       </If>
       <If when={params().length}>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[4] }}>
           <Each of={params().slice(0, MAX_CHIPS)} key={(name) => name}>
             {(name) => (
               <View
                 testID={`tool-param:${name()}`}
                 style={{
-                  paddingVertical: 2,
-                  paddingHorizontal: 8,
+                  paddingVertical: space[2],
+                  paddingHorizontal: space[8],
                   borderWidth: 1,
                   borderColor: c().border,
                 }}
@@ -412,12 +417,12 @@ function ItemList(props: {
     all() ? props.items : props.items.slice(0, COLLAPSED_ITEMS);
   return (
     <If when={props.items.length}>
-      <View testID={`list:${props.kind}`} style={{ gap: 8 }}>
-        <Label variant="small" weight={600}>
+      <View testID={`list:${props.kind}`} style={{ gap: space[8] }}>
+        <Label variant="small" weight={weight.strong}>
           {props.heading}
         </Label>
-        <SmoothScroll style={{ maxHeight: 420 }} scrollbar={false}>
-          <View style={{ gap: 8 }}>
+        <SmoothScroll style={{ maxHeight: listHeight }} scrollbar={false}>
+          <View style={{ gap: space[8] }}>
             <Each of={shown()} key={(item) => item.name}>
               {(item) => <ItemCard kind={props.kind} item={item()} />}
             </Each>
@@ -476,14 +481,14 @@ function ResultInfo(props: { result: PluginTestResult }) {
   return (
     <View
       testID="result-info"
-      style={{ ...row, flexWrap: "wrap", gap: 8, alignItems: "center" }}
+      style={{ ...row, flexWrap: "wrap", gap: space[8], alignItems: "center" }}
     >
       <If when={label().text}>
         <View
           tooltip={hint(label().full, c)}
           style={{ flexShrink: 1, minWidth: 0 }}
         >
-          <Label variant="small" weight={600} lines={1}>
+          <Label variant="small" weight={weight.strong} lines={1}>
             {label().text}
           </Label>
         </View>
@@ -493,7 +498,7 @@ function ResultInfo(props: { result: PluginTestResult }) {
           <View
             style={{
               paddingVertical: 1,
-              paddingHorizontal: 6,
+              paddingHorizontal: space[4],
               borderWidth: 1,
               borderColor: c().border,
             }}
@@ -534,7 +539,7 @@ function CursorLoginRow(props: {
   return (
     <>
       <If when={offered()}>
-        <View style={{ gap: 8 }}>
+        <View style={{ gap: space[8] }}>
           <Label
             variant="small"
             tone="muted"
@@ -544,14 +549,14 @@ function CursorLoginRow(props: {
               ? uiText("cursorReloginNote")
               : uiText("cursorLoginNote")}
           </Label>
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <Button
               label={
                 signedIn() ? uiText("cursorRelogin") : uiText("cursorLogin")
               }
               tone="plain"
               labelVariant="body"
-              size={28}
+              size={control.md}
               disabled={props.test.busy()}
               onPress={() =>
                 props.test.cursorLogin(
@@ -563,7 +568,7 @@ function CursorLoginRow(props: {
         </View>
       </If>
       <If when={props.test.cursorId() !== undefined}>
-        <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
+        <View style={{ ...row, gap: space[8], flexWrap: "wrap" }}>
           <Label variant="small" tone="muted">
             {uiText("cursorLoginWaiting")}
           </Label>
@@ -571,7 +576,7 @@ function CursorLoginRow(props: {
             label={uiText("cursorLoginCancel")}
             tone="plain"
             labelVariant="body"
-            size={28}
+            size={control.md}
             onPress={props.test.cursorCancel}
           />
         </View>
@@ -588,15 +593,15 @@ function CursorLoginRow(props: {
 function TestResultView(props: { test: Test; stdio: boolean }) {
   const result = props.test.result;
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: space[8] }}>
       <If when={props.stdio}>
         <Label variant="small" tone="muted">
           {uiText("testStdioHint")}
         </Label>
       </If>
       <If when={result()}>
-        <View style={{ gap: 8 }}>
-          <Label variant="small" weight={600}>
+        <View style={{ gap: space[8] }}>
+          <Label variant="small" weight={weight.strong}>
             {testLabel(result()!) +
               (REQUEST_MADE.has(result()!.status)
                 ? ` · ${result()!.ms} ms`
@@ -644,8 +649,8 @@ const clip = (text: string): string =>
 export function SkillRows(props: { item: PluginView }) {
   const c = colors();
   return (
-    <View style={{ gap: 8 }}>
-      <Label variant="subtitle" weight={600}>
+    <View style={{ gap: space[8] }}>
+      <Label variant="subtitle" weight={weight.strong}>
         {uiText("pluginSkillsHeading")}
       </Label>
       <If when={!props.item.skills.length}>
@@ -654,7 +659,7 @@ export function SkillRows(props: { item: PluginView }) {
         </Label>
       </If>
       {/* One column when narrow; cards keep a readable basis and wrap into two when there is room. */}
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[8] }}>
         <Each of={props.item.skills} key={(skill) => skill.name}>
           {(skill) => (
             <View
@@ -663,13 +668,13 @@ export function SkillRows(props: { item: PluginView }) {
                 flexGrow: 1,
                 flexShrink: 1,
                 flexBasis: 280,
-                gap: 4,
-                padding: 12,
+                gap: space[4],
+                padding: space[12],
                 borderWidth: 1,
                 borderColor: c().border,
               }}
             >
-              <Label variant="subtitle" weight={600}>
+              <Label variant="subtitle" weight={weight.strong}>
                 {skill().name}
               </Label>
               <If when={skill().description}>
@@ -689,7 +694,7 @@ export function SkillRows(props: { item: PluginView }) {
 export function ServerRows(props: { item: PluginView; phone?: boolean }) {
   const c = colors();
   return (
-    <View style={{ gap: 12 }}>
+    <View style={{ gap: space[12] }}>
       <If when={!hostKnowsHeaders(props.item)}>
         <Label variant="small" tone="muted">
           {uiText("hostNeedsUpdate")}
@@ -702,15 +707,15 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
           return (
             <View
               style={{
-                gap: 12,
-                padding: 16,
+                gap: space[12],
+                padding: space[16],
                 borderWidth: 1,
                 borderColor: c().border,
               }}
             >
               <View
                 testID={`server-head:${server().name}`}
-                style={{ ...row, gap: 10, alignItems: "center" }}
+                style={{ ...row, gap: space[8], alignItems: "center" }}
               >
                 {/* What may give way is the left cluster; the buttons are never squeezed or wrapped. */}
                 <View
@@ -718,7 +723,7 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
                     ...row,
                     flexShrink: 1,
                     minWidth: 0,
-                    gap: props.phone ? 8 : 10,
+                    gap: space[8],
                     alignItems: "center",
                   }}
                 >
@@ -726,7 +731,7 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
                     style={{ flexShrink: 1, minWidth: 0 }}
                     tooltip={hint(server().name, c)}
                   >
-                    <Label variant="subtitle" weight={600} lines={1}>
+                    <Label variant="subtitle" weight={weight.strong} lines={1}>
                       {server().name}
                     </Label>
                   </View>
@@ -736,7 +741,7 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
                     lines={1}
                     style={{
                       flexShrink: 0,
-                      paddingHorizontal: 5,
+                      paddingHorizontal: space[4],
                       borderWidth: 1,
                       borderColor: c().strong,
                     }}
@@ -775,7 +780,12 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
                 }
               >
                 <View
-                  style={{ ...row, flexWrap: "wrap", columnGap: 12, rowGap: 4 }}
+                  style={{
+                    ...row,
+                    flexWrap: "wrap",
+                    columnGap: space[12],
+                    rowGap: space[4],
+                  }}
                 >
                   <If when={(server().env ?? []).length}>
                     <Label
@@ -836,14 +846,14 @@ export function ServersDialog(props: {
       sheet={props.phone}
       plainSheetHeader={props.phone}
       compact={!props.phone}
-      titleWeight={500}
-      width={640}
+      titleWeight={weight.regular}
+      width={dialogWidth.xl}
       overPhoneNavigation={props.phone}
       onClose={props.onClose}
     >
-      <SmoothScroll style={{ maxHeight: 560 }} scrollbar={false}>
-        <View style={{ padding: 20, gap: 12 }}>
-          <Label variant="subtitle" weight={600}>
+      <SmoothScroll style={{ maxHeight: bodyHeight }} scrollbar={false}>
+        <View style={{ padding: space[20], gap: space[12] }}>
+          <Label variant="subtitle" weight={weight.strong}>
             {uiText("serversHeading")}
           </Label>
           <ServerRows item={props.item} phone={props.phone} />
