@@ -34,6 +34,7 @@ import { taskMoment } from "./facts";
 import { activeTaskRun, latestExecutorRun } from "./run-log";
 import { statusName, TaskGlyph } from "./status";
 import { StatusSelect } from "./status-select";
+import { TaskStepsBlock } from "./steps-block";
 import { TaskQuestions } from "./task-questions";
 
 /** The width of a rail row's label; what goes under its value starts there. */
@@ -617,6 +618,7 @@ export function TaskRail(detail: {
           {taskMoment(item().updatedAt)}
         </Label>
       </RailRow>
+      <TaskStepsBlock taskId={item().id} />
       <If when={item().status === "in_review" && !item().children?.length}>
         <TaskReviewActions state={detail.state} />
       </If>
