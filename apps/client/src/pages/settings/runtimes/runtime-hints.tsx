@@ -1,15 +1,9 @@
 import type { AgentRuntimeInfo } from "@eta/client-contracts";
-import { signal, View } from "nsh";
-import {
-  Button,
-  Fonts,
-  Icon,
-  Label,
-  monoFontFamily,
-  row,
-} from "../../../components";
-import { control, icon, space, weight } from "../../../components/tokens";
+import { View } from "nsh";
+import { Button, Fonts, Label, monoFontFamily, row } from "../../../components";
+import { control, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
+import { Disclosure } from "../../../ui";
 import { WarningLine } from "../section";
 import { LOGIN_COMMANDS } from "./status";
 
@@ -42,7 +36,6 @@ export function RuntimeHints(props: {
   onRetry: () => void;
   onRuntimes?: (() => void) | undefined;
 }) {
-  const open = signal(false);
   const signIn = () =>
     props.chosen?.status === "unauthenticated"
       ? LOGIN_COMMANDS[props.chosen.id]
@@ -86,54 +79,43 @@ export function RuntimeHints(props: {
             {uiText("runtimeUnreachable")}
           </Label>
         </If>
-        <View style={{ ...row, gap: space[8], minHeight: space[20] }}>
-          <If when={props.explained.length > 0}>
-            <View
-              role="button"
-              accessibilityLabel={uiText("runtimeDetails")}
-              accessibilityState={{ expanded: open() }}
-              onPress={() => open.set(!open())}
-              style={{ ...row, gap: space[4], cursor: "pointer" }}
-            >
-              <Icon
-                name={open() ? "down" : "right"}
-                size={icon.sm}
-                tone="mutedInk"
-              />
-              <Label variant="small" tone="mutedInk">
-                {uiText("runtimeDetails")}
-              </Label>
-            </View>
-          </If>
-          <View style={{ flex: 1 }} />
-          <Button
-            label={uiText("runtimeRetry")}
-            tone="ghost"
-            size={control.sm}
-            labelTone="mutedInk"
-            busy={props.probing}
-            style={{ paddingHorizontal: 0 }}
-            onPress={props.onRetry}
-          />
-        </View>
-        <If when={open() && props.explained.length > 0}>
-          <View style={{ gap: space[4], paddingLeft: space[16] }}>
-            <Each of={props.explained} key={(item) => item.id}>
-              {(item) => (
-                <View style={{ gap: 1 }}>
-                  <Label
-                    variant="small"
-                    weight={weight.regular}
-                    tone="mutedInk"
-                  >
-                    {item().label}
-                  </Label>
-                  <RuntimeWords>{item().detail ?? ""}</RuntimeWords>
-                </View>
-              )}
-            </Each>
+        <Disclosure.Root>
+          <View style={{ ...row, gap: space[8], minHeight: space[20] }}>
+            <If when={props.explained.length > 0}>
+              <Disclosure.Trigger label={uiText("runtimeDetails")} />
+            </If>
+            <View style={{ flex: 1 }} />
+            <Button
+              label={uiText("runtimeRetry")}
+              tone="ghost"
+              size={control.sm}
+              labelTone="mutedInk"
+              busy={props.probing}
+              style={{ paddingHorizontal: 0 }}
+              onPress={props.onRetry}
+            />
           </View>
-        </If>
+          <If when={props.explained.length > 0}>
+            <Disclosure.Content
+              style={{ gap: space[4], paddingLeft: space[16] }}
+            >
+              <Each of={props.explained} key={(item) => item.id}>
+                {(item) => (
+                  <View style={{ gap: 1 }}>
+                    <Label
+                      variant="small"
+                      weight={weight.regular}
+                      tone="mutedInk"
+                    >
+                      {item().label}
+                    </Label>
+                    <RuntimeWords>{item().detail ?? ""}</RuntimeWords>
+                  </View>
+                )}
+              </Each>
+            </Disclosure.Content>
+          </If>
+        </Disclosure.Root>
         <If when={props.error}>
           {(error) => (
             <Label variant="small" tone="mutedInk">
