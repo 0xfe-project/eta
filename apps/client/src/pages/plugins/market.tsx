@@ -62,10 +62,14 @@ let lastCatalog: MarketCatalog | undefined;
 const POLL_MS = 3000;
 const POLL_LIMIT = 60;
 
-/** How many Composio toolkits the market draws at first, and each time Show more is pressed. */
-const BATCH = 48;
-/** How near the end of the list, in points, the next batch is drawn without Show more being pressed. */
-const NEAR_END = 400;
+/** How many rows of cards the market draws at first, and each time Show more is pressed or the end comes near. A batch is whole rows, so how many cards it holds follows from the columns. */
+const ROWS = 10;
+/** On a phone a row is one short card, so a batch holds more rows: ten of them would not fill the screen, and nothing would scroll to draw the next. */
+const PHONE_ROWS = 20;
+/** The widest card (a Composio one), for how many fit in a row; the gap between cards is `space[12]`. */
+const CARD_SPACE = 267; // design-value: the Composio card's width, the widest card
+/** How near the end of the list, in points, the next batch is drawn without Show more being pressed: about a screen, so the next batch is drawn before the end is seen. */
+const NEAR_END = 800; // design-value: a distance of scrolling, not a style
 /** How long a search waits for the next key before the list follows it. */
 const SEARCH_MS = 175;
 
@@ -146,14 +150,29 @@ export function Market(props: {
           ...item.categories,
         ]).includes(needle()),
     );
-  /** How many of the matching toolkits are drawn. A new search starts again from the first batch. */
-  const drawn = signal(BATCH);
+  /** The width of the list of cards, once laid out: what the columns follow from. */
+  const room = signal(0);
+  /** Whether the columns are known: at once on a phone (one), after the first layout elsewhere. Until then nothing is drawn, which would only be redrawn, with its pictures asked for, once the width says how many fit. */
+  const known = () => phone() || room() > 0;
+  const columns = () =>
+    phone()
+      ? 1
+      : Math.max(
+          1,
+          Math.floor((room() + space[12]) / (CARD_SPACE + space[12])),
+        );
+  /** How many rows of the matching cards (toolkits first, then the other sources' plugins) are drawn. A new search starts again from the first batch. */
+  const batchRows = () => (phone() ? PHONE_ROWS : ROWS);
+  const rows = signal(batchRows());
+  const drawn = () => (known() ? rows() * columns() : 0);
+  /** Everything the search matches, whatever is drawn: a search looks through all of it. */
+  const total = () => toolkits().length + entries().length;
   /** The height of the content when scrolling last drew a batch: another is drawn only once the content has grown. */
   let drawnAt = 0;
   effect(() => {
     needle();
     untracked(() => {
-      drawn.set(BATCH);
+      rows.set(batchRows());
       drawnAt = 0;
     });
   });
@@ -161,15 +180,18 @@ export function Market(props: {
   const nearEnd: NonNullable<ScrollProps["onScroll"]> = (event) => {
     const end = event.contentSize.height;
     if (
-      toolkits().length <= drawn() ||
+      total() <= drawn() ||
       end === drawnAt ||
       event.offset.y + event.size.height < end - NEAR_END
     )
       return;
     drawnAt = end;
-    drawn.update((n) => n + BATCH);
+    rows.update((n) => n + batchRows());
   };
   const shownToolkits = () => toolkits().slice(0, drawn());
+  /** The other sources' plugins come after the toolkits, so they fill what the toolkits leave of the batch. */
+  const shownEntries = () =>
+    entries().slice(0, Math.max(0, drawn() - toolkits().length));
   const currentToolkit = () =>
     allToolkits().find((item) => toolkitKey(item) === detail());
   /** A Composio source with no key, or whose key was refused: an answer of its own, not a failure of the market. */
@@ -776,6 +798,7 @@ export function Market(props: {
               </Label>
             </If>
             <View
+              onLayout={({ bounds }) => room.set(bounds.size.width)}
               style={{
                 ...row,
                 flexWrap: "wrap",
@@ -848,16 +871,7 @@ export function Market(props: {
                   </View>
                 )}
               </Each>
-              <If when={toolkits().length > drawn()}>
-                <View style={{ width: "100%", alignItems: "center" }}>
-                  <Button
-                    label={uiText("marketShowMore")}
-                    tone="ghost"
-                    onPress={() => drawn.update((n) => n + BATCH)}
-                  />
-                </View>
-              </If>
-              <Each of={entries()} key={key}>
+              <Each of={shownEntries()} key={key}>
                 {(item) => (
                   <View
                     role="button"
@@ -924,6 +938,16 @@ export function Market(props: {
                 )}
               </Each>
             </View>
+            {/* At the end of the list, after both kinds of card; the list also draws the next batch by itself near its end. */}
+            <If when={known() && total() > drawn()}>
+              <View style={{ alignItems: "center" }}>
+                <Button
+                  label={uiText("marketShowMore")}
+                  tone="ghost"
+                  onPress={() => rows.update((n) => n + batchRows())}
+                />
+              </View>
+            </If>
             <If when={skipped().length}>
               <Label variant="small" tone="muted">
                 {uiText("marketSkipped", { count: skipped().length })}

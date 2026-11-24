@@ -6,17 +6,34 @@ const SEARCH = { ...OPEN, clock: {} };
 type App = Awaited<ReturnType<typeof open>>;
 const cards = (app: App) => app.count("id:plugin-avatar");
 
-// 130 toolkits, one batch is 48.
+// 130 toolkits; a batch is ten rows, so how many cards it holds follows from the columns the width gives.
+const ROWS = 10;
+const pad = (n: number) => String(n).padStart(4, "0");
+/** How many cards sit side by side: the toolkits that share the first one's row. */
+function columns(app: App): number {
+  const first = app.layout("label:Toolkit 0000")!;
+  let count = 0;
+  for (let i = 0; i < 12; i++) {
+    const card = app.layout(`label:Toolkit ${pad(i)}`);
+    if (card && card.y === first.y) count++;
+  }
+  return count;
+}
+const batchOf = (app: App) => ROWS * columns(app);
+
 test("only the first batch of toolkits is drawn, and Show more adds the next batch", async () => {
   const app = await open("./fixtures/market-batches.tsx", OPEN);
   await app.waitFor("text:Toolkit 0000");
-  expect(cards(app)).toBe(48);
-  expect(app.shows("Toolkit 0047")).toBe(true);
-  expect(app.shows("Toolkit 0048")).toBe(false);
+  const batch = batchOf(app);
+  expect(batch).toBeLessThan(130);
+  expect(cards(app)).toBe(batch);
+  expect(app.shows(`Toolkit ${pad(batch - 1)}`)).toBe(true);
+  expect(app.shows(`Toolkit ${pad(batch)}`)).toBe(false);
   await app.press("label:Show more");
-  expect(cards(app)).toBe(96);
-  expect(app.shows("Toolkit 0048")).toBe(true);
-  await app.press("label:Show more");
+  expect(cards(app)).toBe(batch * 2);
+  expect(app.shows(`Toolkit ${pad(batch)}`)).toBe(true);
+  for (let i = 0; i < 10 && app.count("label:Show more") > 0; i++)
+    await app.press("label:Show more");
   expect(cards(app)).toBe(130);
   expect(app.shows("Toolkit 0129")).toBe(true);
   expect(app.count("label:Show more")).toBe(0);
@@ -24,11 +41,12 @@ test("only the first batch of toolkits is drawn, and Show more adds the next bat
 
 test("a picture is only asked for by a card that is drawn", async () => {
   const app = await open("./fixtures/market-batches.tsx", OPEN);
-  await app.waitFor("text:logos:48 calls:48");
-  expect(app.shows("text:logos:48 calls:48")).toBe(true);
+  await app.waitFor("text:Toolkit 0000");
+  const batch = batchOf(app);
+  await app.waitFor(`text:logos:${batch} calls:${batch}`);
   await app.press("label:Show more");
-  await app.waitFor("text:logos:96 calls:96");
-  expect(app.shows("text:logos:96 calls:96")).toBe(true);
+  await app.waitFor(`text:logos:${batch * 2} calls:${batch * 2}`);
+  expect(app.shows(`text:logos:${batch * 2} calls:${batch * 2}`)).toBe(true);
 });
 
 test("a search looks through every toolkit, not only the drawn ones", async () => {
@@ -44,15 +62,17 @@ test("a search looks through every toolkit, not only the drawn ones", async () =
 test("a search with more matches than a batch draws one batch again, and Show more goes on from there", async () => {
   const app = await open("./fixtures/market-batches.tsx", SEARCH);
   await app.waitFor("text:Toolkit 0000");
+  const batch = batchOf(app);
   await app.press("label:Show more");
-  expect(cards(app)).toBe(96);
+  expect(cards(app)).toBe(batch * 2);
   // "toolkit 00" matches Toolkit 0000 to 0099: 100 toolkits, more than a batch.
   await app.type("label:Search plugins", "toolkit 00");
   await app.clock!.runFor(400);
-  expect(cards(app)).toBe(48);
+  expect(cards(app)).toBe(batch);
   await app.press("label:Show more");
-  expect(cards(app)).toBe(96);
-  await app.press("label:Show more");
+  expect(cards(app)).toBe(batch * 2);
+  for (let i = 0; i < 10 && app.count("label:Show more") > 0; i++)
+    await app.press("label:Show more");
   expect(cards(app)).toBe(100);
   expect(app.count("label:Show more")).toBe(0);
 });
@@ -60,9 +80,10 @@ test("a search with more matches than a batch draws one batch again, and Show mo
 test("the list follows a search only once the typing pauses", async () => {
   const app = await open("./fixtures/market-batches.tsx", SEARCH);
   await app.waitFor("text:Toolkit 0000");
+  const batch = batchOf(app);
   await app.type("label:Search plugins", "Toolkit 0125");
   // The words are in the field at once; the cards wait for the pause.
-  expect(cards(app)).toBe(48);
+  expect(cards(app)).toBe(batch);
   await app.clock!.runFor(400);
   expect(cards(app)).toBe(1);
 });
@@ -71,25 +92,33 @@ test("the list follows a search only once the typing pauses", async () => {
 test("scrolling to the end of the list draws the next batch, one batch and no more", async () => {
   const app = await open("./fixtures/market-batches.tsx", OPEN);
   await app.waitFor("text:Toolkit 0000");
-  expect(cards(app)).toBe(48);
+  const batch = batchOf(app);
+  expect(cards(app)).toBe(batch);
   await app.scroll("text:Toolkit 0000", 100000);
-  expect(cards(app)).toBe(96);
-  expect(app.shows("Toolkit 0048")).toBe(true);
+  expect(cards(app)).toBe(batch * 2);
+  expect(app.shows(`Toolkit ${pad(batch)}`)).toBe(true);
 });
 
-test("a list scrolled only a little draws no more", async () => {
+test("a list scrolled a little draws one batch ahead, and a second little scroll draws no more", async () => {
   const app = await open("./fixtures/market-batches.tsx", OPEN);
   await app.waitFor("text:Toolkit 0000");
+  const batch = batchOf(app);
   await app.scroll("text:Toolkit 0000", 100);
-  expect(cards(app)).toBe(48);
+  expect(cards(app)).toBe(batch * 2);
+  await app.scroll("text:Toolkit 0000", 100);
+  expect(cards(app)).toBe(batch * 2);
 });
 
-test("the end of the list reached again, with the content grown, draws the last batch, and Show more goes with it", async () => {
+test("the end of the list reached again, with the content grown, draws the next batch, and Show more goes when all is drawn", async () => {
   const app = await open("./fixtures/market-batches.tsx", OPEN);
   await app.waitFor("text:Toolkit 0000");
+  const batch = batchOf(app);
   await app.scroll("text:Toolkit 0000", 100000);
-  expect(cards(app)).toBe(96);
+  expect(cards(app)).toBe(batch * 2);
   await app.scroll("text:Toolkit 0000", 100000);
+  expect(cards(app)).toBe(Math.min(batch * 3, 130));
+  for (let i = 0; i < 10 && cards(app) < 130; i++)
+    await app.scroll("text:Toolkit 0000", 100000);
   expect(cards(app)).toBe(130);
   expect(app.count("label:Show more")).toBe(0);
 });
@@ -97,18 +126,20 @@ test("the end of the list reached again, with the content grown, draws the last 
 test("Show more still draws a batch after a batch was drawn by scrolling", async () => {
   const app = await open("./fixtures/market-batches.tsx", OPEN);
   await app.waitFor("text:Toolkit 0000");
+  const batch = batchOf(app);
   await app.scroll("text:Toolkit 0000", 100000);
-  expect(cards(app)).toBe(96);
+  expect(cards(app)).toBe(batch * 2);
   await app.press("label:Show more");
-  expect(cards(app)).toBe(130);
+  expect(cards(app)).toBe(batch * 3);
 });
 
 test("a search after a scroll draws the first batch again", async () => {
   const app = await open("./fixtures/market-batches.tsx", SEARCH);
   await app.waitFor("text:Toolkit 0000");
+  const batch = batchOf(app);
   await app.scroll("text:Toolkit 0000", 100000);
-  expect(cards(app)).toBe(96);
+  expect(cards(app)).toBe(batch * 2);
   await app.type("label:Search plugins", "toolkit 00");
   await app.clock!.runFor(400);
-  expect(cards(app)).toBe(48);
+  expect(cards(app)).toBe(batch);
 });

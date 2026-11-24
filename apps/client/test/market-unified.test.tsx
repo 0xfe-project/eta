@@ -47,15 +47,18 @@ test("a batch is whole rows: the drawn cards are a multiple of the columns", asy
   expect(cards(narrow) % columns(narrow)).toBe(0);
 });
 
+// The phone's toolkit cards are narrow slivers, so its first batch fits the screen and nothing scrolls: Show more is what draws the plugins there.
 test("on a phone the plugins are one to a row, and still come in batches", async () => {
   const app = await open1("./fixtures/market-unified-phone.tsx", NARROW);
   expect(cards(app)).toBeLessThan(230);
-  expect(app.shows("label:Plugin 0199")).toBe(false);
-  await app.scroll("label:Toolkit 0000", 100000);
+  expect(app.shows("label:Plugin 0000")).toBe(false);
+  await app.press("label:Show more");
   const one = app.layout("label:Plugin 0000")!;
   const two = app.layout("label:Plugin 0001")!;
   expect(one.x).toBe(two.x);
   expect(two.y).toBeGreaterThan(one.y);
+  expect(cards(app)).toBeLessThan(230);
+  expect(app.shows("label:Plugin 0199")).toBe(false);
 });
 
 test("Show more is at the end of the list, below the last card drawn", async () => {
