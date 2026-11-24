@@ -365,7 +365,7 @@ export function SkillFile(props: {
                 heading2: textStyle(type("subtitle"), "prose"),
                 heading3: textStyle(type("body")),
                 paragraph: { marginTop: 0, marginBottom: 0 },
-                list: { gap: 6 },
+                list: { gap: space[4] },
                 listMarker: { color: c().ink },
                 code: { fontFamily: monoFontFamily(fonts()) },
                 codeBlockCode: {

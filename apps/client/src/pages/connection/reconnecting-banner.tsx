@@ -11,7 +11,7 @@ export function ReconnectingBanner(props: {
     <View
       style={{
         ...row,
-        paddingVertical: props.phone ? 10 : 8,
+        paddingVertical: props.phone ? space[12] : space[8],
         paddingHorizontal: space[16],
         gap: space[8],
         backgroundColor: c().selected,

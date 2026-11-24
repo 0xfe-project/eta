@@ -172,9 +172,9 @@ export function SkillDetail(props: {
       label={uiText("skillReloadReader")}
       icon="refresh"
       iconOnly
-      iconSize={14}
+      iconSize={icon.md}
       tone={tablet() ? "plain" : "ghost"}
-      style={tablet() ? undefined : { marginLeft: 6 }}
+      style={tablet() ? undefined : { marginLeft: space[8] }}
       onPress={refresh}
     />
   );
@@ -321,7 +321,7 @@ export function SkillDetail(props: {
         <If when={preview()?.metadata}>
           <View
             style={{
-              gap: 6,
+              gap: space[4],
               paddingBottom: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
@@ -334,12 +334,12 @@ export function SkillDetail(props: {
               onPress={() => metadata.set(!metadata())}
               style={{
                 ...row,
-                gap: 6,
+                gap: space[4],
                 alignSelf: "flex-start",
                 cursor: "pointer",
               }}
             >
-              <Icon name={metadata() ? "down" : "right"} size={10} />
+              <Icon name={metadata() ? "down" : "right"} size={icon.sm} />
               <Label variant="small">{uiText("metadata")}</Label>
             </View>
             <If when={metadata()}>
@@ -411,7 +411,7 @@ export function SkillDetail(props: {
                 style={{
                   width: 6,
                   height: 6,
-                  marginTop: 5,
+                  marginTop: space[4],
                   flexShrink: 0,
                   backgroundColor: c().warning,
                 }}
@@ -531,16 +531,16 @@ export function SkillDetail(props: {
             style={{
               ...row,
               height: control.md,
-              gap: 6,
+              gap: space[4],
               alignSelf: "flex-start",
-              paddingHorizontal: 10,
+              paddingHorizontal: space[12],
               borderWidth: 1,
               borderColor: showFiles() ? c().ink : c().strong,
               backgroundColor: showFiles() ? c().selected : undefined,
               cursor: "pointer",
             }}
           >
-            <Icon name="folder" size={11} />
+            <Icon name="folder" size={icon.sm} />
             <Label variant="small">{uiText("files")}</Label>
             <If when={!showFiles() && fileName()}>
               <Label variant="caption" tone="muted">

@@ -1,6 +1,6 @@
 import { View } from "nsh";
 import { colors, Field, Label, row, textFaces } from "../../components";
-import { control, space } from "../../components/tokens";
+import { control, space, tracked } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export function HostFields(props: {
@@ -84,8 +84,13 @@ export function HostFields(props: {
           onSubmit={props.onSubmit}
           style={{
             ...fieldStyle(),
-            ...(props.tablet && props.token ? { letterSpacing: 2.24 } : {}),
-            ...(props.plain && props.token ? { letterSpacing: 1.6 } : {}),
+            // A token's characters spaced apart, in em of the field's text.
+            ...(props.tablet && props.token
+              ? { letterSpacing: tracked("caps", type("body").size) }
+              : {}),
+            ...(props.plain && props.token
+              ? { letterSpacing: tracked("caps", type("subtitle").size) }
+              : {}),
             ...(props.tokenWrong ? { borderColor: c().ink } : {}),
           }}
         />

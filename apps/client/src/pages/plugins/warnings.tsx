@@ -11,7 +11,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
-import { control, space, weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 import { pluginText as text } from "./labels";
@@ -120,12 +120,12 @@ export function PluginWarningsDialog(props: {
         </Label>
         <CloseButton
           onPress={props.onClose}
-          iconSize={14}
-          style={{ marginVertical: -space[2], marginRight: -6 }}
+          iconSize={icon.md}
+          style={{ marginVertical: -space[2], marginRight: -space[8] }}
         />
       </View>
       <SmoothScroll style={{ maxHeight: 300 }} scrollbar={false}>
-        <View style={{ paddingHorizontal: space[16], gap: 6 }}>
+        <View style={{ paddingHorizontal: space[16], gap: space[4] }}>
           <WarningsText item={props.item} />
         </View>
       </SmoothScroll>
@@ -144,7 +144,7 @@ export function PluginWarningsDialog(props: {
           tone="primary"
           size={control.md}
           labelWeight={weight.regular}
-          style={{ paddingHorizontal: 14 }}
+          style={{ paddingHorizontal: space[16] }}
           onPress={props.onClose}
         />
       </View>
@@ -177,17 +177,25 @@ export function PluginWarnings(props: {
           borderBottomWidth: 1,
           borderColor: c().border,
           ...(props.phone
-            ? { gap: 6, paddingTop: space[2], paddingBottom: 6 }
-            : { gap: space[8], height: space[32], paddingHorizontal: 10 }),
+            ? { gap: space[4], paddingTop: space[2], paddingBottom: space[8] }
+            : {
+                gap: space[8],
+                height: space[32],
+                paddingHorizontal: space[12],
+              }),
         }}
       >
-        <Icon name="warning" size={14} />
+        <Icon name="warning" size={icon.md} />
         <Label weight={weight.strong} variant="small">
           {uiText("warningsFor", { name: props.item.name })}
         </Label>
       </View>
       <View
-        style={props.phone ? { gap: space[8] } : { padding: 10, gap: space[8] }}
+        style={
+          props.phone
+            ? { gap: space[8] }
+            : { padding: space[12], gap: space[8] }
+        }
       >
         <WarningsText item={props.item} inline />
         <Button
@@ -198,7 +206,11 @@ export function PluginWarnings(props: {
           labelVariant="caption"
           style={
             props.phone
-              ? { alignSelf: "flex-start", gap: 6, paddingHorizontal: 10 }
+              ? {
+                  alignSelf: "flex-start",
+                  gap: space[4],
+                  paddingHorizontal: space[12],
+                }
               : { alignSelf: "flex-start", marginTop: space[2] }
           }
           onPress={() => {

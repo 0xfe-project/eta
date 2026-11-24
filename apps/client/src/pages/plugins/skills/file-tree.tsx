@@ -10,7 +10,7 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
-import { icon, space } from "../../../components/tokens";
+import { icon, opacity, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
 export function SkillFileTree(props: {
@@ -74,9 +74,9 @@ export function SkillFileTree(props: {
                 style={{
                   ...row,
                   height: phone() ? space[32] : space[24],
-                  paddingHorizontal: phone() ? 10 : 8,
-                  gap: 5,
-                  opacity: item().kind === "blocked" ? 0.45 : 1,
+                  paddingHorizontal: phone() ? space[12] : space[8],
+                  gap: space[4],
+                  opacity: item().kind === "blocked" ? opacity.disabled : 1,
                   backgroundColor:
                     props.selected === path() ? c().selected : c().canvas,
                   cursor: item().kind === "blocked" ? "default" : "pointer",

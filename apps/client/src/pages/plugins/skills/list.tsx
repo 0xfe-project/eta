@@ -24,7 +24,13 @@ import {
   SmoothScroll,
   textFaces,
 } from "../../../components";
-import { control, icon, space, weight } from "../../../components/tokens";
+import {
+  control,
+  icon,
+  opacity,
+  space,
+  weight,
+} from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { SkillDetail } from "./detail";
@@ -238,9 +244,13 @@ export function Skills(props: {
         alignItems: tablet() || phone() ? "stretch" : "center",
         flexWrap: tablet() || phone() ? "nowrap" : "wrap",
         gap: tablet() || phone() ? space[8] : space[12],
-        paddingHorizontal: tablet() ? 14 : phone() ? 16 : 24,
-        paddingTop: tablet() ? 10 : 8,
-        paddingBottom: tablet() ? 10 : phone() ? 12 : 16,
+        paddingHorizontal: tablet()
+          ? space[16]
+          : phone()
+            ? space[16]
+            : space[24],
+        paddingTop: tablet() ? space[12] : space[8],
+        paddingBottom: tablet() ? space[12] : phone() ? space[12] : space[16],
         borderBottomWidth: tablet() ? 1 : 0,
         borderColor: c().border,
       }}
@@ -265,7 +275,7 @@ export function Skills(props: {
               onPress={() => changeScope(item())}
               style={{
                 paddingHorizontal: space[12],
-                paddingVertical: 5,
+                paddingVertical: space[4],
                 borderWidth: 1,
                 borderColor: scope() === item() ? c().strong : "transparent",
                 backgroundColor: scope() === item() ? c().canvas : undefined,
@@ -344,7 +354,7 @@ export function Skills(props: {
             width: "100%",
             height: phone() ? space[32] : control.md,
             fontSize: type("small").size,
-            paddingRight: 25,
+            paddingRight: space[24],
           }}
         />
         <View
@@ -403,7 +413,13 @@ export function Skills(props: {
       else={
         <ListSkeleton
           label={uiText("loadingSkills")}
-          style={{ paddingHorizontal: tablet() ? 6 : phone() ? 8 : 16 }}
+          style={{
+            paddingHorizontal: tablet()
+              ? space[8]
+              : phone()
+                ? space[8]
+                : space[16],
+          }}
         />
       }
     >
@@ -470,10 +486,10 @@ export function Skills(props: {
                     ...(tablet()
                       ? {
                           ...row,
-                          paddingHorizontal: 14,
+                          paddingHorizontal: space[16],
                           minHeight: 60,
                           borderBottomWidth: 1,
-                          gap: 10,
+                          gap: space[8],
                         }
                       : phone()
                         ? {
@@ -504,12 +520,8 @@ export function Skills(props: {
                         backgroundColor: c().selected,
                       }}
                     >
-                      <View style={{ opacity: 0.6 }}>
-                        <Icon
-                          name="scroll"
-                          size={phone() ? 18 : 16}
-                          tone="mutedInk"
-                        />
+                      <View style={{ opacity: opacity.muted }}>
+                        <Icon name="scroll" size={icon.md} tone="mutedInk" />
                       </View>
                     </View>
                   </If>
@@ -578,7 +590,7 @@ export function Skills(props: {
                 label={uiText("skillReload")}
                 icon="refresh"
                 iconOnly
-                iconSize={14}
+                iconSize={icon.md}
                 size={control.lg}
                 onPress={refresh}
               />

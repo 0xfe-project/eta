@@ -4,7 +4,7 @@ import type { ConnectionFailure } from "./diagnostics";
 import { parseConnectLink } from "@eta/client-contracts/connect-link";
 import { cleanup, effect, platform, signal, View } from "nsh";
 import { Button, colors, grow, Header, Label, row } from "../../components";
-import { control, space } from "../../components/tokens";
+import { control, opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { addressFrom, useHost } from "../../services/host";
 import { ConnectionError, LostPhoneConnection } from "./connection-errors";
@@ -427,7 +427,8 @@ export function Connection(props: {
                       tablet()
                         ? {
                             paddingHorizontal: space[24],
-                            opacity: !draft().trim() || busy() ? 0.5 : 1,
+                            opacity:
+                              !draft().trim() || busy() ? opacity.disabled : 1,
                           }
                         : { paddingHorizontal: space[12] }
                     }

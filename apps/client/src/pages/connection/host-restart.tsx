@@ -207,7 +207,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
     <View
       testID="update-screen-steps"
       style={{
-        gap: 6,
+        gap: space[4],
         paddingVertical: space[12],
         borderTopWidth: 1,
         borderBottomWidth: 1,
@@ -216,7 +216,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
     >
       <Each of={steps(shown, downloaded())} key={(step) => step.text}>
         {(step) => (
-          <View style={{ ...row, gap: 10 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <View style={{ width: space[16], alignItems: "center" }}>
               {mark(step().state)}
             </View>
@@ -305,12 +305,12 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                           alignItems: "flex-start",
                           gap: space[8],
                           paddingVertical: space[8],
-                          paddingHorizontal: 10,
+                          paddingHorizontal: space[12],
                           borderWidth: 1,
                           borderColor: c().strong,
                         }}
                       >
-                        <View style={{ paddingTop: 5 }}>
+                        <View style={{ paddingTop: space[4] }}>
                           <StatusDot color={c().warning} />
                         </View>
                         <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
@@ -382,7 +382,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                             gap: space[8],
                           }}
                         >
-                          <View style={{ paddingTop: 5 }}>
+                          <View style={{ paddingTop: space[4] }}>
                             <StatusDot color={c().warning} />
                           </View>
                           <Label
@@ -433,7 +433,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                             gap: space[8],
                           }}
                         >
-                          <View style={{ paddingTop: 5 }}>
+                          <View style={{ paddingTop: space[4] }}>
                             <StatusDot color={c().red} />
                           </View>
                           <Label

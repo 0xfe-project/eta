@@ -1,7 +1,7 @@
 import { View } from "nsh";
 import { colors, Icon, Label, row, textFaces } from "../../components";
 import { LayoutSelect } from "../../components/select";
-import { control, space } from "../../components/tokens";
+import { control, icon, space } from "../../components/tokens";
 import { formatLocale } from "../../i18n";
 
 const pluginConfigCopy = {
@@ -67,7 +67,7 @@ export function PluginSelect(props: {
         <View
           style={{
             ...row,
-            gap: props.compact ? 6 : 8,
+            gap: props.compact ? space[4] : space[8],
             minHeight: props.phone
               ? props.compact
                 ? control.md
@@ -75,7 +75,8 @@ export function PluginSelect(props: {
               : props.compact
                 ? space[24]
                 : control.md,
-            paddingHorizontal: props.phone && !props.compact ? 10 : 8,
+            paddingHorizontal:
+              props.phone && !props.compact ? space[12] : space[8],
             borderWidth: 1,
             borderColor: c().strong,
             backgroundColor: c().canvas,
@@ -92,7 +93,7 @@ export function PluginSelect(props: {
           </Label>
           <Icon
             name="down"
-            size={props.phone && !props.compact ? 14 : 12}
+            size={props.phone && !props.compact ? icon.md : icon.sm}
             tone={props.phone ? "ink" : "muted"}
           />
         </View>
