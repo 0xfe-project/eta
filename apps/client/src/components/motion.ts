@@ -1,5 +1,5 @@
 import type { Easing, MotionSpec, ViewStyle } from "nsh";
-import { createMotion, signal } from "nsh";
+import { createMotion, LayoutAnimation, reduceMotion, signal } from "nsh";
 import { space } from "./tokens";
 
 // The app's motion, said once (#378, #379 and #380 share this file): every duration, curve and
@@ -31,6 +31,10 @@ export const motion = {
   menuOut: 160,
   /** How much smaller a popup menu starts than it ends. */
   menuScale: 0.96,
+  /** Rows making way as a group or a parent folds or unfolds, within the screen: the rows that
+   * stay move over all of it, the rows that come fade in over its second half and the rows that
+   * go fade out over its first 30%. */
+  fold: 260,
   /** How far a dialog, sheet, drawer or page travels while it fades. */
   shift: space[16],
   /** In and out of a screen: `cubic-bezier(.32,.72,0,1)`, the spec's opening curve. */
@@ -100,6 +104,31 @@ export function menuMotion(align: "start" | "end", reduced: boolean) {
 /** A curve as a style's `cubic-bezier()`. */
 function curve(points: Easing) {
   return `cubic-bezier(${(points as number[]).join(", ")})` as const;
+}
+
+/**
+ * Call just before folding or unfolding a group or a parent: in the change that follows, the
+ * rows that stay move to their new places (ease in and out, as moves within a screen do), the
+ * rows that come fade in once the others have mostly moved and the rows that go fade out first.
+ * With less motion asked for, the change happens at once, as before.
+ */
+export function foldNext() {
+  if (reduceMotion()) return;
+  LayoutAnimation.configureNext({
+    duration: motion.fold,
+    update: { type: "easeInEaseOut" },
+    create: {
+      type: "easeInEaseOut",
+      property: "opacity",
+      duration: motion.fold / 2,
+      delay: motion.fold / 2,
+    },
+    delete: {
+      type: "easeInEaseOut",
+      property: "opacity",
+      duration: motion.fold * 0.3,
+    },
+  });
 }
 
 /** A backdrop behind a dialog fading in or out. */

@@ -1,5 +1,6 @@
 import type { BoardTaskView } from "@eta/client-contracts";
 import { signal } from "nsh";
+import { foldNext } from "../../components/motion";
 import { subtasksOf } from "../tasks/status";
 
 /**
@@ -14,6 +15,7 @@ export function parentOpen(id: string, revealed = false): boolean {
 }
 
 export function setParentOpen(id: string, open: boolean): void {
+  foldNext();
   chosen.set({ ...chosen(), [id]: open });
 }
 
