@@ -1,14 +1,7 @@
 import type { JSX, ViewStyle } from "nsh";
-import {
-  cleanup,
-  keymap,
-  Overlay,
-  platform,
-  signal,
-  View,
-  windowSize,
-} from "nsh";
+import { cleanup, Overlay, platform, signal, View, windowSize } from "nsh";
 import { Dialog } from "nsh/base";
+import { createDismissable } from "../ui/behaviors";
 import { Regular } from "./density";
 import { Header } from "./header";
 import { fade, fadeIn, fadeOut, motion, passing } from "./motion";
@@ -19,8 +12,6 @@ import { colors, fill, row } from "./theme";
 import { ToastLayer } from "./toast";
 import { control, icon, layer, shadow, space, weight } from "./tokens";
 
-const modalStack: (() => void)[] = [];
-
 /** A centred dialog's width: `sm` a confirmation, `md` a short form (the default), `lg` a form
  * with rows, `xl` a dialog with its own layout. Not tokens: only a dialog takes them. */
 export const dialogWidth = { sm: 360, md: 448, lg: 560, xl: 640 } as const;
@@ -30,10 +21,6 @@ const grabberWidth = 36;
 
 /** The header bar: a phone sheet's (44 with no divider under it), a stepped dialog's. */
 const headerHeight = { sheet: 40, plainSheet: 44, step: 48 } as const;
-
-function closeTopModal() {
-  modalStack.at(-1)?.();
-}
 
 export function Modal(props: {
   title: string;
@@ -91,12 +78,10 @@ export function Modal(props: {
       if (!gone) props.onClose();
     });
   };
-  modalStack.push(close);
-  cleanup(() => {
-    const position = modalStack.indexOf(close);
-    if (position >= 0) modalStack.splice(position, 1);
+  createDismissable({
+    onDismiss: close,
+    enabled: () => props.dismissible !== false && !leaving(),
   });
-  keymap.bind("escape", closeTopModal, { when: "always" });
   // Read here, outside the `Overlay`: the screen's safe area and keyboard.
   const insets = screenInsets();
   const focused = props.modalFocus && !props.phone;
