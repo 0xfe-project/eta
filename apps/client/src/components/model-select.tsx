@@ -5,7 +5,15 @@ import { Select } from "nsh/base";
 import { uiText } from "../i18n";
 import { useHost } from "../services/host";
 import { Icon, Label } from "./text";
-import { colors, row, textFaces, textStyle } from "./theme";
+import {
+  colors,
+  fontFamily,
+  Fonts,
+  groupHeaderStyle,
+  row,
+  textFaces,
+  textStyle,
+} from "./theme";
 import { control, icon, space } from "./tokens";
 
 /** The model picker's popup: wide enough for a provider's long model ids. */
@@ -53,6 +61,7 @@ export function ModelSelect(props: {
 }) {
   const c = colors();
   const type = textFaces();
+  const fonts = Fonts();
   const models = useModels();
   const items = () => {
     const all = models().map((model) => ({
@@ -89,6 +98,7 @@ export function ModelSelect(props: {
       searchStyle={{
         color: c().ink,
         placeholderColor: c().muted,
+        fontFamily: fontFamily(fonts().interface),
         ...textStyle(type("small")),
         paddingHorizontal: space[12],
         height: searchHeight,
@@ -97,6 +107,7 @@ export function ModelSelect(props: {
         borderColor: c().border,
       }}
       groupStyle={{
+        ...groupHeaderStyle(type("caption"), fonts(), c()),
         paddingHorizontal: space[12],
         paddingTop: space[8],
         paddingBottom: space[4],
@@ -105,6 +116,7 @@ export function ModelSelect(props: {
         minHeight: control.md,
         paddingHorizontal: 0,
         color: c().ink,
+        fontFamily: fontFamily(fonts().interface),
         fontSize: type("small").size,
       }}
       empty={

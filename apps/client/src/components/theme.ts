@@ -1,4 +1,4 @@
-import type { ViewStyle } from "nsh";
+import type { TextStyle, ViewStyle } from "nsh";
 import type { Flavor, PaletteId } from "./palettes";
 import type { DensityName } from "./tokens";
 import { context } from "nsh";
@@ -260,4 +260,21 @@ export function textFaces() {
  * (a text input, a TextView's styles). */
 export function textStyle(face: TextFace, leading: "line" | "prose" = "line") {
   return { fontSize: face.size, lineHeight: face[leading] };
+}
+
+/** The text style of a grouped `Select`'s group header. NSH draws its own text there, so without
+ * the style it falls back to the platform default font; this gives a group title the client's
+ * interface font and a section label's colour and size (`Label variant="caption" tone="muted"`).
+ * Shared by `LayoutSelect` and `ModelSelect` so every grouped select inherits it. */
+export function groupHeaderStyle(
+  face: TextFace,
+  fonts: { interface: string; mono: string },
+  c: typeof light,
+): TextStyle {
+  return {
+    fontFamily: fontFamily(fonts.interface),
+    color: c.muted,
+    fontSize: face.size,
+    lineHeight: face.line,
+  };
 }
