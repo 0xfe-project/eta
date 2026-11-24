@@ -6,6 +6,7 @@ import { View } from "nsh";
 import {
   Button,
   colors,
+  grow,
   Icon,
   inCompact,
   Label,
@@ -384,7 +385,7 @@ export function TaskRail(detail: {
     });
   }
   return (
-    <View style={{ gap: space[12] }}>
+    <View style={{ ...grow, gap: space[12] }}>
       <RailRow label={uiText("status")}>
         <StatusSelect item={item()} state={detail.state} />
       </RailRow>
