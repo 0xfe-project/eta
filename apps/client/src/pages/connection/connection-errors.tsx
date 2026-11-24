@@ -14,6 +14,7 @@ import {
 } from "../../components";
 import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { cardWidth } from "./visuals";
 
 function Mono(props: { children?: string }) {
   const fonts = Fonts();
@@ -64,7 +65,7 @@ export function ConnectionError(
     <View
       style={{
         width: "100%",
-        maxWidth: 480,
+        maxWidth: cardWidth,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
@@ -189,13 +190,13 @@ export function LostPhoneConnection(
         <Button
           label={uiText("retry")}
           tone="primary"
-          size={52}
+          size={control.touch}
           labelVariant="body"
           onPress={props.onRetry}
         />
         <Button
           label={uiText("useAnotherHost")}
-          size={52}
+          size={control.touch}
           labelVariant="body"
           onPress={props.onChange}
         />

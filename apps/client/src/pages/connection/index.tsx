@@ -19,7 +19,7 @@ import {
 } from "./local-host";
 import { PhoneConnectionForm } from "./phone-form";
 import { Scanner } from "./scanner";
-import { ConnectionMessage, LocationOption } from "./visuals";
+import { cardWidth, ConnectionMessage, LocationOption } from "./visuals";
 import { WorkspaceSkeleton } from "./workspace-skeleton";
 export { WorkspaceSkeleton } from "./workspace-skeleton";
 
@@ -270,7 +270,11 @@ export function Connection(props: {
               width: "100%",
               ...(phone()
                 ? grow
-                : { maxWidth: 480, borderWidth: 1, borderColor: c().strong }),
+                : {
+                    maxWidth: cardWidth,
+                    borderWidth: 1,
+                    borderColor: c().strong,
+                  }),
               backgroundColor: c().canvas,
             }}
           >

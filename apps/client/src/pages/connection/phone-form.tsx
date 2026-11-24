@@ -8,9 +8,12 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { space } from "../../components/tokens";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { ConnectionIntro, ConnectionMessage, PhoneHero } from "./visuals";
+
+/** The least room the intro over the form takes. */
+const introHeight = 192;
 
 export function PhoneConnectionForm(props: {
   children?: JSX.Element;
@@ -34,7 +37,7 @@ export function PhoneConnectionForm(props: {
       <View
         style={{
           flexGrow: 1,
-          minHeight: 190,
+          minHeight: introHeight,
           justifyContent: "flex-end",
           paddingHorizontal: space[16],
           paddingBottom: space[24],
@@ -78,7 +81,7 @@ export function PhoneConnectionForm(props: {
                     : uiText("connect")
               }
               tone="primary"
-              size={52}
+              size={control.touch}
               labelVariant="body"
               dimDisabled={props.connecting}
               disabled={props.busy || !props.address.trim()}
@@ -94,7 +97,7 @@ export function PhoneConnectionForm(props: {
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  minHeight: 52,
+                  minHeight: control.touch,
                   paddingVertical: space[12],
                   paddingHorizontal: space[12],
                   backgroundColor: c().button,
@@ -109,7 +112,7 @@ export function PhoneConnectionForm(props: {
           <If when={!props.remoteFailure}>
             <Button
               label={props.scanLabel}
-              size={52}
+              size={control.touch}
               labelVariant="body"
               disabled={props.busy}
               onPress={props.onScan}

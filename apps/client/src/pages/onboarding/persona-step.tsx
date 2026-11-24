@@ -10,7 +10,14 @@ export interface Persona {
   description: string;
 }
 
-// Skeleton bars of the two placeholder rows: name and description widths.
+// Skeleton bars of the two placeholder rows: name and description widths, a line of text tall;
+// the trailing bar stands for the row's state.
+const lineHeight = 12;
+const stateBarWidth = 40;
+/** The column at a row's end: its state, or the install bar. */
+const stateWidth = 96;
+/** How wide the reason under "Unable to load agents" runs. */
+const reasonWidth = 320;
 const skeletonRows = {
   wide: [
     [88, 420],
@@ -26,12 +33,12 @@ const skeletonRows = {
  * and a short trailing bar, two rows as on the web. */
 function PersonaSkeleton(props: { phone: boolean }) {
   const c = colors();
-  const bar = (width: number, height: number) => (
+  const bar = (width: number) => (
     <View
       style={{
         width,
         maxWidth: "100%",
-        height,
+        height: lineHeight,
         flexShrink: 0,
         backgroundColor: c().border,
       }}
@@ -69,19 +76,19 @@ function PersonaSkeleton(props: { phone: boolean }) {
                 paddingTop: space[4],
               }}
             >
-              {bar(widths()[0], 12)}
-              {bar(widths()[1], 10)}
+              {bar(widths()[0])}
+              {bar(widths()[1])}
             </View>
             <View
               style={{
                 ...row,
-                width: 96,
+                width: stateWidth,
                 height: space[20],
                 flexShrink: 0,
                 justifyContent: "flex-end",
               }}
             >
-              {bar(40, 10)}
+              {bar(stateBarWidth)}
             </View>
           </View>
         )}
@@ -147,7 +154,7 @@ export function PersonaStep(props: {
             <Label
               variant="small"
               tone="muted"
-              style={{ maxWidth: 320, textAlign: "center" }}
+              style={{ maxWidth: reasonWidth, textAlign: "center" }}
             >
               {props.missingReason || uiText("theHostDidntAnswerCheckYour")}
             </Label>
@@ -174,7 +181,7 @@ export function PersonaStep(props: {
                 disabled={installed() || props.working}
                 onChange={() => props.onToggle(card().id)}
                 size={icon.md}
-                markSize={12}
+                markSize={icon.sm}
                 indicatorStyle={{
                   marginTop: space[2],
                   borderColor: settled()
@@ -207,7 +214,11 @@ export function PersonaStep(props: {
                   </Label>
                 </View>
                 <View
-                  style={{ width: 96, flexShrink: 0, alignItems: "flex-end" }}
+                  style={{
+                    width: stateWidth,
+                    flexShrink: 0,
+                    alignItems: "flex-end",
+                  }}
                 >
                   <If when={installed()}>
                     <View style={{ ...row, height: space[20], gap: space[4] }}>
@@ -233,7 +244,7 @@ export function PersonaStep(props: {
                       <Label variant="small">{uiText("installing")}</Label>
                       <View
                         style={{
-                          width: 96,
+                          width: stateWidth,
                           height: space[2],
                           backgroundColor: c().border,
                         }}

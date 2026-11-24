@@ -4,6 +4,7 @@ import { signal, View } from "nsh";
 import {
   Button,
   colors,
+  dialogWidth,
   grow,
   Header,
   Icon,
@@ -29,8 +30,12 @@ const footerButton = (disabled = false) => ({
   gap: space[4],
   opacity: disabled ? opacity.disabled : 1,
 });
-// On a phone the footer's buttons are 36pt tall, as is step 1's first Add source.
-const phoneButton = 36;
+// On a phone the footer's buttons are touch height, as is step 1's first Add source.
+const phoneButton = control.touch;
+/** A source row's trailing state (a dot and its model count). */
+const sourceStateWidth = 80;
+/** The provider dialog's height: most of a phone's screen, a fixed one elsewhere. */
+const providerHeight = { phone: "90%", other: 560 } as const;
 
 /** "A", "A and B", "A, B and C". */
 function listText(items: string[]) {
@@ -115,7 +120,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
         // A phone gets the whole screen, as the web's /onboard page.
         phonePage={props.phone}
         overPhoneNavigation={props.phone}
-        width={640}
+        width={dialogWidth.xl}
         height={props.phone ? "100%" : undefined}
         onClose={props.onClose}
         dismissible={false}
@@ -181,10 +186,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                       />
                     }
                   >
-                    <StatusDot
-                      color={step() === num() ? c().ink : c().faint}
-                      size={8}
-                    />
+                    <StatusDot color={step() === num() ? c().ink : c().faint} />
                   </If>
                 )}
               </Each>
@@ -278,7 +280,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                     <View
                       style={{
                         ...row,
-                        width: 80,
+                        width: sourceStateWidth,
                         height: space[20],
                         gap: space[4],
                         flexShrink: 0,
@@ -521,8 +523,8 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
             sources().find((source) => source.id === detail())?.name ?? detail()
           }
           phone={props.phone}
-          width={640}
-          height={props.phone ? "90%" : 560}
+          width={dialogWidth.xl}
+          height={props.phone ? providerHeight.phone : providerHeight.other}
           hideHeader
           onClose={() => detail.set("")}
         >

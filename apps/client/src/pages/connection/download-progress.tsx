@@ -3,6 +3,7 @@ import { View } from "nsh";
 import { colors, Header, Label } from "../../components";
 import { DownloadProgressBar } from "../../components/download-progress";
 import { space } from "../../components/tokens";
+import { cardWidth } from "./visuals";
 import { uiText } from "../../i18n";
 import { localProgress } from "./local-host";
 
@@ -21,7 +22,7 @@ export function DownloadStatus(props: { layout: Layout }) {
     <View
       style={{
         width: "100%",
-        maxWidth: 480,
+        maxWidth: cardWidth,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,

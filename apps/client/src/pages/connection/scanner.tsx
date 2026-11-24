@@ -37,6 +37,7 @@ export function Scanner(props: {
     <View
       style={{
         ...fill,
+        // design-value: over the Connect page's own parts, under the dialogs it opens
         zIndex: 10,
         // design-value: the camera's backdrop is dark in either theme
         backgroundColor: "#0a0b0c",
