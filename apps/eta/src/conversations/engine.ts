@@ -1654,6 +1654,8 @@ export class Engine {
         rows,
         trigger,
         nameOf: (message) => this.#nameOf(message),
+        agentName: (agentId) =>
+          this.#agents.get(agentId)?.name ?? "another agent",
         filesOf: (message) => lines.get(message.id) ?? [],
       }),
       images,
