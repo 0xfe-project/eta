@@ -64,18 +64,20 @@ test("a toolkit switched off for every agent says so", async () => {
   expect(off.x).toBeGreaterThanOrEqual(name.x);
 });
 
-test("an agent on an external runtime cannot take a toolkit, and the row says why", async () => {
+test("an agent on an external runtime can take a ready toolkit, and the row has no warning", async () => {
   const app = await open(
     "./fixtures/plugins-composio-agent-external.tsx",
     WINDOW,
   );
   await app.waitFor("label:@composio/gmail");
-  expect(app.count("id:composio-plugin-external")).toBe(1);
-  // A toolkit already in its list can be taken out; one that is not cannot be put in.
+  expect(app.count("id:composio-plugin-external")).toBe(0);
+  expect(app.shows("Not available to agents on an external runtime.")).toBe(
+    false,
+  );
+  await app.press("label:@composio/gmail");
+  await app.waitFor("text:chosen:@composio/gmail");
   await app.press("label:@composio/gmail");
   await app.waitFor("text:chosen:");
-  expect(app.shows("text:chosen:@composio/gmail")).toBe(false);
-  await expect(refused(app.press("label:@composio/gmail"))).resolves.toBe(true);
   expect(app.shows("text:chosen:@composio/gmail")).toBe(false);
 });
 

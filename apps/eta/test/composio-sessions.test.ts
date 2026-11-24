@@ -514,15 +514,99 @@ describe("a Composio toolkit as a plugin of the agents", () => {
     expect(plugins.mcpSourcesFor("ada")).toHaveLength(1);
   });
 
-  it("gives an agent on an external runtime nothing, and the key does not go to it", async () => {
-    const { composio, plugins } = setup();
-    await composio.sync(["gmail"]);
-    const extras = await plugins.runtimeExtrasFor({
-      agentId: "ada",
-      runtime: "codex",
-    } as never);
-    expect(JSON.stringify(extras)).not.toContain(KEY);
-    expect(extras.mcpServers ?? []).toEqual([]);
+  describe("on an external runtime", () => {
+    const extrasOf = (plugins: Plugins, agentId: string) =>
+      plugins.runtimeExtrasFor({ agentId, runtime: "codex" } as never);
+
+    it("gives an agent that enabled a ready toolkit its server, with the key as a header", async () => {
+      const { composio, plugins } = setup();
+      await composio.sync(["gmail"]);
+      const extras = await extrasOf(plugins, "ada");
+      expect(extras.mcpServers).toEqual([
+        {
+          name: "composio-gmail",
+          type: "http",
+          url: `${base()}/tool_router/sess-1/mcp`,
+          headers: { "x-api-key": KEY },
+        },
+      ]);
+    });
+
+    it("gives an agent that did not enable it nothing", async () => {
+      const { composio, plugins } = setup();
+      await composio.sync(["gmail"]);
+      const extras = await extrasOf(plugins, "bob");
+      expect(extras.mcpServers ?? []).toEqual([]);
+      expect(JSON.stringify(extras)).not.toContain(KEY);
+    });
+
+    it("gives nothing for a toolkit that is not ready, whose source is off, or whose key is gone", async () => {
+      const { composio, plugins } = setup();
+      await composio.sync(["gmail"]);
+      composio.setEnabled(false);
+      expect((await extrasOf(plugins, "ada")).mcpServers ?? []).toEqual([]);
+      composio.setEnabled(true);
+      expect((await extrasOf(plugins, "ada")).mcpServers).toHaveLength(1);
+      await composio.sync([]);
+      expect((await extrasOf(plugins, "ada")).mcpServers ?? []).toEqual([]);
+      await composio.sync(["gmail"]);
+      composio.clearKey();
+      const extras = await extrasOf(plugins, "ada");
+      expect(extras.mcpServers ?? []).toEqual([]);
+      expect(JSON.stringify(extras)).not.toContain(KEY);
+    });
+
+    it("keeps an installed plugin's server when it has the same name, and gives no two of one name", async () => {
+      const { composio, plugins } = setup();
+      await composio.sync(["gmail"]);
+      plugins.rows.setEnabled("ada", ["@composio/gmail", "composio"]);
+      const installed = {
+        name: "composio",
+        hash: "h",
+        dir: "unused",
+        source: { kind: "local", path: "unused" },
+        plugin: {
+          manifest: { name: "composio" },
+          root: "unused",
+          fields: [],
+          configProblems: [],
+          skills: [],
+          bindings: {},
+          servers: [
+            {
+              name: "gmail",
+              config: {
+                type: "streamable-http",
+                url: "http://installed.example/mcp",
+                headers: {},
+              },
+            },
+          ],
+        },
+      };
+      vi.spyOn(plugins.registry, "get").mockImplementation((name) =>
+        name === "composio" ? (installed as never) : undefined,
+      );
+      const { mcpServers = [] } = await extrasOf(plugins, "ada");
+      expect(mcpServers.map((server) => server.name)).toEqual([
+        "composio-gmail",
+      ]);
+      expect(mcpServers[0]).toMatchObject({
+        url: "http://installed.example/mcp",
+      });
+      expect(JSON.stringify(mcpServers)).not.toContain(KEY);
+    });
+
+    it("gives nothing for a toolkit whose session did not check out", async () => {
+      const { composio, plugins } = setup();
+      echo = (body) => ({
+        toolkits: { enabled: [...body.toolkits.enable, "github"] },
+        manage_connections: { enable_connection_removal: false },
+        workbench: { enable: false },
+      });
+      await composio.sync(["gmail"]);
+      expect((await extrasOf(plugins, "ada")).mcpServers ?? []).toEqual([]);
+    });
   });
 
   it("changes the stamp of its agents' sessions when the session is another one", async () => {
