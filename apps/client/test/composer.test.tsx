@@ -99,7 +99,8 @@ test("files a file manager copied or dropped are read from their file: URLs and 
 
 test("a copied folder is refused, and its block says why", async () => {
   const app = await fixture();
-  const folder = `file://${new URL("fixtures", import.meta.url).pathname}`;
+  // As Finder copies a folder: its URL ends with a slash.
+  const folder = `file://${new URL("fixtures/", import.meta.url).pathname}`;
   await app.paste(input, { uris: [folder] });
   const why = "fixtures is a folder. Attach the files in it instead.";
   const block = `label:Can't attach fixtures: ${why}`;

@@ -54,7 +54,8 @@ function pathOfUri(uri: string): string {
 
 /** The file's name, from its URL's last segment. */
 export function nameOfUri(uri: string): string {
-  const last = uri.split(/[/\\]/).pop() || "file";
+  // A folder's URL ends with a slash: its name is the segment before it.
+  const last = uri.split(/[/\\]/).filter(Boolean).pop() || "file";
   try {
     return decodeURIComponent(last);
   } catch {
