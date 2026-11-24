@@ -324,7 +324,7 @@ function Edges(props: {
         {props.label}
       </Label>
       <Each of={props.edges} key={(edge) => edge.taskId}>
-        {(edge) => (
+        {(edge, index) => (
           <View
             role="button"
             accessibilityLabel={edge().title}
@@ -336,7 +336,8 @@ function Edges(props: {
               gap: space[8],
               // Edge to edge, so the hover does too; the text stays where the bordered box put it.
               paddingHorizontal: inset + space[12],
-              borderTopWidth: 1,
+              // One line between two rows: only the first draws the line above the list.
+              borderTopWidth: index() === 0 ? 1 : 0,
               borderBottomWidth: 1,
               borderColor: c().border,
               cursor: "pointer",
