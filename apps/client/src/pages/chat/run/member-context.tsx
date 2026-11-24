@@ -143,11 +143,7 @@ export function MemberContext(props: {
     if (!current) return "";
     const epoch = section("branch")?.compactionEpoch ?? 0;
     return [
-      uiText("contextRing", {
-        percent: String(current.percent),
-        used: current.used.toLocaleString(),
-        window: Math.round(current.window / 1000).toLocaleString(),
-      }),
+      uiText("contextRing", { detail: current.detail }),
       epoch > 0 ? uiText("contextCompactions", { count: String(epoch) }) : "",
     ]
       .filter(Boolean)

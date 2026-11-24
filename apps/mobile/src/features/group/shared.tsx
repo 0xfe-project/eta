@@ -24,22 +24,20 @@ export const statusLabel = (status: MemberStatus): string =>
 /** `anthropic:claude-opus-5-5` is `provider:modelId`; the phone shows the model. */
 export const modelName = (id: string): string => id.slice(id.indexOf(":") + 1);
 
-/** `48.2k`, `210k`, `1.4M`: the web's member stats, without a `.0`. */
-export function tokens(count: number | undefined): string {
-  if (count === undefined) return "—";
-  const short = (value: number) => value.toFixed(1).replace(/\.0$/, "");
-  if (count >= 1_000_000) return `${short(count / 1_000_000)}M`;
-  if (count >= 1_000) return `${short(count / 1_000)}k`;
-  return String(count);
-}
-
 /** `sessions.<id>` is only a target once asked for, so ask once before subscribing. */
 const opened = new Set<string>();
 
 type Session = Partial<
   Pick<
     SessionViewSections,
-    "usage" | "model" | "tools" | "metrics" | "tasks" | "transcript" | "prompt"
+    | "spend"
+    | "context"
+    | "model"
+    | "tools"
+    | "metrics"
+    | "tasks"
+    | "transcript"
+    | "prompt"
   >
 >;
 

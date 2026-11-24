@@ -92,3 +92,34 @@ export function tokensReported(usage: Usage | undefined): boolean {
   if (usage === undefined) return false;
   return (usage as { tokensUnreported?: unknown }).tokensUnreported !== true;
 }
+
+type TokenField = "input" | "output" | "cacheRead" | "cacheWrite";
+type MeteredUsage = Usage & { reportedFields?: TokenField[] };
+
+/** Persist which fields were present before normalizing a runtime report to pi's numeric shape. */
+export function withUsageEvidence(
+  usage: Usage,
+  raw: Partial<Record<TokenField, number | null | undefined>>,
+): Usage {
+  const reportedFields = (
+    ["input", "output", "cacheRead", "cacheWrite"] as const
+  ).filter((key) => {
+    const value = raw[key];
+    return (
+      typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    );
+  });
+  return Object.assign(usage, { reportedFields });
+}
+
+export function reportedField(
+  usage: MeteredUsage,
+  key: TokenField,
+): number | null {
+  if (!tokensReported(usage)) return null;
+  // Older journals normalized absent fields to zero. Only a positive count is evidence there.
+  const known = usage.reportedFields?.includes(key) ?? usage[key] > 0;
+  return known && Number.isSafeInteger(usage[key]) && usage[key] >= 0
+    ? usage[key]
+    : null;
+}

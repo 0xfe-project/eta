@@ -9,6 +9,7 @@ import type {
   UpgradeCheckView,
 } from "@eta/client-contracts";
 import type {
+  WireEvent,
   WireSocket,
   WireSocketEvents,
   WireState,
@@ -372,6 +373,8 @@ export function createHost(options: HostOptions = {}) {
     section,
     list,
     call,
+    onEvent: (target: string, listener: (event: WireEvent) => void) =>
+      wire?.onEvent(target, listener) ?? (() => {}),
     action,
     optimistic,
     upgrade: upgrades.status,

@@ -390,7 +390,7 @@ export class OarDelegate implements RunDelegate {
    * Between runs, the runtime is watched: the first sign of a root turn nobody prompted marks
    * where it began and asks for a run to follow it. A turn of this delegate's hears its own.
    */
-  #watch(session: Session): void {
+  #watch(session: Session, emit: RunDelegateContext["emit"]): void {
     this.#unwatch?.();
     this.#tasks.clear();
     this.#unwatch = session.events((event: Event) => {
@@ -410,6 +410,20 @@ export class OarDelegate implements RunDelegate {
       )
         return;
       if (event.sessionId !== session.id || event.agentPath.length > 0) return;
+      if (
+        event.kind === "compaction_started" ||
+        event.kind === "compaction_ended" ||
+        event.kind === "model"
+      ) {
+        emit("context:invalidated", {
+          reason: event.kind === "model" ? "model" : "compacted",
+          at: event.receivedAt,
+          ...(event.kind === "model" ? { model: event.model } : {}),
+          ...(event.kind === "compaction_ended" && event.outcome === "completed"
+            ? { compactedAt: event.receivedAt }
+            : {}),
+        });
+      }
       if (!TURN_SIGNS.has(event.kind)) return;
       this.#adopted = event.seq;
       this.#wake();
@@ -610,7 +624,7 @@ export class OarDelegate implements RunDelegate {
     this.#opening = this.#open(context, settings);
     try {
       this.#opened = await this.#opening;
-      this.#watch(this.#opened.session);
+      this.#watch(this.#opened.session, context.emit);
       return this.#opened;
     } finally {
       this.#opening = undefined;
@@ -782,6 +796,8 @@ export class OarDelegate implements RunDelegate {
       let ended: TurnOutcome | undefined;
       /** The seq of the turn's end: only what rides with it (its usage) is still this turn's. */
       let endedAt: number | undefined;
+      let span: string | undefined;
+      let sequence = -1;
       const settle = (outcome: TurnOutcome): void => {
         if (settled) return;
         settled = true;
@@ -804,6 +820,23 @@ export class OarDelegate implements RunDelegate {
             if (settled) return;
             // Once the turn has ended, what follows is the runtime's next turn, the watcher's to hear.
             if (endedAt !== undefined && event.seq !== endedAt) return;
+            if (event.agentPath.length === 0) {
+              if (event.sessionId !== session.id || event.seq < sequence)
+                return;
+              sequence = event.seq;
+              if (event.kind === "turn_active") span = event.spanId;
+              // Codex names the native turn. Context cannot be attributed to an earlier span.
+              if (
+                (event.kind === "usage" ||
+                  event.kind === "model" ||
+                  event.kind === "compaction_started" ||
+                  event.kind === "compaction_ended") &&
+                event.spanId !== undefined &&
+                event.spanId !== span &&
+                (span !== undefined || this.#options.runtime === "codex")
+              )
+                return;
+            }
             translator.see(event);
             if (event.agentPath.length > 0) return;
             if (event.kind === "turn_ended") {

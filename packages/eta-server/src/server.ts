@@ -27,6 +27,7 @@ import type {
   PrivateNetworkConfig,
 } from "@eta/client-contracts";
 import type { CompactionSummarizer, KernelModels } from "@eta/core";
+import type { ProvidersPluginOptions } from "./bundled/providers";
 import type { RemoteSessions } from "./bundled/sessions";
 import type { SessionManagerOptions } from "./manager";
 import type { EtaConfig } from "./providers/config-types";
@@ -108,6 +109,8 @@ export interface AssembleOptions {
    * to `base`.
    */
   overlayModels?: ((base: KernelModels) => KernelModels) | undefined;
+  monthlySummaries?: ProvidersPluginOptions["monthlySummaries"];
+  streamQuotaSummaries?: ProvidersPluginOptions["streamQuotaSummaries"];
   /** Which bundled plugins to mount. Default: all of them. */
   plugins?: readonly BundledPluginName[];
   /** The agent's home, for `~/.eta/persona`. Defaults to the real one. */
@@ -228,6 +231,9 @@ function mountBundled(
     settings: SettingsStore;
     home: string;
     fetch?: typeof fetch;
+    monthlySummaries?: ProvidersPluginOptions["monthlySummaries"];
+    streamQuotaSummaries?: ProvidersPluginOptions["streamQuotaSummaries"];
+    warn: (message: string) => void;
     /** Handed to the providers plugin: the config moved, so the model layer must follow. */
     onModelsChanged?: (() => void | Promise<void>) | undefined;
   },
@@ -245,6 +251,9 @@ function mountBundled(
       "providers",
       providersPlugin({
         store: deps.providers,
+        warn: deps.warn,
+        monthlySummaries: deps.monthlySummaries,
+        streamQuotaSummaries: deps.streamQuotaSummaries,
         ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
         ...(deps.onModelsChanged === undefined
           ? {}
@@ -520,6 +529,9 @@ export async function assembleServer(
     manager: sessions,
     remote: options.remoteSessions,
     providers,
+    monthlySummaries: options.monthlySummaries,
+    streamQuotaSummaries: options.streamQuotaSummaries,
+    warn,
     settings,
     home: options.home ?? homedir(),
     onModelsChanged: reloadModels,

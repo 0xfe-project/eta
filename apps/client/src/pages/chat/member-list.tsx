@@ -1,4 +1,9 @@
-import type { ConversationInfo, MemberView } from "@eta/client-contracts";
+import type {
+  ConversationInfo,
+  MemberSpend,
+  MemberView,
+} from "@eta/client-contracts";
+import { displaySpend } from "@eta/client-contracts";
 import { View } from "nsh";
 import {
   ActionItem,
@@ -13,9 +18,8 @@ import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { hint } from "../../components/controls";
 import { StatusDot } from "../../components/status-dot";
 import { avatar, icon, sizes, space } from "../../components/tokens";
-import { uiText } from "../../i18n";
-import { followSession, useHost } from "../../services/host";
-import { tokens } from "../tasks/usage";
+import { formatLocale, uiText } from "../../i18n";
+import { useHost } from "../../services/host";
 import { activeReply, memberStatus } from "./member-status";
 import { MemberStepsLedger, MemberStepsToggle } from "./member-steps";
 
@@ -234,15 +238,12 @@ function MemberStats(props: { session: string; model?: string | null }) {
   const host = useHost();
   const c = colors();
   const target = () => `sessions.${props.session}`;
-  followSession(() => props.session);
   const context = useContextUsage(() => props.session);
-  const usage = () =>
-    host.section<{
-      input: number;
-      output: number;
-      cacheRead: number;
-      cacheWrite: number;
-    }>(target(), "usage");
+  const spend = (key: keyof MemberSpend) =>
+    displaySpend(
+      host.section<MemberSpend>(target(), "spend")?.[key],
+      formatLocale(),
+    );
   const tools = () => host.section<unknown[]>(target(), "tools");
   const model = () =>
     host.section<{ id: string }>(target(), "model")?.id ??
@@ -250,11 +251,9 @@ function MemberStats(props: { session: string; model?: string | null }) {
     uiText("defaultModel");
   const spent = () =>
     `${uiText("memberUsage", {
-      input: tokens(usage()?.input),
-      output: tokens(usage()?.output),
-      cache: tokens(
-        usage() ? usage()!.cacheRead + usage()!.cacheWrite : undefined,
-      ),
+      input: spend("input"),
+      output: spend("output"),
+      cache: spend("cache"),
     })} · ${uiText("memberTools", {
       count: tools() ? String(tools()!.length) : "—",
     })}`;
@@ -263,7 +262,7 @@ function MemberStats(props: { session: string; model?: string | null }) {
       <If when={context()}>
         {(current) => (
           <Label variant="caption" style={{ flexShrink: 0 }}>
-            {`${current().percent}%`}
+            {current().label}
           </Label>
         )}
       </If>

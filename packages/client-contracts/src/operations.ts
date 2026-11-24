@@ -183,6 +183,45 @@ export interface BalanceLine {
   available: string;
 }
 
+export interface MonthlyUsage {
+  usedPercent: number;
+  resetsAt?: string;
+}
+
+export type SourceSummary =
+  | {
+      source: "provider";
+      id: string;
+      balanceRevision: string;
+      value: { balance: { lines: BalanceLine[] } } | null;
+    }
+  | {
+      source: "account";
+      id: string;
+      quotaRevision: string | null;
+      value: { monthly: MonthlyUsage } | null;
+    };
+
+export interface SourceSummaries {
+  items: SourceSummary[];
+}
+
+export interface SourceQuota extends MonthlyUsage {
+  period: "weekly" | "monthly";
+}
+
+export type SourceSummaryUpdate =
+  | Extract<SourceSummary, { source: "provider" }>
+  | (Omit<Extract<SourceSummary, { source: "account" }>, "value"> & {
+      value: { quota: SourceQuota } | null;
+    });
+
+export interface SourceSummariesVisit {
+  visitId: string;
+}
+
+export type SourceSummaryEvent = SourceSummariesVisit & SourceSummaryUpdate;
+
 export interface ProviderBalance {
   state:
     | "available"

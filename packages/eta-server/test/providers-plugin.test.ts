@@ -10,8 +10,15 @@ import type {
   ProviderCheckResult,
   ProviderRefreshResult,
   ProvidersView,
+  SourceSummaries,
+  SourceSummaryEvent,
 } from "@eta/client-contracts";
-import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
+import type {
+  EventFrame,
+  ServerFrame,
+  StateSnapshot,
+} from "@eta/client-wire-proto";
+import type { ProvidersPluginOptions } from "../src/bundled/providers";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +27,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PROVIDER_ACTIONS, providersPlugin } from "../src/bundled/providers";
 import { MODELS_DEV_URL } from "../src/providers/metadata";
 import { ProviderConfigStore, revisionOf } from "../src/providers/store";
+import { createConnection } from "../src/transport";
 import { WireService } from "../src/wire-service";
 
 const roots: string[] = [];
@@ -42,7 +50,9 @@ interface Harness {
 }
 
 async function harness(
-  options: { watchIntervalMs?: number; fetch?: typeof fetch } = {},
+  options: Pick<ProvidersPluginOptions, "fetch" | "streamQuotaSummaries"> & {
+    watchIntervalMs?: number;
+  } = {},
 ): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), "eta-providers-plugin-"));
   roots.push(root);
@@ -64,6 +74,7 @@ async function harness(
       const fiber = ctx.plugin(
         providersPlugin({
           store,
+          streamQuotaSummaries: options.streamQuotaSummaries,
           ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
         }) as never,
         undefined as never,
@@ -139,7 +150,11 @@ describe("what the plugin puts on the pipe", () => {
         .map((descriptor) => descriptor.name)
         .sort(),
     ).toEqual(
-      [...PROVIDER_ACTIONS].map((action) => `providers.${action}`).sort(),
+      [
+        "billing.readSourceSummaries",
+        "billing.startSourceSummaries",
+        ...PROVIDER_ACTIONS.map((action) => `providers.${action}`),
+      ].sort(),
     );
     // Eager: a client that just connected draws the settings page from `hello`.
     expect(h.wire.registry.eagerTargets()).toContain("providers");
@@ -1058,4 +1073,228 @@ describe("account balances through the saved source", () => {
       }
     },
   );
+});
+
+describe("billing.readSourceSummaries", () => {
+  it("bounds concurrent reads across visits, shares aliases and never returns a previous success on failure", async () => {
+    const release = Promise.withResolvers<void>();
+    let active = 0;
+    let peak = 0;
+    let phase = 0;
+    const request = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const credential = new Headers(init?.headers).get("Authorization");
+      peak = Math.max(peak, ++active);
+      try {
+        await release.promise;
+        if (
+          phase === 2 ||
+          (phase === 1 && credential === "Bearer synthetic-0")
+        ) {
+          return new Response("private upstream body", {
+            status: 429,
+            headers: { "Retry-After": "120" },
+          });
+        }
+        return Response.json({
+          balance_infos: [{ currency: "CNY", total_balance: String(phase) }],
+        });
+      } finally {
+        active--;
+      }
+    });
+    const h = await harness({ fetch: request as unknown as typeof fetch });
+    const providers = Array.from({ length: 7 }, (_, i) => ({
+      id: String(i),
+      kind: "deepseek",
+      baseUrl: "https://api.deepseek.com",
+      apiKey: `synthetic-${i % 6}`,
+      models: [],
+    }));
+    await writeFile(
+      h.store.path,
+      JSON.stringify({ providers: [...providers, provider("custom")] }),
+    );
+    const warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await h.load();
+    const batch = async () =>
+      (
+        (await h.wire.dispatch(
+          {
+            op: "call",
+            target: "billing",
+            action: "readSourceSummaries",
+            args: {},
+          },
+          { reply: () => {} } as never,
+        )) as { result: SourceSummaries }
+      ).result.items;
+    try {
+      const one = batch();
+      const two = batch();
+      await until(() => active === 4);
+      release.resolve();
+      expect(await two).toEqual(await one);
+      expect((await one)[0]?.value).toEqual({
+        balance: { lines: [{ currency: "CNY", available: "0" }] },
+      });
+      expect((await one).at(-1)?.value).toBeNull();
+      expect(peak).toBe(4);
+      expect(request).toHaveBeenCalledTimes(6);
+      phase = 1;
+      const partial = await batch();
+      expect(partial.map((i) => !!i.value)).toEqual([
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+      ]);
+      expect(request).toHaveBeenCalledTimes(12);
+      phase = 2;
+      expect((await batch()).every((i) => i.value === null)).toBe(true);
+      expect(request).toHaveBeenCalledTimes(17);
+      expect((await batch()).every((i) => i.value === null)).toBe(true);
+      expect(request).toHaveBeenCalledTimes(17);
+      expect(warnings.mock.calls.flat().join(" ")).toMatch(
+        /failure=rate_limited retry=\d{4}/,
+      );
+      expect(warnings.mock.calls.flat().join(" ")).not.toMatch(
+        /synthetic|private upstream/,
+      );
+    } finally {
+      release.resolve();
+      await h.unload();
+    }
+  });
+});
+
+describe("billing.startSourceSummaries", () => {
+  it("queues balances before quota within four slots and streams only to the caller", async () => {
+    const releases = Array.from({ length: 5 }, () =>
+      Promise.withResolvers<void>(),
+    );
+    const quota = Promise.withResolvers<void>();
+    const started: string[] = [];
+    const billing = (frames: ServerFrame[]) =>
+      frames.filter(
+        (frame): frame is EventFrame =>
+          frame.type === "event" &&
+          frame.target === "billing" &&
+          frame.name.startsWith("source"),
+      );
+    const h = await harness({
+      fetch: (async (_url, init) => {
+        const id = new Headers(init?.headers).get("Authorization")!.slice(-1);
+        started.push(id);
+        await releases[Number(id)]!.promise;
+        return Response.json({
+          balance_infos: [{ currency: "USD", total_balance: id }],
+        });
+      }) as typeof fetch,
+      streamQuotaSummaries: async (schedule, publish) => {
+        await schedule(async () => {
+          started.push("quota");
+          await quota.promise;
+          return { connectionId: "codex", windows: [] };
+        });
+        publish({
+          source: "account",
+          id: "codex",
+          quotaRevision: "rev",
+          value: { quota: { period: "weekly", usedPercent: 17 } },
+        });
+      },
+    });
+    await writeFile(
+      h.store.path,
+      JSON.stringify({
+        providers: releases.map((_, id) => ({
+          id: String(id),
+          kind: "deepseek",
+          baseUrl: "https://api.deepseek.com",
+          apiKey: `fixture-${id}`,
+          models: [],
+        })),
+      }),
+    );
+    await h.load();
+    const callerFrames: ServerFrame[] = [];
+    const otherFrames: ServerFrame[] = [];
+    const deps = { wire: h.wire, mounted: () => [] };
+    const caller = createConnection(
+      { id: 1, send: (frame) => callerFrames.push(frame) },
+      deps,
+    );
+    const other = createConnection(
+      { id: 2, send: (frame) => otherFrames.push(frame) },
+      deps,
+    );
+    const events = () => billing(callerFrames);
+    try {
+      await other.handle(
+        JSON.stringify({ op: "subscribe", target: "billing" }),
+      );
+      await caller.handle(
+        JSON.stringify({
+          op: "call",
+          target: "billing",
+          action: "startSourceSummaries",
+          args: { visitId: "visit" },
+          requestId: "start",
+        }),
+      );
+      expect(callerFrames.at(-1)).toMatchObject({
+        type: "reply",
+        ok: true,
+        requestId: "start",
+      });
+      await until(() => started.length === 4);
+      expect(started).toEqual(["0", "1", "2", "3"]);
+
+      releases[2]!.resolve();
+      await until(() => events().length === 1);
+      expect(events()[0]).toMatchObject({
+        data: { id: "2", visitId: "visit" },
+      });
+      expect(started).toEqual(["0", "1", "2", "3", "4"]);
+
+      releases[0]!.resolve();
+      await until(() => started.includes("quota") && events().length === 2);
+      quota.resolve();
+      await until(() => events().length === 3);
+      expect(events()[2]).toMatchObject({
+        data: {
+          id: "codex",
+          visitId: "visit",
+          value: { quota: { period: "weekly" } },
+        },
+      });
+
+      for (const release of releases) release.resolve();
+      await until(() => events().length === 7);
+      expect(events().at(-1)).toMatchObject({
+        name: "sourceSummariesDone",
+        data: { visitId: "visit" },
+      });
+      expect(
+        events()
+          .slice(0, -1)
+          .map((item) => (item.data as SourceSummaryEvent).id)
+          .sort(),
+      ).toEqual(["0", "1", "2", "3", "4", "codex"]);
+      expect(billing(otherFrames)).toEqual([]);
+      expect(h.frames.filter(({ frame }) => billing([frame]).length)).toEqual(
+        [],
+      );
+    } finally {
+      for (const release of releases) release.resolve();
+      quota.resolve();
+      caller.close();
+      other.close();
+      await h.unload();
+    }
+  });
 });
