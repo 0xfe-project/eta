@@ -42,8 +42,11 @@ test("⌘C copies the text selected in a reply inside a view that took the focus
   expect(app.clipboard()).toBe(selected);
 });
 
-test("⌘C in the composer copies its own selection as Markdown", async () => {
+test("⌘C in the composer copies its own selection as Markdown, after a reply's too", async () => {
   const app = await fixture();
+  // Text selected in a reply first (not headless): what the composer selects after is copied.
+  if (!app.shows("text:platform: web"))
+    await selectEnd(app, "Ship the rollout on Monday.");
   await app.type("id:eta-editor", "ship **today**");
   await app.keyboard.press("mod+a");
   await app.keyboard.press("mod+c");
