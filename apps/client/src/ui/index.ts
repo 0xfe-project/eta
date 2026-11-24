@@ -1,6 +1,7 @@
 export { Badge, dotSize, StatusDot } from "./badge";
 export { BackButton, Button, CloseButton } from "./button";
 export { Callout, WarningLine } from "./callout";
+export { Chip } from "./chip";
 export { CopyButton } from "./copy-button";
 export { Field, FormField } from "./input";
 export { SearchField } from "./search-field";

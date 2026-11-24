@@ -5,6 +5,7 @@ import { canHover } from "../menu";
 import { Icon } from "../text";
 import {
   colors,
+  focusRing,
   fontFamily,
   Fonts,
   monoFontFamily,
@@ -103,6 +104,7 @@ export function Chip(props: {
         tooltip={props.tooltip}
         accessibilityLabel={props.accessibilityLabel}
         onPress={props.onPress}
+        focusVisibleStyle={focusRing(c(), "inset")}
         style={{
           ...row,
           gap: space[4],
@@ -147,6 +149,7 @@ export function Chip(props: {
           accessibilityLabel={props.removeLabel ?? "Remove"}
           onPress={props.onRemove}
           hoverStyle={{ backgroundColor: c().border }}
+          focusVisibleStyle={focusRing(c(), "inset")}
           style={{
             width: type("small").line,
             height: type("small").line,
@@ -229,6 +232,7 @@ export function MentionChip(props: {
         onPress={props.onPress}
         onMouseEnter={() => hovered.set(true)}
         onMouseLeave={() => hovered.set(false)}
+        focusVisibleStyle={focusRing(c(), "inset")}
         style={{ cursor: "pointer" }}
       >
         {chip()}
