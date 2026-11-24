@@ -11,6 +11,7 @@ export { ListRow, SectionHeader } from "./list-row";
 export { ActionItem, ActionMenu } from "./menu";
 export { Popover } from "./popover";
 export { SearchField } from "./search-field";
+export { LayoutSelect, ModelSelect, useModels } from "./select";
 export { CheckControl, ToggleSwitch } from "./selection-controls";
 export { Card, Separator } from "./surface";
 export { Segmented, Tabs } from "./tabs";

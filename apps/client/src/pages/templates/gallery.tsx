@@ -16,11 +16,11 @@ import {
   textStyle,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
-import { ModelSelect, useModels } from "../../components/model-select";
 import { BackButton } from "../../components/navigation-buttons";
 import { avatar, control, icon, space } from "../../components/tokens";
 import { localizedText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { ModelSelect, useModels } from "../../ui";
 import { templates, templateSource } from "./catalog";
 import {
   fillTemplate,
