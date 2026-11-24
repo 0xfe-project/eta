@@ -294,7 +294,8 @@ export function Message(props: {
                 : props.phone
                   ? c().selected
                   : c().surface,
-              opacity: props.delivery && !props.delivery.failure ? 0.6 : 1,
+              opacity:
+                props.delivery && !props.delivery.failure ? opacity.muted : 1,
               paddingVertical: space[8],
               paddingHorizontal: space[12],
             }}

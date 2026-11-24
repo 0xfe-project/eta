@@ -348,17 +348,20 @@ export function HeldMessages(props: {
                   backgroundColor: entry().failure ? c().redFill : c().canvas,
                 }}
               >
-                <View style={{ paddingHorizontal: 10, paddingTop: 6 }}>
+                <View
+                  style={{ paddingHorizontal: space[12], paddingTop: space[8] }}
+                >
                   <Label variant="caption" tone="muted" lines={1}>
                     {head()}
                   </Label>
                 </View>
                 <View
                   style={{
-                    paddingHorizontal: 10,
-                    paddingTop: 2,
-                    paddingBottom: entry().failure ? 2 : 6,
-                    opacity: entry().failure || entry().landed ? 1 : 0.6,
+                    paddingHorizontal: space[12],
+                    paddingTop: space[2],
+                    paddingBottom: entry().failure ? space[2] : space[8],
+                    opacity:
+                      entry().failure || entry().landed ? 1 : opacity.muted,
                   }}
                 >
                   <Label lines={2}>
@@ -373,8 +376,8 @@ export function HeldMessages(props: {
                 <If when={entry().failure}>
                   <View
                     style={{
-                      paddingHorizontal: 10,
-                      paddingBottom: props.phone ? 2 : 6,
+                      paddingHorizontal: space[12],
+                      paddingBottom: props.phone ? space[2] : space[8],
                     }}
                   >
                     <DeliveryLine

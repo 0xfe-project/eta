@@ -1,5 +1,6 @@
 import { View } from "nsh";
-import { colors, Label, row } from "../../components";
+import { colors, focusRing, Label, row } from "../../components";
+import { opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 /** What can be done with a message the host did not take. */
@@ -30,15 +31,11 @@ export function DeliveryLine(
       role="button"
       accessibilityLabel={label}
       onPress={press}
-      hoverStyle={{ opacity: 0.7 }}
-      focusVisibleStyle={{
-        outlineWidth: 1,
-        outlineColor: c().blue,
-        outlineOffset: 1,
-      }}
+      hoverStyle={{ opacity: opacity.muted }}
+      focusVisibleStyle={focusRing(c())}
       style={{
-        paddingVertical: props.phone ? 6 : 0,
-        paddingHorizontal: props.phone ? 4 : 0,
+        paddingVertical: props.phone ? space[8] : 0,
+        paddingHorizontal: props.phone ? space[4] : 0,
         cursor: "pointer",
       }}
     >
@@ -67,8 +64,8 @@ export function DeliveryLine(
             ...row,
             flexWrap: "wrap",
             justifyContent: props.align === "start" ? "flex-start" : "flex-end",
-            columnGap: props.phone ? 6 : 10,
-            rowGap: 2,
+            columnGap: props.phone ? space[4] : space[8],
+            rowGap: space[2],
           }}
         >
           <Label variant="caption" tone="red">
