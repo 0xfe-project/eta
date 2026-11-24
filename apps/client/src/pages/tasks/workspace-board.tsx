@@ -1,7 +1,7 @@
 import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import type { taskDropZones } from "./drag";
-import { View } from "nsh";
+import { Scroll, View } from "nsh";
 import { colors, grow, Label, row, SmoothScroll } from "../../components";
 import { control, icon, space } from "../../components/tokens";
 import { BoardCard } from "./board-card";
@@ -21,8 +21,11 @@ export const visibleStatuses: BoardTaskStatus[] = [
   "cancelled",
 ];
 
-/** A status column on a tablet, at its widest; its heading. */
-const columnMaxWidth = 160;
+/** Fixed column width for board view. */
+const columnWidth = {
+  desktop: 280,
+  tablet: 200,
+};
 const headerHeight = 24;
 
 export function TaskWorkspaceBoard(props: {
@@ -38,118 +41,118 @@ export function TaskWorkspaceBoard(props: {
   const boardDrag = props.drag;
   const column = (status: BoardTaskStatus) =>
     props.items.filter((task) => task.status === status);
+  const colWidth = tablet() ? columnWidth.tablet : columnWidth.desktop;
   return (
-    <View
-      style={{
-        ...row,
-        ...grow,
+    <Scroll
+      horizontal
+      style={{ ...grow }}
+      contentStyle={{
         paddingHorizontal: tablet() ? space[16] : space[24],
         paddingTop: space[12],
         paddingBottom: tablet() ? space[12] : 0,
         gap: space[8],
-        alignItems: "stretch",
       }}
     >
-      <Each of={visibleStatuses}>
-        {(status) => {
-          const folded = () =>
-            !mainStatuses.includes(status()) &&
-            !props.expanded.includes(status());
-          return (
-            <View
-              ref={(view) => boardDrag.register(status(), view)}
-              style={{
-                flex: folded() ? undefined : 1,
-                width: folded()
-                  ? tablet()
-                    ? control.md
-                    : space[32]
-                  : undefined,
-                maxWidth: tablet() && !folded() ? columnMaxWidth : undefined,
-                minWidth: 0,
-                backgroundColor: folded()
-                  ? tablet()
-                    ? c().selected
-                    : c().surface
-                  : c().canvas,
-              }}
-            >
+      <View style={{ ...row, gap: space[8], alignItems: "stretch" }}>
+        <Each of={visibleStatuses}>
+          {(status) => {
+            const folded = () =>
+              !mainStatuses.includes(status()) &&
+              !props.expanded.includes(status());
+            return (
               <View
-                role="button"
-                accessibilityLabel={statusName(status())}
-                onPress={() => props.onFoldStatus(status())}
-                style={
-                  folded()
-                    ? {
-                        alignItems: "center",
-                        paddingTop: space[8],
-                        gap: space[8],
-                        cursor: "pointer",
-                      }
-                    : {
-                        ...row,
-                        gap: tablet() ? space[4] : space[8],
-                        height: headerHeight,
-                        paddingTop: space[8],
-                        paddingLeft: tablet() ? 0 : space[2],
-                        cursor: "pointer",
-                      }
-                }
+                ref={(view) => boardDrag.register(status(), view)}
+                style={{
+                  width: folded()
+                    ? tablet()
+                      ? control.md
+                      : space[32]
+                    : colWidth,
+                  minWidth: 0,
+                  backgroundColor: folded()
+                    ? tablet()
+                      ? c().selected
+                      : c().surface
+                    : c().canvas,
+                }}
               >
-                <TaskGlyph status={status()} size={icon.sm} />
-                <If
-                  when={!folded()}
-                  else={
-                    <>
-                      <SideLabel
-                        text={
-                          tablet()
-                            ? `${statusName(status())} ${column(status()).length}`
-                            : statusName(status())
+                <View
+                  role="button"
+                  accessibilityLabel={statusName(status())}
+                  onPress={() => props.onFoldStatus(status())}
+                  style={
+                    folded()
+                      ? {
+                          alignItems: "center",
+                          paddingTop: space[8],
+                          gap: space[8],
+                          cursor: "pointer",
                         }
-                        tone={tablet() ? "mutedInk" : "muted"}
-                      />
-                      <If when={!tablet()}>
-                        <Label variant="small" tone="muted">
-                          {column(status()).length}
-                        </Label>
-                      </If>
-                    </>
+                      : {
+                          ...row,
+                          gap: tablet() ? space[4] : space[8],
+                          height: headerHeight,
+                          paddingTop: space[8],
+                          paddingLeft: tablet() ? 0 : space[2],
+                          cursor: "pointer",
+                        }
                   }
                 >
-                  <Label variant="small">{statusName(status())}</Label>
-                  <Label variant="small" tone="muted">
-                    {column(status()).length}
-                  </Label>
+                  <TaskGlyph status={status()} size={icon.sm} />
+                  <If
+                    when={!folded()}
+                    else={
+                      <>
+                        <SideLabel
+                          text={
+                            tablet()
+                              ? `${statusName(status())} ${column(status()).length}`
+                              : statusName(status())
+                          }
+                          tone={tablet() ? "mutedInk" : "muted"}
+                        />
+                        <If when={!tablet()}>
+                          <Label variant="small" tone="muted">
+                            {column(status()).length}
+                          </Label>
+                        </If>
+                      </>
+                    }
+                  >
+                    <Label variant="small">{statusName(status())}</Label>
+                    <Label variant="small" tone="muted">
+                      {column(status()).length}
+                    </Label>
+                  </If>
+                </View>
+                <If when={!folded()}>
+                  <SmoothScroll
+                    style={{ ...grow, marginTop: space[8] }}
+                    scrollbar={false}
+                  >
+                    <View style={{ gap: space[8] }}>
+                      <Each of={column(status())} key={(task) => task.id}>
+                        {(task) => (
+                          <BoardCard
+                            task={task()}
+                            layout={props.layout}
+                            drag={boardDrag}
+                            draggable={
+                              props.layout === "desktop" && !task().subtasks
+                            }
+                            onOpen={() => props.onOpen(task().id)}
+                          />
+                        )}
+                      </Each>
+                    </View>
+                  </SmoothScroll>
                 </If>
               </View>
-              <If when={!folded()}>
-                <SmoothScroll
-                  style={{ ...grow, marginTop: space[8] }}
-                  scrollbar={false}
-                >
-                  <View style={{ gap: space[8] }}>
-                    <Each of={column(status())} key={(task) => task.id}>
-                      {(task) => (
-                        <BoardCard
-                          task={task()}
-                          layout={props.layout}
-                          drag={boardDrag}
-                          draggable={
-                            props.layout === "desktop" && !task().subtasks
-                          }
-                          onOpen={() => props.onOpen(task().id)}
-                        />
-                      )}
-                    </Each>
-                  </View>
-                </SmoothScroll>
-              </If>
-            </View>
-          );
-        }}
-      </Each>
-    </View>
+            );
+          }}
+        </Each>
+      </View>
+    </Scroll>
   );
 }
 
