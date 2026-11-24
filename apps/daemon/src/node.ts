@@ -23,6 +23,7 @@ import type {
   OpenSessionArgs,
   Redaction,
   RunOutcome,
+  SessionMcpServer,
   ToolSpec,
 } from "@eta/client-contracts";
 import type { CallFrame, ServerFrame } from "@eta/client-wire-proto";
@@ -69,7 +70,11 @@ import { relayAuthProviderFor } from "./mcp-auth";
 import { McpHost } from "./mcp-host";
 import { ModelCatalog, remoteModels } from "./models";
 import { PluginStore } from "./plugin-files";
-import { pluginMcpSources, runtimeExtras } from "./plugin-launch";
+import {
+  pluginMcpSources,
+  runtimeExtras,
+  withSessionServers,
+} from "./plugin-launch";
 import { loadPlugin } from "./plugin-package";
 import { Reports } from "./reports";
 import { lastSeq, runAndWait } from "./run";
@@ -121,6 +126,8 @@ interface Opening {
   cards: PersonaCard[];
   /** The agent's plugins, read from this machine's copies. */
   plugins: ActivePlugin[];
+  /** The servers the primary named for an external runtime, beyond the plugins'. */
+  servers: readonly SessionMcpServer[];
   redact: readonly Redaction[];
 }
 
@@ -267,12 +274,19 @@ export class DaemonNode {
       // `import "mcp:<server>"` in eta's own loop: the agent's plugins, the user's file and the
       // project's, as on the primary. A server starts on this machine, with the session.
       mcpFor: (meta) => this.#mcp.sessionMcp(meta),
-      runtimeExtrasFor: async (meta) =>
-        await runtimeExtras(this.#openingOf(meta)?.plugins ?? [], {
-          dataDir: options.dataDir,
-          runtime: meta.runtime,
+      // The agent's plugins, then what the primary named beyond them (its Composio toolkits).
+      runtimeExtrasFor: async (meta) => {
+        const opening = this.#openingOf(meta);
+        return withSessionServers(
+          await runtimeExtras(opening?.plugins ?? [], {
+            dataDir: options.dataDir,
+            runtime: meta.runtime,
+            warn,
+          }),
+          opening?.servers ?? [],
           warn,
-        }),
+        );
+      },
       toolMiddleware: ({ meta }) => [
         redactionMiddleware(() => this.#openingOf(meta)?.redact ?? []),
       ],
@@ -621,6 +635,7 @@ export class DaemonNode {
       tools: args.tools,
       cards: (args.personaCards ?? []) as PersonaCard[],
       plugins: await this.#openedPlugins(args),
+      servers: args.mcpServers ?? [],
       redact: args.redactions ?? [],
     });
     const thinking = (id: string): Promise<unknown> =>

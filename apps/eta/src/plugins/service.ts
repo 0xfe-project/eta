@@ -50,6 +50,7 @@ import {
   runtimeExtras,
   serversConfig,
   toMcpEntries,
+  withSessionServers,
 } from "@eta/daemon";
 import { CURSOR_AUTH_HEADER, isCursorServer } from "./cursor-login";
 import {
@@ -375,32 +376,31 @@ export class Plugins {
   async runtimeExtrasFor(meta: SessionMeta): Promise<RuntimeExtras> {
     const { agentId } = meta;
     if (agentId === undefined) return {};
-    const { active, virtual } = this.#split(agentId);
-    const extras = await runtimeExtras(
-      active.map((entry) => ({
-        plugin: entry.plugin!,
-        hash: entry.hash!,
-        config: this.#config(entry),
-      })),
-      { dataDir: this.#dataDir, runtime: meta.runtime, warn: this.#warn },
+    const { active } = this.#split(agentId);
+    return withSessionServers(
+      await runtimeExtras(
+        active.map((entry) => ({
+          plugin: entry.plugin!,
+          hash: entry.hash!,
+          config: this.#config(entry),
+        })),
+        { dataDir: this.#dataDir, runtime: meta.runtime, warn: this.#warn },
+      ),
+      this.toolkitServersFor(agentId),
+      this.#warn,
     );
-    const servers = extras.mcpServers ?? [];
-    const taken = new Set(servers.map((server) => server.name));
-    const toolkits = virtual
-      .flatMap((name) => this.#sessionServersOf(name))
-      .filter((server) => {
-        if (taken.has(server.name)) {
-          this.#warn(
-            `[eta] composio: server ${server.name} skipped: its name is taken by an installed plugin's server`,
-          );
-          return false;
-        }
-        taken.add(server.name);
-        return true;
-      });
-    return toolkits.length === 0
-      ? extras
-      : { ...extras, mcpServers: [...servers, ...toolkits] };
+  }
+
+  /**
+   * The agent's ready Composio toolkits in the shape an external runtime takes. On this machine
+   * they come after the installed plugins' servers (`runtimeExtrasFor`); on a daemon's they go in
+   * the open (`OpenSessionArgs.mcpServers`), since they are no files to send, and the daemon puts
+   * them after the plugins' the same way.
+   */
+  toolkitServersFor(agentId: string): SessionMcpServer[] {
+    return this.#split(agentId).virtual.flatMap((name) =>
+      this.#sessionServersOf(name),
+    );
   }
 
   /** A virtual plugin's servers in the shape an external runtime takes. */

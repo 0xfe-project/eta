@@ -549,6 +549,33 @@ function skillsOnlyDir(active: ActivePlugin, dataDir: string): string {
   return dir;
 }
 
+/**
+ * What a session on an external runtime gets, with more servers after its plugins': a server whose
+ * name is already taken is left out and reported, so no two of a name reach the runtime and an
+ * installed plugin's server is never replaced.
+ */
+export function withSessionServers(
+  extras: RuntimeExtras,
+  added: readonly SessionMcpServer[],
+  warn: (message: string) => void,
+): RuntimeExtras {
+  const servers = extras.mcpServers ?? [];
+  const taken = new Set(servers.map((server) => server.name));
+  const kept = added.filter((server) => {
+    if (taken.has(server.name)) {
+      warn(
+        `[eta] server ${server.name} skipped: its name is taken by another server of the session`,
+      );
+      return false;
+    }
+    taken.add(server.name);
+    return true;
+  });
+  return kept.length === 0
+    ? extras
+    : { ...extras, mcpServers: [...servers, ...kept] };
+}
+
 /** What a session on an external runtime gets from its plugins, wherever it runs. */
 export async function runtimeExtras(
   plugins: readonly ActivePlugin[],

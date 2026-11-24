@@ -237,6 +237,11 @@ export class RemotePlace implements SessionPlace {
     const known = external
       ? undefined
       : this.#deps.models()?.getModel(identity.provider, identity.modelId);
+    // The Composio toolkits are no files, so they are named in the open (an eta agent's are not
+    // sent: its servers come from the plugins' files).
+    const toolkits = external
+      ? this.#deps.plugins.toolkitServersFor(agent.id)
+      : [];
     const { session } = await link.machine("open", {
       ...(input.existing === null ? {} : { session: input.existing }),
       cwd: input.cwd,
@@ -260,6 +265,7 @@ export class RemotePlace implements SessionPlace {
           }),
       tools: this.#tools(conversation.id, agent.id, input.cwd),
       plugins: await this.#deps.plugins.openOn(link, agent.id),
+      ...(toolkits.length === 0 ? {} : { mcpServers: toolkits }),
       redactions: this.#deps.plugins.redactionsFor(agent.id),
     });
     if (session !== input.existing) input.created(session);
