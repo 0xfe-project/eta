@@ -445,12 +445,18 @@ export function pluginsPlugin(
           needComposio().clearKey();
           return { result: { hasKey: false } };
         }),
-        wire.handle("plugins", "composioStatus", async () => ({
-          result: {
-            hasKey: needComposio().hasKey(),
-            enabled: needComposio().source().enabled,
-          },
-        })),
+        // Reads only what the host keeps; it must not wait behind a slow call of the connection.
+        wire.handle(
+          "plugins",
+          "composioStatus",
+          async () => ({
+            result: {
+              hasKey: needComposio().hasKey(),
+              enabled: needComposio().source().enabled,
+            },
+          }),
+          { unordered: true },
+        ),
         wire.handle("plugins", "composioConnected", async () => ({
           result: await needComposio().follow(),
         })),
