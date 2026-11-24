@@ -5,11 +5,11 @@ import { Dialog } from "nsh/base";
 import {
   Button,
   colors,
+  dialogWidth,
   fill,
   grow,
   Icon,
   Label,
-  dialogWidth,
   Modal,
   row,
   SmoothScroll,
@@ -311,7 +311,8 @@ export function InviteAgents(props: {
           label={uiText("invite", { length: inviteIds().length })}
           tone="primary"
           size={phone() ? control.sm : control.md}
-          disabled={saving() || !inviteIds().length}
+          disabled={!inviteIds().length}
+          busy={saving()}
           onPress={() => void invite()}
         />
       </View>

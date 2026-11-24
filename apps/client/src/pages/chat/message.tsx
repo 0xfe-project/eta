@@ -240,6 +240,8 @@ export function Message(props: {
   };
   const discarded = () => item().data.discarded === true;
   const busy = signal(false);
+  /** Stop was pressed and the host has not said the reply is stopping yet. */
+  const stopping = signal(false);
   async function discard() {
     if (busy()) return;
     busy.set(true);
@@ -520,7 +522,8 @@ export function Message(props: {
                 <Button
                   label={uiText("discard")}
                   size={control.sm}
-                  disabled={busy() || host.state().status !== "open"}
+                  disabled={host.state().status !== "open"}
+                  busy={busy()}
                   onPress={() => void discard()}
                 />
               </If>
@@ -650,14 +653,20 @@ export function Message(props: {
                 labelWeight={weight.strong}
                 style={{ paddingHorizontal: space[8] }}
                 disabled={item().status === "stopping"}
-                onPress={() =>
-                  void host.action(() =>
-                    host.call("conversations", "stop", {
-                      conversationId: item().conversationId,
-                      messageId: item().id,
-                    }),
-                  )
-                }
+                busy={stopping() && item().status !== "stopping"}
+                onPress={() => {
+                  stopping.set(true);
+                  void host
+                    .action(() =>
+                      host.call("conversations", "stop", {
+                        conversationId: item().conversationId,
+                        messageId: item().id,
+                      }),
+                    )
+                    .then((result) => {
+                      if (result === undefined) stopping.set(false);
+                    });
+                }}
               />
             </View>
             <ProcessWindow height={processWindowHeight}>

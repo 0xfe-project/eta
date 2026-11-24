@@ -197,10 +197,8 @@ export function TaskReviewDialog(props: {
           size={control.lg}
           tone="primary"
           style={props.phone ? { paddingHorizontal: space[16] } : undefined}
-          disabled={
-            props.submitting ||
-            (props.decision === "todo" && !props.feedback.trim())
-          }
+          disabled={props.decision === "todo" && !props.feedback.trim()}
+          busy={props.submitting}
           onPress={props.onSubmit}
         />
       </View>

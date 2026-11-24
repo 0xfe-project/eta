@@ -459,13 +459,14 @@ export function RoutineEditor(props: {
         label={props.item ? uiText("save") : uiText("routineCreate")}
         tone="primary"
         size={sheet() ? controlHeight.touch : controlHeight.md}
-        disabled={!valid() || busy()}
+        disabled={!valid()}
+        busy={busy()}
         dimDisabled={!sheet()}
         style={{
           paddingHorizontal: space[16],
-          opacity: sheet() || (valid() && !busy()) ? 1 : opacity.disabled,
+          opacity: sheet() || valid() ? 1 : opacity.disabled,
           // The phone sheet draws a disabled primary in the faint fill.
-          ...(sheet() && (!valid() || busy())
+          ...(sheet() && !valid()
             ? { backgroundColor: c().faint, borderColor: c().faint }
             : {}),
         }}

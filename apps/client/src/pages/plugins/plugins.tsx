@@ -75,8 +75,15 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
   const serversPlugin = () => list().find((item) => item.name === servers());
   const warningPlugin = () => list().find((item) => item.name === warnings());
   const sourcePlugin = () => list().find((item) => item.name === source());
+  /** A recheck under way: the refresh icons turn meanwhile. */
+  const refreshing = signal(false);
+  /** The plugin being removed. */
+  const removing = signal(false);
   async function refreshPlugins() {
+    if (refreshing()) return;
+    refreshing.set(true);
     await host.action(() => host.call("plugins", "recheck", {}));
+    refreshing.set(false);
   }
   async function update(name: string) {
     return (
@@ -238,6 +245,8 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                       <Button
                         label={uiText("refreshPlugins")}
                         icon="refresh"
+                        spinIcon
+                        busy={refreshing()}
                         iconOnly
                         iconSize={icon.md}
                         size={control.lg}
@@ -265,6 +274,8 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                       <Button
                         label={uiText("refreshPlugins")}
                         icon="refresh"
+                        spinIcon
+                        busy={refreshing()}
                         iconOnly
                         iconSize={icon.md}
                         size={control.sm}
@@ -439,14 +450,18 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                 size={phone() ? control.touch : control.md}
                 labelWeight={phone() ? weight.regular : undefined}
                 style={phone() ? { flex: 1 } : undefined}
-                onPress={() =>
-                  void host.action(async () => {
-                    const name = remove();
-                    await host.call("plugins", "remove", { name });
-                    if (selected() === name) selected.set("");
-                    remove.set("");
-                  })
-                }
+                busy={removing()}
+                onPress={() => {
+                  removing.set(true);
+                  void host
+                    .action(async () => {
+                      const name = remove();
+                      await host.call("plugins", "remove", { name });
+                      if (selected() === name) selected.set("");
+                      remove.set("");
+                    })
+                    .finally(() => removing.set(false));
+                }}
               />
             </View>
           </View>

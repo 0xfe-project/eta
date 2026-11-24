@@ -601,6 +601,8 @@ export function Skills(props: {
               <Button
                 label={uiText("skillReload")}
                 icon="refresh"
+                spinIcon
+                busy={loading()}
                 iconOnly
                 iconSize={icon.md}
                 size={control.lg}
@@ -622,6 +624,8 @@ export function Skills(props: {
                   <Button
                     label={uiText("skillReload")}
                     icon="refresh"
+                    spinIcon
+                    busy={loading()}
                     iconOnly
                     iconSize={icon.md}
                     size={control.sm}
@@ -661,6 +665,8 @@ export function Skills(props: {
             <Button
               label={uiText("skillReload")}
               icon="refresh"
+              spinIcon
+              busy={loading()}
               iconOnly
               onPress={refresh}
             />

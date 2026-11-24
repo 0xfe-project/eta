@@ -148,16 +148,17 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
           }}
         >
           <Button
-            label={busy() ? uiText("adding") : uiText("addPluginSubmit")}
+            label={uiText("addPluginSubmit")}
             tone="primary"
             size={props.phone ? control.touch : control.md}
             labelWeight={props.phone ? weight.regular : undefined}
             dimDisabled={false}
             style={{
-              opacity: !repo().trim() || busy() ? opacity.disabled : 1,
+              opacity: !repo().trim() ? opacity.disabled : 1,
               ...(props.phone ? { flex: 1 } : {}),
             }}
-            disabled={!repo().trim() || busy()}
+            disabled={!repo().trim()}
+            busy={busy()}
             onPress={() => void submit()}
           />
         </View>

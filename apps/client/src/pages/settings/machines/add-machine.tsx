@@ -120,7 +120,8 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
         tone="primary"
         size={props.phone ? controlHeight.touch : controlHeight.sm}
         style={{ paddingHorizontal: space[12] }}
-        disabled={busy() || installing() || (!command() && !sshReady())}
+        disabled={!command() && !sshReady()}
+        busy={busy() || installing()}
         onPress={() => void create()}
       />
     );

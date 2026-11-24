@@ -23,12 +23,12 @@ import {
 } from "../../components";
 import { hint } from "../../components/controls";
 import { CloseButton } from "../../components/navigation-buttons";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { sheetEdge } from "./configure";
 import { PluginLogo, primeLogos } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
-import { avatar, control, icon, space, weight } from "../../components/tokens";
 
 /**
  * The online market. Everything the catalog says is shown as text, never as markup. The detail shows
@@ -696,10 +696,10 @@ export function Market(props: {
               else={<Label variant="small">{marker(current()!)}</Label>}
             >
               <Button
-                label={busy() ? uiText("adding") : uiText("marketInstall")}
+                label={uiText("marketInstall")}
                 tone="primary"
                 size={phone() ? control.touch : control.md}
-                disabled={busy()}
+                busy={busy()}
                 onPress={() => void install(current()!)}
               />
             </If>

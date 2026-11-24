@@ -392,7 +392,8 @@ export function AgentEditor(props: AgentEditorProps) {
                 creating ? localizedText("Create", "创建") : uiText("save")
               }
               tone="primary"
-              disabled={!canSave()}
+              disabled={!canSave() && !busy()}
+              busy={busy()}
               size={phoneEditor() ? control.lg : undefined}
               style={
                 phoneEditor()
