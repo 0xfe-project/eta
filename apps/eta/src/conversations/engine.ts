@@ -577,7 +577,11 @@ export class Engine {
     );
     if (joining.length === 0)
       return { ...none, steered: false, reason: "idle" };
-    const out = this.#timeline.steerOut(messageId, joining);
+    const into =
+      row.author === "user"
+        ? this.#insertTarget(conversationId, joining)
+        : undefined;
+    const out = this.#timeline.steerOut(messageId, joining, into);
     if (out === undefined) return { ...none, steered: false, reason: "taken" };
     this.#changed([conversationId]);
 
@@ -595,8 +599,11 @@ export class Engine {
       }
     }
     if (joined.length !== joining.length) {
+      // Joined by some: still drawn in the message it went into, and the replies of the rest come
+      // after it as any queued reply does. Joined by none: a message of its own (`send` too).
+      const { into: _into, ...rest } = out.message.data;
       this.#timeline.setData(messageId, {
-        ...out.message.data,
+        ...(joined.length > 0 ? out.message.data : rest),
         woke: [
           ...(out.message.data.woke as string[]),
           ...replies.map((reply) => reply.agentId!),
@@ -725,6 +732,13 @@ export class Engine {
           join: mode === "steer" && this.#joinable(conversation.id, agentId),
         });
       }
+      // A plain steer (`/steer`, the TUI's Tab) is drawn where an Insert is: in the message whose
+      // turns it joins.
+      if (into === undefined && (input.author ?? "user") === "user")
+        into = this.#insertTarget(
+          conversation.id,
+          planned.filter((p) => p.join).map((p) => p.agentId),
+        );
       /*
        * A message nobody can take yet is not a message of the conversation yet: every target still
        * has a reply of its own in flight, so nothing would read it until one of them finished. It
@@ -794,11 +808,12 @@ export class Engine {
       }
     }
     if (joined.length !== planned.filter((p) => p.join).length) {
-      // A message that got a reply of its own is not part of the one it was put into any more:
-      // it reads as its own message, with that reply under it.
+      // Joined by some, it stays in the message it was put into and the replies of the rest come
+      // after it, as `steerHeld` has it. Joined by none, it is not part of that message any more:
+      // it reads as its own message, with its replies under it.
       const { into: _into, ...rest } = message.data;
       this.#timeline.setData(message.id, {
-        ...rest,
+        ...(joined.length > 0 ? message.data : rest),
         woke: replies.map((reply) => reply.agentId),
         joined,
       });
@@ -834,6 +849,45 @@ export class Engine {
           ? [reply.agentId]
           : [],
       );
+  }
+
+  /**
+   * The user message a steer into `agentIds`' turns is drawn in (`data.into`), as an Insert from
+   * that message's popover is: the message each turn answers — its reply's root, so a reply an
+   * @mention woke counts as answering the message that started the exchange. A root that was
+   * itself drawn in another message stands for that one. Turns answering different messages put
+   * it in the latest of them: the one nearest where it was written, so it does not jump up the
+   * transcript (or out of the loaded part of it). Undefined when no turn answers a user message.
+   */
+  #insertTarget(
+    conversationId: string,
+    agentIds: readonly string[],
+  ): string | undefined {
+    let target: MessageView | undefined;
+    for (const agentId of agentIds) {
+      const running = this.#running.get(keyOf(conversationId, agentId));
+      const reply =
+        running === undefined ? undefined : this.#timeline.get(running.replyId);
+      let root =
+        reply?.rootMessageId == null
+          ? undefined
+          : this.#timeline.get(reply.rootMessageId);
+      for (
+        let hops = 0;
+        hops < 4 && typeof root?.data.into === "string";
+        hops++
+      )
+        root = this.#timeline.get(root.data.into);
+      if (
+        root === undefined ||
+        root.conversationId !== conversationId ||
+        root.author !== "user" ||
+        root.data.held !== undefined
+      )
+        continue;
+      if (target === undefined || root.seq > target.seq) target = root;
+    }
+    return target?.id;
   }
 
   /** Whether there is a turn to steer: the member's reply is running, and is not being stopped. */

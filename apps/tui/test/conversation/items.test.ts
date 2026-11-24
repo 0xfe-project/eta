@@ -193,6 +193,42 @@ describe("a user row", () => {
     });
   });
 
+  it("put into another message's turns is drawn under that message, not where it was written", () => {
+    const asked = row({ text: "write the report" });
+    const answer = reply({ text: "here it is", replyToId: asked.id });
+    const at = new Date(2026, 10, 24, 9, 5).getTime();
+    const steer = row({
+      text: "make it shorter",
+      createdAt: at,
+      data: { into: asked.id, joined: [ADA.id], woke: [] },
+    });
+    const drawn = items({ rows: [asked, answer, steer], locale: "zh" });
+    expect(drawn.map((item) => item.key)).toEqual([
+      asked.id,
+      `${steer.id}:inserted`,
+      steer.id,
+      `${answer.id}:text`,
+    ]);
+    expect(drawn[1]).toEqual({
+      kind: "notice",
+      key: `${steer.id}:inserted`,
+      tone: "muted",
+      text: "插入 · 09:05",
+    });
+    expect(drawn[2]).toMatchObject({ kind: "user", text: "make it shorter" });
+  });
+
+  it("put into a message that is not loaded is drawn where it is", () => {
+    const steer = row({
+      text: "make it shorter",
+      data: { into: "not-loaded", joined: [ADA.id] },
+    });
+    expect(items({ rows: [steer] }).map((item) => item.kind)).toEqual([
+      "user",
+      "notice",
+    ]);
+  });
+
   it("with an empty joined list has no line under it", () => {
     const user = row({ text: "hi", data: { joined: [] } });
     expect(items({ rows: [user] })).toHaveLength(1);

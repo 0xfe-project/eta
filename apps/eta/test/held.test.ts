@@ -154,10 +154,12 @@ describe("插入当前这一轮（steerHeld）", () => {
       replies: [],
       dropped: [two.replies[0]!.id],
     });
-    // A message of the conversation now, marked the way a `/steer` is.
+    // A message of the conversation now, drawn in the message whose turn it joined, as an
+    // Insert from that message is.
     expect(steered.message?.data).toMatchObject({
       joined: [agent.id],
       woke: [],
+      into: one.message.id,
     });
     expect(steered.message?.data.held).toBeUndefined();
     await until(() => w.held(group.id).length === 0);
@@ -264,6 +266,8 @@ describe("插入当前这一轮（steerHeld）", () => {
       joined: [],
       woke: [agent.id],
     });
+    // Joined nothing: it is a message of its own, with its reply under it.
+    expect(steered.message?.data).not.toHaveProperty("into");
     const own = await w.settled(group.id, steered.replies[0]!.id);
     expect(own).toMatchObject({ status: "done", text: "the summary" });
     // One copy of the words, read by the model once.
@@ -313,6 +317,8 @@ describe("插入当前这一轮（steerHeld）", () => {
     expect(steered.steered).toBe(true);
     expect([...steered.joined].sort()).toEqual([ada.id, bo.id].sort());
     expect(steered.dropped).toHaveLength(2);
+    // Both answer the same message: it is drawn in that one.
+    expect(steered.message?.data.into).toBe(one.message.id);
 
     gates.Ada.open();
     gates.Bo.open();
@@ -320,6 +326,99 @@ describe("插入当前这一轮（steerHeld）", () => {
     expect(
       w.rows(group.id).filter((row) => row.author === "agent"),
     ).toHaveLength(2);
+  });
+
+  it("两个智能体各自回答不同的消息：画进较新的那一条", async () => {
+    const gates = { Ada: gate(), Bo: gate() };
+    const { models, requests } = scriptedModels(async (request) => {
+      const name = request.agent as "Ada" | "Bo";
+      await gates[name].opened;
+      return say(`${name} done`);
+    });
+    const w = await world({ models });
+    const ada = await w.agent("Ada");
+    const bo = await w.agent("Bo");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id, bo.id]);
+    await w.watch(group.id);
+
+    const toAda = await w.send(group.id, "Ada: the report", {
+      mentions: [ada.id],
+    });
+    await w.settled(group.id, toAda.replies[0]!.id, ["working"]);
+    const toBo = await w.send(group.id, "Bo: the slides", {
+      mentions: [bo.id],
+    });
+    await w.settled(group.id, toBo.replies[0]!.id, ["working"]);
+    await until(() => requests.length === 2);
+    const both = await w.send(group.id, "use the 2026 numbers", {
+      mentions: [ada.id, bo.id],
+    });
+    await until(() => w.held(group.id).length === 1);
+
+    const steered = await steerHeld(w, group.id, both.message.id);
+    expect([...steered.joined].sort()).toEqual([ada.id, bo.id].sort());
+    expect(steered.message?.data.into).toBe(toBo.message.id);
+    gates.Ada.open();
+    gates.Bo.open();
+    await w.settled(group.id, toAda.replies[0]!.id);
+    await w.settled(group.id, toBo.replies[0]!.id);
+  });
+
+  it("只并入了一部分：已并入的仍画在那条消息里，没并入的那个得到自己的回复", async () => {
+    const gates = { Ada: gate(), Bo: gate() };
+    const { models, requests } = scriptedModels(async (request) => {
+      const name = request.agent as "Ada" | "Bo";
+      const seen = request.transcript.join("\n");
+      if (!seen.includes("also check Safari")) {
+        await gates[name].opened;
+        return say(`${name} on it`);
+      }
+      return say(`${name} with Safari`);
+    });
+    const w = await world({ models });
+    const ada = await w.agent("Ada");
+    const bo = await w.agent("Bo");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id, bo.id]);
+    await w.watch(group.id);
+
+    const one = await w.send(group.id, "both of you", {
+      mentions: [ada.id, bo.id],
+    });
+    for (const reply of one.replies)
+      await w.settled(group.id, reply.id, ["working"]);
+    await until(() => requests.length === 2);
+    const note = await uploadNote(w.client, group.id);
+    const two = await w.send(group.id, "also check Safari", {
+      mentions: [ada.id, bo.id],
+      attachments: [note],
+    });
+    await until(() => w.held(group.id).length === 1);
+
+    // Ada is briefed first; her turn ends while her briefing waits on the file, so only Bo joins.
+    const hold = holdNextDelivery();
+    const steering = steerHeld(w, group.id, two.message.id);
+    await hold.reached;
+    const adaReply = one.replies.find((reply) => reply.agentId === ada.id)!;
+    gates.Ada.open();
+    await w.settled(group.id, adaReply.id);
+    hold.release();
+    const steered = await steering;
+
+    expect(steered.steered).toBe(true);
+    expect(steered.joined).toEqual([bo.id]);
+    expect(steered.replies.map((reply) => reply.agentId)).toEqual([ada.id]);
+    expect(steered.message?.data).toMatchObject({
+      into: one.message.id,
+      joined: [bo.id],
+      woke: [ada.id],
+    });
+    const own = await w.settled(group.id, steered.replies[0]!.id);
+    expect(own.text).toBe("Ada with Safari");
+    gates.Bo.open();
+    const boReply = one.replies.find((reply) => reply.agentId === bo.id)!;
+    expect((await w.settled(group.id, boReply.id)).text).toBe("Bo with Safari");
   });
 
   it("早已送达的消息：不是排队中的，什么都不再发", async () => {

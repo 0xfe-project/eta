@@ -244,7 +244,7 @@ describe("a reply in flight", () => {
 
     await r.type("turn left");
     await r.press(KEYS.tab);
-    await screenShows(r, "Joined Ada's reply");
+    await screenShows(r, "Inserted · ");
     const steer = askedFor(world.wire, "conversations.send");
     expect(steer).toEqual([
       expect.objectContaining({ text: "turn left", mode: "steer" }),

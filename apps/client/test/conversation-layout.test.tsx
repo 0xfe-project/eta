@@ -88,6 +88,27 @@ for (const [name, width, height] of sizes)
     expect(app.shows("label:Queued message: Queued words")).toBe(false);
   });
 
+for (const [name, width, height] of sizes)
+  test(`inserted from the queue, a message is drawn in the one whose turn it joined, not as a row of its own (${name})`, async () => {
+    const app = await open(fixture, {
+      width,
+      height,
+      locale: "en-US",
+      urlScheme: "eta://fixture/held",
+    });
+    await app.press("label:Insert into this turn: Queued words");
+    await app.waitFor(`${messages} >> text:Queued words`);
+    expect(app.shows("label:Queued message: Queued words")).toBe(false);
+    // Once, and in "ping"'s insert block: under it, before Ada's reply to it.
+    expect(app.count(`${messages} >> text:Queued words`)).toBe(1);
+    const texts = app.texts();
+    const inserted = texts.findIndex((text) =>
+      /^inserted · /i.test(text.replace(/^· /, "")),
+    );
+    expect(inserted).toBeGreaterThan(texts.indexOf("ping"));
+    expect(texts.indexOf("Queued words")).toBe(inserted + 1);
+  });
+
 test("the desktop panel remembers both positions and never marks its button with pending work", async () => {
   const options = {
     width: 1440,
