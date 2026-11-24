@@ -32,6 +32,11 @@ import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
 import { interactionId } from "../inbox/store";
 import { heldIn } from "../session-owner";
+import {
+  ARCHIVED_RULE,
+  archivedGuard,
+  confirmArchivedParameter,
+} from "../tasks/archived";
 import { GroupConflictError } from "./propose-group";
 import { redactJson, redactText, redactValue } from "./redact";
 
@@ -546,10 +551,20 @@ export function captainSessionTools(
       },
     });
 
+    /** The writing tools refuse an archived task until Captain says it knows (`archived.ts`). */
+    const archivedOnly = archivedGuard(
+      deps.board,
+      (agentId) => deps.agents.get(agentId)?.name ?? "a deleted agent",
+      {
+        rearchive: "archive_task puts it away again, once the user agrees.",
+      },
+    );
+
     const controlTask = defineTool({
       name: "control_task",
       description:
-        "Continue, pause, interrupt, cancel, rerun or delete a task. Normal continuation is a task comment so the executor resumes its own session.",
+        "Continue, pause, interrupt, cancel, rerun or delete a task. Normal continuation is a task comment so the executor resumes its own session. " +
+        `Deleting is not held back for an archived task; anything else is. ${ARCHIVED_RULE}`,
       parameters: Type.Object({
         taskId: Type.String(),
         action: Type.Union([
@@ -561,14 +576,21 @@ export function captainSessionTools(
           Type.Literal("delete"),
         ]),
         text: Type.Optional(Type.String()),
+        confirmArchived: confirmArchivedParameter,
       }),
       execute: async (args) => {
         try {
-          const result = await deps.service.taskControl(args);
+          const { confirmArchived, ...control } = args;
+          const known = deps.board.find(control.taskId);
+          const archived =
+            known === undefined || control.action === "delete"
+              ? undefined
+              : archivedOnly.before(known.id, confirmArchived, "control_task");
+          const result = await deps.service.taskControl(control);
           return text(
             result === null
               ? `Task ${args.taskId} deleted.`
-              : `Task #${result.number} ${args.action}: ${result.status}.`,
+              : `Task #${result.number} ${args.action}: ${result.status}.${archived?.after() ?? ""}`,
             result ?? { taskId: args.taskId, deleted: true },
           );
         } catch (error) {
@@ -581,8 +603,9 @@ export function captainSessionTools(
 
     const updateTask = defineTool({
       name: "update_task_fields",
-      description:
-        "Change a task's title, description or status. This does not change its creator or executor.",
+      description: `Change a task's title, description or status. This does not change its creator or executor. ${
+        ARCHIVED_RULE
+      }`,
       parameters: Type.Object({
         taskId: Type.String(),
         title: Type.Optional(Type.String()),
@@ -590,11 +613,17 @@ export function captainSessionTools(
         status: Type.Optional(
           Type.Union(TASK_STATUSES.map((status) => Type.Literal(status))),
         ),
+        confirmArchived: confirmArchivedParameter,
       }),
       execute(args) {
         try {
           const task = deps.board.find(args.taskId);
           if (task === undefined) return toolError("No such task.");
+          const archived = archivedOnly.before(
+            task.id,
+            args.confirmArchived,
+            "update_task_fields",
+          );
           const updated = deps.board.update(
             task.id,
             {
@@ -606,7 +635,10 @@ export function captainSessionTools(
             },
             { kind: "agent", agentId: captain.agentId },
           );
-          return text(`Task #${updated.number} updated.`, updated);
+          return text(
+            `Task #${updated.number} updated.${archived?.after() ?? ""}`,
+            updated,
+          );
         } catch (error) {
           return toolError(
             error instanceof Error ? error.message : String(error),
