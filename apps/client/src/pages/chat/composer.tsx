@@ -36,13 +36,18 @@ import {
 import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { OutboxRows } from "./composer-delivery";
-import { drainOutbox, openComposerDraft } from "./composer-draft";
+import {
+  drainOutbox,
+  openComposerDraft,
+  placedNow,
+  retryOutgoing,
+} from "./composer-draft";
 
 import { ComposerRecipients } from "./composer-recipients";
 import { HeldMessages } from "./held-messages";
-
 import { activeReply } from "./member-status";
+
+import { deliveries, waitsForOf } from "./outbox";
 
 interface ComposerProps {
   id: string;
@@ -50,6 +55,8 @@ interface ComposerProps {
   members: MemberView[];
   steward?: string | null;
   group: boolean;
+  /** The conversation's kind (`group` by default, `captain`): who a message goes to follows from it. */
+  kind?: string;
   projectId?: string;
   tablet: boolean;
   writing: boolean;
@@ -273,6 +280,17 @@ function ComposerBody(
     !props.blocked &&
     state().files <= MAX_ATTACHMENTS;
   const outgoing = () => store.value().outgoing;
+  /**
+   * Messages on their way that wait in the queue (every agent they go to was answering as they
+   * went, or the host said so): after the held ones, until the host's rows take their place.
+   */
+  const queuing = computed(() =>
+    deliveries({
+      outgoing: outgoing(),
+      landed: store.landed(),
+      shown: new Set(props.held.map((message) => message.id)),
+    }).filter((entry) => entry.waitsFor.length),
+  );
   function removeOutgoing(id: string) {
     return outgoing().filter((item) => item.id !== id);
   }
@@ -285,17 +303,25 @@ function ComposerBody(
       conversationId,
       sent.attachments.map((file) => file.id),
     );
+    const mentions = props.group ? targetAtSend.mentions : undefined;
     edit({
       sticky: props.group ? targetAtSend.sticky : undefined,
       outgoing: [
         ...outgoing(),
-        {
+        placedNow({
           id: crypto.randomUUID(),
           text: sent.text,
           blocks: sent.blocks,
-          mentions: props.group ? targetAtSend.mentions : undefined,
+          mentions,
           attachments: sent.attachments,
-        },
+          at: Date.now(),
+          waitsFor: waitsForOf({
+            kind: props.kind ?? "group",
+            members: props.members,
+            steward: props.steward,
+            mentions,
+          }),
+        }),
       ],
     });
     editor.clear();
@@ -332,6 +358,13 @@ function ComposerBody(
     else editor.insert(nodes, 0);
     editor.focus();
   }
+  // A failed message the reader chose to edit, from its row in the transcript or the queue.
+  effect(() => {
+    const message = store.editing();
+    if (!message) return;
+    store.editing.set(undefined);
+    untracked(() => restore(message));
+  });
   function toggle(id: string) {
     const selected = target().ids;
     const next = selected.includes(id)
@@ -361,19 +394,6 @@ function ComposerBody(
         backgroundColor: c().canvas,
       }}
     >
-      <OutboxRows
-        messages={outgoing()}
-        onRetry={(id) => {
-          edit({
-            outgoing: outgoing().map((item) =>
-              item.id === id ? { ...item, failure: undefined } : item,
-            ),
-          });
-          flush();
-        }}
-        onEdit={restore}
-        onDiscard={(id) => edit({ outgoing: removeOutgoing(id) })}
-      />
       <If when={props.blocked}>
         <View style={{ ...row, gap: space[4] }}>
           <Label variant="small">
@@ -393,6 +413,10 @@ function ComposerBody(
       </If>
       <HeldMessages
         messages={props.held}
+        sending={queuing()}
+        onRetry={(id) => retryOutgoing(store, host, origin, conversationId, id)}
+        onEdit={restore}
+        onDiscard={(id) => edit({ outgoing: removeOutgoing(id) })}
         conversationId={conversationId}
         phone={props.phone}
         onPullBack={prepend}

@@ -13,6 +13,8 @@ import type {
   ConversationStore,
 } from "../conversations/store";
 
+import { routeCaptainMessage } from "@eta/client-contracts/routing";
+
 export const CAPTAIN_KIND = "captain";
 
 export function captainPolicy(deps: {
@@ -20,13 +22,8 @@ export function captainPolicy(deps: {
 }): ConversationPolicy {
   return {
     kind: CAPTAIN_KIND,
-    route: (input) => {
-      const named = [...new Set(input.mentions)].filter((id) =>
-        input.members.includes(id),
-      );
-      // There is only Captain to talk to: a message that names nobody is for Captain all the same.
-      return { targets: [...input.members], named };
-    },
+    // There is only Captain to talk to: a message that names nobody is for Captain all the same.
+    route: routeCaptainMessage,
     canChangeMembers: () => false,
     membersFixed: "Captain's conversation is Captain and the user",
     updateRefusal: () => "Captain's conversation cannot be changed",

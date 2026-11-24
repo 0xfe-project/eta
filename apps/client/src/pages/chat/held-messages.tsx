@@ -3,12 +3,15 @@ import type {
   MessageView,
   SteerHeldResult,
 } from "@eta/client-contracts";
+import type { Outgoing } from "./composer-draft";
+import type { Delivery } from "./outbox";
 import { effect, keymap, signal, View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
 import { opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { DeliveryLine } from "./composer-delivery";
 
 /** More names than this read as a list nobody reads: say "them" instead. */
 const MAX_NAMES = 3;
@@ -57,6 +60,14 @@ export function HeldMessages(props: {
   /** Put the message's text back above whatever is being typed. */
   onPullBack: (text: string) => void;
   phone: boolean;
+  /**
+   * The reader's messages on their way that will wait here: every agent they go to was answering
+   * as they were sent. After the held ones, until the host's rows take their place.
+   */
+  sending: Delivery[];
+  onRetry: (id: string) => void;
+  onEdit: (message: Outgoing) => void;
+  onDiscard: (id: string) => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -132,7 +143,7 @@ export function HeldMessages(props: {
   }
 
   return (
-    <If when={props.messages.length || notice()}>
+    <If when={props.messages.length || props.sending.length || notice()}>
       <View
         role="list"
         accessibilityLabel={uiText("queueLane")}
@@ -304,6 +315,81 @@ export function HeldMessages(props: {
                     () => void take(message(), "drop"),
                   )}
                 </View>
+              </View>
+            );
+          }}
+        </Each>
+        <Each of={props.sending} key={(entry) => entry.message.id}>
+          {(entry) => {
+            const names = () => {
+              const ids = entry().waitsFor;
+              return ids.length > MAX_NAMES
+                ? uiText("queueThem")
+                : ids.map(nameOf).join(uiText("queueSeparator"));
+            };
+            // Taken by the host: queued as any other, until its row comes.
+            const head = () =>
+              entry().landed
+                ? `${uiText("queueQueued")} · ${uiText("queueWaitsFor", { names: names() })}`
+                : `${uiText("sendingQueued")} · ${uiText("sendingWillQueue", { names: names() })}`;
+            return (
+              <View
+                accessibilityLabel={uiText(
+                  entry().failure
+                    ? "sendFailedLabel"
+                    : entry().landed
+                      ? "queueLabel"
+                      : "sendingQueuedLabel",
+                  { text: entry().message.text },
+                )}
+                style={{
+                  borderWidth: 1,
+                  borderColor: c().border,
+                  backgroundColor: entry().failure ? c().redFill : c().canvas,
+                }}
+              >
+                <View
+                  style={{ paddingHorizontal: space[12], paddingTop: space[8] }}
+                >
+                  <Label variant="caption" tone="muted" lines={1}>
+                    {head()}
+                  </Label>
+                </View>
+                <View
+                  style={{
+                    paddingHorizontal: space[12],
+                    paddingTop: space[2],
+                    paddingBottom: entry().failure ? space[2] : space[8],
+                    opacity:
+                      entry().failure || entry().landed ? 1 : opacity.muted,
+                  }}
+                >
+                  <Label lines={2}>
+                    {[
+                      entry().message.text,
+                      ...entry().message.attachments.map((file) => file.name),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </Label>
+                </View>
+                <If when={entry().failure}>
+                  <View
+                    style={{
+                      paddingHorizontal: space[12],
+                      paddingBottom: props.phone ? space[2] : space[8],
+                    }}
+                  >
+                    <DeliveryLine
+                      failure={entry().failure}
+                      phone={props.phone}
+                      align="start"
+                      onRetry={() => props.onRetry(entry().message.id)}
+                      onEdit={() => props.onEdit(entry().message)}
+                      onDiscard={() => props.onDiscard(entry().message.id)}
+                    />
+                  </View>
+                </If>
               </View>
             );
           }}

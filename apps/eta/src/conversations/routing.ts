@@ -11,29 +11,10 @@
 /** How many agent-to-agent mentions one user message may start, across every branch of replies. */
 export const WAKE_BUDGET = 5;
 
-export interface Routing {
-  /** Agents to wake, in the order they were named. They are all members. */
-  targets: string[];
-  /** The members the message named, kept on the row. */
-  named: string[];
-}
-
-/** The group's rule (`group-policy.ts`); another kind of conversation has its own. */
-export function routeUserMessage(input: {
-  members: readonly string[];
-  mentions: readonly string[];
-  /** The conversation's steward, or null for none. */
-  steward: string | null;
-}): Routing {
-  const named = [...new Set(input.mentions)].filter((id) =>
-    input.members.includes(id),
-  );
-  if (named.length > 0) return { targets: named, named };
-  if (input.steward !== null && input.members.includes(input.steward))
-    return { targets: [input.steward], named };
-  if (input.members.length === 1) return { targets: [...input.members], named };
-  return { targets: [], named };
-}
+export type { Routing } from "@eta/client-contracts/routing";
+// The group's rule (`group-policy.ts`): the client reads the same one to tell a message it sends
+// will be held.
+export { routeUserMessage } from "@eta/client-contracts/routing";
 
 /** What an agent's mention may do, given how many mentions its user message has started. */
 export type BudgetVerdict = "wake" | "wake_last" | "capped";
