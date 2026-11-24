@@ -472,6 +472,7 @@ export const tasksMessages = {
   subtasksShow: ["Show subtasks of {{title}}", "展开 {{title}} 的子任务"],
   subtasksHide: ["Hide subtasks of {{title}}", "收起 {{title}} 的子任务"],
   subtasksNeedYou: ["{{count}} needs you", "{{count}} 个待你处理"],
+  thisGroup: ["This group", "本群"],
   allGroups: ["All groups", "所有群组"],
   backToTasks: ["Back to tasks", "返回任务"],
   tasksBefore: ["Before · {{count}}", "前置 · {{count}}"],

@@ -93,7 +93,6 @@ export function Conversation(props: {
   const drawer = signal(false);
   const invite = signal(false);
   const removing = signal<string | undefined>(undefined);
-  const projectInfo = signal(false);
   const member = signal<{ id: string; session: string }>();
   const memberSteps = signal("");
   // The Artifacts tab's search, filters and page: kept across tabs, dropped for another group.
@@ -460,33 +459,6 @@ export function Conversation(props: {
                 host.captain()?.status === "working" ? "working" : "idle",
               )}
             </Label>
-          </If>
-          <If when={!phone() && project() && group()}>
-            <View
-              role="button"
-              accessibilityLabel={project()?.name ?? ""}
-              onPress={() => {
-                panel.set("Context");
-                if (props.layout === "desktop") projectInfo.set(true);
-                else drawer.set(true);
-              }}
-              hoverStyle={{ backgroundColor: c().selected }}
-              style={{
-                ...row,
-                gap: space[4],
-                paddingVertical: space[2],
-                paddingHorizontal: space[8],
-                borderWidth: 1,
-                borderColor: c().border,
-                flexShrink: 0,
-                cursor: "pointer",
-              }}
-            >
-              <Icon name="folder" size={icon.sm} tone="muted" />
-              <Label variant="small" tone="muted" lines={1}>
-                {project()?.name ?? ""}
-              </Label>
-            </View>
           </If>
           <If when={!phone() && group()}>
             <StewardMenu
@@ -861,17 +833,6 @@ export function Conversation(props: {
             />
           </>
         )}
-      </If>
-      <If when={projectInfo() && project()}>
-        <Modal
-          title={project()?.name ?? uiText("directory")}
-          width={dialogWidth.md}
-          onClose={() => projectInfo.set(false)}
-        >
-          <Label style={{ padding: space[16] }}>
-            {project()?.display ?? project()?.path}
-          </Label>
-        </Modal>
       </If>
       <If when={removing() && info() ? removing() : undefined}>
         {(agentId) => (

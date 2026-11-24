@@ -59,6 +59,7 @@ export function ConversationMembers(props: {
           <Button
             label={uiText("invite2")}
             tone="ghost"
+            labelTone="muted"
             disabled={props.info?.archived}
             onPress={props.onInvite}
           />

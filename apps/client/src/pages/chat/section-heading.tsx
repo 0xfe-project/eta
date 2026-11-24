@@ -46,6 +46,7 @@ export function ViewAll(props: {
       label={uiText("viewAll")}
       accessibilityLabel={props.label}
       tone="ghost"
+      labelTone="muted"
       size={props.phone ? control.lg : undefined}
       onPress={props.onPress}
     />

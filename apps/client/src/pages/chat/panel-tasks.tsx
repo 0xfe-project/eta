@@ -11,7 +11,7 @@ import {
   Screen,
 } from "../../components";
 import { dotSize, StatusDot } from "../../components/status-dot";
-import { control, icon, space, weight } from "../../components/tokens";
+import { control, icon, sizes, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { taskTime } from "../tasks/facts";
@@ -229,7 +229,6 @@ const sortNames = {
  */
 export function TasksTab(props: {
   conversationId: string;
-  conversationName: string;
   onTask: (id: string) => void;
 }) {
   const host = useHost();
@@ -291,18 +290,20 @@ export function TasksTab(props: {
   );
   return (
     // No side padding here: each part carries its own, so the rows can reach both edges.
-    <View style={{ paddingTop: space[12] }}>
+    <View>
       <View
         style={{
           ...row,
           justifyContent: "space-between",
+          height: sizes.sectionHeader,
           gap: space[8],
-          paddingBottom: space[12],
           paddingHorizontal: inset,
+          borderBottomWidth: 1,
+          borderColor: c().border,
         }}
       >
         <View style={{ ...row, gap: space[4] }}>
-          {scope(props.conversationName, !everywhere(), () =>
+          {scope(uiText("thisGroup"), !everywhere(), () =>
             everywhere.set(false),
           )}
           {scope(uiText("allGroups"), everywhere(), () => everywhere.set(true))}
