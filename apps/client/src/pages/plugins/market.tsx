@@ -512,8 +512,8 @@ export function Market(props: {
                     accessibilityLabel={item().name}
                     onPress={() => detail.set(key(item()))}
                     style={{
-                      width: phone() ? undefined : cardWidth,
-                      flex: phone() ? 1 : undefined,
+                      // One card per row on a phone: a flex: 1 card in this wrapping row is squeezed to a sliver.
+                      width: phone() ? "100%" : cardWidth,
                       padding: space[12],
                       gap: space[8],
                       backgroundColor: c().canvas,
