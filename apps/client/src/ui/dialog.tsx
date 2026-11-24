@@ -2,7 +2,6 @@ import type { JSX, ViewStyle } from "nsh";
 import { cleanup, Overlay, platform, signal, View, windowSize } from "nsh";
 import { Dialog } from "nsh/base";
 import { Regular } from "../components/density";
-import { Header } from "../components/header";
 import { fade, fadeIn, fadeOut, motion, passing } from "../components/motion";
 import { screenInsets } from "../components/safe-area";
 import { colors, fill, row } from "../components/theme";
@@ -17,6 +16,7 @@ import {
 } from "../components/tokens";
 import { createDismissable } from "./behaviors";
 import { CloseButton } from "./button";
+import { Header } from "./header";
 import { Label } from "./text";
 
 /** A centred dialog's width: `sm` a confirmation, `md` a short form (the default), `lg` a form

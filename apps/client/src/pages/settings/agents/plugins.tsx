@@ -1,12 +1,12 @@
 import type { PluginView } from "@eta/client-contracts";
 import type { AgentForm } from "./form";
 import { View } from "nsh";
-import { colors, Empty, emptyWidth, Label, row } from "../../../components";
-import { CheckControl } from "../../../components/check-control";
+import { colors, row } from "../../../components";
 import { icon, opacity, space, weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
+import { CheckControl, Empty, emptyWidth, Label } from "../../../ui";
 import { useComposioPlugins } from "../../plugins/composio-plugins";
 import {
   emptyStyle,
