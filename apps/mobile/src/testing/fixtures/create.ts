@@ -251,30 +251,6 @@ export function installCreate(host: FakeHost): void {
     return { conversation: made };
   });
 
-  host.on("agents.direct", ({ agentId }: AgentArgs["direct"]) => {
-    const agent = agents().find((each) => each.id === agentId);
-    if (agent === undefined) throw new Error("no such agent");
-    const found = conversations().find(
-      (each) =>
-        each.kind === "direct" && each.participants[0]?.agentId === agentId,
-    );
-    if (found === undefined) {
-      const made = conversation(agent.homeProjectId, "direct", agent.name, [
-        agentId,
-      ]);
-      open(made);
-      return { conversation: made };
-    }
-    if (!found.archived) return { conversation: found };
-    const back = { ...found, archived: false };
-    host.patch(
-      "conversations",
-      "list",
-      conversations().map((each) => (each.id === found.id ? back : each)),
-    );
-    return { conversation: back };
-  });
-
   let refused = host.scenario !== "agent-create-fails";
   host.on("agents.create", (fields: AgentFields) => {
     if (!refused) {

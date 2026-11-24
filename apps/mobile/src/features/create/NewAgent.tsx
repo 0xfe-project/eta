@@ -20,6 +20,7 @@ import { Body, Page } from "../../ui/Page";
 import { SelectSheet } from "../../ui/SelectSheet";
 import { toast } from "../../ui/toast";
 import { call, useTarget } from "../../wire/target";
+import { makeAgentChat } from "../conversations/agentChat";
 import { enterChat } from "./enter";
 import { ChoiceField, Cta, TextField, Title, TopBar } from "./fields";
 import { runtimeModelsOf, useModels } from "./models";
@@ -573,14 +574,7 @@ function InstructionsStep(props: { draft: Draft }) {
     if (fields.model && fields.runtime === "eta") rememberModel(fields.model);
     toast(t("create.agent.created", { name: made.name }));
     try {
-      const { conversation } = await call<AgentResults["direct"]>(
-        "agents",
-        "direct",
-        {
-          agentId: made.id,
-        },
-      );
-      enterChat(conversation.id, 2);
+      enterChat(await makeAgentChat(made), 2);
     } catch (error) {
       // The agent exists: going again here would make a second one.
       toast(t("common.failed", { message: reason(error) }));
