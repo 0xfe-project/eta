@@ -28,6 +28,9 @@ const answerWidth = 400;
 const cardHeaderHeight = 32;
 const fieldLabelWidth = 72;
 
+/** The strip above the transcript naming a question waiting off screen. */
+export const pendingStripHeight = 32;
+
 function SheetQuestion(props: {
   item: InteractionView;
   onDone?: () => void;
@@ -638,9 +641,9 @@ export function PendingStrip(props: {
       focusVisibleStyle={focusRing(c())}
       style={{
         ...row,
-        height: 30,
-        gap: 8,
-        paddingHorizontal: 10,
+        height: pendingStripHeight,
+        gap: space[8],
+        paddingHorizontal: space[12],
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,

@@ -43,7 +43,7 @@ import { uiText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
 import { follow, useHost } from "../../services/host";
 import { isActiveRunStatus } from "../tasks/run-log";
-import { flashQuestion, PendingStrip } from "./approvals";
+import { flashQuestion, PendingStrip, pendingStripHeight } from "./approvals";
 import { defaultFilters } from "./artifacts/filter";
 import { ArtifactPreview } from "./artifacts/preview";
 import { Composer } from "./composer";
@@ -513,7 +513,13 @@ export function Conversation(props: {
           {/* The strip's room stays while questions wait, so the transcript
               does not move when the strip comes and goes with scrolling. */}
           <If when={!phone() && asking().length}>
-            <View style={{ height: 38, paddingHorizontal: space[16], paddingTop: space[8] }}>
+            <View
+              style={{
+                height: pendingStripHeight + space[8],
+                paddingHorizontal: space[16],
+                paddingTop: space[8],
+              }}
+            >
               <If when={offScreen()}>
                 {(item) => (
                   <PendingStrip
