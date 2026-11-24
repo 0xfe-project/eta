@@ -5,7 +5,7 @@ import { Menu, MenuItem, MenuSeparator, Popover, Sheet } from "nsh/base";
 import { Compact } from "./density";
 import { menuMotion } from "./motion";
 import { SmoothScroll } from "./smooth-scroll";
-import { colors, Screen } from "./theme";
+import { colors, focusRing, Screen } from "./theme";
 import { space } from "./tokens";
 
 /** The grabber atop a phone sheet. */
@@ -214,6 +214,7 @@ export function MenuFrame(props: {
         role="button"
         accessibilityState={{ expanded: opened() }}
         onPress={() => change(!opened())}
+        focusVisibleStyle={focusRing(c())}
         style={{ minWidth: 0 }}
       >
         {props.trigger}
@@ -282,6 +283,7 @@ export function MenuRow(props: {
           }}
           hoverStyle={hover}
           activeStyle={{ backgroundColor: c().selected }}
+          focusVisibleStyle={focusRing(c(), "inset")}
           style={{ cursor: "pointer", ...props.style }}
         >
           {props.children}
