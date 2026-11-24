@@ -128,6 +128,7 @@ interface TaskRow {
   archived_by: string | null;
   comments: number;
   run_status: string | null;
+  run_started_at: number | null;
 }
 
 interface ActivityRow {
@@ -159,6 +160,7 @@ const recordOf = (row: TaskRow): TaskRecord => ({
   worktreeBranch: row.worktree_branch,
   originConversationId: row.origin_conversation_id,
   runStatus: row.run_status as TaskRunStatus | null,
+  runStartedAt: row.run_started_at,
   createdBy:
     row.created_by_agent === null
       ? { kind: "user", agentId: null }
@@ -197,13 +199,14 @@ const activityOf = (row: ActivityRow): TaskActivityView => {
 };
 
 /**
- * A task with its comment count and its executor's newest run's status, which the board and every
- * card show: a mentioned agent answering is not the task running.
+ * A task with its comment count and its executor's newest run's status and start, which the board
+ * and every card show: a mentioned agent answering is not the task running.
  */
 const SELECT_TASK = `
   SELECT t.*,
          (SELECT COUNT(*) FROM task_activity a WHERE a.task_id = t.id AND a.kind = 'comment') AS comments,
-         (SELECT r.status FROM task_run r WHERE r.task_id = t.id AND r.agent_id IS NULL ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1) AS run_status
+         (SELECT r.status FROM task_run r WHERE r.task_id = t.id AND r.agent_id IS NULL ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1) AS run_status,
+         (SELECT COALESCE(r.started_at, r.created_at) FROM task_run r WHERE r.task_id = t.id AND r.agent_id IS NULL ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1) AS run_started_at
     FROM task t`;
 
 /** The kinds that put a task away and bring it back: the only entries that do not bring it back. */

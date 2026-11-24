@@ -1,4 +1,8 @@
-import type { ArtifactView, TaskDependencyView } from "@eta/client-contracts";
+import type {
+  ArtifactView,
+  TaskDependencyView,
+  TaskRunView,
+} from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
 import { signal, View } from "nsh";
@@ -27,7 +31,13 @@ import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
 import { actorLabel } from "../tasks/creator";
-import { activeTaskRun } from "../tasks/run-log";
+import {
+  activeTaskRun,
+  liveRuns,
+  runClock,
+  runDoingText,
+  runElapsed,
+} from "../tasks/run-log";
 import { statusName, TaskGlyph } from "../tasks/status";
 import { StatusSelect } from "../tasks/status-select";
 import { TaskDetailDialogs } from "../tasks/task-detail-dialogs";
@@ -59,6 +69,7 @@ export function PanelTask(props: {
   const state = createTaskDetailState({ ...props, docked: true });
   const { task, activity, log } = state;
   const fullGoal = signal(false);
+  const now = runClock(() => (task()?.runs ?? []).some(activeTaskRun));
   // Once, when the task and its timeline first show: later replies do not pull the reader down.
   let opened = false;
   const end = (node: ViewRef | null) => {
@@ -69,10 +80,13 @@ export function PanelTask(props: {
   return (
     <If when={task()} else={<DetailSkeleton label={uiText("loadingTask")} />}>
       {(item) => {
-        const run = () => {
-          const last = item().runs.at(-1);
-          return last && activeTaskRun(last) ? last : undefined;
-        };
+        // What is going on the task: one line per run that has not ended, each its own agent's.
+        const lines = () =>
+          liveRuns(item()).filter((line) => activeTaskRun(line.run));
+        const runName = (entry: TaskRunView) =>
+          (entry.agentId === null
+            ? state.executor()?.name
+            : host.agent(entry.agentId)?.name) ?? uiText("agent");
         const goal = () =>
           fullGoal() || item().description.length <= goalPreview
             ? item().description
@@ -234,8 +248,8 @@ export function PanelTask(props: {
               {/* A thread opens on its latest reply, next to the box to answer it, as on the web. */}
               <View ref={end} />
             </SmoothScroll>
-            <If when={run()}>
-              {(entry) => (
+            <Each of={lines()} key={(line) => line.run.id}>
+              {(line) => (
                 <View
                   style={{
                     ...row,
@@ -249,15 +263,18 @@ export function PanelTask(props: {
                   <Label
                     variant="caption"
                     weight={weight.strong}
-                    style={{ flex: 1 }}
+                    lines={1}
+                    style={{ flexShrink: 1 }}
                   >
-                    {uiText("agentIsWorking", {
-                      name: state.executor()?.name ?? uiText("agent"),
-                    })}
+                    {runDoingText(line().doing, runName(line().run))}
+                  </Label>
+                  <Label variant="caption" tone="muted" style={{ flex: 1 }}>
+                    {runElapsed(line().run, now())}
                   </Label>
                   <View
                     role="button"
-                    onPress={() => log.set(entry())}
+                    accessibilityLabel={`${uiText("executionLog")} · ${runName(line().run)}`}
+                    onPress={() => log.set(line().run)}
                     style={{ cursor: "pointer" }}
                   >
                     <Label variant="caption" tone="muted">
@@ -266,8 +283,8 @@ export function PanelTask(props: {
                   </View>
                   <View
                     role="button"
-                    accessibilityLabel={uiText("stop")}
-                    onPress={() => state.stop(entry())}
+                    accessibilityLabel={`${uiText("stop")} · ${runName(line().run)}`}
+                    onPress={() => state.stop(line().run)}
                     style={{ ...row, gap: space[4], cursor: "pointer" }}
                   >
                     <View
@@ -284,7 +301,7 @@ export function PanelTask(props: {
                   </View>
                 </View>
               )}
-            </If>
+            </Each>
             <TaskCommentHint
               state={state}
               style={{ paddingHorizontal: inset }}

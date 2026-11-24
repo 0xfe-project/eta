@@ -24,13 +24,15 @@ export function taskDay(at: number) {
 }
 
 /**
- * "Running 1 min". The board only knows when the task last moved, which a run's start does; a
- * comment during the run moves it too.
+ * "Running 1 min": since its executor's run started. A mentioned agent answering is not the task
+ * running, so its run does not restart the clock. A host older than `runStartedAt` only says when
+ * the task last moved, which a run's start does (and a comment during the run, too).
  */
 export function runningFor(task: BoardTaskView) {
+  const since = task.runStartedAt ?? task.updatedAt;
   const minutes = Math.max(
     1,
-    Math.floor(Math.abs(Date.now() - task.updatedAt) / 60_000),
+    Math.floor(Math.abs(Date.now() - since) / 60_000),
   );
   return uiText("taskRunningFor", {
     time:

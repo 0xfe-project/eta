@@ -396,9 +396,7 @@ export function TaskDetailDialogs(props: {
         {(run) => (
           <TaskRunLog
             run={task()?.runs.find((entry) => entry.id === run().id) ?? run()}
-            index={
-              task()?.runs.findIndex((entry) => entry.id === run().id) ?? 0
-            }
+            runs={task()?.runs ?? [run()]}
             executor={
               host.agent(run().agentId)?.name ?? executor()?.name ?? "Executor"
             }

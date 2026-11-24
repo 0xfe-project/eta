@@ -220,6 +220,7 @@ const viewOf = (task: TaskRecord, graph: TaskGraph): BoardTaskView => ({
   captainAssignmentId: task.captainAssignmentId,
   captainMessageId: task.captainMessageId,
   runStatus: task.runStatus,
+  runStartedAt: task.runStartedAt,
   dependsOn: dependsOnOf(graph, task.id),
   waitingOn: waitingOnOf(graph, task.id),
   parentId: task.parentId,

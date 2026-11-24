@@ -31,7 +31,7 @@ import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { ActorName } from "./creator";
 import { taskMoment } from "./facts";
-import { activeTaskRun } from "./run-log";
+import { activeTaskRun, latestExecutorRun } from "./run-log";
 import { statusName, TaskGlyph } from "./status";
 import { StatusSelect } from "./status-select";
 
@@ -294,7 +294,7 @@ export function TaskFields(detail: {
           ? "Own git worktree"
           : (item().workspace.path ?? "Project directory"),
       ],
-      ["Run", item().runs.at(-1)?.status ?? ""],
+      ["Run", latestExecutorRun(item())?.status ?? ""],
       ["Updated", relativeTime(item().updatedAt)],
     ].filter(([, value]) => value);
   return (
@@ -338,9 +338,9 @@ export function TaskFields(detail: {
   );
 }
 
-/** Where the task's latest run stands, in a word or two. */
+/** Where the task's latest run stands, in a word or two: its executor's, not a mentioned agent's answer. */
 export function taskRunText(item: BoardTaskDetail) {
-  const last = item.runs.at(-1);
+  const last = latestExecutorRun(item);
   if (!last) return uiText("taskNeverRun");
   if (activeTaskRun(last)) return uiText("running");
   if (last.status === "completed" && last.startedAt && last.finishedAt)
@@ -370,7 +370,7 @@ export function TaskRail(detail: {
   const executorId = () => item().assigneeAgentId ?? item().createdBy.agentId;
   const executor = () => host.agent(executorId());
   const parent = () => item().ancestors?.at(-1);
-  const run = () => item().runs.at(-1);
+  const run = () => latestExecutorRun(item());
   const runText = () => taskRunText(item());
   /** A stopped or finished run starts over from the rail; a running one has Stop instead. */
   const canStartOver = () =>
