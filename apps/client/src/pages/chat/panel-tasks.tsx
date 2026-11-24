@@ -11,10 +11,11 @@ import {
   Screen,
 } from "../../components";
 import { dotSize, StatusDot } from "../../components/status-dot";
-import { control, icon, sizes, space, weight } from "../../components/tokens";
+import { control, icon, sizes, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { taskTime } from "../tasks/facts";
+import { Segmented } from "../tasks/segmented";
 import {
   statusName,
   SubtaskSegments,
@@ -263,31 +264,6 @@ export function TasksTab(props: {
       onTask={props.onTask}
     />
   );
-  const scope = (label: string, selected: boolean, onPress: () => void) => (
-    <View
-      role="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      hoverStyle={{ backgroundColor: c().selected }}
-      style={{
-        paddingVertical: space[2],
-        paddingHorizontal: space[8],
-        borderWidth: 1,
-        borderColor: selected ? c().ink : c().border,
-        cursor: "pointer",
-      }}
-    >
-      <Label
-        variant="small"
-        weight={selected ? weight.strong : weight.regular}
-        tone={selected ? "ink" : "muted"}
-        lines={1}
-      >
-        {label}
-      </Label>
-    </View>
-  );
   return (
     // No side padding here: each part carries its own, so the rows can reach both edges.
     <View>
@@ -302,12 +278,14 @@ export function TasksTab(props: {
           borderColor: c().border,
         }}
       >
-        <View style={{ ...row, gap: space[4] }}>
-          {scope(uiText("thisGroup"), !everywhere(), () =>
-            everywhere.set(false),
-          )}
-          {scope(uiText("allGroups"), everywhere(), () => everywhere.set(true))}
-        </View>
+        <Segmented
+          options={[
+            { value: "this", label: uiText("thisGroup") },
+            { value: "all", label: uiText("allGroups") },
+          ]}
+          value={everywhere() ? "all" : "this"}
+          onChange={(value) => everywhere.set(value === "all")}
+        />
         <ActionMenu
           label={uiText("tasksSortBy")}
           sheetTitle={uiText("tasksSortBy")}
