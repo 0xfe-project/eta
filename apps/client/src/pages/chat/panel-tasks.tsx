@@ -24,30 +24,79 @@ import {
 } from "../tasks/status";
 import { cardUsage, UsageLine, usageShown, useLiveRate } from "../tasks/usage";
 import { setTaskPanelSort, taskPanelSort } from "./panel-sort";
+import {
+  latestChange,
+  needingYou,
+  parentOpen,
+  setParentOpen,
+  taskRoots,
+  treeRows,
+} from "./panel-tree";
 import { SectionHeading, ViewAll } from "./section-heading";
 
 const closed = (task: BoardTaskView) =>
   task.status === "done" || task.status === "cancelled";
 
-/** Tasks as a tree: each parent, by number, followed by its subtasks. */
-function taskTree(tasks: BoardTaskView[]) {
-  const ids = new Set(tasks.map((task) => task.id));
-  const sorted = [...tasks].sort((a, b) => a.number - b.number);
-  const rows: { task: BoardTaskView; depth: number }[] = [];
-  const visit = (task: BoardTaskView, depth: number) => {
-    rows.push({ task, depth });
-    for (const child of sorted.filter((entry) => entry.parentId === task.id))
-      visit(child, depth + 1);
-  };
-  for (const task of sorted)
-    if (!task.parentId || !ids.has(task.parentId)) visit(task, 0);
-  return rows;
+/** A parent's fold: its subtasks under it, or not. */
+export function SubtaskToggle(props: {
+  task: BoardTaskView;
+  open: boolean;
+  onToggle: () => void;
+  /** The side of its square: bigger on a phone, for a thumb. */
+  size?: number;
+}) {
+  const c = colors();
+  return (
+    <View
+      role="button"
+      accessibilityLabel={uiText(props.open ? "subtasksHide" : "subtasksShow", {
+        title: props.task.title,
+      })}
+      accessibilityState={{ expanded: props.open }}
+      onPress={props.onToggle}
+      hoverStyle={{ backgroundColor: c().strong }}
+      style={{
+        ...row,
+        justifyContent: "center",
+        width: props.size ?? 24,
+        height: props.size ?? 24,
+        marginRight: -6,
+        flexShrink: 0,
+        cursor: "pointer",
+      }}
+    >
+      <View
+        style={{ transform: props.open ? [{ rotate: "180deg" }] : undefined }}
+      >
+        <Icon name="down" size={10} tone="muted" />
+      </View>
+    </View>
+  );
 }
 
-/** The Context tab's Tasks section: open tasks, subtasks under their parent. */
+/** A parent's progress: a segment per subtask, then how many are done. */
+export function SubtaskProgress(props: {
+  task: BoardTaskView;
+  width?: number;
+}) {
+  const host = useHost();
+  return (
+    <>
+      <SubtaskSegments
+        subtasks={subtasksOf(host.tasks(), props.task)}
+        width={props.width}
+      />
+      <Label variant="caption" tone="muted" style={{ flexShrink: 0 }}>
+        {`${props.task.subtasks?.done ?? 0}/${props.task.subtasks?.total ?? 0}`}
+      </Label>
+    </>
+  );
+}
+
 /** A task's row in the context panel's list. */
 const contextRowHeight = 32;
 
+/** The Context tab's Tasks section: open tasks, each parent folded over its subtasks. */
 export function ContextTasks(props: {
   tasks: BoardTaskView[];
   onTask: (id: string) => void;
@@ -56,14 +105,24 @@ export function ContextTasks(props: {
 }) {
   const host = useHost();
   const c = colors();
-  const open = () => props.tasks.filter((task) => !closed(task));
+  const open = () =>
+    taskRoots(
+      props.tasks.filter((task) => !closed(task)),
+      host.tasks(),
+    );
   // The Tasks tab lists every unarchived task: offered when that is more than shown here.
-  const listed = () => props.tasks.filter((task) => !task.archivedAt);
-  const rows = () => taskTree(open()).slice(0, 6);
+  const listed = () =>
+    taskRoots(
+      props.tasks.filter((task) => !task.archivedAt),
+      host.tasks(),
+    ).roots;
+  const shown = () =>
+    [...open().roots].sort((a, b) => a.number - b.number).slice(0, 6);
+  const rows = () => treeRows(shown(), open().revealed, host.tasks());
   return (
     <View>
-      <SectionHeading label={uiText("tasks2")} count={open().length}>
-        <If when={listed().length > rows().length}>
+      <SectionHeading label={uiText("tasks2")} count={open().roots.length}>
+        <If when={listed().length > shown().length}>
           <ViewAll label={uiText("tasksViewAll")} onPress={props.onViewAll} />
         </If>
       </SectionHeading>
@@ -77,7 +136,7 @@ export function ContextTasks(props: {
             style={{
               ...row,
               height: contextRowHeight,
-              paddingLeft: entry().depth ? space[12] + icon.sm : space[12],
+              paddingLeft: space[12] + entry().depth * 22,
               paddingRight: space[12],
               gap: space[8],
               borderBottomWidth: 1,
@@ -93,17 +152,26 @@ export function ContextTasks(props: {
               {entry().task.title}
             </Label>
             <If
-              when={entry().task.subtasks?.total}
-              else={<TaskStatus task={entry().task} />}
+              when={entry().parent}
+              else={
+                <>
+                  <TaskStatus task={entry().task} />
+                  <Icon name="right" size={icon.sm} tone="muted" />
+                </>
+              }
             >
-              <SubtaskSegments
-                subtasks={subtasksOf(host.tasks(), entry().task)}
+              <If
+                when={!entry().open && needingYou(entry().task, host.tasks())}
+              >
+                <StatusDot color={c().warning} />
+              </If>
+              <SubtaskProgress task={entry().task} />
+              <SubtaskToggle
+                task={entry().task}
+                open={entry().open}
+                onToggle={() => setParentOpen(entry().task.id, !entry().open)}
               />
-              <Label variant="caption" tone="muted">
-                {`${entry().task.subtasks?.done ?? 0}/${entry().task.subtasks?.total ?? 0}`}
-              </Label>
             </If>
-            <Icon name="right" size={icon.sm} tone="muted" />
           </View>
         )}
       </Each>
@@ -174,6 +242,25 @@ export function TasksTab(props: {
           (everywhere() || task.conversationId === props.conversationId),
       )
       .sort((a, b) => b.updatedAt - a.updatedAt);
+  // Parents with their subtasks under them, placed and ordered as one: by the parent's status (its
+  // subtasks' own), and by when anything in it last changed.
+  const tree = () => taskRoots(tasks(), host.tasks());
+  const roots = () => {
+    const all = host.tasks();
+    return tree()
+      .roots.map((task) => ({ task, at: latestChange(task, all) }))
+      .sort((a, b) => b.at - a.at)
+      .map((entry) => entry.task);
+  };
+  const branch = (task: BoardTaskView, timeFirst?: boolean) => (
+    <TaskBranch
+      task={task}
+      depth={0}
+      revealed={tree().revealed}
+      timeFirst={timeFirst}
+      onTask={props.onTask}
+    />
+  );
   const scope = (label: string, selected: boolean, onPress: () => void) => (
     <View
       role="button"
@@ -261,22 +348,16 @@ export function TasksTab(props: {
       <If when={taskPanelSort() === "updated"}>
         <View style={{ height: space[2] }} />
         <Each
-          of={tasks().filter((task) => !closed(task))}
+          of={roots().filter((task) => !closed(task))}
           key={(task) => task.id}
         >
-          {(task) => (
-            <TaskRow
-              task={task()}
-              timeFirst
-              onPress={() => props.onTask(task().id)}
-            />
-          )}
+          {(task) => branch(task(), true)}
         </Each>
       </If>
       <Each of={taskPanelSort() === "needs" ? sections : []}>
         {(section, index) => {
           const items = () =>
-            tasks().filter((task) =>
+            roots().filter((task) =>
               (section()[1] as readonly BoardTaskStatus[]).includes(
                 task.status,
               ),
@@ -295,12 +376,7 @@ export function TasksTab(props: {
                 {`${uiText(section()[0])} ${items().length}`}
               </Label>
               <Each of={items()} key={(task) => task.id}>
-                {(task) => (
-                  <TaskRow
-                    task={task()}
-                    onPress={() => props.onTask(task().id)}
-                  />
-                )}
+                {(task) => branch(task())}
               </Each>
             </If>
           );
@@ -309,7 +385,7 @@ export function TasksTab(props: {
       <Each of={folded}>
         {(group, index) => {
           const items = () =>
-            tasks().filter((task) => task.status === group()[0]);
+            roots().filter((task) => task.status === group()[0]);
           const expanded = () => open().includes(group()[0]);
           return (
             <If when={items().length}>
@@ -344,13 +420,7 @@ export function TasksTab(props: {
               </View>
               <If when={expanded()}>
                 <Each of={items()} key={(task) => task.id}>
-                  {(task) => (
-                    <TaskRow
-                      task={task()}
-                      timeFirst={taskPanelSort() === "updated"}
-                      onPress={() => props.onTask(task().id)}
-                    />
-                  )}
+                  {(task) => branch(task(), taskPanelSort() === "updated")}
                 </Each>
               </If>
             </If>
@@ -386,16 +456,123 @@ function PanelRate(props: { task: BoardTaskView }) {
   );
 }
 
+/** A task and, when it is open, its subtasks under it, each its own branch. */
+function TaskBranch(props: {
+  task: BoardTaskView;
+  depth: number;
+  revealed: Set<string>;
+  timeFirst?: boolean | undefined;
+  onTask: (id: string) => void;
+}) {
+  const host = useHost();
+  const children = () => subtasksOf(host.tasks(), props.task);
+  const open = () =>
+    parentOpen(props.task.id, props.revealed.has(props.task.id));
+  const toggle = () =>
+    children().length
+      ? { open: open(), onToggle: () => setParentOpen(props.task.id, !open()) }
+      : undefined;
+  return (
+    <>
+      <If
+        when={props.depth === 0}
+        else={
+          <SubtaskRow
+            task={props.task}
+            depth={props.depth}
+            toggle={toggle()}
+            onPress={() => props.onTask(props.task.id)}
+          />
+        }
+      >
+        <TaskRow
+          task={props.task}
+          timeFirst={props.timeFirst}
+          toggle={toggle()}
+          onPress={() => props.onTask(props.task.id)}
+        />
+      </If>
+      <If when={open() && children().length}>
+        <Each of={children()} key={(task) => task.id}>
+          {(child) => (
+            <TaskBranch
+              task={child()}
+              depth={props.depth + 1}
+              revealed={props.revealed}
+              onTask={props.onTask}
+            />
+          )}
+        </Each>
+      </If>
+    </>
+  );
+}
+
+/** A subtask under its open parent: its mark, number, title and status, a step in. */
+function SubtaskRow(props: {
+  task: BoardTaskView;
+  depth: number;
+  toggle?: { open: boolean; onToggle: () => void } | undefined;
+  onPress: () => void;
+}) {
+  const c = colors();
+  return (
+    <View
+      role="button"
+      accessibilityLabel={props.task.title}
+      onPress={props.onPress}
+      hoverStyle={{ backgroundColor: c().selected }}
+      style={{
+        ...row,
+        height: 34,
+        gap: 8,
+        flexShrink: 0,
+        // Under the parent's title: the inset, its 14px mark and the 10px gap, a step per level.
+        paddingLeft: inset + 24 * props.depth,
+        paddingRight: inset,
+        cursor: "pointer",
+      }}
+    >
+      <TaskGlyph status={props.task.status} size={12} />
+      <Label variant="caption" tone="muted" style={{ flexShrink: 0 }}>
+        {`#${props.task.number}`}
+      </Label>
+      <Label variant="small" lines={1} style={{ flex: 1 }}>
+        {props.task.title}
+      </Label>
+      <If when={props.toggle} else={<TaskStatus task={props.task} />}>
+        {(toggle) => (
+          <>
+            <SubtaskProgress task={props.task} />
+            <SubtaskToggle
+              task={props.task}
+              open={toggle().open}
+              onToggle={toggle().onToggle}
+            />
+          </>
+        )}
+      </If>
+    </View>
+  );
+}
+
 function TaskRow(props: {
   task: BoardTaskView;
   /** Sorted by Recently updated: the time leads the second line, in ink. */
-  timeFirst?: boolean;
+  timeFirst?: boolean | undefined;
+  /** A parent's fold, beside its progress. */
+  toggle?: { open: boolean; onToggle: () => void } | undefined;
   onPress: () => void;
 }) {
   const layout = Screen();
   const host = useHost();
   const c = colors();
   const task = () => props.task;
+  // A parent's time is its newest subtask's: what moved in it last.
+  const changed = () =>
+    taskTime({ ...task(), updatedAt: latestChange(task(), host.tasks()) });
+  const waiting = () =>
+    props.toggle && !props.toggle.open ? needingYou(task(), host.tasks()) : 0;
   const executor = () =>
     host.agent(task().assigneeAgentId ?? task().createdBy.agentId)?.name;
   // `taskTime`, not the routines' `runAgo`: that one needs `Intl.RelativeTimeFormat`, which the
@@ -403,7 +580,7 @@ function TaskRow(props: {
   const meta = () =>
     (props.timeFirst
       ? [`#${task().number}`, executor()]
-      : [`#${task().number}`, executor(), taskTime(task())]
+      : [`#${task().number}`, executor(), changed()]
     )
       .filter(Boolean)
       .join(" · ");
@@ -438,7 +615,7 @@ function TaskRow(props: {
         <View style={{ ...row, minWidth: 0 }}>
           <If when={props.timeFirst}>
             <Label variant="caption" lines={1} style={{ flexShrink: 0 }}>
-              {taskTime(task())}
+              {changed()}
             </Label>
             <Label
               variant="caption"
@@ -456,6 +633,18 @@ function TaskRow(props: {
           >
             {meta()}
           </Label>
+          <If when={waiting()}>
+            <Label
+              variant="caption"
+              tone="muted"
+              style={{ flexShrink: 0, marginHorizontal: 4 }}
+            >
+              ·
+            </Label>
+            <Label variant="caption" tone="warning" style={{ flexShrink: 0 }}>
+              {uiText("subtasksNeedYou", { count: waiting() })}
+            </Label>
+          </If>
           <If when={usageShown() && cardUsage(task())}>
             <Label
               variant="caption"
@@ -478,13 +667,16 @@ function TaskRow(props: {
         <PanelRate task={task()} />
       </If>
       <If when={task().subtasks?.total}>
-        <SubtaskSegments
-          subtasks={subtasksOf(host.tasks(), task())}
-          width={dotSize}
-        />
-        <Label variant="small" tone="muted">
-          {`${task().subtasks?.done ?? 0}/${task().subtasks?.total ?? 0}`}
-        </Label>
+        <SubtaskProgress task={task()} width={dotSize} />
+      </If>
+      <If when={props.toggle}>
+        {(toggle) => (
+          <SubtaskToggle
+            task={task()}
+            open={toggle().open}
+            onToggle={toggle().onToggle}
+          />
+        )}
       </If>
       <If when={!task().subtasks?.total}>
         <If when={waitingFor()}>
