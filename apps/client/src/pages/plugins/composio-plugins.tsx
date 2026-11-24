@@ -3,6 +3,7 @@ import { effect, signal, untracked, View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { hint } from "../../components/controls";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -57,7 +58,7 @@ export function ComposioPluginSwitch(props: {
       <View
         testID="composio-plugin-switch"
         tooltip={hint(words(), c)}
-        style={{ ...row, gap: 8, flex: 1, minWidth: 0 }}
+        style={{ ...row, gap: space[8], flex: 1, minWidth: 0 }}
       >
         <View style={{ flexShrink: 0 }}>
           <ToggleSwitch

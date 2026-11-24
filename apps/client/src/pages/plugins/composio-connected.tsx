@@ -3,7 +3,7 @@ import type { Layout } from "../../components";
 import { effect, openUrl, signal, untracked, View } from "nsh";
 import { Button, colors, Label, row } from "../../components";
 import { hint } from "../../components/controls";
-import { control, space } from "../../components/tokens";
+import { avatar, control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
@@ -187,14 +187,14 @@ export function ComposioConnected(props: {
         ...row,
         alignItems: "center",
         justifyContent: "flex-end",
-        gap: 4,
-        minHeight: divided ? 36 : 24,
+        gap: space[4],
+        minHeight: divided ? 36 : space[24], // design-value: 36px divided action row, not on the space scale
         ...(divided
           ? {
               borderTopWidth: 1,
               borderColor: c().border,
-              paddingTop: 8,
-              marginTop: 10,
+              paddingTop: space[8],
+              marginTop: 10, // design-value: 10px above the divided action row, not on the space scale
             }
           : {}),
       }}
@@ -228,7 +228,7 @@ export function ComposioConnected(props: {
         tooltip={failed() ? hint(uiText("composioPluginError"), c) : undefined}
         style={{
           flexShrink: 0,
-          paddingHorizontal: 6,
+          paddingHorizontal: 6, // design-value: 6px badge padding, not on the space scale
           paddingVertical: 1,
           backgroundColor: c()[look().fill],
         }}
@@ -245,17 +245,20 @@ export function ComposioConnected(props: {
   };
   /** A card the user switched off for every agent is shown one step fainter. */
   const faint = (item: Connected) => ({
-    opacity: viewOf(item.slug)?.enabled === false ? 0.55 : 1,
+    opacity: viewOf(item.slug)?.enabled === false ? 0.55 : 1, // design-value: a switched-off card, fainter than muted and not disabled
   });
   return (
     <If when={shown().length}>
-      <View testID="composio-connected-group" style={{ gap: rows() ? 0 : 8 }}>
+      <View
+        testID="composio-connected-group"
+        style={{ gap: rows() ? 0 : space[8] }}
+      >
         <View
           style={{
-            gap: 2,
+            gap: space[2],
             paddingHorizontal: rows() ? inset() : 0,
-            paddingTop: rows() ? 16 : 0,
-            paddingBottom: rows() ? 6 : 0,
+            paddingTop: rows() ? space[16] : 0,
+            paddingBottom: rows() ? 6 : 0, // design-value: 6px under the group title, not on the space scale
             borderBottomWidth: rows() ? 1 : 0,
             borderColor: c().border,
           }}
@@ -286,7 +289,7 @@ export function ComposioConnected(props: {
                 ...row,
                 flexWrap: "wrap",
                 alignItems: "flex-start",
-                gap: 12,
+                gap: space[12],
               }}
             >
               <Each of={shown()} key={(item) => item.slug}>
@@ -296,14 +299,14 @@ export function ComposioConnected(props: {
                     accessibilityLabel={item().name}
                     style={{
                       ...faint(item()),
-                      width: 267,
-                      padding: 12,
+                      width: 267, // design-value: card width, as on the market's cards
+                      padding: space[12],
                       backgroundColor: c().canvas,
                       borderWidth: 1,
                       borderColor: c().border,
                     }}
                   >
-                    <View style={{ ...row, gap: 8 }}>
+                    <View style={{ ...row, gap: space[8] }}>
                       <PluginLogo name={item().name} composio={item().slug} />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <PluginName name={item().name} />
@@ -315,7 +318,7 @@ export function ComposioConnected(props: {
                       variant="small"
                       tone="muted"
                       lines={2}
-                      style={{ height: 36, marginTop: 12 }}
+                      style={{ height: 36, marginTop: space[12] }} // design-value: two lines of small text, 36px high
                     >
                       {item().description}
                     </Label>
@@ -342,16 +345,16 @@ export function ComposioConnected(props: {
                   <View
                     style={{
                       ...row,
-                      height: 60,
-                      gap: 12,
+                      height: 60, // design-value: row height, as on the market's rows
+                      gap: space[12],
                       paddingLeft: inset(),
-                      paddingRight: 12,
+                      paddingRight: space[12],
                     }}
                   >
                     <PluginLogo
                       name={item().name}
                       composio={item().slug}
-                      size={32}
+                      size={avatar.lg}
                     />
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <PluginName name={item().name} />
@@ -361,8 +364,8 @@ export function ComposioConnected(props: {
                   <View
                     style={{
                       paddingLeft: inset(),
-                      paddingRight: 12,
-                      paddingBottom: 10,
+                      paddingRight: space[12],
+                      paddingBottom: 10, // design-value: 10px under the footer, not on the space scale
                     }}
                   >
                     {footer(item())}

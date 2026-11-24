@@ -7,7 +7,7 @@ import { effect, Image, signal, untracked, View } from "nsh";
 import { colors, Label } from "../../components";
 import { useHost } from "../../services/host";
 import { avatarFill, avatarInitial, avatarInk } from "./avatar-color";
-import { avatar, icon, weight } from "../../components/tokens";
+import { avatar, weight } from "../../components/tokens";
 
 const found = new Map<string, Signal<string | null | undefined>>();
 

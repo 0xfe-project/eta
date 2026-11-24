@@ -190,22 +190,24 @@ export function AgentPlugins(props: { form: AgentForm }) {
                       : list.filter((entry) => entry !== item().name),
                   )
                 }
-                size={16}
-                markSize={phoneEditor() ? 10 : 12}
-                indicatorStyle={{ margin: phoneEditor() ? 6 : 4 }}
+                size={icon.md}
+                // design-value: 10px mark in the phone's larger checkbox, between icon sizes
+                markSize={phoneEditor() ? 10 : icon.sm}
+                // design-value: 6px inset of the phone's larger checkbox, not on the space scale
+                indicatorStyle={{ margin: phoneEditor() ? 6 : space[4] }}
                 style={{
                   ...row,
                   alignItems: "flex-start",
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
-                  gap: 10,
+                  paddingHorizontal: space[16],
+                  paddingVertical: space[8],
+                  gap: 10, // design-value: 10px between the checkbox and the text, not on the space scale
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   cursor: usable() || checked() ? "pointer" : "default",
-                  opacity: item().enabled ? 1 : 0.55,
+                  opacity: item().enabled ? 1 : 0.55, // design-value: a switched-off row, fainter than muted and not disabled
                 }}
               >
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                   <Label weight={500}>{item().name}</Label>
                   {/* The same mark and words as an installed plugin's row: the phone's status line under the name; otherwise the lane, at the right end of the line of the name (below). */}
                   <If when={phoneEditor() && !item().enabled}>
@@ -229,6 +231,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
                 </View>
                 <If when={!phoneEditor() && !item().enabled}>
                   <View testID="composio-plugin-off" style={{ flexShrink: 0 }}>
+                    {/* design-value: the status lane's own width, as on the installed plugin row */}
                     <StatusLane width={108} status={off()} />
                   </View>
                 </If>

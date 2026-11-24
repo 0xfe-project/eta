@@ -790,16 +790,16 @@ export function Market(props: {
                     accessibilityLabel={item().name}
                     onPress={() => detail.set(toolkitKey(item()))}
                     style={{
-                      width: phone() ? undefined : 267,
+                      width: phone() ? undefined : 267, // design-value: card width, as on the installed page's Composio cards
                       flex: phone() ? 1 : undefined,
-                      padding: 12,
-                      gap: 6,
+                      padding: space[12],
+                      gap: 6, // design-value: 6px between a card's lines, not on the space scale
                       backgroundColor: c().canvas,
                       borderWidth: 1,
                       borderColor: c().border,
                     }}
                   >
-                    <View style={{ ...row, gap: 8 }}>
+                    <View style={{ ...row, gap: space[8] }}>
                       <PluginLogo name={item().name} composio={item().slug} />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <PluginName name={item().name} />
@@ -813,7 +813,11 @@ export function Market(props: {
                     </Label>
                     {/* The mark sits where the other sources' markers do: the card's bottom right, on the source's line. */}
                     <View
-                      style={{ ...row, gap: 8, minHeight: type("small").line }}
+                      style={{
+                        ...row,
+                        gap: space[8],
+                        minHeight: type("small").line,
+                      }}
                     >
                       <View style={grow}>
                         <Label variant="caption" tone="muted" lines={1}>
@@ -944,16 +948,18 @@ export function Market(props: {
           {...sheet(currentToolkit()!.name, 512, () => detail.set(""))}
           hideHeader
         >
+          {/* design-value: the detail's scroll height, as the other detail sheets */}
           <SmoothScroll style={{ maxHeight: 440 }} scrollbar={false}>
+            {/* design-value: 10px and 6px in the detail's body, not on the space scale */}
             <View style={{ gap: 10, paddingTop: 6, ...inset() }}>
               <View
                 testID="market-detail-header"
-                style={{ ...row, gap: 12, alignItems: "center" }}
+                style={{ ...row, gap: space[12], alignItems: "center" }}
               >
                 <PluginLogo
                   name={currentToolkit()!.name}
                   composio={currentToolkit()!.slug}
-                  size={40}
+                  size={avatar.xl}
                 />
                 <View
                   tooltip={hint(currentToolkit()!.name, c)}
@@ -963,6 +969,7 @@ export function Market(props: {
                     {currentToolkit()!.name}
                   </Label>
                 </View>
+                {/* design-value: the close button's icon, between icon sizes */}
                 <CloseButton onPress={() => detail.set("")} iconSize={14} />
               </View>
               <Label
@@ -1026,9 +1033,9 @@ export function Market(props: {
             style={{
               ...row,
               justifyContent: "flex-end",
-              gap: 8,
-              paddingTop: 10,
-              paddingBottom: phone() ? 24 : 0,
+              gap: space[8],
+              paddingTop: 10, // design-value: 10px above the buttons, not on the space scale
+              paddingBottom: phone() ? space[24] : 0,
               ...inset(),
             }}
           >

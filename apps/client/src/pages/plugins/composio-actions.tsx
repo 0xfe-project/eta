@@ -1,6 +1,7 @@
 import type { PluginResults } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { Button, Label, Modal } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -59,6 +60,7 @@ export function ComposioDisconnect(props: {
   return (
     <Modal
       title={uiText("composioDisconnectTitle", { name: props.name })}
+      // design-value: dialog width, as the other disconnect-style dialogs
       width={432}
       phone={props.phone}
       sheet={props.phone}
@@ -67,7 +69,8 @@ export function ComposioDisconnect(props: {
       dismissible={!busy()}
       onClose={props.onClose}
     >
-      <View style={{ padding: 16, gap: 10 }}>
+      {/* design-value: 10px between the dialog's lines, not on the space scale */}
+      <View style={{ padding: space[16], gap: 10 }}>
         <Label>{uiText("composioDisconnectBody", { name: props.name })}</Label>
         <If when={failed()}>
           <Label tone="red">{uiText("composioDisconnectFailed")}</Label>
