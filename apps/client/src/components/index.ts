@@ -6,6 +6,7 @@ export {
   DetailSkeleton,
   ListSkeleton,
   MessagesSkeleton,
+  Revealed,
 } from "./loading-skeleton";
 export { dialogWidth, Modal } from "./modal";
 export { PaneHandle } from "./pane-handle";

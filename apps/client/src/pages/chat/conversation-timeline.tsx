@@ -17,6 +17,7 @@ import {
   Label,
   MessagesSkeleton,
 } from "../../components";
+import { settled } from "../../components/pending";
 import { wheelScroll } from "../../components/scroll-follow";
 import {
   control,
@@ -220,9 +221,11 @@ export function ConversationTimeline(props: {
       if (actions.get(id) === focus) actions.delete(id);
     };
   }
+  // The skeleton, once it appeared, stays its least time before the messages (#380).
+  const loaded = settled(() => props.loaded);
   return (
     <If
-      when={props.loaded && !props.noCachedMessages}
+      when={loaded() && !props.noCachedMessages}
       else={
         <If
           when={props.noCachedMessages}

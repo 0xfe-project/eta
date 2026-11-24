@@ -34,3 +34,13 @@ export function shownWhile(busy: () => boolean): () => boolean {
   cleanup(() => clearTimeout(timer));
   return shown;
 }
+
+/**
+ * Whether what a region waits for may be drawn: `ready`, and the skeleton that stood in for it
+ * (if one appeared) has had its `motion.minShown`. Until then the region keeps its skeleton,
+ * which draws itself only after `motion.reveal` (loading-skeleton.tsx).
+ */
+export function settled(ready: () => boolean): () => boolean {
+  const waiting = shownWhile(() => !ready());
+  return () => ready() && !waiting();
+}

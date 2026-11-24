@@ -25,6 +25,7 @@ import {
   SmoothScroll,
   textFaces,
 } from "../../../components";
+import { settled } from "../../../components/pending";
 import {
   control,
   icon,
@@ -415,9 +416,11 @@ export function Skills(props: {
     paddingVertical: space[40],
   } as const;
   const emptyWidth = () => (tablet() ? 220 : phone() ? 240 : 260);
+  // The skeleton, once it appeared, stays its least time before the skills (#380).
+  const loaded = settled(() => !loading());
   const emptyState = () => (
     <If
-      when={!loading()}
+      when={loaded()}
       else={
         <ListSkeleton
           label={uiText("loadingSkills")}
