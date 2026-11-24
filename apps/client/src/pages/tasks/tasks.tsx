@@ -23,6 +23,7 @@ import {
   textStyle,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { foldNext } from "../../components/motion";
 import { settled } from "../../components/pending";
 import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -118,12 +119,14 @@ export function Tasks(props: {
     view() === "List" &&
     !archive() &&
     (props.layout !== "desktop" || listGrouping() === "Part of");
-  const collapse = (status: string) =>
+  const collapse = (status: string) => {
+    foldNext();
     expanded.update((items) =>
       items.includes(status)
         ? items.filter((entry) => entry !== status)
         : [...items, status],
     );
+  };
   /** The no-tasks and no-match states, drawn larger and bolder on desktop and tablet. */
   const designed = () =>
     !phone() && !host.state().missing.tasks && !!host.state().targets.tasks;

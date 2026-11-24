@@ -1,5 +1,6 @@
 import type { CaptainResults, ProvidersView } from "@eta/client-contracts";
 import type { Layout } from "../components";
+import type { MotionFrom } from "../components/motion";
 import type { Flavor, PaletteId } from "../components/palettes";
 import type { Page } from "../navigation/routes";
 import type { ChatWidth, Theme } from "../pages/settings/appearance";
@@ -14,8 +15,9 @@ import {
   View,
   windowSize,
 } from "nsh";
-import { fill, grow, keyboardShown, row, sizes } from "../components";
+import { colors, fill, grow, keyboardShown, row, sizes } from "../components";
 import { useModels } from "../components/model-select";
+import { fadeIn, motion, passing, pushed } from "../components/motion";
 import { ChatList } from "../navigation/chat-list";
 import { link, workspaceLocation } from "../navigation/location";
 import { PhoneNavigation } from "../navigation/phone-tabs";
@@ -58,6 +60,7 @@ export function Workspace(props: {
   onConnect: () => void;
 }) {
   const host = useHost();
+  const c = colors();
   const start = workspaceLocation();
   const page = signal<Page>(
     start.page === "settings" || start.page === "onboard" ? "chat" : start.page,
@@ -87,25 +90,63 @@ export function Workspace(props: {
           : undefined;
   const routineId = signal("");
   const task = signal("");
+  const phone = () => props.layout === "phone";
+  // On a phone a page pushed in (a conversation over the chat list, a task, Settings) comes in
+  // over the page it opened from and goes back off it: both are drawn while it moves. A page of
+  // More or Routines, which takes the place of the one before, fades in from the trailing edge,
+  // and the one before, coming back, from the leading edge. Tab changes and the larger layouts
+  // change at once, as before.
+  const pane = passing();
+  function step(from: MotionFrom) {
+    if (phone()) void pane.play(fadeIn(from, motion.pageIn), true);
+  }
+  const chatPush = pushed();
+  const taskPush = pushed();
+  const settingsPush = pushed();
+  /** The task going back off the page it opened from, drawn while it goes. */
+  let leavingTask = "";
+  /** A task changed in the layer it opened in: it comes in over the page under it, or another
+   * takes its place. On the Tasks page the page itself does the same. */
+  const taskLayer = () => phone() && page() !== "tasks";
   const taskBackStack: string[] = [];
   function openTask(id: string) {
     taskBackStack.length = 0;
+    const was = task();
     task.set(id);
+    if (!id || !taskLayer()) taskPush.settle();
+    else if (!was) void taskPush.enter();
+    else if (was !== id) taskPush.swap("end");
   }
   function openRelatedTask(id: string) {
     if (id === task()) return;
     if (task()) taskBackStack.push(task());
     task.set(id);
+    if (taskLayer()) taskPush.swap("end");
   }
   function closeTask() {
-    task.set(taskBackStack.pop() ?? "");
+    const was = task();
+    const next = taskBackStack.pop() ?? "";
+    task.set(next);
+    if (!taskLayer()) return;
+    if (next) taskPush.swap("start");
+    else if (was) {
+      leavingTask = was;
+      void taskPush.leave();
+    }
+  }
+  /** On a phone, the conversation comes in over the chat list or goes back off it. */
+  let leavingChat = "";
+  function showConversation(shown: boolean) {
+    if (!shown) leavingChat = conversation();
+    if (phone() && shown !== mobileOpen())
+      void (shown ? chatPush.enter() : chatPush.leave());
+    mobileOpen.set(shown);
   }
   const newGroup = signal(false);
   const newTask = signal(false);
   const setup = signal(start.page === "onboard");
   let checkedSetup = false;
   const models = useModels();
-  const phone = () => props.layout === "phone";
   const phoneTabs = () => phone() && !keyboardShown();
   const waitingForHost = () =>
     phone() &&
@@ -136,7 +177,7 @@ export function Workspace(props: {
         setup.set(next.page === "onboard");
         settings.set(next.page === "settings" ? "Agents" : undefined);
         conversation.set(next.conversation);
-        mobileOpen.set(Boolean(next.conversation));
+        showConversation(Boolean(next.conversation));
       }),
     );
   // The groups opened before this one, newest last: archiving the open group goes back to them.
@@ -146,14 +187,17 @@ export function Workspace(props: {
     page.set("chat");
     if (conversation() && conversation() !== id) previous.push(conversation());
     conversation.set(id);
-    mobileOpen.set(true);
+    showConversation(true);
     link("chat", id);
   }
   function back() {
-    mobileOpen.set(false);
+    showConversation(false);
     link("chat");
   }
+  /** The section Settings goes back off the page under it with. */
+  let leavingSettings: SettingsSection = "Agents";
   function showSettings(section: SettingsSection = "Agents") {
+    if (phone() && !settings()) void settingsPush.enter();
     settings.set(section);
     link("settings");
   }
@@ -174,6 +218,8 @@ export function Workspace(props: {
       return;
     }
     settings.set(undefined);
+    settingsPush.settle();
+    chatPush.settle();
     page.set(next);
     mobileOpen.set(false);
     link(next);
@@ -181,6 +227,7 @@ export function Workspace(props: {
   function showRoutine(id?: string) {
     routineId.set(id ?? "");
     navigate("routines");
+    step("end");
   }
   const activeId = () => (page() === "captain" ? captain() : conversation());
   function leaveUnavailableChat() {
@@ -222,8 +269,14 @@ export function Workspace(props: {
     conversation.set("");
     if (!phone()) link("chat");
   }
+  /** The conversation drawn: the open one, or on a phone the one going back off the list. */
+  const shownChat = () =>
+    page() === "chat" && phone() && !mobileOpen() && chatPush.leaving()
+      ? leavingChat
+      : activeId();
   const conversationVisible = () =>
-    Boolean(activeId()) && (page() === "captain" || !phone() || mobileOpen());
+    Boolean(shownChat()) &&
+    (page() === "captain" || !phone() || mobileOpen() || chatPush.leaving());
   effect(() => {
     const providers = host.section<ProvidersView>("providers", "config");
     if (
@@ -261,6 +314,61 @@ export function Workspace(props: {
         void openCaptain();
       });
   });
+  /** The open conversation, Captain's, or the empty page. */
+  const chat = () => (
+    <If
+      when={conversationVisible()}
+      else={
+        <If
+          when={page() === "chat" && !phone() && captain()}
+          else={
+            <ConversationEmpty
+              captain={page() === "captain"}
+              onCreate={() => newGroup.set(true)}
+            />
+          }
+        >
+          <Conversation
+            id={captain()}
+            layout={props.layout}
+            captain
+            onPending={() => navigate("pending")}
+            onTask={openTask}
+            onAccessLost={leaveUnavailableChat}
+            onRelatedTask={openRelatedTask}
+            onRoutines={showRoutine}
+            contentWidth={conversationWidth()}
+            alignComposer={narrowChat()}
+            rail={props.chatRail}
+            taskId={task()}
+            onCloseTask={closeTask}
+          />
+        </If>
+      }
+    >
+      <Each of={[shownChat()]}>
+        {(id) => (
+          <Conversation
+            id={id()}
+            onReadDraft={() => mobileOpen.set(true)}
+            captain={page() === "captain"}
+            layout={props.layout}
+            onPending={() => navigate("pending")}
+            onTask={openTask}
+            onAccessLost={leaveUnavailableChat}
+            onRelatedTask={openRelatedTask}
+            onRoutines={showRoutine}
+            contentWidth={conversationWidth()}
+            alignComposer={narrowChat()}
+            rail={props.chatRail}
+            taskId={task()}
+            onCloseTask={closeTask}
+            onBack={phone() && page() === "chat" ? back : undefined}
+          />
+        )}
+      </Each>
+    </If>
+  );
   const workspace = () => (
     <View style={grow}>
       <If
@@ -306,6 +414,7 @@ export function Workspace(props: {
             ...row,
             ...grow,
             alignItems: "stretch",
+            ...pane.style(),
             display: props.layout === "tablet" && settings() ? "none" : "flex",
             visibility:
               props.layout === "tablet" && settings() ? "hidden" : "visible",
@@ -314,7 +423,8 @@ export function Workspace(props: {
           <If
             when={
               (page() === "chat" &&
-                (props.layout === "tablet" || (phone() && !mobileOpen()))) ||
+                (props.layout === "tablet" ||
+                  (phone() && (!mobileOpen() || chatPush.under())))) ||
               (page() === "captain" && props.layout === "tablet")
             }
           >
@@ -331,61 +441,22 @@ export function Workspace(props: {
           </If>
           <If
             when={
-              (page() === "chat" && (!phone() || mobileOpen())) ||
+              (page() === "chat" &&
+                (!phone() || mobileOpen() || chatPush.leaving())) ||
               page() === "captain"
             }
           >
-            <If
-              when={conversationVisible()}
-              else={
-                <If
-                  when={page() === "chat" && !phone() && captain()}
-                  else={
-                    <ConversationEmpty
-                      captain={page() === "captain"}
-                      onCreate={() => newGroup.set(true)}
-                    />
-                  }
-                >
-                  <Conversation
-                    id={captain()}
-                    layout={props.layout}
-                    captain
-                    onPending={() => navigate("pending")}
-                    onTask={openTask}
-                    onAccessLost={leaveUnavailableChat}
-                    onRelatedTask={openRelatedTask}
-                    onRoutines={showRoutine}
-                    contentWidth={conversationWidth()}
-                    alignComposer={narrowChat()}
-                    rail={props.chatRail}
-                    taskId={task()}
-                    onCloseTask={closeTask}
-                  />
-                </If>
-              }
-            >
-              <Each of={[activeId()]}>
-                {(id) => (
-                  <Conversation
-                    id={id()}
-                    onReadDraft={() => mobileOpen.set(true)}
-                    captain={page() === "captain"}
-                    layout={props.layout}
-                    onPending={() => navigate("pending")}
-                    onTask={openTask}
-                    onAccessLost={leaveUnavailableChat}
-                    onRelatedTask={openRelatedTask}
-                    onRoutines={showRoutine}
-                    contentWidth={conversationWidth()}
-                    alignComposer={narrowChat()}
-                    rail={props.chatRail}
-                    taskId={task()}
-                    onCloseTask={closeTask}
-                    onBack={phone() && page() === "chat" ? back : undefined}
-                  />
-                )}
-              </Each>
+            <If when={phone() && page() === "chat"} else={chat()}>
+              <View
+                style={{
+                  ...fill,
+                  backgroundColor: c().canvas,
+                  ...chatPush.style(),
+                  pointerEvents: chatPush.leaving() ? "none" : "auto",
+                }}
+              >
+                {chat()}
+              </View>
             </If>
           </If>
           <If when={page() === "tasks"}>
@@ -403,13 +474,27 @@ export function Workspace(props: {
               onCaptain={() => navigate("captain")}
               initialId={routineId()}
               layout={props.layout}
-              onBack={phone() ? () => navigate("pending") : undefined}
+              onBack={
+                phone()
+                  ? () => {
+                      navigate("pending");
+                      step("start");
+                    }
+                  : undefined
+              }
             />
           </If>
           <If when={page() === "plugins"}>
             <Plugins
               layout={props.layout}
-              onBack={phone() ? () => navigate("more") : undefined}
+              onBack={
+                phone()
+                  ? () => {
+                      navigate("more");
+                      step("start");
+                    }
+                  : undefined
+              }
             />
           </If>
           <If when={page() === "pending"}>
@@ -423,7 +508,10 @@ export function Workspace(props: {
           <If when={page() === "more"}>
             <More
               layout={props.layout}
-              onNavigate={navigate}
+              onNavigate={(next) => {
+                navigate(next);
+                step("end");
+              }}
               onSettings={() => showSettings()}
             />
           </If>
@@ -446,46 +534,59 @@ export function Workspace(props: {
           }}
         />
       </If>
-      <If when={settings()}>
-        {(section) => (
-          <View
-            style={{
-              ...fill,
-              zIndex: paneOrder.settings,
-              left: props.layout === "tablet" ? sizes.rail : 0,
-              bottom: phoneTabs() ? sizes.phoneNav : 0,
-            }}
-          >
-            <Settings
-              initial={section()}
-              layout={props.layout}
-              theme={props.theme}
-              onTheme={props.onTheme}
-              paletteId={props.paletteId}
-              onPalette={props.onPalette}
-              flavor={props.flavor}
-              onFlavor={props.onFlavor}
-              chatWidth={props.chatWidth}
-              onChatWidth={props.onChatWidth}
-              chatRail={props.chatRail}
-              onChatRail={props.onChatRail}
-              onFonts={props.onFonts}
-              onTask={(id) => {
-                navigate("tasks");
-                openTask(id);
+      <If
+        when={
+          settings() ?? (settingsPush.leaving() ? leavingSettings : undefined)
+        }
+      >
+        {(section) => {
+          return (
+            <View
+              style={{
+                ...fill,
+                ...settingsPush.style(),
+                pointerEvents: settingsPush.leaving() ? "none" : "auto",
+                zIndex: paneOrder.settings,
+                left: props.layout === "tablet" ? sizes.rail : 0,
+                bottom: phoneTabs() ? sizes.phoneNav : 0,
               }}
-              onConnect={props.onConnect}
-              onClose={() => {
-                settings.set(undefined);
-                if (phone() && page() === "chat" && !conversation()) {
-                  navigate("more");
-                } else {
-                  link(page(), page() === "chat" ? conversation() : undefined);
-                }
-              }}
-            />
-          </View>
-        )}
+            >
+              <Settings
+                initial={section()}
+                layout={props.layout}
+                theme={props.theme}
+                onTheme={props.onTheme}
+                paletteId={props.paletteId}
+                onPalette={props.onPalette}
+                flavor={props.flavor}
+                onFlavor={props.onFlavor}
+                chatWidth={props.chatWidth}
+                onChatWidth={props.onChatWidth}
+                chatRail={props.chatRail}
+                onChatRail={props.onChatRail}
+                onFonts={props.onFonts}
+                onTask={(id) => {
+                  navigate("tasks");
+                  openTask(id);
+                }}
+                onConnect={props.onConnect}
+                onClose={() => {
+                  leavingSettings = section();
+                  settings.set(undefined);
+                  if (phone() && page() === "chat" && !conversation()) {
+                    navigate("more");
+                  } else {
+                    link(
+                      page(),
+                      page() === "chat" ? conversation() : undefined,
+                    );
+                  }
+                  if (phone()) void settingsPush.leave();
+                }}
+              />
+            </View>
+          );
+        }}
       </If>
       <If when={newGroup()}>
         <NewConversation
@@ -503,20 +604,35 @@ export function Workspace(props: {
         />
       </If>
       <If
-        when={task() && page() !== "tasks" && (phone() || page() === "pending")}
+        when={
+          (task() || taskPush.leaving()) &&
+          page() !== "tasks" &&
+          (phone() || page() === "pending")
+        }
       >
-        <View style={{ ...fill, zIndex: paneOrder.task }}>
-          <Each of={[task()]}>
-            {(id) => (
-              <TaskDetail
-                id={id()}
-                layout={props.layout}
-                onClose={closeTask}
-                onTask={openRelatedTask}
-              />
-            )}
-          </Each>
-        </View>
+        {() => {
+          return (
+            <View
+              style={{
+                ...fill,
+                zIndex: paneOrder.task,
+                ...taskPush.style(),
+                pointerEvents: taskPush.leaving() ? "none" : "auto",
+              }}
+            >
+              <Each of={[task() || leavingTask]}>
+                {(id) => (
+                  <TaskDetail
+                    id={id()}
+                    layout={props.layout}
+                    onClose={closeTask}
+                    onTask={openRelatedTask}
+                  />
+                )}
+              </Each>
+            </View>
+          );
+        }}
       </If>
     </View>
   );

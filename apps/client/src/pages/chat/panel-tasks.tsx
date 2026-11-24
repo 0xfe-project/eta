@@ -10,6 +10,7 @@ import {
   row,
   Screen,
 } from "../../components";
+import { foldNext } from "../../components/motion";
 import { dotSize, StatusDot } from "../../components/status-dot";
 import { control, icon, sizes, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -365,13 +366,14 @@ export function TasksTab(props: {
               <View
                 role="button"
                 accessibilityState={{ expanded: expanded() }}
-                onPress={() =>
+                onPress={() => {
+                  foldNext();
                   open.set(
                     expanded()
                       ? open().filter((status) => status !== group()[0])
                       : [...open(), group()[0]],
-                  )
-                }
+                  );
+                }}
                 style={{
                   ...row,
                   height: control.md,

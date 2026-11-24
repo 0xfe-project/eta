@@ -39,8 +39,9 @@ for (const [surface, width] of surfaces) {
     await app.press("label:In review");
     expect(app.texts()).toContain("Sent: tasks.update in_review");
 
-    // On its way: the menu is closed and the trigger takes no presses until the host answers.
-    expect(app.texts()).not.toContain("Parked; it won't start");
+    // On its way: the menu closes (it goes out first) and the trigger takes no presses until
+    // the host answers.
+    await app.waitUntil(() => !app.texts().includes("Parked; it won't start"));
     expect(app.enabled(trigger)).toBe(false);
 
     await app.press("text:Answer");
@@ -81,7 +82,7 @@ for (const [surface, width] of surfaces) {
     await app.press(trigger);
     expect(app.texts()).toContain("Parked; it won't start");
     await app.keyboard.press("escape");
-    expect(app.texts()).not.toContain("Parked; it won't start");
+    await app.waitUntil(() => !app.texts().includes("Parked; it won't start"));
     expect(app.texts()).toContain("Sent: tasks.update in_review");
   });
 }

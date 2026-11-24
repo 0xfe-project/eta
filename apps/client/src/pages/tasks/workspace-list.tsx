@@ -11,6 +11,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { foldNext } from "../../components/motion";
 import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -81,12 +82,14 @@ export function TaskWorkspaceList(props: {
             {(group) => {
               const isFolded = () =>
                 props.foldedParents().includes(group().parent.id);
-              const fold = () =>
+              const fold = () => {
+                foldNext();
                 props.foldedParents.update((ids) =>
                   isFolded()
                     ? ids.filter((id) => id !== group().parent.id)
                     : [...ids, group().parent.id],
                 );
+              };
               const foldLabel = () =>
                 `${isFolded() ? "Expand" : "Collapse"} ${group().parent.title}`;
               return (
