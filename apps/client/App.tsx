@@ -36,6 +36,7 @@ import {
   ElementPicking,
 } from "./src/components/element-picker";
 import { settled } from "./src/components/pending";
+import { ProgressNotificationLayer } from "./src/components/progress-notification";
 import { ToastLayer } from "./src/components/toast";
 import { control, icon, layer, space } from "./src/components/tokens";
 import { createLanguagePreference, LanguageSettings, uiText } from "./src/i18n";
@@ -286,6 +287,7 @@ function App() {
                         />
                       </If>
                       <ToastLayer />
+                      <ProgressNotificationLayer />
                       <If when={!forcedConnect()}>
                         <HostRestartScreen
                           onConnect={() => {
@@ -336,6 +338,8 @@ function App() {
                       <ClientUpdateNotice />
                       <If when={host.error()}>
                         <View
+                          role="alert"
+                          accessibilityLiveRegion="assertive"
                           style={{
                             ...row,
                             position: "absolute",

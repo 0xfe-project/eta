@@ -4,6 +4,7 @@ import type { light } from "./theme";
 import {
   cleanup,
   createMotion,
+  Easing,
   effect,
   reduceMotion,
   untracked,
@@ -22,6 +23,44 @@ const turn: MotionSpec = {
   easing: "linear",
 };
 
+const { rampDeg, rampMs, sustainFirstMs, sustainNextMs, finishLinearMs } =
+  motion.spinAction;
+
+/** First 18%: accelerates smoothly from rest to 600°/s (36° in 120 ms, quadratic). */
+const spinRampUp: MotionSpec = {
+  keyframes: { rotate: [0, rampDeg] },
+  duration: rampMs,
+  easing: Easing.quad,
+};
+
+/** Middle of the first turn at a steady 600°/s. */
+const spinSustainFirst: MotionSpec = {
+  keyframes: { rotate: [rampDeg, 360 - rampDeg] },
+  duration: sustainFirstMs,
+  easing: "linear",
+};
+
+/** Bridges a continuing turn linearly through 360° back to 0° without pausing. */
+const spinFinishLinear: MotionSpec = {
+  keyframes: { rotate: [360 - rampDeg, 360] },
+  duration: finishLinearMs,
+  easing: "linear",
+};
+
+/** Subsequent turns sustain at 600°/s until the action finishes. */
+const spinSustainNext: MotionSpec = {
+  keyframes: { rotate: [0, 360 - rampDeg] },
+  duration: sustainNextMs,
+  easing: "linear",
+};
+
+/** Last 18%: decelerates smoothly from 600°/s to rest on a whole turn (360°). */
+const spinRampDown: MotionSpec = {
+  keyframes: { rotate: [360 - rampDeg, 360] },
+  duration: rampMs,
+  easing: Easing.out(Easing.quad),
+};
+
 /** A spinner: turns for as long as it is drawn. Draw it through `shownWhile` (pending.ts). */
 export function Spinner(props: { size?: number; tone?: keyof typeof light }) {
   const spin = createMotion();
@@ -35,8 +74,10 @@ export function Spinner(props: { size?: number; tone?: keyof typeof light }) {
 }
 
 /**
- * A button's own icon that stands for its action (refresh, check again): it starts turning as
- * the action starts, turns at least once, and stops only on a whole turn.
+ * A button's own icon that stands for its action (refresh, check again): it starts turning
+ * immediately on press, accelerates over the first ~18%, sustains at ~600°/s while running,
+ * and decelerates over the last ~18% to land on a whole turn (at least 640 ms for one full
+ * turn). Stays stationary when reduced motion is enabled.
  */
 export function SpinningIcon(props: {
   name: IconName;
@@ -47,23 +88,36 @@ export function SpinningIcon(props: {
   const spin = createMotion();
   let turning = false;
   let gone = false;
-  function step() {
+
+  async function runCycle() {
     turning = true;
-    void spin.play(turn).then(({ finished }) => {
-      turning = false;
-      // A whole turn looks like none: back to 0 for the next.
+    try {
+      const up = await spin.play(spinRampUp);
+      if (!up.finished || gone || reduceMotion()) return;
+      const first = await spin.play(spinSustainFirst);
+      if (!first.finished || gone || reduceMotion()) return;
+
+      while (untracked(() => props.running) && !reduceMotion()) {
+        if (gone) return;
+        const bridge = await spin.play(spinFinishLinear);
+        if (!bridge.finished || gone || reduceMotion()) return;
+        spin.reset();
+        const next = await spin.play(spinSustainNext);
+        if (!next.finished || gone || reduceMotion()) return;
+      }
+
+      await spin.play(spinRampDown);
+    } finally {
       spin.reset();
-      if (
-        finished &&
-        !gone &&
-        untracked(() => props.running) &&
-        !reduceMotion()
-      )
-        step();
-    });
+      turning = false;
+      if (!gone && untracked(() => props.running) && !reduceMotion()) {
+        void runCycle();
+      }
+    }
   }
+
   effect(() => {
-    if (props.running && !turning && !reduceMotion()) untracked(step);
+    if (props.running && !turning && !reduceMotion()) untracked(runCycle);
   });
   cleanup(() => {
     gone = true;
