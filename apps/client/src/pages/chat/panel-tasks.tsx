@@ -311,6 +311,7 @@ export function TasksTab(props: {
         <ActionMenu
           label={uiText("tasksSortBy")}
           sheetTitle={uiText("tasksSortBy")}
+          leading={<Icon name="sort" size={icon.sm} tone="muted" />}
           value={uiText("tasksSorting", {
             name: uiText(sortNames[taskPanelSort()]),
           })}

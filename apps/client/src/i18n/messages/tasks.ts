@@ -466,7 +466,7 @@ export const tasksMessages = {
   taskCompletedCount: ["Completed {{count}}", "已完成 {{count}}"],
   taskCancelledCount: ["Cancelled {{count}}", "已取消 {{count}}"],
   tasksSortBy: ["Sort tasks", "任务排序方式"],
-  tasksSorting: ["Sort: {{name}}", "排序：{{name}}"],
+  tasksSorting: ["{{name}}", "{{name}}"],
   tasksSortNeedsYou: ["Needs you first", "待处理优先"],
   tasksSortUpdated: ["Recently updated", "最近更新"],
   subtasksShow: ["Show subtasks of {{title}}", "展开 {{title}} 的子任务"],
