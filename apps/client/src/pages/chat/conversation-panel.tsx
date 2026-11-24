@@ -287,7 +287,6 @@ export function ConversationPanel(props: {
                       <If when={panel() === "Tasks"}>
                         <TasksTab
                           conversationId={props.id}
-                          conversationName={props.info?.name ?? ""}
                           onTask={props.onTask}
                         />
                       </If>

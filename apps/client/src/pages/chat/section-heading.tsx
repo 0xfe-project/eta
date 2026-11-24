@@ -1,7 +1,7 @@
 import type { JSX } from "nsh";
 import { View } from "nsh";
-import { Button, Caption, Label, row } from "../../components";
-import { control, space } from "../../components/tokens";
+import { Button, colors, Label, row } from "../../components";
+import { control, sizes, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 /** A Context-tab section's heading: its name, and whatever it offers at the right end. */
@@ -10,24 +10,23 @@ export function SectionHeading(props: {
   count?: number;
   children?: JSX.Element;
 }) {
+  const c = colors();
   return (
     <View
       style={{
         ...row,
-        gap: space[4],
-        minHeight: space[32],
-        paddingTop: space[8],
-        paddingBottom: space[2],
+        justifyContent: "space-between",
+        height: sizes.sectionHeader,
         paddingHorizontal: space[12],
+        borderBottomWidth: 1,
+        borderColor: c().border,
       }}
     >
-      <Caption text={props.label} />
-      <If when={props.count !== undefined}>
-        <Label variant="caption" tone="muted">
-          {props.count}
-        </Label>
-      </If>
-      <View style={{ flex: 1 }} />
+      <Label variant="small" tone="muted">
+        {props.count !== undefined
+          ? `${props.label} ${props.count}`
+          : props.label}
+      </Label>
       {props.children}
     </View>
   );
@@ -48,9 +47,7 @@ export function ViewAll(props: {
       accessibilityLabel={props.label}
       tone="ghost"
       labelTone="muted"
-      labelVariant="caption"
-      size={props.phone ? control.lg : control.sm}
-      style={{ marginRight: -space[8] }}
+      size={props.phone ? control.lg : undefined}
       onPress={props.onPress}
     />
   );
