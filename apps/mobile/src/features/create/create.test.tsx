@@ -289,6 +289,18 @@ test("07c, 07d: an agent, then its private chat", async () => {
   await app.waitFor("代码审查");
 });
 
+test("07d: the agent made gets a group of its own (conversations.create), not agents.direct", async () => {
+  const app = await start();
+  await app.press("label:新建智能体");
+  await app.type("id:agent-name", "代码审查");
+  await app.press("id:agent-next");
+  await app.waitFor("id:agent-create");
+  await app.press("id:agent-create");
+  await app.waitFor("id:chat-members");
+  expect(app.shows("label:群信息")).toBe(true);
+  expect(app.shows("text:/主理人：代码审查/")).toBe(true);
+});
+
 test("07c: a runtime the machine lacks moves the draft to eta", async () => {
   const app = await start();
   await app.press("label:新建智能体");

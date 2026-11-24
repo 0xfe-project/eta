@@ -135,6 +135,16 @@ test("03k member sheet: stats, invite, remove with a confirmation", async () => 
   await app.waitFor("text:2 位成员");
 });
 
+test("talking to a member alone makes a group of it alone (conversations.create), not agents.direct", async () => {
+  const app = await start("group:wire");
+  await app.waitFor("id:member-agent-ache");
+  await app.press("id:member-agent-ache");
+  await app.press("单独和 Ache 说");
+  await app.waitFor("id:chat-members");
+  expect(app.shows("label:群信息")).toBe(true);
+  expect(app.shows("text:/主理人：Ache/")).toBe(true);
+});
+
 test("stop reaches the member's own reply", async () => {
   const app = await start("group:board");
   await app.waitFor("id:member-agent-mori");

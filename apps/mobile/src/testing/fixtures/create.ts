@@ -228,7 +228,11 @@ export function installCreate(host: FakeHost): void {
   });
 
   host.on("conversations.create", (args: ConversationArgs["create"]) => {
-    const project = projects().find((each) => each.id === args.projectId);
+    // An agent's home directory is a project too, though the project list does not show it.
+    const home = agents().find((each) => each.homeProjectId === args.projectId);
+    const project =
+      projects().find((each) => each.id === args.projectId) ??
+      (home && { id: home.homeProjectId, name: home.name });
     if (project === undefined) throw new Error("no such project");
     const members = args.agentIds ?? [];
     // As the host: a group needs a member, and its steward is one of them, null for none, or

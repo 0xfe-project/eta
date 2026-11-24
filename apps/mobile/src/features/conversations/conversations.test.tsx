@@ -46,6 +46,15 @@ test("02a: every agent has a row, and one nobody talked to gets its chat on the 
   expect(app.texts()).not.toContain("等待确认");
 });
 
+test("02a: the first press makes a group of the agent alone (conversations.create), not agents.direct", async () => {
+  const app = await start({ "eta.fake.scenario": "empty" });
+  await app.press("label:私聊");
+  await app.press("id:direct-agent-mori");
+  await app.waitFor("id:chat-members");
+  expect(app.shows("label:群信息")).toBe(true);
+  expect(app.shows("text:/主理人：Mori/")).toBe(true);
+});
+
 test("02a: the private chats, a waiting one strong and the busy status over the preview", async () => {
   const app = await start();
   await app.press("label:私聊 1");
