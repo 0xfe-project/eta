@@ -83,9 +83,9 @@ export function memoryFileLabel(path: string, home: string): string {
 }
 
 export function parseMemory(text: string, target: MemoryFile): MemoryEntry[] {
-  const entries: MemoryEntry[] = [];
+  const items: { section: MemorySection; num?: number; text: string }[] = [];
+  const used = new Set<number>();
   let section: MemorySection | undefined;
-  let nextNum = 0;
   for (const line of text.split("\n")) {
     const heading = /^##\s+(\w+)/.exec(line);
     if (heading !== null) {
@@ -98,18 +98,35 @@ export function parseMemory(text: string, target: MemoryFile): MemoryEntry[] {
     // eslint-disable-next-line regexp/no-super-linear-backtracking -- one trimmed line of a local file; a rewrite could change what matches
     const item = /^-\s+(?:\[(\d+)\]\s+)?(.*)$/.exec(line.trim());
     if (item === null || item[2].length === 0) continue;
-    // A hand-written note carries no number: take the next free one and keep it.
-    const num = item[1] === undefined ? nextNum : Number(item[1]);
-    nextNum = Math.max(nextNum, num) + 1;
-    entries.push({
-      id: `${target.label}#${num}`,
-      num,
-      file: target.path,
+    // A duplicated number (a copy-pasted line) is renumbered, so ids stay unique.
+    let num = item[1] === undefined ? undefined : Number(item[1]);
+    if (num !== undefined && used.has(num)) num = undefined;
+    if (num !== undefined) used.add(num);
+    items.push({
       section,
+      ...(num === undefined ? {} : { num }),
       text: item[2],
     });
   }
-  return entries;
+  // A hand-written note carries no number: it takes the next one in file order, skipping
+  // any number written anywhere in the file — a line further down keeps its own.
+  let nextNum = 0;
+  return items.map(({ section: s, num, text: t }) => {
+    let n = num;
+    if (n === undefined) {
+      while (used.has(nextNum)) nextNum += 1;
+      n = nextNum;
+      used.add(n);
+    }
+    nextNum = Math.max(nextNum, n + 1);
+    return {
+      id: `${target.label}#${n}`,
+      num: n,
+      file: target.path,
+      section: s,
+      text: t,
+    };
+  });
 }
 
 export function renderMemory(entries: readonly MemoryEntry[]): string {

@@ -364,3 +364,32 @@ describe("the local-disk filesystem", () => {
     }
   });
 });
+
+describe("parseMemory numbering", () => {
+  // A hand-written `- [task-1-…] note` between [144] and [145] used to take 145,
+  // and the next write saved two notes with the same id.
+  it("never gives a hand-written note a number written further down", () => {
+    const text =
+      "## decision\n- [144] a\n- [tag] hand written\n- [145] b\n- [146] c\n";
+    const entries = parseMemory(text, local);
+    expect(entries.map((e) => e.num)).toEqual([144, 147, 145, 146]);
+    expect(entries[1]?.text).toBe("[tag] hand written");
+  });
+
+  it("renumbers a copy-pasted duplicate number", () => {
+    const nums = parseMemory(
+      "## lesson\n- [0] a\n- [1] b\n- [1] copy\n",
+      local,
+    ).map((e) => e.num);
+    expect(nums).toEqual([0, 1, 2]);
+  });
+
+  it("keeps ids unique through a write-back", async () => {
+    const fs = memFs({
+      [local.path]: "## decision\n- [0] a\n- [tag] hand written\n- [1] b\n",
+    });
+    await applyExtraction(fs, local, { add_new_decision: ["c"] });
+    const nums = parseMemory(fs.files[local.path]!, local).map((e) => e.num);
+    expect(new Set(nums).size).toBe(nums.length);
+  });
+});
