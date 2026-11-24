@@ -16,11 +16,18 @@ export const light = {
   canvas: "#ffffff",
   surface: "#fafafa",
   selected: "#f2f2f2",
+  /** The line of a focused or chosen thing: the box being typed in, the selected chip. Never a
+   * resting line (that is `border`). */
   ink: "#111111",
   muted: "#6e6e6e",
   mutedInk: "#505050",
   faint: "#8c8c8c",
+  /** The resting line of a container: a box, a row, a chip. One line round the surfaces of a group,
+   * so they read as one column and not as unrelated boxes. */
   border: "#e5e5e5",
+  /** The line of a hovered container, or of a small control (a checkbox square, an icon button).
+   * Never a resting container's line: one step darker at rest makes that box the odd one out of
+   * its group. */
   strong: "#cccccc",
   button: "#171717",
   buttonInk: "#ffffff",
