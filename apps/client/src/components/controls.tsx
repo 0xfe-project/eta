@@ -1,7 +1,6 @@
-import type { InputRef, JSX, TextStyle, ViewStyle } from "nsh";
+import type { JSX, ViewStyle } from "nsh";
 import type { light } from "./theme";
 import { signal, View } from "nsh";
-import { Input } from "nsh/base";
 import { useText } from "../i18n";
 import { Button } from "../ui/button";
 import { pickerTarget } from "./element-picker";
@@ -15,122 +14,17 @@ import {
   touchScreen,
 } from "./menu";
 import { Icon, Label } from "./text";
-import {
-  colors,
-  fontFamily,
-  Fonts,
-  grow,
-  row,
-  Screen,
-  textFaces,
-  textStyle,
-} from "./theme";
+import { colors, grow, row, Screen } from "./theme";
 import { control, icon, shadow, space, weight } from "./tokens";
 
 export { Button, hint } from "../ui/button";
+export { Field } from "../ui/input";
 
 /** A menu's width, unless its caller says. */
 const menuWidth = 172;
 /** A choice's row in a phone sheet, and in a menu. */
 const sheetRowHeight = 52;
 const checkRowHeight = 32;
-
-type FieldInputProps = Pick<
-  Parameters<typeof Input>[0],
-  | "role"
-  | "accessibilityState"
-  | "accessibilityControls"
-  | "accessibilityActiveDescendant"
-  | "readonly"
-  | "onContentSizeChange"
-  | "onSelectionChange"
-  | "onFocus"
-  | "onCompositionChange"
-  | "pasteBehavior"
-  | "onPaste"
->;
-
-export function Field(
-  props: FieldInputProps & {
-    label: string;
-    value: string;
-    placeholder?: string;
-    masked?: boolean;
-    maxLength?: number;
-    multiline?: boolean;
-    style?: TextStyle;
-    inputRef?: (ref: InputRef) => void;
-    onChange: (value: string) => void;
-    onSubmit?: () => void;
-    onBlur?: () => void;
-  },
-) {
-  const color = colors();
-  const fonts = Fonts();
-  const type = textFaces();
-  const picker = pickerTarget(
-    "Field",
-    "apps/client/src/components/controls.tsx",
-    false,
-  );
-  return (
-    <Input
-      ref={(ref) => {
-        picker.ref(ref);
-        props.inputRef?.(ref);
-      }}
-      role={props.role}
-      accessibilityState={props.accessibilityState}
-      accessibilityControls={props.accessibilityControls}
-      accessibilityActiveDescendant={props.accessibilityActiveDescendant}
-      readonly={props.readonly}
-      onContentSizeChange={props.onContentSizeChange}
-      onSelectionChange={props.onSelectionChange}
-      onFocus={props.onFocus}
-      onCompositionChange={props.onCompositionChange}
-      pasteBehavior={props.pasteBehavior}
-      onPaste={props.onPaste}
-      onMouseEnter={picker.onMouseEnter}
-      onMouseLeave={picker.onMouseLeave}
-      accessibilityLabel={props.label}
-      value={props.value}
-      placeholder={props.placeholder}
-      masked={props.masked}
-      maxLength={props.maxLength}
-      multiline={props.multiline}
-      submitBehavior={
-        props.onSubmit
-          ? "submit"
-          : props.multiline
-            ? "newline"
-            : "blurAndSubmit"
-      }
-      onChange={({ value }) => props.onChange(value)}
-      onSubmit={() => props.onSubmit?.()}
-      onBlur={props.onBlur}
-      focusStyle={{ borderColor: color().ink }}
-      style={{
-        color: color().ink,
-        placeholderColor: color().muted,
-        backgroundColor: color().canvas,
-        fontFamily: fontFamily(fonts().interface),
-        ...textStyle(type("body")),
-        height: space[32],
-        paddingHorizontal: space[8],
-        paddingVertical: space[4],
-        borderWidth: 1,
-        borderColor: color().border,
-        borderRadius: 0,
-        // A multiline field scrolls its own text, but nsh's layout still counts
-        // all of that text in the content size of the `Scroll` around it, so a
-        // long value made the page scroll on into blank space. Clipping the
-        // field keeps its text out of that size.
-        ...(props.multiline ? { overflow: "hidden" as const } : {}),
-        ...props.style,
-      }}
-    />
-  );
-}
 
 /** A menu its trigger opens: in the phone layout the design's sheet at the
  * bottom (full width, a grabber, 52pt rows), in the tablet and desktop

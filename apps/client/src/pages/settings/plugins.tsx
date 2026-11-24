@@ -1,20 +1,15 @@
 import type { MarketSettings, MarketSource } from "@eta/client-contracts";
 import { effect, signal, untracked, View } from "nsh";
-import { Input } from "nsh/base";
 import {
   Button,
   colors,
   Empty,
   emptyWidth,
   Field,
-  fontFamily,
-  Fonts,
   grow,
   Label,
   row,
   SmoothScroll,
-  textFaces,
-  textStyle,
 } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, icon, space, weight } from "../../components/tokens";
@@ -48,8 +43,6 @@ function sourceProblem(
 export function PluginSettings(props: { phone?: boolean }) {
   const host = useHost();
   const c = colors();
-  const type = textFaces();
-  const fonts = Fonts();
   const settings = signal<MarketSettings>();
   const name = signal("");
   const address = signal("");
@@ -152,26 +145,18 @@ export function PluginSettings(props: { phone?: boolean }) {
     onChange: (value: string) => void,
     onSubmit?: () => void,
   ) => (
-    <Input
-      accessibilityLabel={label}
+    <Field
+      label={label}
       placeholder={label}
       value={value()}
-      submitBehavior="submit"
+      compact
       onSubmit={onSubmit}
-      onChange={(event) => onChange(event.value)}
-      focusStyle={{ borderColor: c().ink }}
-      style={{
-        color: c().ink,
-        placeholderColor: c().faint,
-        backgroundColor: c().canvas,
-        fontFamily: fontFamily(fonts().interface),
-        ...textStyle(type("small")),
-        height: props.phone ? control.touch : control.md,
-        paddingHorizontal: props.phone ? space[12] : space[8],
-        borderWidth: 1,
-        borderColor: c().strong,
-        borderRadius: 0,
-      }}
+      onChange={onChange}
+      style={
+        props.phone
+          ? { height: control.touch, paddingHorizontal: space[12] }
+          : undefined
+      }
     />
   );
   const inset = props.phone ? space[16] : space[24];
