@@ -1,6 +1,6 @@
 import type { McpResults, McpServerView } from "@eta/client-contracts";
 import type { Layout } from "../../../components";
-import { Clipboard, openUrl, signal, View } from "nsh";
+import { openUrl, signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -16,6 +16,7 @@ import { StatusDot } from "../../../components/status-dot";
 import { control, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { CopyButton } from "../../../ui";
 
 import {
   McpPhoneHeader,
@@ -166,13 +167,9 @@ export function McpDetail(props: {
                   label={uiText("openSignInPage")}
                   onPress={() => void openUrl(flow().authorizationUrl)}
                 />
-                <Button
+                <CopyButton
                   label={uiText("copyLink")}
-                  onPress={() =>
-                    void host.action(() =>
-                      Clipboard.writeText(flow().authorizationUrl),
-                    )
-                  }
+                  value={() => flow().authorizationUrl}
                 />
               </View>
               <Field
