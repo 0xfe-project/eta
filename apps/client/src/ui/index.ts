@@ -12,3 +12,4 @@ export { Card, Separator } from "./surface";
 export { Segmented, Tabs } from "./tabs";
 export { Caption, Icon, Label, RowChevron } from "./text";
 export { TimeField } from "./time-field";
+export { hint, Tooltip } from "./tooltip";
