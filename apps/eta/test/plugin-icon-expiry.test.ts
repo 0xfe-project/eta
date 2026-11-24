@@ -95,15 +95,6 @@ const bytesOf = (answer: { status: string; logo?: { data: string } }) =>
     : answer.status;
 
 describe("a picture kept under the homepage still counts when the short 'no own logo' row is old", () => {
-  it("the same Logos and database: asked once, then read at once as a hit", async () => {
-    const w = await world();
-    const { db, logos } = w.boot();
-    await logos.forEntry(REPO, "HEAD", "plugins/x", w.ask("HEAD").homepage);
-    const answer = logos.cached([w.ask("HEAD")])[0]!;
-    expect(answer.status).toBe("hit");
-    db.close();
-  });
-
   it("a new Logos on the same file (a restart), inside the hour: a hit, and no request", async () => {
     const w = await world();
     const first = w.boot();

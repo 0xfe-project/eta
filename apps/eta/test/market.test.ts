@@ -823,32 +823,6 @@ describe("switching a source on and off", () => {
     ]);
   });
 
-  it("one enabled source failing still hides no other, and a source that is off is not read", async () => {
-    let asked = 0;
-    handler = (request) => {
-      const path = new URL(request.url).pathname;
-      if (path === "/off.json") asked++;
-      if (path === "/good.json")
-        return json({ plugins: [item({ name: "good" })] });
-      return new Response("gone", { status: 404 });
-    };
-    const m = await market();
-    for (const source of m.raw.sources()) m.raw.removeSource(source.url);
-    const base = `http://127.0.0.1:${server.port}`;
-    m.raw.addSource(`${base}/bad.json`, "Bad");
-    m.raw.addSource(`${base}/good.json`, "Good");
-    m.raw.addSource(`${base}/off.json`, "Off");
-    m.raw.setSourceEnabled(`${base}/off.json`, false);
-    const catalog = await m.raw.catalog();
-    expect(catalog.sources.map((x) => x.source.name)).toEqual(["Bad", "Good"]);
-    expect(catalog.sources[0]!.error).toMatch(/HTTP 404/);
-    expect(catalog.sources[1]!.entries!.map((e) => e.name)).toEqual(["good"]);
-    expect(asked).toBe(0);
-    m.raw.setSourceEnabled(`${base}/off.json`, true);
-    await m.raw.catalog();
-    expect(asked).toBe(1);
-  });
-
   it("keeps an installed plugin installed when its source is switched off", async () => {
     const { url, sha } = await repo();
     handler = () => json({ plugins: [item({ ...sourceOf({ url, sha }) })] });

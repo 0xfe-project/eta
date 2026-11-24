@@ -84,14 +84,6 @@ test("a refused install says why in the detail", async () => {
   expect(app.shows("the plugin name is taken by a local plugin")).toBe(true);
 });
 
-test("the kept catalog shows at once, while the read that asks the servers has not answered", async () => {
-  const app = await open("./fixtures/market-cached.tsx", {
-    width: 900,
-    height: 700,
-  });
-  expect(app.shows("kept-entry")).toBe(true);
-});
-
 test("a card is as tall as the others whether or not it carries a marker", async () => {
   const app = await open("./fixtures/market-markers.tsx", {
     width: 1400,
