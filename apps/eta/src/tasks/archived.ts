@@ -3,15 +3,14 @@
  *
  * Anything new on an archived task brings it back onto the board (`#revive` in `store.ts`), and
  * archiving is usually the user's own act: an agent that retitles or comments on a task the user put
- * away undoes that without ever having seen it. So the tools that write on a task refuse an archived
- * one until the agent says it knows (`confirmArchived`), and when it does, the result says what
- * the change undid, so the agent can tell the user. The reading tools say a task is archived, by
- * whom and when, so the agent knows before it tries.
+ * away undoes that without ever having seen it. The tools that write on a task still go through on
+ * an archived one (the user chose a note, not a hold), and the result says what the change undid,
+ * so the agent tells the user. The reading tools say a task is archived, by whom and when, so the
+ * agent knows before it tries.
  */
 import type { BoardTaskView, TaskActivityView } from "@eta/client-contracts";
 import type { TaskBoard } from "./board";
 import { archivedEntry } from "@eta/client-contracts";
-import { Type } from "typebox";
 
 /** A time as a model reads it at a glance: `2026-11-24 01:38 UTC`. */
 const minuteOf = (at: number): string =>
@@ -50,58 +49,34 @@ export function archivedSaid(
   return `${nameOf(by)} archived it at ${when}${along}`;
 }
 
-/** The parameter every tool that writes on a task carries. */
-export const confirmArchivedParameter = Type.Optional(
-  Type.Boolean({
-    description:
-      "Only for a task that is archived: true says you know this brings it back onto the board, " +
-      "undoing whoever archived it (usually the user, on purpose). Without it an archived task is " +
-      "refused and nothing changes.",
-  }),
-);
-
 /** The sentence the descriptions of the writing tools share. */
 export const ARCHIVED_RULE =
-  "An archived task (the task-reading tools say so, with who archived it and when) comes back onto the board when anything " +
-  "new happens on it, and archiving is usually the user's own decision: such a call is refused " +
-  "unless you pass confirmArchived: true, which you do only when the user asked for the change.";
+  "On an archived task (the task-reading tools say so, with who archived it and when) the call " +
+  "still goes through, and anything new on it brings it back onto the board, undoing whoever " +
+  "archived it (usually the user, on purpose); the result then says so, and you tell the user.";
 
-export interface ArchivedGuard {
+export interface ArchivedNote {
   /**
-   * Before a change: throws, for an archived task and no confirmation, an error that says who
-   * archived it and what to do instead; else returns what to add to the result once the change is
-   * made (`after`), or nothing for a task that is not archived.
+   * Before a change: for an archived task, what to add to the result once the change is made
+   * (`after`); nothing for a task that is not archived. It never stops the change.
    */
-  before: (
-    taskId: string,
-    confirmed: boolean | undefined,
-    tool: string,
-  ) => { after: () => string } | undefined;
+  before: (taskId: string) => { after: () => string } | undefined;
 }
 
 /**
- * The guard for one set of tools. `instead` is what the refusal offers besides confirming (a new
- * task, for an agent that can make one); `rearchive` is how the agent puts it away again, when it
- * can.
+ * The note for one set of tools. `rearchive` is how the agent puts the task away again, for one
+ * that already can (Captain); others are only told to tell the user.
  */
-export function archivedGuard(
+export function archivedNote(
   board: TaskBoard,
   nameOf: (agentId: string) => string,
-  options: { instead?: string; rearchive?: string } = {},
-): ArchivedGuard {
+  options: { rearchive?: string } = {},
+): ArchivedNote {
   return {
-    before(taskId, confirmed, tool) {
+    before(taskId) {
       const task = board.find(taskId);
       if (task === undefined || !isArchived(task)) return undefined;
       const said = archivedSaid(task, board.activity(task.id), nameOf)!;
-      if (confirmed !== true)
-        throw new Error(
-          `#${task.number} is archived: ${said}. Nothing was changed. Changing or commenting on ` +
-            "an archived task brings it back onto the board, which undoes that archive" +
-            `${options.rearchive === undefined ? ", and you cannot archive it again" : ""}. ` +
-            `If the user asked for this, call ${tool} again with confirmArchived: true` +
-            `${options.instead === undefined ? "" : `; ${options.instead.replaceAll("#N", `#${task.number}`)}`}.`,
-        );
       return {
         after: () => {
           const now = board.find(task.id);
@@ -109,9 +84,7 @@ export function archivedGuard(
             return `\n\nNote: #${task.number} is archived (${said}). Nothing new was written on it, so it stays archived.`;
           return (
             `\n\nNote: #${task.number} was archived: ${said}. This change brought it back onto ` +
-            `the board. If the user meant it to stay put away, tell them; ${
-              options.rearchive ?? "agents cannot archive it again."
-            }`
+            `the board; tell the user.${options.rearchive === undefined ? "" : ` ${options.rearchive}`}`
           );
         },
       };

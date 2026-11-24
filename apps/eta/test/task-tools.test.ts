@@ -191,23 +191,19 @@ describe("the task tools", () => {
     });
   });
 
-  it("tell an agent a task is archived, refuse to write on it unless told, and say what a confirmed change undid", async () => {
+  it("tell an agent a task is archived, write on it as asked, and say in the result that it brought it back", async () => {
     // One list of calls per message the agent is sent.
     const phases = [
       [
         call("create_task", { title: "Kept" }),
         call("create_task", { title: "Away" }),
+        call("create_task", { title: "Also away" }),
       ],
       [
         call("list_tasks", { archived: "include" }),
         call("get_task", { task: "2" }),
         call("update_task", { task: "#2", title: "Renamed" }),
-        call("comment_task", { task: "2", body: "one more thing" }),
-        call("update_task", {
-          task: "#2",
-          title: "Renamed",
-          confirmArchived: true,
-        }),
+        call("comment_task", { task: "3", body: "one more thing" }),
         call("get_task", { task: "2" }),
         call("update_task", { task: "#1", title: "Kept still" }),
         call("comment_task", { task: "1", body: "fine" }),
@@ -232,62 +228,52 @@ describe("the task tools", () => {
     const first = await w.send(group.id, "make them");
     await w.settled(group.id, first.replies[0]!.id);
     const away = w.host.product.board.find("2")!;
-    // The user puts #2 away by hand, the way the board's Archive does.
+    const alsoAway = w.host.product.board.find("3")!;
+    // The user puts #2 and #3 away by hand, the way the board's Archive does.
     await w.client.call("tasks", "archive", { taskId: away.id });
+    await w.client.call("tasks", "archive", { taskId: alsoAway.id });
 
     const second = await w.send(group.id, "go on");
     await w.settled(group.id, second.replies[0]!.id);
     const [
       listed,
       read,
-      refusedUpdate,
-      refusedComment,
-      confirmed,
+      updated,
+      commented,
       reread,
       plainUpdate,
       plainComment,
-    ] = results.slice(2);
+    ] = results.slice(3);
 
     // The reading tools say it is archived, by whom and when.
-    const when = /\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC/;
     expect(listed).toMatch(
       /#2 \[todo\] \[archived\] Away — .*; archived: the user archived it by hand at \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC: they put it away on purpose/,
     );
     expect(listed).toMatch(/^#1 \[todo\] Kept — never run, created by Ada$/m);
     expect(read).toMatch(
-      /\nArchived: the user archived it by hand at .*Changing or commenting on it brings it back onto the board\./,
-    );
-    expect(read).toMatch(when);
-
-    // Without confirmArchived, nothing is written, and the agent is told why and what to do.
-    expect(refusedUpdate).toMatch(
-      /^#2 is archived: the user archived it by hand at .*Nothing was changed\./,
-    );
-    expect(refusedUpdate).toContain(
-      "call update_task again with confirmArchived: true",
-    );
-    expect(refusedUpdate).toContain("make a new task instead");
-    expect(refusedUpdate).toContain("you cannot archive it again");
-    expect(refusedComment).toContain(
-      "call comment_task again with confirmArchived: true",
+      /\nArchived: the user archived it by hand at \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC.*Changing or commenting on it brings it back onto the board\./,
     );
 
-    // Confirmed, the change is made and the result says it undid the user's archive.
-    expect(confirmed).toMatch(
-      /^#2 is now \[todo\] "Renamed"\.\n\nNote: #2 was archived: the user archived it by hand at .*This change brought it back onto the board\. If the user meant it to stay put away, tell them; agents cannot archive it again\.$/,
+    // Without any confirmation, the change is made, and the result says it undid the user's archive.
+    expect(updated).toMatch(
+      /^#2 is now \[todo\] "Renamed"\.\n\nNote: #2 was archived: the user archived it by hand at \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC: they put it away on purpose\. This change brought it back onto the board; tell the user\.$/,
+    );
+    expect(commented).toMatch(
+      /^Commented on #3\.\n\nNote: #3 was archived: the user archived it by hand at .*This change brought it back onto the board; tell the user\.$/,
     );
     expect(reread).toMatch(
       /^#2 \[todo\] Renamed — never run, created by Ada\nWorks in/,
     );
     expect(w.host.product.board.find(away.id)!.archivedAt).toBeNull();
+    expect(w.host.product.board.find(alsoAway.id)!.archivedAt).toBeNull();
     const comments = w.host.db
-      .query<{ n: number }, [string]>(
-        "SELECT COUNT(*) AS n FROM task_activity WHERE task_id = ? AND kind = 'comment'",
+      .query<{ body: string }, [string]>(
+        "SELECT body FROM task_activity WHERE task_id = ? AND kind = 'comment'",
       )
-      .get(away.id)!;
-    expect(comments.n).toBe(0);
+      .all(alsoAway.id);
+    expect(comments.map((row) => row.body)).toEqual(["one more thing"]);
 
-    // A task that is not archived is as it was.
+    // A task that is not archived gets no note.
     expect(plainUpdate).toBe('#1 is now [todo] "Kept still".');
     expect(plainComment).toBe("Commented on #1.");
   });

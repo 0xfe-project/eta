@@ -44,12 +44,7 @@ import {
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
 import { taskOf } from "../session-owner";
-import {
-  ARCHIVED_RULE,
-  archivedGuard,
-  archivedSaid,
-  confirmArchivedParameter,
-} from "./archived";
+import { ARCHIVED_RULE, archivedNote, archivedSaid } from "./archived";
 import { executorOf } from "./store";
 
 /** A failure the model can act on, from anything the board refused. */
@@ -204,9 +199,8 @@ function reading(deps: TaskToolDeps) {
   const archived = (task: BoardTaskView): string | undefined =>
     archivedSaid(task, board.activity(task.id), nameOf);
 
-  /** The guard of the tools that write on a task (`archived.ts`). */
-  const guard = (options?: Parameters<typeof archivedGuard>[2]) =>
-    archivedGuard(board, nameOf, options);
+  /** The note the tools that write on a task add for an archived one (`archived.ts`). */
+  const note = () => archivedNote(board, nameOf);
 
   /** One line: what a model can read without asking for the task. */
   const line = (task: BoardTaskView): string => {
@@ -403,7 +397,7 @@ function reading(deps: TaskToolDeps) {
     },
   });
 
-  return { whoIs, taskOf, list, get, guard };
+  return { whoIs, taskOf, list, get, note };
 }
 
 function conversationTools(
@@ -414,11 +408,8 @@ function conversationTools(
   const actor: TaskActor = { kind: "agent", agentId: who.agentId };
   const assignment = () =>
     deps.captain?.assignmentFor(who.conversationId, who.agentId);
-  const { taskOf, list, get, guard } = reading(deps);
-  const archivedOnly = guard({
-    instead:
-      "if it is new work, make a new task instead (draft_task, or create_task when the user asked for one) and refer to #N in it",
-  });
+  const { taskOf, list, get, note } = reading(deps);
+  const archivedNotice = note();
 
   // The debt this comment used to record is paid on the prompt side. The session's own list is
   // now "steps" (`create_step` / `update_step` / `list_steps` / `get_step`), the base prompt says
@@ -651,7 +642,6 @@ function conversationTools(
             "Tasks this one should no longer wait for: numbers (12 or #12) or ids",
         }),
       ),
-      confirmArchived: confirmArchivedParameter,
     }),
     execute(args) {
       try {
@@ -660,15 +650,10 @@ function conversationTools(
           parent,
           addDependencies,
           removeDependencies,
-          confirmArchived,
           ...fields
         } = args;
         const id = taskOf(which).id;
-        const archived = archivedOnly.before(
-          id,
-          confirmArchived,
-          "update_task",
-        );
+        const archived = archivedNotice.before(id);
         if (parent !== undefined)
           board.setParent(id, parent.trim() === "" ? null : parent, actor);
         for (const other of removeDependencies ?? [])
@@ -702,16 +687,11 @@ function conversationTools(
     parameters: Type.Object({
       task: Type.String({ description: "The task's number (12 or #12) or id" }),
       body: Type.String({ description: "What to say" }),
-      confirmArchived: confirmArchivedParameter,
     }),
     execute(args) {
       try {
         const task = taskOf(args.task);
-        const archived = archivedOnly.before(
-          task.id,
-          args.confirmArchived,
-          "comment_task",
-        );
+        const archived = archivedNotice.before(task.id);
         board.comment(task.id, args.body, actor);
         return text(`Commented on #${task.number}.${archived?.after() ?? ""}`, {
           id: task.id,
@@ -740,8 +720,8 @@ function mentionedTools(
   who: { agentId: string; taskId: string; maker: boolean },
 ): KernelTool[] {
   const { runner, asks } = deps;
-  const { list, get, guard } = reading(deps);
-  const archivedOnly = guard();
+  const { list, get, note } = reading(deps);
+  const archivedNotice = note();
 
   const answer = defineTool({
     name: "comment_task",
@@ -752,15 +732,10 @@ function mentionedTools(
       `you are mentioned again. ${ARCHIVED_RULE}`,
     parameters: Type.Object({
       body: Type.String({ description: "Your answer" }),
-      confirmArchived: confirmArchivedParameter,
     }),
     execute(args) {
       try {
-        const archived = archivedOnly.before(
-          who.taskId,
-          args.confirmArchived,
-          "comment_task",
-        );
+        const archived = archivedNotice.before(who.taskId);
         return text(
           `${runner.answer(who.taskId, who.agentId, args.body)}${archived?.after() ?? ""}`,
           { id: who.taskId },
@@ -847,8 +822,8 @@ function runTools(
 ): KernelTool[] {
   const { board, runner } = deps;
   const actor: TaskActor = { kind: "agent", agentId: who.agentId };
-  const { taskOf, list, get, guard } = reading(deps);
-  const archivedOnly = guard();
+  const { taskOf, list, get, note } = reading(deps);
+  const archivedNotice = note();
 
   const task = (): TaskRecord => taskOf(who.taskId);
 
@@ -883,11 +858,9 @@ function runTools(
           description: "backlog, todo, in_progress or blocked",
         }),
       ),
-      confirmArchived: confirmArchivedParameter,
     }),
     execute(args) {
       try {
-        const { confirmArchived, ...fields } = args;
         if (
           args.status === "done" ||
           args.status === "cancelled" ||
@@ -898,12 +871,8 @@ function runTools(
               ? "use finish_task to move the task to review"
               : `moving the task to ${args.status} is for the user to decide`,
           );
-        const archived = archivedOnly.before(
-          who.taskId,
-          confirmArchived,
-          "update_task",
-        );
-        const updated = board.update(task().id, fields, actor);
+        const archived = archivedNotice.before(who.taskId);
+        const updated = board.update(task().id, args, actor);
         return text(
           `#${updated.number} is now [${updated.status}] "${updated.title}".${archived?.after() ?? ""}`,
           { id: updated.id, status: updated.status },
@@ -993,16 +962,11 @@ function runTools(
       }`,
     parameters: Type.Object({
       body: Type.String({ description: "What to say" }),
-      confirmArchived: confirmArchivedParameter,
     }),
     execute(args) {
       try {
         workingRun();
-        const archived = archivedOnly.before(
-          who.taskId,
-          args.confirmArchived,
-          "comment_task",
-        );
+        const archived = archivedNotice.before(who.taskId);
         // Your own comment is not sent back to you, and does not wake the task either.
         board.comment(task().id, args.body, actor, { deliver: false });
         return text(
