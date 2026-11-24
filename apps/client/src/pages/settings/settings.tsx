@@ -56,6 +56,8 @@ export function Settings(
     layout: Layout;
     onConnect: () => void;
     onTask: (id: string) => void;
+    /** Start from a template instead: the workspace opens the template gallery; no link without it. */
+    onTemplates?: () => void;
     onClose: () => void;
   },
 ) {
@@ -406,6 +408,13 @@ export function Settings(
               agent.set(undefined);
               section.set("Runtimes");
             }}
+            onTemplates={
+              props.onTemplates &&
+              (() => {
+                agent.set(undefined);
+                props.onTemplates?.();
+              })
+            }
           />
         )}
       </If>

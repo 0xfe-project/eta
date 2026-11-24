@@ -29,6 +29,8 @@ export interface AgentEditorProps {
   onModelServices: () => void;
   /** Leave for Settings › Runtimes, where a runtime's sign-in is shown; no link without it. */
   onRuntimes?: () => void;
+  /** Start from a template instead (the template gallery); no button without it. */
+  onTemplates?: () => void;
 }
 
 export function createAgentForm(props: AgentEditorProps) {

@@ -1,4 +1,8 @@
-import type { CaptainResults, ProvidersView } from "@eta/client-contracts";
+import type {
+  AgentResults,
+  CaptainResults,
+  ProvidersView,
+} from "@eta/client-contracts";
 import type { Layout } from "../components";
 import type { MotionFrom } from "../components/motion";
 import type { Flavor, PaletteId } from "../components/palettes";
@@ -37,6 +41,8 @@ import { Settings } from "../pages/settings/settings";
 import { NewTask } from "../pages/tasks/new-task";
 import { TaskDetail } from "../pages/tasks/task-detail";
 import { TaskWorkspace } from "../pages/tasks/task-workspace";
+import { TemplateGallery } from "../pages/templates/gallery";
+import { requestedTemplate } from "../pages/templates/link";
 import { follow, useHost } from "../services/host";
 
 /** The conversation list on a tablet narrower than 960. */
@@ -143,6 +149,18 @@ export function Workspace(props: {
     mobileOpen.set(shown);
   }
   const newGroup = signal(false);
+  /** The template gallery, open on a template id ("" for none in particular). */
+  const templateGallery = signal<string | undefined>(undefined);
+  // A template link (`eta://template?id=…`, `?template=…`) opens the gallery on it.
+  effect(() => {
+    const id = requestedTemplate();
+    if (!id) return;
+    requestedTemplate.set(undefined);
+    // An agent is made in Settings › Agents now: a link gets out of Settings first.
+    const section = settings();
+    if (section) closeSettings(section);
+    templateGallery.set(id);
+  });
   const newTask = signal(false);
   const setup = signal(start.page === "onboard");
   let checkedSetup = false;
@@ -200,6 +218,24 @@ export function Workspace(props: {
     if (phone() && !settings()) void settingsPush.enter();
     settings.set(section);
     link("settings");
+  }
+  /** Settings closes the way its own close does, off the page under it. */
+  function closeSettings(section: SettingsSection) {
+    leavingSettings = section;
+    settings.set(undefined);
+    if (phone() && page() === "chat" && !conversation()) {
+      navigate("more");
+    } else {
+      link(page(), page() === "chat" ? conversation() : undefined);
+    }
+    if (phone()) void settingsPush.leave();
+  }
+  /** The private chat with an agent, made the first time and found every time after. */
+  async function direct(agentId: string) {
+    const result = await host.action(() =>
+      host.call<AgentResults["direct"]>("agents", "direct", { agentId }),
+    );
+    if (result) open(result.conversation.id);
   }
   let openingCaptain = false;
   async function openCaptain() {
@@ -570,18 +606,10 @@ export function Workspace(props: {
                   openTask(id);
                 }}
                 onConnect={props.onConnect}
-                onClose={() => {
-                  leavingSettings = section();
-                  settings.set(undefined);
-                  if (phone() && page() === "chat" && !conversation()) {
-                    navigate("more");
-                  } else {
-                    link(
-                      page(),
-                      page() === "chat" ? conversation() : undefined,
-                    );
-                  }
-                  if (phone()) void settingsPush.leave();
+                onClose={() => closeSettings(section())}
+                onTemplates={() => {
+                  closeSettings(section());
+                  templateGallery.set("");
                 }}
               />
             </View>
@@ -593,6 +621,21 @@ export function Workspace(props: {
           layout={props.layout}
           onOpen={open}
           onClose={() => newGroup.set(false)}
+        />
+      </If>
+      <If when={templateGallery() !== undefined}>
+        <TemplateGallery
+          phone={phone()}
+          initialId={templateGallery() || undefined}
+          onClose={() => templateGallery.set(undefined)}
+          onCreated={(agentId) => {
+            templateGallery.set(undefined);
+            void direct(agentId);
+          }}
+          onModelServices={() => {
+            templateGallery.set(undefined);
+            showSettings("Model services");
+          }}
         />
       </If>
       <If when={newTask()}>
