@@ -10,8 +10,13 @@ import { ActionItem, Button, Label, Modal, row } from "../components";
 import { FieldDialog } from "../components/field-dialog";
 import { MenuFrame } from "../components/menu";
 import { colors } from "../components/theme";
+import { control, shadow, space, weight } from "../components/tokens";
 import { uiText } from "../i18n";
 import { useHost } from "../services/host";
+
+const menuWidth = 188;
+/** The group's name atop the phone's action sheet. */
+const sheetHeaderHeight = 36;
 
 /** Renaming and archiving go through `conversations.update`; a connection without it sees both dimmed. */
 function useGroupsEditable() {
@@ -46,15 +51,21 @@ export function GroupMenu(props: {
           if (!open) props.onClose();
         }}
         popupStyle={{
-          width: 188,
-          paddingVertical: 4,
+          width: menuWidth,
+          paddingVertical: space[4],
           borderWidth: 1,
           borderColor: c().strong,
           backgroundColor: c().canvas,
-          boxShadow: [{ x: 0, y: 8, blur: 24, color: "#0000001f" }],
+          boxShadow: [shadow.popover],
         }}
         sheetHeader={
-          <View style={{ ...row, height: 36, paddingHorizontal: 16 }}>
+          <View
+            style={{
+              ...row,
+              height: sheetHeaderHeight,
+              paddingHorizontal: space[16],
+            }}
+          >
             <Label variant="small" tone="muted" lines={1} style={{ flex: 1 }}>
               {props.group.name}
             </Label>
@@ -77,7 +88,7 @@ export function GroupMenu(props: {
           <Label
             variant="caption"
             tone="muted"
-            style={{ paddingHorizontal: 9, paddingVertical: 6 }}
+            style={{ paddingHorizontal: space[8], paddingVertical: space[8] }}
           >
             {uiText("groupsReadOnly")}
           </Label>
@@ -179,7 +190,7 @@ export function ArchiveGroup(props: {
         {uiText("archiveGroupBody")}
       </Label>
       <If when={running() > 0}>
-        <Label variant="small" tone="amber">
+        <Label variant="small" tone="warning">
           {running() === 1
             ? uiText("archiveGroupOneRunning")
             : uiText("archiveGroupRunning", { count: running() })}
@@ -196,33 +207,33 @@ export function ArchiveGroup(props: {
       overPhoneNavigation
       hideHeader={props.phone}
       compact={!props.phone}
-      titleWeight={500}
+      titleWeight={weight.regular}
       dismissible={!busy()}
       onClose={props.onClose}
     >
       <If
         when={props.phone}
         else={
-          <View style={{ paddingTop: 6, gap: 8 }}>
+          <View style={{ paddingTop: space[8], gap: space[8] }}>
             {body()}
             <View
               style={{
                 ...row,
-                gap: 8,
+                gap: space[8],
                 justifyContent: "flex-end",
-                paddingTop: 12,
+                paddingTop: space[12],
               }}
             >
               <Button
                 label={uiText("cancel")}
-                size={28}
+                size={control.md}
                 disabled={busy()}
                 onPress={props.onClose}
               />
               <Button
                 label={uiText("archive")}
                 tone="danger"
-                size={28}
+                size={control.md}
                 disabled={busy()}
                 onPress={() => void archive()}
               />
@@ -230,23 +241,32 @@ export function ArchiveGroup(props: {
           </View>
         }
       >
-        <View style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}>
-          <Label weight={600} style={{ flex: 1 }}>
+        <View
+          style={{
+            ...row,
+            height: control.touch,
+            paddingLeft: space[16],
+            paddingRight: space[8],
+          }}
+        >
+          <Label weight={weight.strong} style={{ flex: 1 }}>
             {title()}
           </Label>
         </View>
-        <View style={{ paddingHorizontal: 16, gap: 8 }}>{body()}</View>
-        <View style={{ padding: 16, gap: 8 }}>
+        <View style={{ paddingHorizontal: space[16], gap: space[8] }}>
+          {body()}
+        </View>
+        <View style={{ padding: space[16], gap: space[8] }}>
           <Button
             label={uiText("archive")}
             tone="danger"
-            size={40}
+            size={control.touch}
             disabled={busy()}
             onPress={() => void archive()}
           />
           <Button
             label={uiText("cancel")}
-            size={40}
+            size={control.touch}
             disabled={busy()}
             onPress={props.onClose}
           />

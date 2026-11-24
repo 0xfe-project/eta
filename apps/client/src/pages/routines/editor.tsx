@@ -13,7 +13,9 @@ import {
   ActionMenu,
   Button,
   colors,
+  dialogWidth,
   Field,
+  focusRing,
   fontFamily,
   Fonts,
   grow,
@@ -32,6 +34,13 @@ import {
   touchRow,
   touchScreen,
 } from "../../components/menu";
+import {
+  control as controlHeight,
+  icon,
+  opacity,
+  space,
+  weight,
+} from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { upcomingTimes, weekday } from "./schedule";
@@ -42,9 +51,26 @@ interface ScheduleOption {
   onSelect: () => void;
 }
 
+/** A schedule select's menu. */
+const selectMenuWidth = { phone: 240, tablet: 200, desktop: 180 } as const;
+/** A row of that menu off touch screens. */
+const optionHeight = { tablet: 36, desktop: 32 } as const;
+/** The time of day beside the frequency. */
+const timeFieldWidth = { sheet: 140, tablet: 112, desktop: 116 } as const;
+/** The phone sheet's frequency and interval selects. */
+const frequencyWidth = { cron: 152, other: 120 } as const;
+/** The cron expression field. */
+const cronWidth = 160;
+/** The time zone field. */
+const timezoneWidth = { tablet: 240, desktop: 368 } as const;
+/** The brief: in the phone sheet when editing or creating, and on wider screens. */
+const briefHeight = { edit: 96, create: 124, wide: 112 } as const;
+/** The inline form's column. */
+const formWidth = 800;
+
 /**
- * The phone form's select: a 36pt trigger with 14pt text, opening the
- * design's titled bottom sheet of 48pt rows with the selected one tinted.
+ * The phone form's select: a 44pt trigger, opening the design's titled
+ * bottom sheet of 48pt rows with the selected one tinted.
  */
 function PhoneSelect(props: {
   label: string;
@@ -57,27 +83,33 @@ function PhoneSelect(props: {
   return (
     <MenuFrame
       popupStyle={{
-        width: 240,
+        width: selectMenuWidth.phone,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
       }}
-      sheetStyle={{ paddingBottom: 24 }}
+      sheetStyle={{ paddingBottom: space[24] }}
       sheetHeader={
-        <View style={{ ...row, height: 44, paddingHorizontal: 16 }}>
-          <Label weight={600}>{props.title}</Label>
+        <View
+          style={{
+            ...row,
+            height: controlHeight.touch,
+            paddingHorizontal: space[16],
+          }}
+        >
+          <Label weight={weight.strong}>{props.title}</Label>
         </View>
       }
       trigger={
         <View
           accessibilityLabel={props.label}
           hoverStyle={canHover ? { backgroundColor: c().selected } : undefined}
-          focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+          focusVisibleStyle={focusRing(c(), "inset")}
           style={{
             ...row,
-            height: 36,
-            gap: 8,
-            paddingHorizontal: 10,
+            height: controlHeight.touch,
+            gap: space[8],
+            paddingHorizontal: space[12],
             cursor: "pointer",
             borderWidth: 1,
             borderColor: c().border,
@@ -88,7 +120,7 @@ function PhoneSelect(props: {
           <Label lines={1} style={{ flex: 1, minWidth: 0 }}>
             {props.value}
           </Label>
-          <Icon name="down" size={14} tone="muted" />
+          <Icon name="down" size={icon.md} tone="muted" />
         </View>
       }
     >
@@ -100,9 +132,9 @@ function PhoneSelect(props: {
             label={option().label}
             style={{
               ...row,
-              height: 48,
+              height: space[48],
               flexShrink: 0,
-              paddingHorizontal: 16,
+              paddingHorizontal: space[16],
               borderTopWidth: 1,
               borderColor: c().border,
               backgroundColor: option().checked ? c().selected : undefined,
@@ -110,9 +142,11 @@ function PhoneSelect(props: {
             onSelect={option().onSelect}
           >
             <Label style={{ flex: 1 }}>{option().label}</Label>
-            <View style={{ width: 16, height: 16, flexShrink: 0 }}>
+            <View
+              style={{ width: space[16], height: space[16], flexShrink: 0 }}
+            >
               <If when={option().checked}>
-                <Icon name="check" size={16} />
+                <Icon name="check" size={icon.md} />
               </If>
             </View>
           </MenuRow>
@@ -154,7 +188,9 @@ function ScheduleSelect(props: {
     >
       <MenuFrame
         popupStyle={{
-          width: props.tablet ? 200 : 180,
+          width: props.tablet
+            ? selectMenuWidth.tablet
+            : selectMenuWidth.desktop,
           borderWidth: 1,
           borderColor: c().strong,
           backgroundColor: c().canvas,
@@ -166,11 +202,11 @@ function ScheduleSelect(props: {
             hoverStyle={
               canHover ? { backgroundColor: c().selected } : undefined
             }
-            focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+            focusVisibleStyle={focusRing(c(), "inset")}
             style={{
               ...row,
               justifyContent: "space-between",
-              gap: props.tablet ? 12 : 8,
+              gap: props.tablet ? space[12] : space[8],
               cursor: "pointer",
               borderWidth: 1,
               borderColor: c().border,
@@ -181,7 +217,11 @@ function ScheduleSelect(props: {
             <Label variant="small" lines={1} style={{ minWidth: 0 }}>
               {props.value}
             </Label>
-            <Icon name="down" size={10} tone={props.tablet ? "ink" : "muted"} />
+            <Icon
+              name="down"
+              size={icon.sm}
+              tone={props.tablet ? "ink" : "muted"}
+            />
           </View>
         }
       >
@@ -193,9 +233,13 @@ function ScheduleSelect(props: {
               label={option().label}
               style={{
                 ...row,
-                height: touchScreen ? touchRow : props.tablet ? 34 : 30,
-                gap: 8,
-                paddingHorizontal: 10,
+                height: touchScreen
+                  ? touchRow
+                  : props.tablet
+                    ? optionHeight.tablet
+                    : optionHeight.desktop,
+                gap: space[8],
+                paddingHorizontal: space[12],
                 backgroundColor: option().checked ? c().selected : undefined,
               }}
               onSelect={option().onSelect}
@@ -203,9 +247,11 @@ function ScheduleSelect(props: {
               <Label variant="small" style={{ flex: 1 }}>
                 {option().label}
               </Label>
-              <View style={{ width: 12, height: 12, flexShrink: 0 }}>
+              <View
+                style={{ width: space[12], height: space[12], flexShrink: 0 }}
+              >
                 <If when={option().checked}>
-                  <Icon name="check" size={12} />
+                  <Icon name="check" size={icon.sm} />
                 </If>
               </View>
             </MenuRow>
@@ -315,8 +361,13 @@ export function RoutineEditor(props: {
   // The phone sheet: 36px controls with 14px text, a footer bar under the fields.
   const sheet = () => props.phone && !props.inline;
   // The tablet form uses 32px controls with a 10px inset; the desktop one 28px and 8px.
-  const control = () => (sheet() ? 36 : props.tablet ? 32 : 28);
-  const controlInset = () => (sheet() || props.tablet ? 10 : 8);
+  const control = () =>
+    sheet()
+      ? controlHeight.touch
+      : props.tablet
+        ? controlHeight.lg
+        : controlHeight.md;
+  const controlInset = () => (sheet() || props.tablet ? space[12] : space[8]);
   const input = () => ({
     height: control(),
     paddingHorizontal: controlInset(),
@@ -325,13 +376,13 @@ export function RoutineEditor(props: {
   const select = () => ({
     height: control(),
     paddingHorizontal: controlInset(),
-    gap: 8,
+    gap: space[8],
     borderColor: c().border,
   });
   const interval = (hours: number) =>
     hours === 1 ? uiText("intervalHour") : uiText("intervalHours", { hours });
   const field = (label: string, content: JSX.Element, width?: number) => (
-    <View style={{ gap: 6, width: width ?? "100%", maxWidth: "100%" }}>
+    <View style={{ gap: space[4], width: width ?? "100%", maxWidth: "100%" }}>
       <Label variant="small" tone={sheet() ? "mutedInk" : undefined}>
         {label}
       </Label>
@@ -343,9 +394,13 @@ export function RoutineEditor(props: {
       <View
         style={{
           ...row,
-          width: sheet() ? 140 : props.tablet ? 110 : 114,
+          width: sheet()
+            ? timeFieldWidth.sheet
+            : props.tablet
+              ? timeFieldWidth.tablet
+              : timeFieldWidth.desktop,
           height: control(),
-          gap: 8,
+          gap: space[8],
           paddingHorizontal: controlInset(),
           justifyContent: "space-between",
           borderWidth: 1,
@@ -361,7 +416,7 @@ export function RoutineEditor(props: {
           renderSegment={(entry) => (
             <Label
               variant="small"
-              style={{ marginLeft: entry.segment === "period" ? 4 : 0 }}
+              style={{ marginLeft: entry.segment === "period" ? space[4] : 0 }}
             >
               {entry.label}
             </Label>
@@ -372,7 +427,7 @@ export function RoutineEditor(props: {
             color: c().ink,
           }}
         />
-        <Icon name="routines" size={sheet() ? 14 : 12} />
+        <Icon name="routines" size={sheet() ? icon.md : icon.sm} />
       </View>
     </If>
   );
@@ -380,36 +435,35 @@ export function RoutineEditor(props: {
     <View
       style={{
         ...row,
-        gap: 8,
+        gap: space[8],
         justifyContent: "flex-end",
         ...(sheet()
           ? {
-              paddingTop: 12,
-              paddingHorizontal: 16,
-              paddingBottom: 24,
+              paddingTop: space[12],
+              paddingHorizontal: space[16],
+              paddingBottom: space[24],
               borderTopWidth: 1,
               borderColor: c().border,
             }
-          : { paddingTop: 4 }),
+          : { paddingTop: space[4] }),
       }}
     >
       <Button
         label={uiText("cancel")}
-        size={sheet() ? 36 : 28}
+        size={sheet() ? controlHeight.touch : controlHeight.md}
         disabled={busy()}
-        style={{ paddingHorizontal: 14 }}
+        style={{ paddingHorizontal: space[16] }}
         onPress={props.onClose}
       />
       <Button
         label={props.item ? uiText("save") : uiText("routineCreate")}
         tone="primary"
-        size={sheet() ? 36 : 28}
+        size={sheet() ? controlHeight.touch : controlHeight.md}
         disabled={!valid() || busy()}
         dimDisabled={!sheet()}
         style={{
-          paddingHorizontal: 14,
-          opacity:
-            sheet() || (valid() && !busy()) ? 1 : props.tablet ? 0.55 : 0.5,
+          paddingHorizontal: space[16],
+          opacity: sheet() || (valid() && !busy()) ? 1 : opacity.disabled,
           // The phone sheet draws a disabled primary in the faint fill.
           ...(sheet() && (!valid() || busy())
             ? { backgroundColor: c().faint, borderColor: c().faint }
@@ -422,37 +476,41 @@ export function RoutineEditor(props: {
   const form = () => (
     <View
       style={{
-        paddingVertical: props.inline && !props.tablet ? 20 : 16,
-        paddingTop: sheet() ? 12 : undefined,
-        paddingHorizontal: props.tablet ? 24 : props.inline ? 28 : 16,
-        gap: props.tablet ? 14 : 16,
+        paddingVertical: props.inline && !props.tablet ? space[20] : space[16],
+        paddingTop: sheet() ? space[12] : undefined,
+        paddingHorizontal: props.tablet
+          ? space[24]
+          : props.inline
+            ? space[32]
+            : space[16],
+        gap: props.tablet ? space[12] : space[16],
         width: "100%",
-        maxWidth: props.inline ? 800 : undefined,
+        maxWidth: props.inline ? formWidth : undefined,
         borderTopWidth: sheet() ? 1 : 0,
         borderColor: c().border,
       }}
     >
       <If when={props.inline}>
-        <View style={{ gap: props.tablet ? 14 : 4 }}>
+        <View style={{ gap: props.tablet ? space[12] : space[4] }}>
           <View
             role="button"
             accessibilityLabel={props.item?.name ?? uiText("routines2")}
             onPress={props.onClose}
-            focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+            focusVisibleStyle={focusRing(c(), "inset")}
             style={{
               ...row,
-              height: props.tablet ? undefined : 28,
-              gap: 6,
+              height: props.tablet ? undefined : controlHeight.md,
+              gap: space[4],
               alignSelf: "flex-start",
               cursor: "pointer",
             }}
           >
-            <Icon name="arrowLeft" size={12} />
+            <Icon name="arrowLeft" size={icon.sm} />
             <Label variant="small" tone={props.tablet ? "mutedInk" : "muted"}>
               {props.item?.name ?? uiText("routines2")}
             </Label>
           </View>
-          <Label weight={600}>
+          <Label weight={weight.strong}>
             {props.item ? uiText("edit") : uiText("newRoutine")}
           </Label>
         </View>
@@ -479,14 +537,14 @@ export function RoutineEditor(props: {
             style={
               sheet()
                 ? {
-                    height: props.item ? 96 : 124,
-                    paddingVertical: 8,
-                    paddingHorizontal: 10,
+                    height: props.item ? briefHeight.edit : briefHeight.create,
+                    paddingVertical: space[8],
+                    paddingHorizontal: space[12],
                     ...textStyle(type("small"), "prose"),
                   }
                 : {
-                    height: props.tablet ? 110 : 112,
-                    padding: 10,
+                    height: briefHeight.wide,
+                    padding: space[12],
                     ...textStyle(type("small"), "prose"),
                   }
             }
@@ -511,7 +569,7 @@ export function RoutineEditor(props: {
       {field(
         uiText("schedule"),
         <>
-          <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
+          <View style={{ ...row, gap: space[8], flexWrap: "wrap" }}>
             <ScheduleSelect
               label={uiText("scheduleFrequency")}
               title={uiText("frequency")}
@@ -522,7 +580,13 @@ export function RoutineEditor(props: {
                 sheet()
                   ? kind() === "hourly"
                     ? { flex: 1, minWidth: 0 }
-                    : { width: kind() === "cron" ? 150 : 120, flexShrink: 0 }
+                    : {
+                        width:
+                          kind() === "cron"
+                            ? frequencyWidth.cron
+                            : frequencyWidth.other,
+                        flexShrink: 0,
+                      }
                   : select()
               }
               options={(Object.keys(kinds) as RoutineSchedule["kind"][]).map(
@@ -557,14 +621,11 @@ export function RoutineEditor(props: {
                             : [...previous, day()],
                         )
                       }
-                      focusVisibleStyle={{
-                        outlineWidth: 1,
-                        outlineColor: c().blue,
-                      }}
+                      focusVisibleStyle={focusRing(c(), "inset")}
                       style={{
                         ...(props.tablet
-                          ? { paddingHorizontal: 7 }
-                          : { width: 28 }),
+                          ? { paddingHorizontal: space[8] }
+                          : { width: controlHeight.md }),
                         alignSelf: "stretch",
                         alignItems: "center",
                         justifyContent: "center",
@@ -599,7 +660,9 @@ export function RoutineEditor(props: {
                 tablet={props.tablet}
                 phone={props.phone}
                 triggerStyle={
-                  sheet() ? { width: 120, flexShrink: 0 } : select()
+                  sheet()
+                    ? { width: frequencyWidth.other, flexShrink: 0 }
+                    : select()
                 }
                 options={HOURLY_STEPS.map((hours) => ({
                   label: interval(hours),
@@ -616,7 +679,9 @@ export function RoutineEditor(props: {
                 onChange={cron.set}
                 style={{
                   ...input(),
-                  ...(sheet() ? { flex: 1, minWidth: 0 } : { width: 160 }),
+                  ...(sheet()
+                    ? { flex: 1, minWidth: 0 }
+                    : { width: cronWidth }),
                 }}
               />
             </If>
@@ -636,7 +701,7 @@ export function RoutineEditor(props: {
               </If>
             }
           >
-            <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
+            <View style={{ ...row, gap: space[8], flexWrap: "wrap" }}>
               {time()}
               <If when={kind() === "cron"}>
                 <Label variant="caption" tone="muted">
@@ -686,7 +751,11 @@ export function RoutineEditor(props: {
             }))}
           />
         </If>,
-        sheet() ? undefined : props.tablet ? 240 : 366,
+        sheet()
+          ? undefined
+          : props.tablet
+            ? timezoneWidth.tablet
+            : timezoneWidth.desktop,
       )}
       <If when={!sheet()}>{actions()}</If>
     </View>
@@ -707,7 +776,7 @@ export function RoutineEditor(props: {
           sheet={props.phone}
           plainSheetHeader={props.phone}
           overPhoneNavigation={props.phone}
-          width={540}
+          width={dialogWidth.lg}
           onClose={props.onClose}
         >
           <SmoothScroll style={{ flexShrink: 1 }}>{form()}</SmoothScroll>

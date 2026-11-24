@@ -4,6 +4,7 @@ import {
   Button,
   Caption,
   colors,
+  focusRing,
   grow,
   Header,
   Icon,
@@ -13,6 +14,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
@@ -64,6 +66,12 @@ function readTime(at: number) {
 // A ghost button keeps a transparent frame so it is as wide as a bordered one.
 const ghostFrame = { borderWidth: 1, borderColor: "transparent" };
 
+/** A row of the source, servers and reads boxes; reads are denser off phones. */
+const rowHeight = 36;
+const denseRowHeight = 32;
+/** A row of the phone's actions at the foot. */
+const actionRowHeight = 52;
+
 export function PluginDetail(props: DetailProps) {
   const host = useHost();
   const c = colors();
@@ -82,8 +90,8 @@ export function PluginDetail(props: DetailProps) {
   // On a phone each block carries the design's own top spacing.
   const section = (top: number) =>
     props.phone
-      ? { gap: 6, paddingHorizontal: 16, paddingTop: top }
-      : { gap: 6 };
+      ? { gap: space[4], paddingHorizontal: space[16], paddingTop: top }
+      : { gap: space[4] };
   const needsConfig = () => props.item.state === "needs_config";
   const enabledSwitch = () => <PluginEnabled item={props.item} />;
   function update() {
@@ -104,17 +112,17 @@ export function PluginDetail(props: DetailProps) {
           <View
             style={{
               ...row,
-              height: 40,
+              height: space[40],
               flexShrink: 0,
-              gap: 8,
-              paddingHorizontal: 14,
+              gap: space[8],
+              paddingHorizontal: space[16],
               borderBottomWidth: 1,
               borderColor: c().border,
               backgroundColor: c().surface,
             }}
           >
-            <View style={{ ...row, flex: 1, minWidth: 0, gap: 8 }}>
-              <Label weight={600} lines={1} style={{ flexShrink: 1 }}>
+            <View style={{ ...row, flex: 1, minWidth: 0, gap: space[8] }}>
+              <Label weight={weight.strong} lines={1} style={{ flexShrink: 1 }}>
                 {props.item.name}
               </Label>
               <Label variant="small" tone="muted" lines={1}>
@@ -158,8 +166,8 @@ export function PluginDetail(props: DetailProps) {
               label={uiText("pluginActions")}
               icon="more"
               iconOnly
-              size={40}
-              iconSize={20}
+              size={control.touch}
+              iconSize={icon.lg}
               tone="ghost"
               onPress={() => actions.set(true)}
             />
@@ -168,24 +176,28 @@ export function PluginDetail(props: DetailProps) {
       </If>
       <SmoothScroll style={grow} scrollbar={false}>
         <View
-          style={props.phone ? { paddingBottom: 16 } : { padding: 20, gap: 20 }}
+          style={
+            props.phone
+              ? { paddingBottom: space[16] }
+              : { padding: space[20], gap: space[20] }
+          }
         >
           <If when={props.phone}>
             <View
               style={{
                 ...row,
-                gap: 12,
-                paddingHorizontal: 16,
-                paddingTop: 16,
-                paddingBottom: 4,
+                gap: space[12],
+                paddingHorizontal: space[16],
+                paddingTop: space[16],
+                paddingBottom: space[4],
               }}
             >
-              <PluginGlyph size={40} />
-              <View style={{ gap: 4, flex: 1 }}>
-                <View style={{ ...row, gap: 8 }}>
+              <PluginGlyph size={avatar.xl} />
+              <View style={{ gap: space[4], flex: 1 }}>
+                <View style={{ ...row, gap: space[8] }}>
                   <Label
                     variant="subtitle"
-                    weight={600}
+                    weight={weight.strong}
                     lines={1}
                     style={{ flexShrink: 1 }}
                   >
@@ -220,7 +232,7 @@ export function PluginDetail(props: DetailProps) {
               pluginWarnings(props.item).length
             }
           >
-            <View style={props.phone ? undefined : { gap: 14 }}>
+            <View style={props.phone ? undefined : { gap: space[12] }}>
               <If when={props.item.description}>
                 <Label
                   variant="small"
@@ -228,9 +240,9 @@ export function PluginDetail(props: DetailProps) {
                   style={
                     props.phone
                       ? {
-                          paddingHorizontal: 16,
-                          paddingTop: 8,
-                          paddingBottom: 12,
+                          paddingHorizontal: space[16],
+                          paddingTop: space[8],
+                          paddingBottom: space[12],
                         }
                       : undefined
                   }
@@ -242,9 +254,9 @@ export function PluginDetail(props: DetailProps) {
                 <Button
                   label={uiText("configure")}
                   tone={needsConfig() ? "primary" : "plain"}
-                  size={40}
+                  size={control.touch}
                   labelVariant="body"
-                  style={{ marginHorizontal: 16 }}
+                  style={{ marginHorizontal: space[16] }}
                   onPress={props.onConfigure}
                 />
               </If>
@@ -255,8 +267,8 @@ export function PluginDetail(props: DetailProps) {
                   style={
                     props.phone
                       ? {
-                          marginHorizontal: 16,
-                          marginTop: configure() ? 16 : 0,
+                          marginHorizontal: space[16],
+                          marginTop: configure() ? space[16] : 0,
                         }
                       : undefined
                   }
@@ -266,19 +278,23 @@ export function PluginDetail(props: DetailProps) {
             </View>
           </If>
           <View style={section(20)}>
-            <Caption text={text("source")} phone={props.phone} />
+            <Caption text={text("source")} />
             <View
               style={{
                 ...row,
-                gap: 8,
-                minHeight: props.phone ? 36 : undefined,
-                paddingHorizontal: 10,
-                paddingVertical: props.phone ? 6 : 8,
+                gap: space[8],
+                minHeight: props.phone ? rowHeight : undefined,
+                paddingHorizontal: space[12],
+                paddingVertical: space[8],
                 borderWidth: 1,
                 borderColor: c().border,
               }}
             >
-              <Icon name={git() ? "link" : "folder"} size={14} tone="muted" />
+              <Icon
+                name={git() ? "link" : "folder"}
+                size={icon.md}
+                tone="muted"
+              />
               <Label variant="small" style={{ flex: 1, minWidth: 0 }}>
                 {source().label}
               </Label>
@@ -296,12 +312,12 @@ export function PluginDetail(props: DetailProps) {
                     copied.set(value);
                   });
                 }}
-                focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+                focusVisibleStyle={focusRing(c(), "inset")}
                 style={{
                   // The hit area stays 24px while the drawn glyph is 14px, like the design.
-                  width: 24,
-                  height: 24,
-                  margin: -5,
+                  width: space[24],
+                  height: space[24],
+                  margin: -space[4],
                   alignItems: "center",
                   justifyContent: "center",
                   cursor: "pointer",
@@ -309,21 +325,24 @@ export function PluginDetail(props: DetailProps) {
               >
                 <Icon
                   name={copied() === source().clipboard ? "check" : "copy"}
-                  size={14}
+                  size={icon.md}
                   tone="muted"
                 />
               </View>
             </View>
           </View>
           <View style={section(16)}>
-            <Caption text={text("runs")} phone={props.phone} />
-            <View style={{ gap: 12 }}>
+            <Caption text={text("runs")} />
+            <View style={{ gap: space[12] }}>
               <ServerRows item={props.item} phone={props.phone} />
               <SkillRows item={props.item} />
               <Label
                 variant="small"
                 tone="muted"
-                style={{ paddingHorizontal: 10, paddingVertical: 7 }}
+                style={{
+                  paddingHorizontal: space[12],
+                  paddingVertical: space[8],
+                }}
               >
                 {uiText("skillsMcpServers", {
                   length: props.item.skills.length,
@@ -334,21 +353,21 @@ export function PluginDetail(props: DetailProps) {
           </View>
           <If when={reads().length}>
             <View style={section(16)}>
-              <Caption text={text("audit")} phone={props.phone} />
+              <Caption text={text("audit")} />
               <View style={{ borderWidth: 1, borderColor: c().border }}>
                 <Each of={reads()} key={(entry) => entry.id}>
                   {(entry, index) => (
                     <View
                       style={{
                         ...row,
-                        gap: props.phone ? 8 : 10,
-                        minHeight: props.phone ? 36 : 30,
-                        paddingHorizontal: 10,
+                        gap: space[8],
+                        minHeight: props.phone ? rowHeight : denseRowHeight,
+                        paddingHorizontal: space[12],
                         borderTopWidth: index() ? 1 : 0,
                         borderColor: c().border,
                       }}
                     >
-                      <AgentFace id={entry().agentId} size={14} />
+                      <AgentFace id={entry().agentId} size={avatar.sm} />
                       <Label variant="small" lines={1} style={{ flex: 1 }}>
                         {`${entry().agentName ?? text("deletedAgent")} · ${entry().field}`}
                       </Label>
@@ -412,16 +431,16 @@ function ActionRow(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        gap: 12,
-        minHeight: 52,
+        gap: space[12],
+        minHeight: actionRowHeight,
         borderTopWidth: 1,
         borderColor: c().border,
-        paddingHorizontal: 16,
+        paddingHorizontal: space[16],
         cursor: "pointer",
       }}
     >
-      <Icon name={props.icon} size={18} />
-      <View style={{ flex: 1, gap: 2 }}>
+      <Icon name={props.icon} size={icon.md} />
+      <View style={{ flex: 1, gap: space[2] }}>
         <Label>{props.label}</Label>
         <Label variant="caption" tone="muted">
           {props.hint}

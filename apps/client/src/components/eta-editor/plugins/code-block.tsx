@@ -16,6 +16,7 @@ import {
 import { uiText } from "../../../i18n";
 import { canHover } from "../../menu";
 import { colors, row, textFaces } from "../../theme";
+import { opacity, space } from "../../tokens";
 import { modKey } from "../keys";
 import { blocksOf } from "../positions";
 import { oneStep } from "../step";
@@ -169,8 +170,8 @@ function CodeBlockChrome(props: { editor: EtaEditorHandle }) {
                   width: block().box.width - 2,
                   top: block().box.y + 1,
                   height: type("caption").line + 8,
-                  paddingHorizontal: 12,
-                  gap: 8,
+                  paddingHorizontal: space[12],
+                  gap: space[8],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                 }}
@@ -191,7 +192,7 @@ function CodeBlockChrome(props: { editor: EtaEditorHandle }) {
                     onPress={() =>
                       void Clipboard.writeText(codeOf(block().node))
                     }
-                    hoverStyle={{ opacity: 0.7 }}
+                    hoverStyle={{ opacity: opacity.muted }}
                     style={{ cursor: "pointer" }}
                   >
                     {caption(uiText("copyAction"), c().muted)}
@@ -221,7 +222,7 @@ function CodeBlockChrome(props: { editor: EtaEditorHandle }) {
                       type("small").line -
                       9,
                     height: type("small").line + 8,
-                    paddingHorizontal: 12,
+                    paddingHorizontal: space[12],
                     borderTopWidth: 1,
                     borderColor: c().border,
                     backgroundColor: c().surface,

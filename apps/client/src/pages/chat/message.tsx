@@ -9,6 +9,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX, ViewRef } from "nsh";
 import type { TextSelection } from "../../components/eta-editor";
+import type { DeliveryActions } from "./composer-delivery";
 import {
   captainProposalOf,
   publishedRefs,
@@ -24,6 +25,7 @@ import {
   Button,
   Caption,
   colors,
+  Compact,
   focusRing,
   Icon,
   Label,
@@ -35,6 +37,15 @@ import {
   shownFiles,
   shownMentions,
 } from "../../components/eta-editor";
+import {
+  avatar,
+  control,
+  icon,
+  opacity,
+  shadow,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
 import { subtasksOf, TaskSummary } from "../tasks/status";
@@ -42,6 +53,7 @@ import { Proposal, Question } from "./approvals";
 import { ArtifactRow } from "./artifacts/row";
 import { CaptainReview, reviewItemsOf } from "./captain-review";
 import { cardOpen, setCardOpen } from "./card-folds";
+import { DeliveryLine } from "./composer-delivery";
 import { activeReply } from "./member-status";
 import { messageTime } from "./message-time";
 import { ProcessStep, ProcessWindow } from "./process-step";
@@ -56,6 +68,12 @@ const replyBlockGap = 8;
 
 /** A reply at work keeps this height, however much it writes. */
 const processWindowHeight = 176;
+
+/** How wide your message's bubble runs; a task draft's card and, on phones, the least room its
+ * title keeps. */
+const bubbleWidth = { phone: "84%", desktop: "72%" } as const;
+const draftCardWidth = 560;
+const draftTitleWidth = 200;
 
 /** How each code the host fails a reply with is said. */
 const failureReasons: Record<string, Parameters<typeof uiText>[0]> = {
@@ -77,6 +95,11 @@ export function Message(props: {
   insertPanel?: () => JSX.Element;
   /** The next reply of the same member failed the same way: say so, not why. */
   sameFailureAsNext?: boolean;
+  /**
+   * A message of the reader's still on its way (the host has not taken it): faded while it goes,
+   * red with why and what to do once it failed. Its row becomes the host's when that comes.
+   */
+  delivery?: { failure?: string } & DeliveryActions;
   phone: boolean;
   compact?: boolean;
   captain?: boolean;
@@ -238,28 +261,43 @@ export function Message(props: {
     <View
       style={{
         alignSelf: "stretch",
-        gap: item().author === "user" || card() ? 4 : replyBlockGap,
+        gap: item().author === "user" || card() ? space[4] : replyBlockGap,
         // A review card and a failed reply are one block each, 24 apart.
         paddingVertical: card()
           ? 0
           : review() || item().status === "failed"
-            ? 6
+            ? space[8]
             : props.phone
               ? 0
-              : 16,
-        paddingHorizontal: props.phone || props.compact || card() ? 0 : 16,
+              : space[16],
+        paddingHorizontal:
+          props.phone || props.compact || card() ? 0 : space[16],
       }}
     >
       <If when={item().author === "user"}>
-        <View style={{ alignItems: "flex-end", gap: props.phone ? 4 : 6 }}>
+        <View style={{ alignItems: "flex-end", gap: space[4] }}>
           <View
+            accessibilityLabel={
+              props.delivery
+                ? uiText(
+                    props.delivery.failure ? "sendFailedLabel" : "sendingLabel",
+                    { text: item().text },
+                  )
+                : undefined
+            }
             style={{
-              maxWidth: props.phone ? "84%" : "72%",
+              maxWidth: props.phone ? bubbleWidth.phone : bubbleWidth.desktop,
               borderWidth: 1,
               borderColor: c().border,
-              backgroundColor: props.phone ? c().selected : c().surface,
-              paddingVertical: 8,
-              paddingHorizontal: 12,
+              backgroundColor: props.delivery?.failure
+                ? c().redFill
+                : props.phone
+                  ? c().selected
+                  : c().surface,
+              opacity:
+                props.delivery && !props.delivery.failure ? opacity.muted : 1,
+              paddingVertical: space[8],
+              paddingHorizontal: space[12],
             }}
           >
             <chatText.View
@@ -271,9 +309,9 @@ export function Message(props: {
               {(addition) => (
                 <View
                   style={{
-                    gap: 3,
-                    marginTop: 6,
-                    paddingTop: 6,
+                    gap: space[2],
+                    marginTop: space[8],
+                    paddingTop: space[8],
                     borderTopWidth: 1,
                     borderColor: c().border,
                   }}
@@ -290,60 +328,74 @@ export function Message(props: {
               )}
             </Each>
           </View>
-          <View style={{ ...row, gap: 8 }}>
-            <Label
-              variant="caption"
-              tone={props.phone ? "muted" : "faint"}
-              style={{
-                textTransform: props.phone ? "none" : "uppercase",
-                letterSpacing: props.phone ? 0 : 0.4,
-              }}
-            >
-              {stamp()}
-            </Label>
-            <If when={props.canInsert || props.inserting}>
-              <Popover
-                open={props.inserting ?? false}
-                placement="bottom"
-                align="end"
-                offset={6}
-                margin={8}
-                onOpenChange={(event) => {
-                  if (event.open) props.onInsert();
-                  else props.onInsertClose?.();
+          <If when={props.delivery}>
+            {(delivery) => (
+              <DeliveryLine
+                failure={delivery().failure}
+                phone={props.phone}
+                onRetry={delivery().onRetry}
+                onEdit={delivery().onEdit}
+                onDiscard={delivery().onDiscard}
+              />
+            )}
+          </If>
+          <If when={!props.delivery}>
+            <View style={{ ...row, gap: space[8] }}>
+              <Label
+                variant="caption"
+                tone={props.phone ? "muted" : "faint"}
+                tracking={props.phone ? undefined : "caps"}
+                style={{
+                  textTransform: props.phone ? "none" : "uppercase",
                 }}
-                popupStyle={{
-                  borderWidth: 1,
-                  borderColor: c().border,
-                  backgroundColor: c().canvas,
-                  boxShadow: [{ x: 0, y: 4, blur: 16, color: "#0a0a0a14" }],
-                }}
-                trigger={
-                  <View
-                    accessibilityLabel={uiText("insertMessage")}
-                    hoverStyle={{ borderColor: c().ink }}
-                    style={{
-                      paddingVertical: 1,
-                      paddingHorizontal: 6,
-                      borderWidth: 1,
-                      borderColor: props.inserting ? c().ink : c().border,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <Label
-                      variant="caption"
-                      tone={props.inserting ? "ink" : "muted"}
-                      style={{ letterSpacing: 1, textTransform: "uppercase" }}
-                    >
-                      {uiText("insert")}
-                    </Label>
-                  </View>
-                }
               >
-                {props.insertPanel?.()}
-              </Popover>
-            </If>
-          </View>
+                {stamp()}
+              </Label>
+              <If when={props.canInsert || props.inserting}>
+                <Popover
+                  open={props.inserting ?? false}
+                  placement="bottom"
+                  align="end"
+                  offset={6}
+                  margin={8}
+                  onOpenChange={(event) => {
+                    if (event.open) props.onInsert();
+                    else props.onInsertClose?.();
+                  }}
+                  popupStyle={{
+                    borderWidth: 1,
+                    borderColor: c().border,
+                    backgroundColor: c().canvas,
+                    boxShadow: [shadow.float],
+                  }}
+                  trigger={
+                    <View
+                      accessibilityLabel={uiText("insertMessage")}
+                      hoverStyle={{ borderColor: c().ink }}
+                      style={{
+                        paddingVertical: 1,
+                        paddingHorizontal: space[8],
+                        borderWidth: 1,
+                        borderColor: props.inserting ? c().ink : c().border,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Label
+                        tracking="caps"
+                        variant="caption"
+                        tone={props.inserting ? "ink" : "muted"}
+                        style={{ textTransform: "uppercase" }}
+                      >
+                        {uiText("insert")}
+                      </Label>
+                    </View>
+                  }
+                >
+                  <Compact>{props.insertPanel?.()}</Compact>
+                </Popover>
+              </If>
+            </View>
+          </If>
         </View>
       </If>
       <If when={item().kind === "task_card" || item().kind === "task_draft"}>
@@ -372,7 +424,7 @@ export function Message(props: {
           <View
             style={{
               alignSelf: "stretch",
-              maxWidth: props.phone ? undefined : 560,
+              maxWidth: props.phone ? undefined : draftCardWidth,
               borderWidth: 1,
               borderColor: c().border,
             }}
@@ -393,26 +445,26 @@ export function Message(props: {
               style={{
                 ...row,
                 flexWrap: props.phone ? "wrap" : "nowrap",
-                columnGap: 8,
-                rowGap: 6,
-                paddingVertical: 6,
-                paddingHorizontal: 10,
+                columnGap: space[8],
+                rowGap: space[4],
+                paddingVertical: space[8],
+                paddingHorizontal: space[12],
                 cursor: draftDescription() ? "pointer" : undefined,
               }}
             >
               <If when={draftDescription()}>
                 <Icon
                   name={cardIsOpen() ? "down" : "right"}
-                  size={10}
+                  size={icon.sm}
                   tone="faint"
                 />
               </If>
               <Label
+                tracking="caps"
                 variant="caption"
                 tone="faint"
                 style={{
                   flexShrink: 0,
-                  letterSpacing: 1.4,
                   textTransform: "uppercase",
                 }}
               >
@@ -420,9 +472,9 @@ export function Message(props: {
               </Label>
               <Label
                 variant="small"
-                weight={500}
+                weight={weight.regular}
                 lines={1}
-                style={{ flex: 1, minWidth: props.phone ? 200 : 0 }}
+                style={{ flex: 1, minWidth: props.phone ? draftTitleWidth : 0 }}
               >
                 {draftTitle(item())}
               </Label>
@@ -432,7 +484,7 @@ export function Message(props: {
                   <View
                     style={{
                       flexShrink: 0,
-                      paddingHorizontal: 5,
+                      paddingHorizontal: space[4],
                       borderWidth: 1,
                       borderColor: c().border,
                     }}
@@ -446,7 +498,7 @@ export function Message(props: {
                 <View
                   style={{
                     flexShrink: 0,
-                    paddingHorizontal: 5,
+                    paddingHorizontal: space[4],
                     borderWidth: 1,
                     borderColor: c().warning,
                   }}
@@ -460,7 +512,7 @@ export function Message(props: {
                  * task; the other discards the draft, as the proposals' does. */}
                 <Button
                   label={uiText("editAndConfirm")}
-                  size={22}
+                  size={control.sm}
                   controlRef={(node) => {
                     action = node;
                   }}
@@ -468,7 +520,7 @@ export function Message(props: {
                 />
                 <Button
                   label={uiText("discard")}
-                  size={22}
+                  size={control.sm}
                   disabled={busy() || host.state().status !== "open"}
                   onPress={() => void discard()}
                 />
@@ -477,7 +529,7 @@ export function Message(props: {
             <If when={cardIsOpen() && draftDescription()}>
               <View
                 style={{
-                  padding: 10,
+                  padding: space[12],
                   borderTopWidth: 1,
                   borderColor: c().border,
                 }}
@@ -505,16 +557,16 @@ export function Message(props: {
           <View
             style={{
               ...row,
-              gap: props.phone && !active() ? 6 : 8,
+              gap: props.phone && !active() ? space[4] : space[8],
               // The name sits 10 from the first block on wider screens.
               marginBottom: props.phone ? 0 : 10 - replyBlockGap,
             }}
           >
             <AgentFace
               id={item().agentId}
-              size={props.phone ? (active() ? 18 : 16) : 14}
+              size={props.phone ? avatar.sm : avatar.sm}
             />
-            <Label variant="small" weight={600}>
+            <Label variant="small" weight={weight.strong}>
               {host.agent(item().agentId)?.name ??
                 (item().author === "captain" ? "Captain" : uiText("agent"))}
             </Label>
@@ -532,9 +584,9 @@ export function Message(props: {
                 focusVisibleStyle={focusRing(c())}
                 style={{
                   ...row,
-                  height: 26,
-                  gap: 8,
-                  paddingHorizontal: 10,
+                  height: control.md,
+                  gap: space[8],
+                  paddingHorizontal: space[12],
                   borderWidth: 1,
                   borderColor: c().border,
                   cursor: "pointer",
@@ -542,16 +594,16 @@ export function Message(props: {
               >
                 <Icon
                   name="right"
-                  size={props.phone ? 10 : 8}
+                  size={icon.sm}
                   tone={props.phone ? "faint" : "muted"}
                 />
                 <Caption
                   text={uiText("thinkingProcess")}
-                  style={{ letterSpacing: 0.8, color: c().faint }}
+                  style={{ color: c().faint }}
                 />
                 <View style={{ flex: 1 }} />
                 <Caption
-                  style={{ letterSpacing: 0.8, color: c().faint }}
+                  style={{ color: c().faint }}
                   text={`${props.phone ? "· " : ""}${uiText(
                     stepCount() === 1 ? "oneProcessStep" : "processStepCount",
                     { count: stepCount() },
@@ -573,9 +625,9 @@ export function Message(props: {
             <View
               style={{
                 ...row,
-                height: 24,
-                paddingLeft: 10,
-                paddingRight: 4,
+                height: space[24],
+                paddingLeft: space[12],
+                paddingRight: space[4],
                 justifyContent: "space-between",
                 borderBottomWidth: 1,
                 borderColor: c().border,
@@ -594,10 +646,10 @@ export function Message(props: {
               </Label>
               <Button
                 label={uiText("stop")}
-                size={18}
+                size={control.sm}
                 labelVariant="caption"
-                labelWeight={600}
-                style={{ paddingHorizontal: 7 }}
+                labelWeight={weight.strong}
+                style={{ paddingHorizontal: space[8] }}
                 disabled={item().status === "stopping"}
                 onPress={() =>
                   void host.action(() =>
@@ -622,7 +674,7 @@ export function Message(props: {
             style={{
               ...row,
               justifyContent: "flex-end",
-              paddingRight: 8,
+              paddingRight: space[8],
               opacity: stepCount() ? 1 : 0,
             }}
           >
@@ -630,7 +682,7 @@ export function Message(props: {
               role="button"
               accessibilityLabel={uiText("processViewMore")}
               onPress={stepCount() ? () => process.set(true) : undefined}
-              hoverStyle={{ opacity: 0.7 }}
+              hoverStyle={{ opacity: opacity.muted }}
               focusVisibleStyle={focusRing(c())}
               style={{ cursor: stepCount() ? "pointer" : undefined }}
             >
@@ -642,11 +694,12 @@ export function Message(props: {
         </If>
         <If when={item().status === "failed" && !review()}>
           {/* A failed reply is its time, then why, as a warning line. */}
-          <View style={{ gap: 8 }}>
+          <View style={{ gap: space[8] }}>
             <Label
+              tracking="caps"
               variant="caption"
               tone="muted"
-              style={{ letterSpacing: 1, textTransform: "uppercase" }}
+              style={{ textTransform: "uppercase" }}
             >
               {messageTime(item().createdAt, false)}
             </Label>
@@ -663,7 +716,7 @@ export function Message(props: {
                   ref={(node) => {
                     reply = node;
                   }}
-                  style={{ paddingHorizontal: 2 }}
+                  style={{ paddingHorizontal: space[2] }}
                 >
                   <chatText.View
                     text={{ text: text(), mentions: mentionRefs() }}
@@ -715,8 +768,8 @@ export function Message(props: {
           <Label
             variant="caption"
             tone={props.phone ? "muted" : "faint"}
+            tracking={props.phone ? undefined : "caps"}
             style={{
-              letterSpacing: props.phone ? 0 : 0.4,
               textTransform: props.phone ? "none" : "uppercase",
             }}
           >

@@ -2,6 +2,7 @@ import type { TaskActor } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { AgentFace, UserFace } from "../../components/agent-face";
+import { avatar, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -33,13 +34,18 @@ export function ownerLine(
 export function ActorName(props: { actor: TaskActor; size: number }) {
   const host = useHost();
   return (
-    <View style={{ ...row, gap: 6, flex: 1, minWidth: 0 }}>
+    <View style={{ ...row, gap: space[4], flex: 1, minWidth: 0 }}>
       {props.actor.kind === "agent" ? (
         <AgentFace id={props.actor.agentId} size={props.size} />
       ) : (
         <UserFace size={props.size} />
       )}
-      <Label variant="small" weight={600} lines={1} style={{ flexShrink: 1 }}>
+      <Label
+        variant="small"
+        weight={weight.strong}
+        lines={1}
+        style={{ flexShrink: 1 }}
+      >
         {actorLabel(props.actor, host.agent)}
       </Label>
     </View>
@@ -56,10 +62,10 @@ export function CreatorChip(props: { creator: TaskActor }) {
       accessibilityLabel={uiText("taskCreatorValue", { name: name() })}
       style={{
         ...row,
-        gap: 6,
+        gap: space[4],
         alignSelf: "flex-start",
-        paddingVertical: 2,
-        paddingHorizontal: 8,
+        paddingVertical: space[2],
+        paddingHorizontal: space[8],
         borderWidth: 1,
         borderColor: c().border,
       }}
@@ -68,11 +74,11 @@ export function CreatorChip(props: { creator: TaskActor }) {
         {uiText("taskCreator")}
       </Label>
       {props.creator.kind === "agent" ? (
-        <AgentFace id={props.creator.agentId} size={14} />
+        <AgentFace id={props.creator.agentId} size={avatar.sm} />
       ) : (
-        <UserFace size={14} />
+        <UserFace size={avatar.sm} />
       )}
-      <Label variant="caption" weight={600} lines={1}>
+      <Label variant="caption" weight={weight.strong} lines={1}>
         {name()}
       </Label>
     </View>

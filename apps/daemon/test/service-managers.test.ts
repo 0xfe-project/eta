@@ -348,7 +348,7 @@ describe("windows", () => {
         registered.push(registration);
         if (!services.has(registration.name as string))
           services.set(registration.name as string, "stopped");
-        return true;
+        return undefined;
       },
     };
     return { api: api as never, calls, registered, services };

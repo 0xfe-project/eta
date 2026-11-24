@@ -2,6 +2,8 @@ import type { RoutineSummary } from "@eta/client-contracts";
 import { View } from "nsh";
 import {
   colors,
+  dialogWidth,
+  focusRing,
   grow,
   Label,
   Modal,
@@ -9,6 +11,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { StatusDot } from "../../components/status-dot";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { routineTime } from "./schedule";
 
@@ -21,7 +24,7 @@ export function PendingReports(props: {
   return (
     <Modal
       title={uiText("pending")}
-      width={360}
+      width={dialogWidth.sm}
       height="100%"
       side
       overPhoneNavigation
@@ -29,7 +32,7 @@ export function PendingReports(props: {
       onClose={props.onClose}
     >
       <SmoothScroll style={grow}>
-        <View style={{ padding: 12, gap: 8 }}>
+        <View style={{ padding: space[12], gap: space[8] }}>
           <Each
             of={props.routines
               .flatMap((routine) =>
@@ -46,14 +49,14 @@ export function PendingReports(props: {
             {(entry) => (
               <View
                 style={{
-                  paddingVertical: 10,
-                  paddingHorizontal: 12,
-                  gap: 6,
+                  paddingVertical: space[12],
+                  paddingHorizontal: space[12],
+                  gap: space[4],
                   borderWidth: 1,
                   borderColor: c().strong,
                 }}
               >
-                <View style={{ ...row, gap: 6 }}>
+                <View style={{ ...row, gap: space[4] }}>
                   <StatusDot
                     color={entry().run.status === "sent" ? c().blue : c().red}
                   />
@@ -76,10 +79,7 @@ export function PendingReports(props: {
                   onPress={() => {
                     props.onOpen(entry().routine.id, entry().run.id);
                   }}
-                  focusVisibleStyle={{
-                    outlineWidth: 1,
-                    outlineColor: c().blue,
-                  }}
+                  focusVisibleStyle={focusRing(c(), "inset")}
                   style={{ alignSelf: "flex-start", cursor: "pointer" }}
                 >
                   <Label

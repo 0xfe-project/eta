@@ -6,6 +6,7 @@ import {
   ActionMenu,
   Button,
   colors,
+  dialogWidth,
   Field,
   Label,
   Modal,
@@ -14,10 +15,15 @@ import {
   textStyle,
 } from "../../components";
 import { sendShortcut } from "../../components/eta-editor";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { createDescription, DescriptionBox } from "./description-box";
 import { Segmented } from "./segmented";
+
+/** The executor and workspace selects, and how far the "waits for" list runs. */
+const selectWidth = 116;
+const waitsForWidth = 380;
 
 export function NewTask(props: {
   phone: boolean;
@@ -74,23 +80,29 @@ export function NewTask(props: {
       props.onOpen(result.tasks[0].id);
     }
   }
-  const select = { width: 115, height: 24, paddingHorizontal: 9 };
-  const link = { height: 24, paddingHorizontal: 0, borderWidth: 0 };
+  const select = {
+    width: selectWidth,
+    height: control.sm,
+    paddingHorizontal: space[8],
+  };
+  const link = { height: control.sm, paddingHorizontal: 0, borderWidth: 0 };
   return (
     <Modal
       title={uiText("newTask")}
-      width={512}
+      width={dialogWidth.lg}
       phone={props.phone}
       compact={!props.phone}
       onClose={props.onClose}
     >
       <View
         style={
-          props.phone ? { padding: 14, gap: 14 } : { paddingTop: 14, gap: 14 }
+          props.phone
+            ? { padding: space[16], gap: space[12] }
+            : { paddingTop: space[16], gap: space[12] }
         }
       >
-        <View style={{ gap: 14 }}>
-          <View style={{ gap: 6 }}>
+        <View style={{ gap: space[12] }}>
+          <View style={{ gap: space[4] }}>
             <Label variant="caption">{uiText("title")}</Label>
             <Field
               label={uiText("title")}
@@ -98,14 +110,14 @@ export function NewTask(props: {
               value={title()}
               onChange={title.set}
               style={{
-                height: 30,
-                paddingHorizontal: 10,
+                height: control.lg,
+                paddingHorizontal: space[12],
                 ...textStyle(type("small")),
                 borderColor: c().strong,
               }}
             />
           </View>
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: space[4] }}>
             <Label variant="caption">{uiText("description")}</Label>
             <DescriptionBox
               description={description}
@@ -115,7 +127,7 @@ export function NewTask(props: {
             />
           </View>
         </View>
-        <View style={{ gap: 10 }}>
+        <View style={{ gap: space[8] }}>
           <NewTaskRow label={uiText("executor")}>
             <ActionMenu
               label={uiText("executor")}
@@ -194,7 +206,7 @@ export function NewTask(props: {
                   : `+ ${uiText("newTaskAdd")}`
               }
               truncateValue
-              triggerStyle={{ ...link, maxWidth: 380 }}
+              triggerStyle={{ ...link, maxWidth: waitsForWidth }}
             >
               <Each of={tasks()} key={(task) => task.id}>
                 {(task) => (
@@ -226,7 +238,7 @@ export function NewTask(props: {
             />
           </NewTaskRow>
         </View>
-        <View style={{ ...row, gap: 8, justifyContent: "flex-end" }}>
+        <View style={{ ...row, gap: space[8], justifyContent: "flex-end" }}>
           <Button label={uiText("cancel")} onPress={props.onClose} />
           <Button
             label={uiText("newTaskCreate")}
@@ -241,10 +253,13 @@ export function NewTask(props: {
   );
 }
 
+/** A row's label column. */
+const rowLabelWidth = 64;
+
 function NewTaskRow(props: { label: string; children: JSX.Element }) {
   return (
-    <View style={{ ...row, gap: 14 }}>
-      <Label variant="small" tone="mutedInk" style={{ width: 62 }}>
+    <View style={{ ...row, gap: space[12] }}>
+      <Label variant="small" tone="mutedInk" style={{ width: rowLabelWidth }}>
         {props.label}
       </Label>
       {props.children}

@@ -9,6 +9,7 @@ import {
   row,
 } from "../../components";
 import { canHover, inSheet, MenuFrame, MenuRow } from "../../components/menu";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { setUsageShown, usageShown } from "./usage";
 
@@ -17,6 +18,9 @@ import { setUsageShown, usageShown } from "./usage";
  * their token usage. On desktop and tablet a toolbar button with a popup; on a phone a button at
  * the top right with a sheet at the bottom.
  */
+/** The View menu off phones. */
+const menuWidth = 260;
+
 export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
   const c = colors();
   const open = signal(false);
@@ -28,8 +32,8 @@ export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
       open={open()}
       onOpenChange={open.set}
       popupStyle={{
-        width: 260,
-        paddingVertical: 4,
+        width: menuWidth,
+        paddingVertical: space[4],
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
@@ -38,23 +42,23 @@ export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
         <View
           style={{
             ...row,
-            height: 44,
-            paddingLeft: 16,
-            paddingRight: 8,
+            height: control.touch,
+            paddingLeft: space[16],
+            paddingRight: space[8],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <Label weight={600} lines={1} style={grow}>
+          <Label weight={weight.strong} lines={1} style={grow}>
             {uiText("usageView")}
           </Label>
           <Button
             label={uiText("close")}
             icon="close"
             iconOnly
-            iconSize={16}
+            iconSize={icon.md}
             tone="ghost"
-            size={32}
+            size={control.lg}
             onPress={() => open.set(false)}
           />
         </View>
@@ -71,18 +75,22 @@ export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
               expandedStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: 25,
-                paddingHorizontal: props.tablet ? 6 : 8,
-                gap: 5,
+                height: control.sm,
+                paddingHorizontal: space[8],
+                gap: space[4],
                 flexShrink: 0,
                 cursor: "pointer",
                 backgroundColor: open() ? c().selected : undefined,
               }}
             >
-              <Icon name="sliders" size={12} tone={open() ? "ink" : "muted"} />
+              <Icon
+                name="sliders"
+                size={icon.sm}
+                tone={open() ? "ink" : "muted"}
+              />
               <Label
                 variant="small"
-                weight={props.tablet ? 500 : 400}
+                weight={weight.regular}
                 tone={open() ? "ink" : "muted"}
               >
                 {uiText("usageView")}
@@ -93,21 +101,25 @@ export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
           <View
             accessibilityLabel={uiText("usageView")}
             style={{
-              width: 40,
-              height: 40,
+              width: space[40],
+              height: space[40],
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
             }}
           >
-            <Icon name="sliders" size={20} />
+            <Icon name="sliders" size={icon.lg} />
           </View>
         </If>
       }
     >
       <If when={!props.phone}>
         <View
-          style={{ paddingTop: 6, paddingBottom: 2, paddingHorizontal: 10 }}
+          style={{
+            paddingTop: space[8],
+            paddingBottom: space[2],
+            paddingHorizontal: space[12],
+          }}
         >
           <Caption text={uiText("usageView")} />
         </View>
@@ -132,13 +144,13 @@ function UsageRow(props: { phone?: boolean; on: boolean }) {
       style={{
         ...row,
         alignItems: "flex-start",
-        paddingVertical: sheet() ? 14 : 6,
-        paddingHorizontal: sheet() ? 16 : 10,
-        gap: 12,
+        paddingVertical: sheet() ? space[16] : space[8],
+        paddingHorizontal: sheet() ? space[16] : space[12],
+        gap: space[12],
       }}
       onSelect={() => setUsageShown(!props.on)}
     >
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+      <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
         <Label variant={sheet() ? "body" : "small"}>
           {uiText("usageShowTokens")}
         </Label>
@@ -151,10 +163,10 @@ function UsageRow(props: { phone?: boolean; on: boolean }) {
       <View
         style={{
           ...row,
-          marginTop: 2,
-          width: 28,
-          height: 16,
-          paddingHorizontal: 2,
+          marginTop: space[2],
+          width: control.md,
+          height: space[16],
+          paddingHorizontal: space[2],
           flexShrink: 0,
           justifyContent: props.on ? "flex-end" : "flex-start",
           borderWidth: 1,
@@ -164,8 +176,8 @@ function UsageRow(props: { phone?: boolean; on: boolean }) {
       >
         <View
           style={{
-            width: 10,
-            height: 10,
+            width: space[12],
+            height: space[12],
             backgroundColor: props.on ? c().buttonInk : c().muted,
           }}
         />

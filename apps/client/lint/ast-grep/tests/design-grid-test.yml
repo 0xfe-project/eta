@@ -1,0 +1,21 @@
+id: design-grid
+valid:
+  - "const rowHeight = 52;"
+  - "const labelWidth = 72;"
+  - "const inset = space[12];"
+  - "const columnWidth = { runs: 60, tokens: 92 } as const;"
+  - "const itemHeight = { phone: sizes.phoneNav - border.hair, rail: 48 };"
+  - "const bubbleWidth = { phone: \"84%\", desktop: \"72%\" } as const;"
+  - "const MAX_HEIGHT = 1_200;"
+  - "const hairGap = 1;"
+  - "const PAGE_SIZE = 15;"
+  - "const goalPreview = 600;"
+  - "const timeout = 250;"
+invalid:
+  - "const rowHeight = 53;"
+  - "const inset = 11;"
+  - "const glyphInset = 4.5;"
+  - "const labelWidth = phone() ? 62 : 72;"
+  - "const columnWidth = { runs: 60, tokens: 90 } as const;"
+  - "const menuOffset = -6;"
+  - "const CARD_WIDTH = 150;"

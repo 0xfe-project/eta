@@ -5,30 +5,46 @@ import type { light, TextVariant } from "./theme";
 import { Image, Text, View } from "nsh";
 import { TextView } from "nsh/base";
 import { iconPaths } from "./icons";
-import { colors, fontFamily, Fonts, monoFontFamily, textFaces } from "./theme";
+import {
+  colors,
+  densityDefaults,
+  fontFamily,
+  Fonts,
+  inCompact,
+  monoFontFamily,
+  textFaces,
+  textStyle,
+} from "./theme";
+import { icon, opacity, space, tracking, weight } from "./tokens";
 
 export function Label(props: {
   children?: JSX.Element | string | number;
-  /** The text's role in the type scale; `body` by default. */
+  /** The text's role in the type scale; the density's (`body` in regular) by default. */
   variant?: TextVariant;
   tone?: keyof typeof light;
   weight?: number;
+  /** Letter spacing, in em of the role's size: `caps` with uppercase, `tight` for display text. */
+  tracking?: keyof typeof tracking;
   lines?: number;
   style?: TextStyle;
 }) {
   const color = colors();
   const fonts = Fonts();
   const type = textFaces();
-  const face = () => type(props.variant ?? "body");
+  const density = densityDefaults();
+  const face = () => type(props.variant ?? density().text);
   return (
     <Text
       style={{
         fontFamily: fontFamily(fonts().interface),
         fontSize: face().size,
         lineHeight: face().line,
-        fontWeight: props.weight ?? 400,
+        fontWeight: props.weight ?? weight.regular,
         color: color()[props.tone ?? "ink"],
         numberOfLines: props.lines,
+        ...(props.tracking
+          ? { letterSpacing: tracking[props.tracking] * face().size }
+          : {}),
         ...props.style,
       }}
     >
@@ -43,6 +59,8 @@ export function Icon(props: {
   tone?: keyof typeof light;
 }) {
   const color = colors();
+  const density = densityDefaults();
+  const size = () => props.size ?? density().icon;
   const src = () =>
     `data:image/svg+xml,${encodeURIComponent(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path fill="${
@@ -54,8 +72,8 @@ export function Icon(props: {
       src={src()}
       fadeDuration={0}
       style={{
-        width: props.size ?? 14,
-        height: props.size ?? 14,
+        width: size(),
+        height: size(),
         flexShrink: 0,
       }}
     />
@@ -70,11 +88,14 @@ export function Markdown(props: {
   /** `small` text at its tight line height with `subtitle` headings, for a
    * narrow panel. */
   dense?: boolean;
-  /** The body's role: `body` by default, `small` with `dense`. Running text
-   * takes the role's `prose` line height, dense text its `line`. */
+  /** The body's role: `body` by default, `small` with `dense` or where the
+   * density is compact. Running text takes the role's `prose` line height,
+   * dense text its `line`. Where compact, headings, tables and code take the
+   * body's role too, so nothing in it is larger than its text. */
   variant?: TextVariant;
-  /** Compact headings (with `compactHeadings` or `dense`): role, weight and
-   * the space above and below, such as `small`/600 with 6 above. */
+  /** Compact headings (with `compactHeadings`, `dense` or a compact density):
+   * role, weight and the space above and below, such as `small`/600 with 6
+   * above. */
   heading?: {
     variant?: TextVariant;
     weight?: number;
@@ -86,13 +107,20 @@ export function Markdown(props: {
   const c = colors();
   const fonts = Fonts();
   const type = textFaces();
+  const compact = inCompact();
   const code = () => ({ fontFamily: monoFontFamily(fonts()) });
   const base = props.dense
-    ? { weight: 600, space: 0, after: 0 }
-    : { weight: undefined, space: 16, after: 6 };
-  const body = () => type(props.variant ?? (props.dense ? "small" : "body"));
+    ? { weight: weight.strong, space: 0, after: 0 }
+    : { weight: compact() ? weight.strong : undefined, space: 16, after: 6 };
+  const variant = () =>
+    props.variant ?? (props.dense || compact() ? "small" : "body");
+  const body = () => type(variant());
+  /** Where compact: a table's cells and a code block in the body's size, at its tight line. */
+  const fit = () => (compact() ? textStyle(body()) : {});
   const heading = () => {
-    const face = type(props.heading?.variant ?? "subtitle");
+    const face = type(
+      props.heading?.variant ?? (compact() ? variant() : "subtitle"),
+    );
     return {
       fontSize: face.size,
       lineHeight: face.line,
@@ -101,7 +129,7 @@ export function Markdown(props: {
       marginBottom: props.heading?.after ?? base.after,
     };
   };
-  const headings = props.compactHeadings || props.dense;
+  const headings = () => props.compactHeadings || props.dense || compact();
   return (
     <TextView
       markdown={props.value}
@@ -118,11 +146,16 @@ export function Markdown(props: {
           color: c().ink,
         },
         paragraph: { marginTop: 0, marginBottom: 0 },
-        codeBlockCode: code(),
+        codeBlockCode: { ...code(), ...fit() },
         code: code(),
-        heading1: headings ? heading() : undefined,
-        heading2: headings ? heading() : undefined,
-        heading3: headings ? heading() : undefined,
+        heading1: headings() ? heading() : undefined,
+        heading2: headings() ? heading() : undefined,
+        heading3: headings() ? heading() : undefined,
+        heading4: compact() ? heading() : undefined,
+        heading5: compact() ? heading() : undefined,
+        heading6: compact() ? heading() : undefined,
+        tableCell: fit(),
+        tableHeaderCell: fit(),
         link: { color: c().blue },
       }}
       codeBlockActions={[{ id: "copy" }]}
@@ -132,8 +165,6 @@ export function Markdown(props: {
 
 export function Caption(props: {
   text: string;
-  /** The phone's 0.08em tracking. */
-  phone?: boolean;
   tone?: keyof typeof light;
   style?: TextStyle;
 }) {
@@ -141,11 +172,8 @@ export function Caption(props: {
     <Label
       variant="caption"
       tone={props.tone ?? "muted"}
-      style={{
-        letterSpacing: props.phone ? 0.8 : 1.2,
-        textTransform: "uppercase",
-        ...props.style,
-      }}
+      tracking="caps"
+      style={{ textTransform: "uppercase", ...props.style }}
     >
       {props.text}
     </Label>
@@ -155,9 +183,9 @@ export function Caption(props: {
 /** The 14px foreground caret at 45% in a 16px slot that ends phone list rows. */
 export function RowChevron() {
   return (
-    <View style={{ width: 16, alignItems: "center", flexShrink: 0 }}>
-      <View style={{ opacity: 0.45 }}>
-        <Icon name="right" size={14} />
+    <View style={{ width: space[16], alignItems: "center", flexShrink: 0 }}>
+      <View style={{ opacity: opacity.disabled }}>
+        <Icon name="right" size={icon.md} />
       </View>
     </View>
   );

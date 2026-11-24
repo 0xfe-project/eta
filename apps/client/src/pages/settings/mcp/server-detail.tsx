@@ -13,6 +13,7 @@ import {
   SmoothScroll,
 } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
+import { control, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -23,16 +24,20 @@ import {
   toolsDescription,
   transportDescription,
 } from "./server-presentation";
+
+/** A fact's value beside its label, and the sign-out confirmation's sheet. */
+const valueWidth = "70%";
+const signOutHeight = 188;
 function McpFact(props: { label: string; value: string }) {
   const c = colors();
   return (
     <View
       style={{
         ...row,
-        minHeight: 44,
-        gap: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        minHeight: control.touch,
+        gap: space[12],
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -41,7 +46,7 @@ function McpFact(props: { label: string; value: string }) {
       <Label
         variant="small"
         tone="muted"
-        style={{ maxWidth: "70%", textAlign: "right" }}
+        style={{ maxWidth: valueWidth, textAlign: "right" }}
       >
         {props.value}
       </Label>
@@ -87,7 +92,7 @@ export function McpDetail(props: {
           <Header
             title={server().server}
             layout={props.layout}
-            inset={16}
+            inset={space[16]}
             onBack={props.onBack}
           />
         }
@@ -98,9 +103,9 @@ export function McpDetail(props: {
         <View
           style={{
             ...row,
-            minHeight: 44,
-            gap: 6,
-            paddingHorizontal: 16,
+            minHeight: control.touch,
+            gap: space[4],
+            paddingHorizontal: space[16],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
@@ -136,8 +141,8 @@ export function McpDetail(props: {
             variant="small"
             tone="muted"
             style={{
-              paddingHorizontal: 16,
-              paddingVertical: 8,
+              paddingHorizontal: space[16],
+              paddingVertical: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -146,17 +151,17 @@ export function McpDetail(props: {
           </Label>
         </If>
         <If when={feedback() || server().error}>
-          <Label variant="small" tone="red" style={{ padding: 16 }}>
+          <Label variant="small" tone="red" style={{ padding: space[16] }}>
             {feedback() || server().error}
           </Label>
         </If>
         <If when={login() && signInNeeded() ? login() : undefined}>
           {(flow) => (
-            <View style={{ padding: 16, gap: 8 }}>
+            <View style={{ padding: space[16], gap: space[8] }}>
               <Label variant="small" tone="muted">
                 {uiText("mcpReturnHint")}
               </Label>
-              <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
+              <View style={{ ...row, gap: space[8], flexWrap: "wrap" }}>
                 <Button
                   label={uiText("openSignInPage")}
                   onPress={() => void openUrl(flow().authorizationUrl)}
@@ -198,9 +203,9 @@ export function McpDetail(props: {
         <View
           style={{
             ...(phone() ? {} : { ...row, justifyContent: "flex-end" }),
-            gap: 8,
-            paddingHorizontal: 16,
-            paddingVertical: 12,
+            gap: space[8],
+            paddingHorizontal: space[16],
+            paddingVertical: space[12],
             borderTopWidth: 1,
             borderColor: c().border,
           }}
@@ -209,7 +214,7 @@ export function McpDetail(props: {
             <Button
               label={uiText("signIn")}
               tone="primary"
-              size={phone() ? 32 : 24}
+              size={phone() ? control.lg : control.sm}
               disabled={busy()}
               onPress={() =>
                 void run(async () => {
@@ -230,7 +235,7 @@ export function McpDetail(props: {
           <If when={signedIn() && host.can("mcp.logout")}>
             <Button
               label={uiText("signOut")}
-              size={phone() ? 32 : 24}
+              size={phone() ? control.lg : control.sm}
               disabled={busy()}
               onPress={() => confirm.set(true)}
             />
@@ -239,7 +244,7 @@ export function McpDetail(props: {
             <Button
               label={uiText("mcpReload")}
               icon="refresh"
-              size={phone() ? 32 : 24}
+              size={phone() ? control.lg : control.sm}
               disabled={busy()}
               onPress={() =>
                 void run(async () => {
@@ -261,14 +266,14 @@ export function McpDetail(props: {
           title={uiText("mcpConfirmSignOut", { server: server().server })}
           phone={phone()}
           sheet={phone()}
-          height={186}
+          height={signOutHeight}
           onClose={() => confirm.set(false)}
         >
-          <View style={{ padding: 16, gap: 12 }}>
+          <View style={{ padding: space[16], gap: space[12] }}>
             <Label variant="small" tone="muted">
               {uiText("mcpSignOutHint")}
             </Label>
-            <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
+            <View style={{ ...row, justifyContent: "flex-end", gap: space[8] }}>
               <Button
                 label={uiText("cancel")}
                 onPress={() => confirm.set(false)}

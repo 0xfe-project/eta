@@ -1,0 +1,32 @@
+id: design-color
+language: tsx
+severity: error
+message: A colour written in place of a token; take it from the palette (theme.ts).
+note: |
+  A hex colour, rgb()/rgba() or an alpha pasted onto a token (`${c().warning}1f`) goes into the
+  palette as a token (light and dark), or the line says why: `// design-value: <reason>`.
+ignores:
+  - src/components/tokens.ts
+  - src/components/theme.ts
+  - src/components/palettes.ts
+rule:
+  any:
+    - kind: pair
+      all:
+        - has:
+            field: key
+            regex: ^["']?(color|[A-Za-z]*Color)["']?$
+        - has:
+            field: value
+            matches: design-color
+    - kind: jsx_attribute
+      all:
+        - has:
+            kind: property_identifier
+            regex: ^(color|[A-Za-z]*Color)$
+        - has:
+            any:
+              - kind: jsx_expression
+                has:
+                  matches: design-color
+              - matches: design-color

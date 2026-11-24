@@ -4,6 +4,7 @@ import { levelSupport } from "@eta/client-contracts";
 import { View } from "nsh";
 import { ActionItem, ActionMenu, Field, Label, row } from "../../../components";
 import { ModelSelect } from "../../../components/model-select";
+import { space } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 import { RuntimeHints } from "../runtimes/runtime-hints";
 import { reasonText, runtimeReason } from "../runtimes/status";
@@ -13,6 +14,10 @@ import { AvatarRow } from "./avatar";
 import { EditorRow, focusOnOpen } from "./editor-row";
 import { PersonaField } from "./instructions";
 import { MachineField } from "./machine-field";
+
+/** The name field, and the runtime menu: wide enough for a name and its reason on one line. */
+const nameWidth = 200;
+const runtimeMenuWidth = 260;
 
 const agentNameLimit = 100;
 export function AgentGeneral(props: {
@@ -76,7 +81,7 @@ export function AgentGeneral(props: {
           when={!creating}
           else={
             // The creator's hint is one 10px line: the muted reason, then the link in ink.
-            <View style={{ ...row, flexWrap: "wrap", columnGap: 6 }}>
+            <View style={{ ...row, flexWrap: "wrap", columnGap: space[4] }}>
               <Label variant="caption" tone="muted">
                 {missingModel()
                   ? localizedText(
@@ -89,7 +94,7 @@ export function AgentGeneral(props: {
             </View>
           }
         >
-          <View style={{ alignItems: "flex-start", gap: 2 }}>
+          <View style={{ alignItems: "flex-start", gap: space[2] }}>
             <If
               when={missingModel()}
               else={
@@ -157,7 +162,11 @@ export function AgentGeneral(props: {
     <View
       style={
         creating
-          ? { paddingVertical: 16, paddingHorizontal: 14, gap: 16 }
+          ? {
+              paddingVertical: space[16],
+              paddingHorizontal: space[16],
+              gap: space[16],
+            }
           : undefined
       }
     >
@@ -168,7 +177,7 @@ export function AgentGeneral(props: {
         label={uiText("name")}
         stack={stacked()}
         phone={phoneEditor()}
-        width={200}
+        width={nameWidth}
       >
         <Field
           label={uiText("name")}
@@ -208,7 +217,7 @@ export function AgentGeneral(props: {
           value={runtimeLabel(runtime())}
           triggerStyle={selectStyle()}
           // Wide enough for a name and its reason on one line ("OpenCode  Probe timed out (30s)").
-          popupWidth={260}
+          popupWidth={runtimeMenuWidth}
         >
           <Each of={runtimeList()}>
             {(item) => (

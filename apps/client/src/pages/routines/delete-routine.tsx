@@ -5,6 +5,7 @@
 import type { RoutineInfo } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { Button, Label, Modal, row } from "../../components";
+import { control, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -37,7 +38,7 @@ export function DeleteRoutine(props: {
         {uiText("deleteRoutineBody")}
       </Label>
       <If when={props.running}>
-        <Label variant="small" tone="amber">
+        <Label variant="small" tone="warning">
           {uiText("deleteRoutineRunning")}
         </Label>
       </If>
@@ -52,33 +53,33 @@ export function DeleteRoutine(props: {
       overPhoneNavigation
       hideHeader={props.phone}
       compact={!props.phone}
-      titleWeight={500}
+      titleWeight={weight.regular}
       dismissible={!busy()}
       onClose={props.onClose}
     >
       <If
         when={props.phone}
         else={
-          <View style={{ paddingTop: 6, gap: 8 }}>
+          <View style={{ paddingTop: space[8], gap: space[8] }}>
             {body()}
             <View
               style={{
                 ...row,
-                gap: 8,
+                gap: space[8],
                 justifyContent: "flex-end",
-                paddingTop: 12,
+                paddingTop: space[12],
               }}
             >
               <Button
                 label={uiText("cancel")}
-                size={28}
+                size={control.md}
                 disabled={busy()}
                 onPress={props.onClose}
               />
               <Button
                 label={uiText("delete")}
                 tone="danger"
-                size={28}
+                size={control.md}
                 disabled={blocked()}
                 onPress={() => void remove()}
               />
@@ -86,23 +87,32 @@ export function DeleteRoutine(props: {
           </View>
         }
       >
-        <View style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}>
-          <Label weight={600} style={{ flex: 1 }}>
+        <View
+          style={{
+            ...row,
+            height: control.touch,
+            paddingLeft: space[16],
+            paddingRight: space[8],
+          }}
+        >
+          <Label weight={weight.strong} style={{ flex: 1 }}>
             {title()}
           </Label>
         </View>
-        <View style={{ paddingHorizontal: 16, gap: 8 }}>{body()}</View>
-        <View style={{ padding: 16, gap: 8 }}>
+        <View style={{ paddingHorizontal: space[16], gap: space[8] }}>
+          {body()}
+        </View>
+        <View style={{ padding: space[16], gap: space[8] }}>
           <Button
             label={uiText("delete")}
             tone="danger"
-            size={40}
+            size={control.touch}
             disabled={blocked()}
             onPress={() => void remove()}
           />
           <Button
             label={uiText("cancel")}
-            size={40}
+            size={control.touch}
             disabled={busy()}
             onPress={props.onClose}
           />

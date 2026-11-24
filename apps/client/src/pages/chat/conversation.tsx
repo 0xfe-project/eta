@@ -12,12 +12,13 @@ import type {
 import type { Layout } from "../../components";
 import type { ArtifactFilters } from "./artifacts/filter";
 import type { PanelTab } from "./conversation-panel";
-import { computed, effect, signal, View, windowSize } from "nsh";
+import { computed, effect, signal, untracked, View, windowSize } from "nsh";
 import { desktopPanelOpen, setDesktopPanelOpen } from "../../app/desktop-panel";
 import { paneWidth } from "../../app/pane-width";
 import {
   Button,
   colors,
+  dialogWidth,
   grow,
   Header,
   Icon,
@@ -27,26 +28,40 @@ import {
   row,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
-import { StatusDot } from "../../components/status-dot";
+import { dotSize, StatusDot } from "../../components/status-dot";
+import {
+  avatar,
+  control,
+  icon,
+  layer,
+  opacity,
+  shadow,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
 import { follow, useHost } from "../../services/host";
 import { isActiveRunStatus } from "../tasks/run-log";
-import { PendingStrip } from "./approvals";
+import { flashQuestion, PendingStrip, pendingStripHeight } from "./approvals";
 import { defaultFilters } from "./artifacts/filter";
 import { ArtifactPreview } from "./artifacts/preview";
 import { Composer } from "./composer";
+import { openComposerDraft, placedNow, retryOutgoing } from "./composer-draft";
 import { PhoneConversationInfo } from "./conversation-info";
 import { ConversationPanel, panelAttention } from "./conversation-panel";
 import { ConversationTimeline } from "./conversation-timeline";
 import { indexInserts, InsertMessage } from "./insert-message";
 import { keptMessages } from "./kept-messages";
 import { InviteAgents, StewardMenu } from "./members";
-import { QuestionDialog } from "./pending";
-import { questionSource } from "./question-row";
+import { deliveries, outgoingRow, waitsForOf } from "./outbox";
+import { questionRowIndex, questionSource } from "./question-row";
 import { RemoveMember } from "./remove-member";
-import { MemberRun } from "./run/member-run";
+import { MemberInspect } from "./run/member-inspect";
 import { RunPanel } from "./run/run-panel";
+
+/** The toast that says a late insert went in, as wide as the app's toasts. */
+const lateInsertWidth = 356;
 
 function FollowTask(props: { id: string }) {
   follow(() => `tasks.${props.id}`);
@@ -105,8 +120,7 @@ export function Conversation(props: {
   follow(target);
   const reloadArtifacts = follow(() => "artifacts");
   const info = () => host.section<ConversationInfo>(target(), "info");
-  const summary = () =>
-    host.conversations().find((item) => item.id === props.id);
+  const summary = () => host.conversation(props.id);
   const members = () =>
     host.section<MemberView[]>(target(), "members") ??
     summary()?.participants ??
@@ -127,10 +141,8 @@ export function Conversation(props: {
   let reveal: ((replyId: string | null) => void) | undefined;
   const asking = () =>
     host.pending().filter((entry) => entry.conversationId === props.id);
-  const questionId = signal("");
-  const question = () => asking().find((entry) => entry.id === questionId());
   // The board list does not carry a task's runs, so the tasks that could have asked (running, in
-  // this conversation) are followed while the dialog is open and matched by session.
+  // this conversation) are followed while the strip shows their question and matched by session.
   const askingTasks = (item: InteractionView) =>
     host
       .tasks()
@@ -149,10 +161,101 @@ export function Conversation(props: {
    * until a lane takes the message.
    */
   const keep = keptMessages();
+  /*
+   * The reader's messages on their way (the outbox the composer sends from, and the ones the host
+   * took whose row has not come yet). One that goes into the conversation is a row at the end of
+   * the transcript under the id the host will give it, so the host's row takes its place without
+   * the list moving; one that will wait is in the queue above the composer.
+   */
+  const outbox = openComposerDraft(host.address()!.origin, props.id);
+  const shownIds = computed(
+    () =>
+      new Set(
+        [...(timeline()?.messages ?? []), ...held()].map(
+          (message) => message.id,
+        ),
+      ),
+  );
+  const onTheWay = computed(() =>
+    deliveries({
+      outgoing: outbox.value().outgoing,
+      landed: outbox.landed(),
+      shown: shownIds(),
+    }),
+  );
+  // The host's rows came: they show from now on.
+  effect(() => outbox.settle([...shownIds()]));
+  // A message saved by an earlier run of the app is placed once its chat knows who is busy.
+  effect(() => {
+    const kind = info()?.kind ?? summary()?.kind;
+    const memberViews = members();
+    if (!kind || !memberViews.length || !outbox.ready()) return;
+    const unplaced = outbox.value().outgoing.filter((item) => !item.waitsFor);
+    if (!unplaced.length) return;
+    untracked(() =>
+      outbox.edit({
+        outgoing: outbox.value().outgoing.map((item) =>
+          item.waitsFor
+            ? item
+            : placedNow({
+                ...item,
+                at: item.at ?? Date.now(),
+                waitsFor: waitsForOf({
+                  kind,
+                  members: memberViews,
+                  steward: stewardId(),
+                  mentions: item.mentions,
+                }),
+              }),
+        ),
+      }),
+    );
+  });
+  const deliveryActions = (id: string) => ({
+    onRetry: () =>
+      retryOutgoing(outbox, host, host.address()!.origin, props.id, id),
+    onEdit: () => {
+      const message = outbox.value().outgoing.find((item) => item.id === id);
+      if (message) outbox.editing.set(message);
+    },
+    onDiscard: () =>
+      outbox.edit({
+        outgoing: outbox.value().outgoing.filter((item) => item.id !== id),
+      }),
+  });
+  const sending = computed(() =>
+    onTheWay().filter((entry) => !entry.waitsFor.length),
+  );
+  const deliveryRows = computed(
+    () =>
+      new Map(
+        // One the host took is sent: it reads as sent while its row is on the way.
+        sending().flatMap((entry) =>
+          entry.landed
+            ? []
+            : [
+                [
+                  entry.message.id,
+                  {
+                    failure: entry.failure,
+                    ...deliveryActions(entry.message.id),
+                  },
+                ] as const,
+              ],
+        ),
+      ),
+  );
+  /** Messages this window sent: the transcript is taken to the end when one of them lands in it. */
+  const mine = signal<ReadonlySet<string>>(new Set());
+  effect(() => {
+    const ids = onTheWay().map((entry) => entry.message.id);
+    const known = untracked(mine);
+    if (ids.some((id) => !known.has(id))) mine.set(new Set([...known, ...ids]));
+  });
   const messages = computed(() => {
     const waiting = new Set(held().map((message) => message.id));
-    return keep(
-      [
+    return keep([
+      ...[
         ...new Map(
           [...older(), ...(timeline()?.messages ?? [])].map((message) => [
             message.id,
@@ -168,9 +271,17 @@ export function Conversation(props: {
               waiting.has(message.replyToId ?? ""))
           ),
       ),
-    );
+      ...sending().map((entry) => outgoingRow(props.id, entry.message)),
+    ]);
   });
   const indexed = computed(() => indexInserts(messages()));
+  /** The newest of this window's messages in the transcript, and whether it failed. */
+  const ownNewest = computed(() => {
+    const own = messages().findLast((message) => mine().has(message.id));
+    return (
+      own && `${own.id}${deliveryRows().get(own.id)?.failure ? ":failed" : ""}`
+    );
+  });
   const questionSourceOf = (item: InteractionView) =>
     questionSource(
       item,
@@ -183,6 +294,28 @@ export function Conversation(props: {
         return detail ? [{ id: task.id, runs: detail.runs }] : [];
       }),
     );
+  // The rows on screen, once the transcript says; until then a loaded reply counts as on screen,
+  // so the strip does not flash up while the transcript opens.
+  const visibleRows = signal<ReadonlySet<string> | undefined>(undefined);
+  const onScreen = (item: InteractionView) => {
+    if (item.replyId === null) return false;
+    const seen = visibleRows();
+    return seen
+      ? seen.has(item.replyId)
+      : questionRowIndex(indexed().rows, item.replyId) !== undefined;
+  };
+  // The strip shows one question: the oldest one waiting that is not on screen.
+  const offScreen = () =>
+    [...asking()]
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .find((item) => !onScreen(item));
+  // A question no loaded row carries may come from a task: its tasks are followed to find out.
+  const stripTasks = () => {
+    const item = offScreen();
+    return item && questionRowIndex(indexed().rows, item.replyId) === undefined
+      ? askingTasks(item)
+      : [];
+  };
   const inserting = signal<
     { message: MessageView; recipients: string[] } | undefined
   >(undefined);
@@ -234,12 +367,29 @@ export function Conversation(props: {
     if (props.layout === "desktop") setDesktopPanelOpen(true);
     else if (!phone()) drawer.set(true);
   }
-  function jumpToSource(item: InteractionView) {
+  /**
+   * Goes to a question: to its reply in the transcript (loading older messages until it is there),
+   * or, when this conversation has no such reply, to the task whose run asked it.
+   */
+  async function jumpTo(item: InteractionView) {
+    const loaded = () => questionRowIndex(indexed().rows, item.replyId);
+    if (item.replyId !== null)
+      while (
+        loaded() === undefined &&
+        (hasOlder() ?? timeline()?.hasMore) &&
+        !paging()
+      ) {
+        const before = messages().length;
+        await history();
+        if (messages().length === before) break;
+      }
+    if (loaded() !== undefined) {
+      reveal?.(item.replyId);
+      flashQuestion(item.id);
+      return;
+    }
     const source = questionSourceOf(item);
-    if (!source) return;
-    questionId.set("");
-    if (source.kind === "row") reveal?.(item.replyId);
-    else openTask(source.taskId);
+    if (source?.kind === "task") openTask(source.taskId);
   }
   function closeDrawer() {
     drawer.set(false);
@@ -284,11 +434,13 @@ export function Conversation(props: {
           title={title()}
           layout={props.layout}
           onBack={props.onBack}
-          inset={phone() ? (props.captain ? 16 : undefined) : 10}
-          end={phone() && !props.captain ? 4 : undefined}
+          inset={phone() ? (props.captain ? space[16] : undefined) : space[12]}
+          end={phone() && !props.captain ? space[4] : undefined}
           compact={phone() && !props.captain}
           leading={
-            phone() && props.captain ? <CaptainFace size={24} /> : undefined
+            phone() && props.captain ? (
+              <CaptainFace size={avatar.md} />
+            ) : undefined
           }
         >
           <If when={phone() && props.captain}>
@@ -310,16 +462,16 @@ export function Conversation(props: {
               hoverStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                gap: 4,
-                paddingVertical: 2,
-                paddingHorizontal: 6,
+                gap: space[4],
+                paddingVertical: space[2],
+                paddingHorizontal: space[8],
                 borderWidth: 1,
                 borderColor: c().border,
                 flexShrink: 0,
                 cursor: "pointer",
               }}
             >
-              <Icon name="folder" size={12} tone="muted" />
+              <Icon name="folder" size={icon.sm} tone="muted" />
               <Label variant="small" tone="muted" lines={1}>
                 {project()?.name ?? ""}
               </Label>
@@ -333,9 +485,9 @@ export function Conversation(props: {
             />
           </If>
           <If when={!phone() && members().length > 1}>
-            <View style={{ ...row, gap: 8, marginLeft: 4 }}>
+            <View style={{ ...row, gap: space[8], marginLeft: space[4] }}>
               <Each of={members()} key={(entry) => entry.agentId}>
-                {(entry) => <AgentFace id={entry().agentId} size={12} />}
+                {(entry) => <AgentFace id={entry().agentId} size={avatar.sm} />}
               </Each>
             </View>
           </If>
@@ -354,10 +506,10 @@ export function Conversation(props: {
                     icon={phone() ? "info" : "sidebar"}
                     iconOnly={phone()}
                     tone={phone() ? "ghost" : "plain"}
-                    size={phone() ? 40 : undefined}
-                    iconSize={phone() ? 16 : undefined}
+                    size={phone() ? control.touch : undefined}
+                    iconSize={phone() ? icon.md : undefined}
                     labelVariant="caption"
-                    style={{ gap: 6 }}
+                    style={{ gap: space[4] }}
                     onPress={() => drawer.set(true)}
                   />
                 }
@@ -373,8 +525,8 @@ export function Conversation(props: {
                   tone="ghost"
                   labelTone="muted"
                   hoverTone="ink"
-                  size={28}
-                  iconSize={14}
+                  size={control.md}
+                  iconSize={icon.md}
                   onPress={() => setDesktopPanelOpen(!desktopPanelOpen())}
                 />
               </If>
@@ -389,8 +541,8 @@ export function Conversation(props: {
                     position: "absolute",
                     top: -3,
                     right: -3,
-                    width: 6,
-                    height: 6,
+                    width: dotSize,
+                    height: dotSize,
                     backgroundColor: c().blue,
                   }}
                 />
@@ -405,18 +557,18 @@ export function Conversation(props: {
             onPress={() => props.onPending?.()}
             style={{
               ...row,
-              height: 44,
+              height: control.touch,
               flexShrink: 0,
-              gap: 8,
-              paddingLeft: 16,
-              paddingRight: 12,
+              gap: space[8],
+              paddingLeft: space[16],
+              paddingRight: space[12],
               backgroundColor: c().selected,
               borderBottomWidth: 1,
               borderColor: c().border,
               cursor: "pointer",
             }}
           >
-            <StatusDot color={c().amber} />
+            <StatusDot color={c().warning} />
             <Label variant="small" lines={1} style={{ flex: 1 }}>
               {approvals().length === 1
                 ? uiText("proposalWaitingForApproval")
@@ -424,11 +576,11 @@ export function Conversation(props: {
                     count: approvals().length,
                   })}
             </Label>
-            <Label variant="small" weight={600}>
+            <Label variant="small" weight={weight.strong}>
               {uiText("reviewProposals")}
             </Label>
-            <View style={{ opacity: 0.45 }}>
-              <Icon name="right" size={14} />
+            <View style={{ opacity: opacity.disabled }}>
+              <Icon name="right" size={icon.md} />
             </View>
           </View>
         </If>
@@ -437,16 +589,15 @@ export function Conversation(props: {
             role="alert"
             style={{
               ...row,
-              paddingVertical: 8,
-              paddingHorizontal: 16,
-              gap: 8,
-              // The design's state-warning at 12%.
-              backgroundColor: `${c().warning}1f`,
+              paddingVertical: space[8],
+              paddingHorizontal: space[16],
+              gap: space[8],
+              backgroundColor: c().warningFill,
               borderBottomWidth: 1,
               borderColor: c().warning,
             }}
           >
-            <Icon name="warning" tone="warningInk" size={14} />
+            <Icon name="warning" tone="warningInk" size={icon.md} />
             <Label variant="small" tone="warningInk" style={{ flex: 1 }}>
               {uiText("connectionLostReconnectingWhatYouSee")}
             </Label>
@@ -460,12 +611,28 @@ export function Conversation(props: {
             alignSelf: "center",
           }}
         >
+          {/* The strip's room stays while questions wait, so the transcript
+              does not move when the strip comes and goes with scrolling. */}
           <If when={!phone() && asking().length}>
-            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-              <PendingStrip
-                items={asking()}
-                onOpen={(item) => questionId.set(item.id)}
-              />
+            <View
+              style={{
+                height: pendingStripHeight + space[8],
+                paddingHorizontal: space[16],
+                paddingTop: space[8],
+              }}
+            >
+              <If when={offScreen()}>
+                {(item) => (
+                  <PendingStrip
+                    item={item()}
+                    more={asking().length - 1}
+                    onJump={(entry) => void jumpTo(entry)}
+                  />
+                )}
+              </If>
+              <Each of={stripTasks()} key={(task) => task.id}>
+                {(task) => <FollowTask id={task().id} />}
+              </Each>
             </View>
           </If>
           {/* The message area takes all the room between the header and the
@@ -476,6 +643,7 @@ export function Conversation(props: {
               revealer={(fn) => {
                 reveal = fn;
               }}
+              onVisibleRows={visibleRows.set}
               onAccessLost={props.onAccessLost}
               title={title()}
               projectName={
@@ -485,6 +653,8 @@ export function Conversation(props: {
               onReadDraft={props.onReadDraft}
               rows={indexed().rows}
               additions={indexed().additions}
+              deliveries={deliveryRows()}
+              sendingId={ownNewest()}
               recipients={indexed().recipients}
               members={members()}
               onMember={(agentId) => {
@@ -540,7 +710,7 @@ export function Conversation(props: {
           </View>
           <If when={lateInsert()}>
             {/* A toast over the end of the transcript, just above the composer. */}
-            <View style={{ height: 0, zIndex: 10 }}>
+            <View style={{ height: 0, zIndex: layer.sticky }}>
               <View
                 role="button"
                 accessibilityLabel={uiText("dismiss")}
@@ -551,14 +721,14 @@ export function Conversation(props: {
                   bottom: 12,
                   right: 16,
                   left: phone() ? 16 : undefined,
-                  width: phone() ? undefined : 356,
-                  gap: 8,
-                  paddingVertical: 12,
-                  paddingHorizontal: 14,
+                  width: phone() ? undefined : lateInsertWidth,
+                  gap: space[8],
+                  paddingVertical: space[12],
+                  paddingHorizontal: space[16],
                   borderWidth: 1,
                   borderColor: c().border,
                   backgroundColor: c().canvas,
-                  boxShadow: [{ x: 0, y: 4, blur: 16, color: "#0a0a0a14" }],
+                  boxShadow: [shadow.float],
                   cursor: "pointer",
                 }}
               >
@@ -602,6 +772,11 @@ export function Conversation(props: {
             tablet={props.layout === "tablet"}
             alignWithContent={props.alignComposer}
             held={timeline()?.held ?? []}
+            kind={
+              info()?.kind ??
+              summary()?.kind ??
+              (props.captain ? "captain" : "group")
+            }
             widgetDraft={widgetDraft()}
             quote={quote()}
           />
@@ -625,7 +800,7 @@ export function Conversation(props: {
       >
         <Modal
           title={phone() ? uiText("conversationInfo") : uiText("panel")}
-          width={360}
+          width={dialogWidth.sm}
           side={!phone()}
           hideHeader
           sheet={phone()}
@@ -653,32 +828,13 @@ export function Conversation(props: {
           </If>
         </Modal>
       </If>
-      <If when={question()}>
-        {(item) => (
-          <>
-            <Each of={askingTasks(item())} key={(task) => task.id}>
-              {(task) => <FollowTask id={task().id} />}
-            </Each>
-            <QuestionDialog
-              item={item()}
-              phone={phone()}
-              onClose={() => questionId.set("")}
-              onSource={
-                questionSourceOf(item())
-                  ? () => jumpToSource(item())
-                  : undefined
-              }
-            />
-          </>
-        )}
-      </If>
       <If when={projectInfo() && project()}>
         <Modal
           title={project()?.name ?? uiText("directory")}
-          width={400}
+          width={dialogWidth.md}
           onClose={() => projectInfo.set(false)}
         >
-          <Label style={{ padding: 16 }}>
+          <Label style={{ padding: space[16] }}>
             {project()?.display ?? project()?.path}
           </Label>
         </Modal>
@@ -704,11 +860,11 @@ export function Conversation(props: {
       </If>
       <If when={member()}>
         <RunPanel
-          title={uiText("runTranscript")}
+          title={uiText("inspectRun")}
           phone={phone()}
           onClose={() => member.set(undefined)}
         >
-          <MemberRun
+          <MemberInspect
             session={member()!.session}
             agentId={member()!.id}
             phone={phone()}

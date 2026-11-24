@@ -12,6 +12,7 @@ import {
   Label,
   monoFontFamily,
 } from "../../../components";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { widgetDocument } from "./widget-document";
 
@@ -130,7 +131,7 @@ export function Widget(props: {
           "--color-border-tertiary": theme.border,
           "--color-text-info": theme.blue,
           "--color-text-success": theme.green,
-          "--color-text-warning": theme.amber,
+          "--color-text-warning": theme.warning,
           "--color-text-danger": theme.red,
           "--font-sans": sans,
           "--font-mono": mono,
@@ -195,7 +196,7 @@ export function Widget(props: {
   }
 
   return (
-    <View style={{ alignSelf: "stretch", minWidth: 0, gap: 4 }}>
+    <View style={{ alignSelf: "stretch", minWidth: 0, gap: space[4] }}>
       <If when={problem() || !height()}>
         <Label variant="caption" tone="muted">
           {problem()

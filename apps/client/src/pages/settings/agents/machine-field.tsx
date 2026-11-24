@@ -10,9 +10,13 @@ import {
 } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
 import { StatusDot } from "../../../components/status-dot";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { EditorRow } from "./editor-row";
+
+/** A machine to pick: its name and the line under it. */
+const optionRow = 56;
 
 export function MachineField(props: { form: AgentForm }) {
   const { phoneEditor, machineId, machines, creating, stacked, selectStyle } =
@@ -47,14 +51,14 @@ export function MachineField(props: { form: AgentForm }) {
       <View role="radiogroup" accessibilityLabel={uiText("runsOn")}>
         <View
           style={{
-            paddingHorizontal: 16,
-            height: 44,
+            paddingHorizontal: space[16],
+            height: control.touch,
             justifyContent: "center",
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <Label weight={600}>{uiText("runsOn")}</Label>
+          <Label weight={weight.strong}>{uiText("runsOn")}</Label>
         </View>
         <Each of={items()} key={(item) => item.id ?? "project"}>
           {(item) => {
@@ -65,22 +69,22 @@ export function MachineField(props: { form: AgentForm }) {
                 label={item().title}
                 checked={picked()}
                 onChange={() => machineId.set(item().id)}
-                size={16}
+                size={icon.md}
                 style={{
                   ...row,
-                  minHeight: 55,
-                  paddingHorizontal: 22,
-                  gap: 16,
+                  minHeight: optionRow,
+                  paddingHorizontal: space[24],
+                  gap: space[16],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   cursor: "pointer",
                 }}
               >
-                <View style={{ ...grow, gap: 2 }}>
-                  <Label weight={500} lines={1}>
+                <View style={{ ...grow, gap: space[2] }}>
+                  <Label weight={weight.regular} lines={1}>
                     {item().title}
                   </Label>
-                  <View style={{ ...row, gap: 5 }}>
+                  <View style={{ ...row, gap: space[4] }}>
                     <If when={item().id}>
                       <StatusDot
                         color={item().online ? c().green : c().strong}
@@ -98,8 +102,8 @@ export function MachineField(props: { form: AgentForm }) {
         <If when={!phoneEditor()}>
           <View
             style={{
-              paddingHorizontal: 16,
-              paddingVertical: 8,
+              paddingHorizontal: space[16],
+              paddingVertical: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}

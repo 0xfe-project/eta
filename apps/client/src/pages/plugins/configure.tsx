@@ -10,6 +10,7 @@ import { Dialog, Input } from "nsh/base";
 import {
   Button,
   colors,
+  dialogWidth,
   Field,
   fill,
   fontFamily,
@@ -24,9 +25,22 @@ import {
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import {
+  control,
+  icon,
+  opacity,
+  shadow,
+  sizes,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { pluginConfigText, PluginSelect } from "./config-fields";
+
+/** How much of the window the configure dialog may take. */
+const dialogMaxWidth = "90%";
+const dialogMaxHeight = "92%";
 
 /** A phone bottom sheet's edge: one strong rule along its top only. */
 export const sheetEdge = {
@@ -79,8 +93,8 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
         backgroundColor: c().canvas,
         fontFamily: fontFamily(fonts().interface),
         ...textStyle(type("small")),
-        height: props.phone ? 40 : 28,
-        paddingHorizontal: props.phone ? 12 : 8,
+        height: props.phone ? space[40] : control.md,
+        paddingHorizontal: props.phone ? space[12] : space[8],
         borderWidth: 1,
         borderColor: c().strong,
         borderRadius: 0,
@@ -96,28 +110,30 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
       panelStyle={props.phone ? sheetEdge : undefined}
       overPhoneNavigation={props.phone}
       compact={!props.phone}
-      titleWeight={500}
-      width={512}
+      titleWeight={weight.regular}
+      width={dialogWidth.lg}
       onClose={props.onClose}
     >
       {/* Phone: a bottom sheet with 14/20 copy, 40pt fields 10pt apart and a
           full-width 44pt Add. */}
       <View
         style={
-          props.phone ? { paddingHorizontal: 16, paddingBottom: 24 } : undefined
+          props.phone
+            ? { paddingHorizontal: space[16], paddingBottom: space[24] }
+            : undefined
         }
       >
         <Label
           variant="small"
           tone="muted"
-          style={props.phone ? undefined : { paddingTop: 6 }}
+          style={props.phone ? undefined : { paddingTop: space[8] }}
         >
           {uiText("addPluginDescription")}
         </Label>
         <View
           style={{
-            gap: props.phone ? 10 : 12,
-            paddingTop: props.phone ? 16 : 14,
+            gap: props.phone ? space[8] : space[12],
+            paddingTop: space[16],
           }}
         >
           {field(uiText("repository"), repo, repo.set, true)}
@@ -128,17 +144,17 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
           style={{
             ...row,
             justifyContent: "flex-end",
-            paddingTop: props.phone ? 16 : 20,
+            paddingTop: props.phone ? space[16] : space[20],
           }}
         >
           <Button
             label={busy() ? uiText("adding") : uiText("addPluginSubmit")}
             tone="primary"
-            size={props.phone ? 44 : 28}
-            labelWeight={props.phone ? 500 : undefined}
+            size={props.phone ? control.touch : control.md}
+            labelWeight={props.phone ? weight.regular : undefined}
             dimDisabled={false}
             style={{
-              opacity: !repo().trim() || busy() ? 0.5 : 1,
+              opacity: !repo().trim() || busy() ? opacity.disabled : 1,
               ...(props.phone ? { flex: 1 } : {}),
             }}
             disabled={!repo().trim() || busy()}
@@ -223,15 +239,15 @@ export function ConfigurePlugin(props: {
   }
   const title = () => uiText("configureWithCount", { name: props.item.name });
   const compactField = () => ({
-    height: 28,
+    height: control.md,
     ...textStyle(type("small")),
     borderColor: c().strong,
     placeholderColor: c().faint,
   });
   const phoneField = () => ({
-    height: 40,
+    height: space[40],
     ...textStyle(type("small")),
-    paddingHorizontal: 10,
+    paddingHorizontal: space[12],
     borderColor: c().strong,
   });
   const form = () => (
@@ -243,12 +259,12 @@ export function ConfigurePlugin(props: {
         <View
           style={
             props.phone
-              ? { padding: 16, gap: 18 }
+              ? { padding: space[16], gap: space[16] }
               : {
-                  paddingHorizontal: 16,
-                  paddingTop: 4,
-                  paddingBottom: 16,
-                  gap: 16,
+                  paddingHorizontal: space[16],
+                  paddingTop: space[4],
+                  paddingBottom: space[16],
+                  gap: space[16],
                 }
           }
         >
@@ -262,13 +278,13 @@ export function ConfigurePlugin(props: {
               const item = () => field();
               const value = () => valueOf(item());
               return (
-                <View style={{ gap: 6 }}>
+                <View style={{ gap: space[4] }}>
                   <If when={item().type !== "boolean"}>
                     <View
                       style={{
                         ...row,
                         alignItems: "baseline",
-                        gap: props.phone ? 8 : 6,
+                        gap: props.phone ? space[8] : space[4],
                       }}
                     >
                       <Label variant="small">{item().title}</Label>
@@ -328,8 +344,13 @@ export function ConfigurePlugin(props: {
                           />
                         }
                       >
-                        <View style={{ ...row, gap: props.phone ? 12 : 10 }}>
-                          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                        <View
+                          style={{
+                            ...row,
+                            gap: props.phone ? space[12] : space[8],
+                          }}
+                        >
+                          <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                             <Label variant="small">{item().title}</Label>
                             <If when={item().description}>
                               <Label variant="caption" tone="muted">
@@ -379,7 +400,9 @@ export function ConfigurePlugin(props: {
                             />
                           }
                         >
-                          <View style={{ ...row, gap: 6, flexWrap: "wrap" }}>
+                          <View
+                            style={{ ...row, gap: space[4], flexWrap: "wrap" }}
+                          >
                             <Each
                               of={spec().options}
                               key={(choice) => choice.value}
@@ -431,7 +454,7 @@ export function ConfigurePlugin(props: {
                     </If>
                   </If>
                   <If when={item().secret}>
-                    <View style={{ ...row, gap: 8 }}>
+                    <View style={{ ...row, gap: space[8] }}>
                       <Label
                         variant="small"
                         tone={props.phone ? "muted" : "mutedInk"}
@@ -505,9 +528,9 @@ export function ConfigurePlugin(props: {
         style={{
           ...row,
           justifyContent: "flex-end",
-          paddingVertical: 12,
-          paddingHorizontal: 16,
-          gap: props.phone ? 12 : 10,
+          paddingVertical: space[12],
+          paddingHorizontal: space[16],
+          gap: props.phone ? space[12] : space[8],
           borderTopWidth: 1,
           borderColor: c().border,
         }}
@@ -520,9 +543,9 @@ export function ConfigurePlugin(props: {
         <Button
           label={uiText("save")}
           tone="primary"
-          size={props.phone ? 36 : undefined}
+          size={props.phone ? control.touch : undefined}
           labelVariant="caption"
-          style={{ paddingHorizontal: props.phone ? 20 : 10 }}
+          style={{ paddingHorizontal: props.phone ? space[20] : space[12] }}
           disabled={
             busy() ||
             accessBusy() ||
@@ -557,11 +580,11 @@ export function ConfigurePlugin(props: {
           ...fill,
           alignItems: "center",
           ...(props.tablet
-            ? { paddingTop: 56 }
-            : { justifyContent: "center", paddingVertical: 24 }),
+            ? { paddingTop: sizes.header + space[16] }
+            : { justifyContent: "center", paddingVertical: space[24] }),
         }}
         backdropStyle={{
-          backgroundColor: props.tablet ? c().sheetShade : c().modalShade,
+          backgroundColor: props.tablet ? c().sheetScrim : c().scrim,
         }}
         onOpenChange={({ open }) => {
           if (!open) props.onClose();
@@ -571,32 +594,32 @@ export function ConfigurePlugin(props: {
           role="dialog"
           accessibilityLabel={title()}
           style={{
-            width: 580,
-            maxWidth: "90%",
-            maxHeight: "92%",
+            width: dialogWidth.lg,
+            maxWidth: dialogMaxWidth,
+            maxHeight: dialogMaxHeight,
             backgroundColor: c().canvas,
             borderWidth: 1,
             borderColor: c().strong,
-            boxShadow: [{ x: 0, y: 8, blur: 24, color: "#0000001f" }],
+            boxShadow: [shadow.popover],
           }}
         >
           <View
             style={{
               ...row,
               alignItems: "flex-start",
-              gap: 12,
-              paddingHorizontal: 16,
-              paddingTop: 16,
-              paddingBottom: 12,
+              gap: space[12],
+              paddingHorizontal: space[16],
+              paddingTop: space[16],
+              paddingBottom: space[12],
             }}
           >
-            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-              <Label weight={600}>{title()}</Label>
+            <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
+              <Label weight={weight.strong}>{title()}</Label>
               <Label variant="small" tone="muted">
                 {pluginConfigText("fields")}
               </Label>
             </View>
-            <CloseButton onPress={props.onClose} iconSize={14} />
+            <CloseButton onPress={props.onClose} iconSize={icon.md} />
           </View>
           {form()}
         </View>

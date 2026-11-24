@@ -1,6 +1,18 @@
 import type { ViewStyle } from "nsh";
 import { View } from "nsh";
 import { colors, row } from "./theme";
+import { avatar, icon, space } from "./tokens";
+
+/** The bars stand in for a line of text, a title, a list row and a reply bubble. */
+const barHeight = { line: 12, title: 20, row: 36, reply: 36 } as const;
+const barWidth = {
+  trailing: 40,
+  title: 184,
+  meta: 92,
+  name: 96,
+  message: 220,
+  reply: 152,
+} as const;
 
 /** A placeholder bar: the muted fill inside a border, as the design's loading states draw it. */
 function Bar(props: { width: ViewStyle["width"]; height: number }) {
@@ -26,23 +38,23 @@ export function ListSkeleton(props: { label: string; style?: ViewStyle }) {
     <View
       role="progressbar"
       accessibilityLabel={props.label}
-      style={{ paddingVertical: 8, ...props.style }}
+      style={{ paddingVertical: space[8], ...props.style }}
     >
-      <Each of={[210, 140, 175, 245, 105]}>
+      <Each of={[208, 140, 176, 244, 104]}>
         {(width) => (
           <View
             style={{
               ...row,
-              height: 36,
+              height: barHeight.row,
               flexShrink: 0,
-              paddingHorizontal: 8,
-              gap: 12,
+              paddingHorizontal: space[8],
+              gap: space[12],
             }}
           >
-            <Bar width={14} height={14} />
-            <Bar width={width()} height={12} />
+            <Bar width={icon.md} height={icon.md} />
+            <Bar width={width()} height={barHeight.line} />
             <View style={{ marginLeft: "auto" }}>
-              <Bar width={40} height={12} />
+              <Bar width={barWidth.trailing} height={barHeight.line} />
             </View>
           </View>
         )}
@@ -57,13 +69,13 @@ export function DetailSkeleton(props: { label: string; style?: ViewStyle }) {
     <View
       role="progressbar"
       accessibilityLabel={props.label}
-      style={{ padding: 16, gap: 12, ...props.style }}
+      style={{ padding: space[16], gap: space[12], ...props.style }}
     >
-      <Bar width={184} height={20} />
-      <Bar width={92} height={12} />
-      <View style={{ gap: 8, paddingTop: 12 }}>
-        <Each of={[211, 366, 183, 366, 122]}>
-          {(width) => <Bar width={width()} height={12} />}
+      <Bar width={barWidth.title} height={barHeight.title} />
+      <Bar width={barWidth.meta} height={barHeight.line} />
+      <View style={{ gap: space[8], paddingTop: space[12] }}>
+        <Each of={[212, 364, 184, 364, 120]}>
+          {(width) => <Bar width={width()} height={barHeight.line} />}
         </Each>
       </View>
     </View>
@@ -72,13 +84,13 @@ export function DetailSkeleton(props: { label: string; style?: ViewStyle }) {
 
 function MessageBars(props: { width: number }) {
   return (
-    <View style={{ gap: 10 }}>
-      <View style={{ ...row, gap: 8 }}>
-        <Bar width={18} height={18} />
-        <Bar width={96} height={12} />
+    <View style={{ gap: space[8] }}>
+      <View style={{ ...row, gap: space[8] }}>
+        <Bar width={avatar.sm} height={avatar.sm} />
+        <Bar width={barWidth.name} height={barHeight.line} />
       </View>
-      <Bar width="100%" height={12} />
-      <Bar width={props.width} height={12} />
+      <Bar width="100%" height={barHeight.line} />
+      <Bar width={props.width} height={barHeight.line} />
     </View>
   );
 }
@@ -89,13 +101,13 @@ export function MessagesSkeleton(props: { label: string; style?: ViewStyle }) {
     <View
       role="progressbar"
       accessibilityLabel={props.label}
-      style={{ padding: 16, gap: 22, ...props.style }}
+      style={{ padding: space[16], gap: space[20], ...props.style }}
     >
-      <MessageBars width={220} />
+      <MessageBars width={barWidth.message} />
       <View style={{ alignItems: "flex-end" }}>
-        <Bar width={150} height={36} />
+        <Bar width={barWidth.reply} height={barHeight.reply} />
       </View>
-      <MessageBars width={150} />
+      <MessageBars width={barWidth.reply} />
     </View>
   );
 }

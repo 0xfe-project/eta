@@ -8,14 +8,25 @@ import type { Signal } from "nsh";
 import type { ShownPicture } from "../../../components/picture-cards";
 import { fullOutputOf } from "@eta/client-contracts/tool-shape";
 import { computed, signal, View } from "nsh";
-import { Caption, colors, Label, Markdown, row } from "../../../components";
+import {
+  Caption,
+  colors,
+  focusRing,
+  Label,
+  Markdown,
+  row,
+} from "../../../components";
 import { PictureCards, PictureChip } from "../../../components/picture-cards";
 import { Lightbox } from "../../../components/picture-viewer";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { PictureModes } from "../../../services/picture-mode";
 import { toolDescription } from "./run-timing";
 import { ToolInput, ToolOutput } from "./tool-code";
+
+/** A step's row in a run's transcript. */
+const lineRowHeight = 32;
 
 export function TranscriptLine(props: {
   session: string;
@@ -47,8 +58,12 @@ export function TranscriptLine(props: {
       else={
         <View
           style={{
-            paddingTop: props.afterTool ? (props.phone ? 32 : 11) : 5,
-            paddingBottom: 5,
+            paddingTop: props.afterTool
+              ? props.phone
+                ? space[32]
+                : space[12]
+              : space[4],
+            paddingBottom: space[4],
             backgroundColor: props.selected ? c().selected : c().canvas,
           }}
         >
@@ -121,12 +136,12 @@ export function TranscriptLine(props: {
             }}
             onPress={props.onToggle}
             hoverStyle={{ backgroundColor: c().selected }}
-            focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+            focusVisibleStyle={focusRing(c(), "inset")}
             style={{
               ...row,
-              height: 31,
-              paddingHorizontal: 10,
-              gap: 4,
+              height: lineRowHeight,
+              paddingHorizontal: space[12],
+              gap: space[4],
               cursor: "pointer",
               backgroundColor: props.selected ? c().selected : c().canvas,
             }}
@@ -156,7 +171,13 @@ export function TranscriptLine(props: {
             />
           </View>
           <If when={props.opened}>
-            <View style={{ padding: 10, gap: 6, backgroundColor: c().surface }}>
+            <View
+              style={{
+                padding: space[12],
+                gap: space[4],
+                backgroundColor: c().surface,
+              }}
+            >
               <If when={entry().input !== undefined}>
                 <Caption text={uiText("runInput")} />
                 <ToolInput name={entry().name} input={entry().input} />
@@ -270,7 +291,7 @@ function TranscriptImages(props: {
       <If
         when={modes.mode() === "expanded"}
         else={
-          <View style={{ ...row, flexWrap: "wrap", gap: 4 }}>
+          <View style={{ ...row, flexWrap: "wrap", gap: space[4] }}>
             <Each of={pictures()} key={(picture) => picture.key}>
               {(picture) => (
                 <PictureChip

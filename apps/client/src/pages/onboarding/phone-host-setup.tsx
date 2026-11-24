@@ -1,5 +1,6 @@
 import { safeAreaInsets, View } from "nsh";
 import { colors, grow, Label, row } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export function PhoneHostSetup(props: { noModel: boolean; hostName?: string }) {
@@ -14,10 +15,10 @@ export function PhoneHostSetup(props: { noModel: boolean; hostName?: string }) {
     <View style={grow}>
       <View
         style={{
-          paddingHorizontal: 16,
-          paddingTop: 32,
-          paddingBottom: 24,
-          gap: 8,
+          paddingHorizontal: space[16],
+          paddingTop: space[32],
+          paddingBottom: space[24],
+          gap: space[8],
         }}
       >
         <Label variant="title">
@@ -49,8 +50,8 @@ export function PhoneHostSetup(props: { noModel: boolean; hostName?: string }) {
         variant="small"
         tone="muted"
         style={{
-          paddingHorizontal: 16,
-          paddingTop: 16,
+          paddingHorizontal: space[16],
+          paddingTop: space[16],
           paddingBottom: Math.max(4, 34 - insets().bottom),
         }}
       >
@@ -72,9 +73,9 @@ function SetupStep(props: {
       style={{
         ...row,
         alignItems: "flex-start",
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        gap: 16,
+        paddingVertical: space[16],
+        paddingHorizontal: space[16],
+        gap: space[16],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -82,11 +83,11 @@ function SetupStep(props: {
       <Label
         variant="small"
         tone={props.waiting ? "faint" : "ink"}
-        style={{ width: 16 }}
+        style={{ width: space[16] }}
       >
         {props.number}
       </Label>
-      <View style={{ ...grow, gap: 4 }}>
+      <View style={{ ...grow, gap: space[4] }}>
         <Label tone={props.waiting ? "muted" : "ink"}>{props.title}</Label>
         <Label variant="small" tone="muted">
           {props.detail}

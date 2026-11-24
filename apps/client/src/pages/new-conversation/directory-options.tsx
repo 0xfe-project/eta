@@ -14,14 +14,19 @@ import { Input } from "nsh/base";
 import {
   Button,
   colors,
+  focusRing,
   grow,
   Icon,
   Label,
   row,
   textFaces,
 } from "../../components";
+import { control, icon, opacity, space } from "../../components/tokens";
 import { localizedText } from "../../i18n";
 import { useHost } from "../../services/host";
+
+/** A place to choose: a finger's row on phones, a list row elsewhere. */
+const optionRowHeight = { phone: 56, desktop: 28 } as const;
 
 export function DirectoryOptions(props: {
   picker: ReturnType<typeof usePlaceFlow>;
@@ -97,15 +102,15 @@ export function DirectoryOptions(props: {
         <View
           style={{
             ...row,
-            marginHorizontal: 16,
-            marginTop: 16,
-            marginBottom: 8,
-            paddingLeft: 12,
+            marginHorizontal: space[16],
+            marginTop: space[16],
+            marginBottom: space[8],
+            paddingLeft: space[12],
             borderWidth: 1,
             borderColor: c().ink,
           }}
         >
-          <Icon name="search" size={14} />
+          <Icon name="search" size={icon.md} />
           <Each of={[pageKey(page())]}>
             {() => (
               <Input
@@ -121,8 +126,8 @@ export function DirectoryOptions(props: {
                 }}
                 style={{
                   ...grow,
-                  height: 38,
-                  paddingHorizontal: 8,
+                  height: phone() ? control.touch : control.lg,
+                  paddingHorizontal: space[8],
                   color: c().ink,
                   placeholderColor: c().muted,
                   fontSize: type("body").size,
@@ -136,16 +141,16 @@ export function DirectoryOptions(props: {
         <View
           style={{
             ...row,
-            gap: 8,
-            minHeight: phone() ? 32 : 24,
-            marginTop: phone() ? 12 : 0,
-            paddingHorizontal: phone() ? 16 : 14,
+            gap: space[8],
+            minHeight: phone() ? space[32] : space[24],
+            marginTop: phone() ? space[12] : 0,
+            paddingHorizontal: space[16],
             borderBottomWidth: phone() ? 0 : 1,
             borderColor: c().border,
           }}
         >
           <If when={phone()}>
-            <Icon name="monitor" size={14} />
+            <Icon name="monitor" size={icon.md} />
           </If>
           <Label variant="small">{machineName()}</Label>
         </View>
@@ -154,7 +159,11 @@ export function DirectoryOptions(props: {
           else={
             <Label
               tone="muted"
-              style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}
+              style={{
+                paddingHorizontal: space[16],
+                paddingTop: space[4],
+                paddingBottom: space[8],
+              }}
             >
               {localizedText(
                 "How do you want to add it?",
@@ -165,9 +174,9 @@ export function DirectoryOptions(props: {
         >
           <View
             style={{
-              height: 40,
+              height: space[40],
               justifyContent: "center",
-              paddingHorizontal: 14,
+              paddingHorizontal: space[16],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -183,7 +192,12 @@ export function DirectoryOptions(props: {
       </If>
       <If when={kind() === "browse" && listing()}>
         <View
-          style={{ ...row, paddingHorizontal: 16, gap: 5, flexWrap: "wrap" }}
+          style={{
+            ...row,
+            paddingHorizontal: space[16],
+            gap: space[4],
+            flexWrap: "wrap",
+          }}
         >
           <Each of={listing()?.crumbs ?? []} key={(crumb) => crumb.path}>
             {(crumb) => (
@@ -217,14 +231,14 @@ export function DirectoryOptions(props: {
         when={kind() === "search" && query() && !loading() && rows().length > 0}
       >
         <Label
+          tracking="caps"
           variant="caption"
           tone="muted"
           style={{
-            paddingHorizontal: 16,
+            paddingHorizontal: space[16],
             // 16pt below the field, whose own margin gives the first 8.
-            paddingTop: phone() ? 8 : 6,
-            paddingBottom: phone() ? 8 : 6,
-            letterSpacing: 0.8,
+            paddingTop: space[8],
+            paddingBottom: space[8],
             borderBottomWidth: phone() ? 0 : 1,
             borderColor: c().border,
           }}
@@ -245,29 +259,27 @@ export function DirectoryOptions(props: {
               selected: selected() === index(),
             }}
             onPress={() => select(entry())}
-            focusVisibleStyle={{
-              outlineWidth: 1,
-              outlineColor: c().blue,
-              outlineOffset: -1,
-            }}
+            focusVisibleStyle={focusRing(c(), "inset")}
             hoverStyle={{ backgroundColor: c().selected }}
             style={{
               ...row,
-              minHeight: phone() ? 56 : 29,
-              marginHorizontal: phone() ? 16 : 0,
-              paddingHorizontal: phone() ? 4 : 14,
-              gap: phone() ? 12 : 10,
+              minHeight: phone()
+                ? optionRowHeight.phone
+                : optionRowHeight.desktop,
+              marginHorizontal: phone() ? space[16] : 0,
+              paddingHorizontal: phone() ? space[4] : space[16],
+              gap: phone() ? space[12] : space[8],
               borderTopWidth: phone() && index() === 0 ? 1 : 0,
               borderBottomWidth: phone() ? 1 : 0,
               borderColor: c().border,
               backgroundColor:
                 selected() === index() ? c().selected : c().canvas,
               cursor: entry().disabled ? "default" : "pointer",
-              opacity: entry().disabled ? 0.5 : 1,
+              opacity: entry().disabled ? opacity.disabled : 1,
             }}
           >
             <If when={phone()}>
-              <Icon name={entry().icon} size={18} />
+              <Icon name={entry().icon} size={icon.md} />
             </If>
             <View
               style={{
@@ -275,7 +287,7 @@ export function DirectoryOptions(props: {
                 flexDirection: phone() ? "column" : "row",
                 alignItems: phone() ? "stretch" : "center",
                 justifyContent: "space-between",
-                gap: phone() ? 0 : 8,
+                gap: phone() ? 0 : space[8],
               }}
             >
               <Label
@@ -297,15 +309,15 @@ export function DirectoryOptions(props: {
               </If>
             </View>
             <If when={phone()}>
-              <View style={{ opacity: 0.5 }}>
-                <Icon name="right" size={14} />
+              <View style={{ opacity: opacity.disabled }}>
+                <Icon name="right" size={icon.md} />
               </View>
             </If>
           </View>
         )}
       </Each>
       <If when={loading() || busy()}>
-        <Label tone="muted" style={{ padding: 16 }}>
+        <Label tone="muted" style={{ padding: space[16] }}>
           {localizedText("Waiting for the machine…", "正在等待机器响应…")}
         </Label>
       </If>
@@ -318,7 +330,7 @@ export function DirectoryOptions(props: {
           !error()
         }
       >
-        <Label tone="muted" style={{ padding: 16 }}>
+        <Label tone="muted" style={{ padding: space[16] }}>
           {localizedText(
             "No directories match this search.",
             "没有匹配的目录。",
@@ -326,7 +338,7 @@ export function DirectoryOptions(props: {
         </Label>
       </If>
       <If when={kind() === "github" && rows().length === 0 && !loading()}>
-        <Label tone="muted" style={{ padding: 16 }}>
+        <Label tone="muted" style={{ padding: space[16] }}>
           {localizedText(
             "Paste a Git URL or enter owner/repo.",
             "粘贴 Git URL 或输入 owner/repo。",
@@ -335,7 +347,7 @@ export function DirectoryOptions(props: {
       </If>
       <If when={cloneProgress()}>
         {(active) => (
-          <View style={{ padding: 16, gap: 8 }}>
+          <View style={{ padding: space[16], gap: space[8] }}>
             <Label>
               {localizedText(
                 `Cloning ${active().repo}…`,

@@ -5,6 +5,7 @@ import type {
 } from "@eta/client-contracts";
 import { announce, cleanup, computed, effect, signal, View } from "nsh";
 import { Button, Label } from "../../../components";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { billingClock, localTime } from "./quota";
@@ -110,9 +111,9 @@ export function BalanceSummary(props: { id: string }) {
     <View
       android={{ accessibilityLiveRegion: "polite" }}
       style={{
-        gap: 2,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        gap: space[2],
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
         alignItems: "flex-start",
       }}
     >
@@ -133,7 +134,7 @@ export function BalanceSummary(props: { id: string }) {
         </If>
       </If>
       <If when={value()?.partial && age() < 1_800_000}>
-        <Label variant="small" tone="amber">
+        <Label variant="small" tone="warning">
           {[value()?.failedCurrencies?.join(", "), uiText("modelReadPartial")]
             .filter(Boolean)
             .join(" · ")}

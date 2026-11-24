@@ -19,6 +19,7 @@ import {
   ActionMenu,
   Button,
   colors,
+  dialogWidth,
   Field,
   grow,
   Label,
@@ -29,9 +30,15 @@ import {
 } from "../../components";
 import { BackButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { acpStatus } from "./external-agent";
+
+/** A multi-line field (the command's arguments, its environment), and the machine menu off
+ * phones. */
+const multilineHeight = 64;
+const machineMenuWidth = 488;
 
 // Settings › External agents: one form to add an agent to a machine's ~/.eta/acp.json or to change
 // one there, as apps/web's AgentDialog does. The fields are checked by the same rules
@@ -213,10 +220,14 @@ export function ExternalAgentForm(props: {
     return key ? uiText(key, { line: problem.line ?? "" }) : problem.key;
   };
   const inputStyle = (invalid: boolean, multiline = false) => ({
-    height: multiline ? 64 : props.phone ? 36 : 30,
+    height: multiline
+      ? multilineHeight
+      : props.phone
+        ? control.touch
+        : control.lg,
     ...textStyle(type(props.phone ? "body" : "small")),
-    paddingHorizontal: 10,
-    paddingVertical: multiline ? 7 : undefined,
+    paddingHorizontal: space[12],
+    paddingVertical: multiline ? space[8] : undefined,
     borderColor: invalid ? c().red : c().strong,
   });
   const hint = (text: string) => (
@@ -242,8 +253,8 @@ export function ExternalAgentForm(props: {
         ? problemText(p.name as keyof AcpDraftProblems)
         : undefined;
     return (
-      <View style={{ gap: 6 }}>
-        <Label variant="small" weight={500}>
+      <View style={{ gap: space[4] }}>
+        <Label variant="small" weight={weight.regular}>
           {p.title}
         </Label>
         <Field
@@ -269,15 +280,15 @@ export function ExternalAgentForm(props: {
   ) => (
     <View
       style={{
-        gap: 2,
-        paddingHorizontal: 10,
-        paddingVertical: 8,
+        gap: space[2],
+        paddingHorizontal: space[12],
+        paddingVertical: space[8],
         borderWidth: 1,
         borderColor: c().border,
       }}
     >
-      <View style={{ ...row, gap: 6, alignItems: "flex-start" }}>
-        <View style={{ paddingTop: 5 }}>
+      <View style={{ ...row, gap: space[4], alignItems: "flex-start" }}>
+        <View style={{ paddingTop: space[4] }}>
           <StatusDot color={dot} />
         </View>
         <Label variant="small" tone={tone} style={{ flex: 1, minWidth: 0 }}>
@@ -285,7 +296,11 @@ export function ExternalAgentForm(props: {
         </Label>
       </View>
       <If when={detail}>
-        <Label variant="small" tone="amber" style={{ paddingLeft: 12 }}>
+        <Label
+          variant="small"
+          tone="warning"
+          style={{ paddingLeft: space[12] }}
+        >
           {detail}
         </Label>
       </If>
@@ -323,7 +338,7 @@ export function ExternalAgentForm(props: {
             result.detail,
           );
         return statusLine(
-          result.status === "error" ? c().red : c().amber,
+          result.status === "error" ? c().red : c().warning,
           uiText("acpTestFailed", {
             label,
             status: uiText(acpStatus[result.status]),
@@ -347,8 +362,8 @@ export function ExternalAgentForm(props: {
       ? uiText("acpEditTitle", { label: props.agent.label })
       : uiText("acpAddTitle");
   const machineField = () => (
-    <View style={{ gap: 6 }}>
-      <Label variant="small" weight={500}>
+    <View style={{ gap: space[4] }}>
+      <Label variant="small" weight={weight.regular}>
         {uiText("externalAgentMachine")}
       </Label>
       <If
@@ -359,8 +374,8 @@ export function ExternalAgentForm(props: {
             accessibilityLabel={uiText("externalAgentMachine")}
             style={{
               ...row,
-              height: props.phone ? 36 : 30,
-              paddingHorizontal: 10,
+              height: props.phone ? control.touch : control.lg,
+              paddingHorizontal: space[12],
               borderWidth: 1,
               borderColor: c().border,
               backgroundColor: c().surface,
@@ -377,13 +392,13 @@ export function ExternalAgentForm(props: {
         <ActionMenu
           label={uiText("externalAgentMachine")}
           value={machineName(machine())}
-          popupWidth={props.phone ? undefined : 490}
+          popupWidth={props.phone ? undefined : machineMenuWidth}
           sheetTitle={uiText("externalAgentMachine")}
           triggerStyle={{
             width: "100%",
-            height: props.phone ? 36 : 30,
-            paddingLeft: 10,
-            paddingRight: 8,
+            height: props.phone ? control.touch : control.lg,
+            paddingLeft: space[12],
+            paddingRight: space[8],
           }}
         >
           <Each of={listed()} key={(item) => item.id}>
@@ -410,7 +425,7 @@ export function ExternalAgentForm(props: {
     </View>
   );
   const fields = () => (
-    <View style={{ gap: 12 }}>
+    <View style={{ gap: space[12] }}>
       {machineField()}
       {field({
         name: "label",
@@ -459,7 +474,7 @@ export function ExternalAgentForm(props: {
       phonePage={props.phone}
       hideHeader={props.phone}
       height={props.phone ? "100%" : undefined}
-      width={520}
+      width={dialogWidth.lg}
       dismissible={!saving()}
       onClose={props.onClose}
     >
@@ -467,30 +482,31 @@ export function ExternalAgentForm(props: {
         <View
           style={{
             ...row,
-            height: 48,
+            height: space[48],
             flexShrink: 0,
-            gap: 4,
-            paddingHorizontal: 8,
+            gap: space[4],
+            paddingHorizontal: space[8],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
           <BackButton
-            size={40}
-            iconSize={16}
+            size={control.touch}
+            iconSize={icon.md}
             disabled={saving()}
             onPress={props.onClose}
           />
-          <Label weight={600} lines={1} style={{ flex: 1 }}>
+          <Label weight={weight.strong} lines={1} style={{ flex: 1 }}>
             {title()}
           </Label>
         </View>
       </If>
+      {/* eslint-disable-next-line no-restricted-syntax -- as on main since #776; not this change's */}
       <Scroll style={props.phone ? grow : { flexShrink: 1 }} scrollbar={false}>
         <View
           style={{
-            paddingHorizontal: props.phone ? 16 : 14,
-            paddingVertical: 12,
+            paddingHorizontal: space[16],
+            paddingVertical: space[12],
           }}
         >
           {fields()}
@@ -499,10 +515,10 @@ export function ExternalAgentForm(props: {
       <View
         style={{
           ...row,
-          gap: 8,
+          gap: space[8],
           flexShrink: 0,
-          paddingHorizontal: props.phone ? 16 : 14,
-          paddingVertical: 12,
+          paddingHorizontal: space[16],
+          paddingVertical: space[12],
           borderTopWidth: props.phone ? 1 : 0,
           borderColor: c().border,
         }}
@@ -510,8 +526,8 @@ export function ExternalAgentForm(props: {
         <If when={host.can("acp.test")}>
           <Button
             label={testing() ? uiText("testing") : uiText("test")}
-            size={props.phone ? 32 : 28}
-            style={{ paddingHorizontal: props.phone ? 14 : 8 }}
+            size={props.phone ? control.lg : control.md}
+            style={{ paddingHorizontal: props.phone ? space[16] : space[8] }}
             disabled={testing() || saving() || !usable()}
             onPress={() => void test()}
           />
@@ -520,8 +536,8 @@ export function ExternalAgentForm(props: {
           <View style={{ flex: 1 }} />
           <Button
             label={uiText("cancel")}
-            size={28}
-            style={{ paddingHorizontal: 8 }}
+            size={control.md}
+            style={{ paddingHorizontal: space[8] }}
             disabled={saving()}
             onPress={props.onClose}
           />
@@ -529,11 +545,11 @@ export function ExternalAgentForm(props: {
         <Button
           label={saveLabel()}
           tone="primary"
-          size={props.phone ? 32 : 28}
+          size={props.phone ? control.lg : control.md}
           style={
             props.phone
               ? { flex: 1, justifyContent: "center" }
-              : { paddingHorizontal: 8 }
+              : { paddingHorizontal: space[8] }
           }
           disabled={saving() || !usable()}
           onPress={() => void save()}

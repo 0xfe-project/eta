@@ -1,0 +1,35 @@
+id: design-number
+language: tsx
+severity: error
+message: A design value written as a number; take it from tokens.ts (space, control, icon…).
+note: |
+  0 and 1 (the hairline) and "100%" are fine. Anything else comes from src/components/tokens.ts,
+  or from a named constant in the component for what is not a token (a row's height, a column's
+  or a dialog's width: `dialogWidth.md`, `const rowHeight = 52`; design-grid keeps those on the
+  grid), or the line says why it is its own value: `// design-value: <reason>`. A JSX `width`,
+  `height` or `…Size` / `…Width` / `…Height` prop counts as a style key.
+ignores:
+  - src/components/tokens.ts
+  - src/components/theme.ts
+  - src/components/palettes.ts
+rule:
+  any:
+    - kind: pair
+      all:
+        - has:
+            field: key
+            regex: ^["']?((padding|margin)(Horizontal|Vertical|Top|Bottom|Left|Right|Start|End)?|gap|rowGap|columnGap|width|height|(min|max)(Width|Height)|border(Top|Bottom|Left|Right|Start|End)?Width|opacity|zIndex|letterSpacing|fontWeight)["']?$
+        - has:
+            field: value
+            matches: design-number
+    - kind: jsx_attribute
+      all:
+        - has:
+            kind: property_identifier
+            regex: ^(size|iconSize|inset|end|width|height|[a-z][A-Za-z]*(Size|Width|Height|Inset))$
+        - has:
+            any:
+              - kind: jsx_expression
+                has:
+                  matches: design-number
+              - matches: design-number

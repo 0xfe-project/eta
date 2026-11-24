@@ -15,17 +15,22 @@ import {
   Button,
   colors,
   Empty,
+  emptyWidth,
   grow,
   Icon,
   Label,
   row,
   SmoothScroll,
 } from "../../components";
+import { control, icon, space, weight } from "../../components/tokens";
 import { formatLocale, uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { messageTime } from "../chat/message-time";
 import { TaskGlyph } from "../tasks/status";
 import { emptyStyle, EntityRow, SectionHeader } from "./section";
+
+/** The quiet-period menu beside its label. */
+const quietPeriodWidth = 160;
 
 export function ArchiveSettings(props: { phone?: boolean }) {
   const host = useHost();
@@ -89,40 +94,40 @@ export function ArchiveSettings(props: { phone?: boolean }) {
             <View
               style={{
                 ...row,
-                minHeight: 40,
-                gap: 16,
-                paddingHorizontal: 16,
-                paddingVertical: 8,
+                minHeight: space[40],
+                gap: space[16],
+                paddingHorizontal: space[16],
+                paddingVertical: space[8],
                 borderBottomWidth: 1,
                 borderColor: c().border,
               }}
             >
-              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                 <Label>{uiText("archiveFinishedTasksAfterTheyAre")}</Label>
                 <Label variant="small" tone="muted">
                   {uiText("autoArchiveHint")}
                 </Label>
               </View>
               {quietPeriod({
-                width: 160,
-                height: 24,
-                paddingLeft: 10,
-                paddingRight: 8,
+                width: quietPeriodWidth,
+                height: space[24],
+                paddingLeft: space[12],
+                paddingRight: space[8],
               })}
             </View>
           }
         >
           <View
             style={{
-              gap: 6,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
+              gap: space[4],
+              paddingHorizontal: space[16],
+              paddingVertical: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
           >
             <Label>{uiText("archiveFinishedTasksAfterTheyAre")}</Label>
-            {quietPeriod({ height: 32, paddingHorizontal: 10 })}
+            {quietPeriod({ height: space[32], paddingHorizontal: space[12] })}
             <Label variant="small" tone="muted">
               {uiText("autoArchivePhoneHint")}
             </Label>
@@ -140,8 +145,8 @@ export function ArchiveSettings(props: { phone?: boolean }) {
           else={
             <View
               style={{
-                paddingHorizontal: 16,
-                paddingVertical: 12,
+                paddingHorizontal: space[16],
+                paddingVertical: space[12],
                 borderBottomWidth: 1,
                 borderColor: c().border,
               }}
@@ -161,7 +166,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
                 title={item().name}
                 leading={
                   props.phone ? undefined : (
-                    <Icon name="archive" size={16} tone="muted" />
+                    <Icon name="archive" size={icon.md} tone="muted" />
                   )
                 }
                 meta={
@@ -206,11 +211,11 @@ export function ArchiveSettings(props: { phone?: boolean }) {
           else={
             <Empty
               icon="archive"
-              iconSize={24}
+              iconSize={icon.lg}
               title={uiText("archivedTasksEmpty")}
-              titleWeight={500}
+              titleWeight={weight.regular}
               description={uiText("archivedTasksEmptyHint")}
-              descriptionWidth={360}
+              descriptionWidth={emptyWidth.narrow}
               style={emptyStyle}
             />
           }
@@ -251,27 +256,31 @@ function ArchivedTaskRow(props: {
     <View
       style={{
         ...row,
-        minHeight: 40,
+        minHeight: space[40],
         flexShrink: 0,
-        gap: 10,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        gap: space[8],
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
     >
       <View
         style={{
-          width: 24,
-          height: 24,
+          width: space[24],
+          height: space[24],
           flexShrink: 0,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <TaskGlyph status={props.task.status} size={14} />
+        <TaskGlyph status={props.task.status} size={icon.md} />
       </View>
-      <Label variant="small" tone="muted" style={{ width: 32, flexShrink: 0 }}>
+      <Label
+        variant="small"
+        tone="muted"
+        style={{ width: space[32], flexShrink: 0 }}
+      >
         {`#${props.task.number}`}
       </Label>
       <Label style={{ flex: 1, minWidth: 0 }}>{props.task.title}</Label>
@@ -280,8 +289,8 @@ function ArchivedTaskRow(props: {
       </Label>
       <Button
         label={uiText("restore")}
-        size={24}
-        style={{ flexShrink: 0, paddingHorizontal: 8 }}
+        size={control.sm}
+        style={{ flexShrink: 0, paddingHorizontal: space[8] }}
         onPress={props.onRestore}
       />
     </View>

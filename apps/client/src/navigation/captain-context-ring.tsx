@@ -1,4 +1,4 @@
-import type { CaptainIdentityView } from "@eta/client-contracts";
+import type { CaptainIdentitySection } from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import { ContextRing, useContextUsage } from "../components/context-ring";
 import { useHost } from "../services/host";
@@ -7,17 +7,16 @@ import { useHost } from "../services/host";
 export function CaptainContextRing(props: { children: JSX.Element }) {
   const host = useHost();
   const session = () => {
-    const captain = host.section<CaptainIdentityView>("captain", "identity");
+    const captain = host.section<CaptainIdentitySection>("captain", "identity");
     return (
-      host
-        .conversations()
-        .find((group) => group.id === captain?.conversationId)
-        ?.participants.find((member) => member.agentId === captain?.agentId)
-        ?.sessionId ?? undefined
+      captain?.conversation?.participants.find(
+        (member) => member.agentId === captain.agentId,
+      )?.sessionId ?? undefined
     );
   };
   const usage = useContextUsage(session);
   return (
+    // design-value: the ring drawn round the rail's 36px Captain face (box 44, radius 20.5)
     <ContextRing usage={usage} size={44} box={44} radius={20.5} label={false}>
       {props.children}
     </ContextRing>

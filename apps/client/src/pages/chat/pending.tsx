@@ -23,6 +23,7 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { CloseButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
 import { follow, relativeTime, useHost } from "../../services/host";
@@ -30,7 +31,17 @@ import { TaskGlyph, taskNeedsAttention } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
 
 /** The dialog a question is answered in, wherever the question was opened from. */
-export function QuestionDialog(props: {
+/** The question dialog, and Captain's proposal as a phone sheet. */
+const questionDialogHeight = 476;
+const proposalSheetHeight = 620;
+
+/** What waits for you: a phone's row and section heading, a row elsewhere, its action's column. */
+const phoneRowHeight = 56;
+const phoneSectionHeight = 32;
+const rowHeight = 52;
+const actionWidth = 56;
+
+function QuestionDialog(props: {
   item: InteractionView;
   phone: boolean;
   onClose: () => void;
@@ -42,7 +53,7 @@ export function QuestionDialog(props: {
   return (
     <Modal
       title={uiText("questionFromWithCount", { value1: name() })}
-      height={474}
+      height={questionDialogHeight}
       phone={props.phone}
       sheet={props.phone}
       hideHeader
@@ -52,18 +63,22 @@ export function QuestionDialog(props: {
       <View
         style={{
           ...row,
-          height: 44,
-          paddingLeft: 16,
-          paddingRight: 8,
-          gap: 8,
+          height: control.touch,
+          paddingLeft: space[16],
+          paddingRight: space[8],
+          gap: space[8],
           flexShrink: 0,
         }}
       >
-        <AgentFace id={props.item.agentId} size={20} />
-        <Label weight={600} style={{ flex: 1 }}>
+        <AgentFace id={props.item.agentId} size={avatar.md} />
+        <Label weight={weight.strong} style={{ flex: 1 }}>
           {uiText("questionFromWithCount", { value1: name() })}
         </Label>
-        <CloseButton size={32} iconSize={16} onPress={props.onClose} />
+        <CloseButton
+          size={control.lg}
+          iconSize={icon.md}
+          onPress={props.onClose}
+        />
       </View>
       <Question
         item={props.item}
@@ -141,29 +156,34 @@ export function Pending(props: {
         hoverStyle={{ backgroundColor: c().selected }}
         style={{
           ...row,
-          minHeight: 56,
-          paddingLeft: 16,
-          paddingRight: 12,
-          gap: 12,
+          minHeight: phoneRowHeight,
+          paddingLeft: space[16],
+          paddingRight: space[12],
+          gap: space[12],
           borderTopWidth: props.first ? 1 : 0,
           borderBottomWidth: 1,
           borderColor: c().border,
           cursor: "pointer",
         }}
       >
-        <View style={{ width: 28, alignItems: "center", flexShrink: 0 }}>
+        <View
+          style={{ width: control.md, alignItems: "center", flexShrink: 0 }}
+        >
           <If when={props.agent}>
-            <AgentFace id={props.agent} size={24} />
+            <AgentFace id={props.agent} size={avatar.md} />
           </If>
           <If when={props.task}>
-            <TaskGlyph status={props.task!} size={16} />
+            <TaskGlyph status={props.task!} size={icon.md} />
           </If>
           <If when={props.routines}>
-            <Icon name="routines" size={20} />
+            <Icon name="routines" size={icon.lg} />
           </If>
         </View>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Label weight={props.strong ? 600 : 400} lines={1}>
+        <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+          <Label
+            weight={props.strong ? weight.strong : weight.regular}
+            lines={1}
+          >
             {props.title}
           </Label>
           <Label variant="caption" tone="muted" lines={1}>
@@ -177,7 +197,7 @@ export function Pending(props: {
           <Label
             variant="caption"
             tone="muted"
-            style={{ width: 28, textAlign: "right", flexShrink: 0 }}
+            style={{ width: control.md, textAlign: "right", flexShrink: 0 }}
           >
             {relativeTime(props.when!)}
           </Label>
@@ -196,14 +216,14 @@ export function Pending(props: {
       <View
         style={{
           ...row,
-          height: 30,
-          gap: 6,
-          paddingHorizontal: 16,
-          marginTop: props.gap ? 8 : 0,
+          height: phoneSectionHeight,
+          gap: space[4],
+          paddingHorizontal: space[16],
+          marginTop: props.gap ? space[8] : 0,
           flexShrink: 0,
         }}
       >
-        <Caption text={props.label} phone />
+        <Caption text={props.label} />
         <Label variant="caption" tone="muted">
           {props.count}
         </Label>
@@ -215,9 +235,9 @@ export function Pending(props: {
       <View
         style={{
           ...row,
-          height: 28,
-          gap: 8,
-          paddingHorizontal: 12,
+          height: control.md,
+          gap: space[8],
+          paddingHorizontal: space[12],
           flexShrink: 0,
           borderBottomWidth: 1,
           borderColor: c().border,
@@ -233,7 +253,7 @@ export function Pending(props: {
   function PanelRow(props: {
     title: string;
     detail: string;
-    detailTone?: "amber" | "ink" | "muted";
+    detailTone?: "warning" | "ink" | "muted";
     detailVariant?: TextVariant;
     action: string;
     actionLink?: boolean;
@@ -249,9 +269,9 @@ export function Pending(props: {
         hoverStyle={{ backgroundColor: c().selected }}
         style={{
           ...row,
-          height: 52,
-          gap: 10,
-          paddingHorizontal: 12,
+          height: rowHeight,
+          gap: space[8],
+          paddingHorizontal: space[12],
           flexShrink: 0,
           borderBottomWidth: 1,
           borderColor: c().border,
@@ -262,14 +282,14 @@ export function Pending(props: {
           style={{
             ...row,
             justifyContent: "center",
-            width: 16,
-            height: 16,
+            width: space[16],
+            height: space[16],
             flexShrink: 0,
           }}
         >
           {props.children}
         </View>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
           <Label variant="small" lines={1}>
             {props.title}
           </Label>
@@ -285,7 +305,7 @@ export function Pending(props: {
           variant="caption"
           tone={props.actionTone ?? "ink"}
           style={{
-            width: 56,
+            width: actionWidth,
             flexShrink: 0,
             textAlign: "right",
             textDecorationLine: props.actionLink ? "underline" : "none",
@@ -293,7 +313,7 @@ export function Pending(props: {
         >
           {props.action}
         </Label>
-        <Icon name="right" size={10} tone="muted" />
+        <Icon name="right" size={icon.sm} tone="muted" />
       </View>
     );
   }
@@ -309,10 +329,10 @@ export function Pending(props: {
             <View
               style={{
                 ...row,
-                gap: 6,
-                paddingTop: 14,
-                paddingBottom: 10,
-                paddingHorizontal: 12,
+                gap: space[4],
+                paddingTop: space[16],
+                paddingBottom: space[12],
+                paddingHorizontal: space[12],
                 borderBottomWidth: 1,
                 borderColor: c().border,
               }}
@@ -361,7 +381,7 @@ export function Pending(props: {
                       ? uiText("prerequisiteCancelledShort")
                       : uiText("taskInReview")
                   }
-                  detailTone={item().status === "blocked" ? "ink" : "amber"}
+                  detailTone={item().status === "blocked" ? "ink" : "warning"}
                   detailVariant={
                     item().status === "blocked" ? "caption" : "small"
                   }
@@ -373,7 +393,7 @@ export function Pending(props: {
                   actionLink
                   onPress={() => props.onTask?.(item().id)}
                 >
-                  <TaskGlyph status={item().status} size={14} />
+                  <TaskGlyph status={item().status} size={icon.md} />
                 </PanelRow>
               )}
             </Each>
@@ -407,7 +427,7 @@ export function Pending(props: {
                 >
                   <Icon
                     name="routines"
-                    size={14}
+                    size={icon.md}
                     tone={routine().unseenFailures ? "red" : "muted"}
                   />
                 </PanelRow>
@@ -430,19 +450,20 @@ export function Pending(props: {
         onPress={props.onPress}
         hoverStyle={{ backgroundColor: c().selected }}
         style={{
-          gap: 3,
-          paddingVertical: 10,
-          paddingHorizontal: 12,
+          gap: space[2],
+          paddingVertical: space[12],
+          paddingHorizontal: space[12],
           borderBottomWidth: 1,
           borderColor: c().border,
           cursor: "pointer",
         }}
       >
         <Label
+          tracking="caps"
           variant="caption"
-          tone="amber"
+          tone="warning"
           lines={1}
-          style={{ letterSpacing: 1, textTransform: "uppercase" }}
+          style={{ textTransform: "uppercase" }}
         >
           {props.caption}
         </Label>
@@ -479,7 +500,7 @@ export function Pending(props: {
               else={<Empty title={uiText("nothingIsWaitingForYou")} />}
             >
               <SmoothScroll style={grow}>
-                <View style={{ gap: 8, padding: 12 }}>
+                <View style={{ gap: space[8], padding: space[12] }}>
                   <Each of={items()} key={(entry) => entry.id}>
                     {(entry) => <Question item={entry()} />}
                   </Each>
@@ -552,10 +573,8 @@ export function Pending(props: {
                   value1: host.agent(entry().agentId)?.name ?? "Agent",
                   value2: entry().conversationId
                     ? ` · ${
-                        host
-                          .conversations()
-                          .find((item) => item.id === entry().conversationId)
-                          ?.name ?? "Conversation"
+                        host.conversation(entry().conversationId)?.name ??
+                        "Conversation"
                       }`
                     : "",
                 })}
@@ -598,10 +617,8 @@ export function Pending(props: {
                 detail={`${item().status === "blocked" ? "Needs your decision" : "For you to check"}${
                   item().conversationId
                     ? ` · ${
-                        host
-                          .conversations()
-                          .find((entry) => entry.id === item().conversationId)
-                          ?.name ?? "Conversation"
+                        host.conversation(item().conversationId)?.name ??
+                        "Conversation"
                       }`
                     : ""
                 }`}
@@ -652,7 +669,7 @@ export function Pending(props: {
         {(entry) => (
           <Modal
             title={uiText("proposalFromCaptain")}
-            height={phone() ? 618 : undefined}
+            height={phone() ? proposalSheetHeight : undefined}
             phone={phone()}
             sheet={phone()}
             hideHeader
@@ -662,20 +679,20 @@ export function Pending(props: {
             <View
               style={{
                 ...row,
-                height: 44,
-                paddingLeft: 16,
-                paddingRight: 8,
-                gap: 8,
+                height: control.touch,
+                paddingLeft: space[16],
+                paddingRight: space[8],
+                gap: space[8],
                 flexShrink: 0,
               }}
             >
-              <CaptainFace size={20} />
-              <Label weight={600} style={{ flex: 1 }}>
+              <CaptainFace size={avatar.md} />
+              <Label weight={weight.strong} style={{ flex: 1 }}>
                 {uiText("proposalFromCaptain")}
               </Label>
               <CloseButton
-                size={32}
-                iconSize={16}
+                size={control.lg}
+                iconSize={icon.md}
                 onPress={() => proposalId.set("")}
               />
             </View>

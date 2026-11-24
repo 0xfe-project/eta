@@ -9,8 +9,16 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { TaskGlyph } from "./status";
+
+/** The feedback box; the list of tasks waiting on this one, and one of its rows; the dialog's
+ * button bar. */
+const feedbackHeight = { phone: 104, regular: 92 } as const;
+const dependentsHeight = 120;
+const dependentHeight = 20;
+const footerHeight = 56;
 
 export function TaskReviewDialog(props: {
   decision: "done" | "todo";
@@ -42,8 +50,8 @@ export function TaskReviewDialog(props: {
     >
       <View
         style={{
-          padding: 16,
-          gap: props.phone && props.decision === "todo" ? 12 : 14,
+          padding: space[16],
+          gap: props.phone && props.decision === "todo" ? space[12] : space[12],
         }}
       >
         <If when={props.phone && props.decision === "todo"}>
@@ -52,7 +60,7 @@ export function TaskReviewDialog(props: {
               executor: props.executor ?? uiText("executor"),
             })}
           </Label>
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: space[4] }}>
             <Label variant="caption" tone="muted">
               {uiText("comment")}
             </Label>
@@ -62,9 +70,9 @@ export function TaskReviewDialog(props: {
               value={props.feedback}
               onChange={props.onFeedback}
               style={{
-                height: 104,
-                paddingVertical: 10,
-                paddingHorizontal: 12,
+                height: feedbackHeight.phone,
+                paddingVertical: space[12],
+                paddingHorizontal: space[12],
                 borderColor: c().strong,
               }}
             />
@@ -82,18 +90,18 @@ export function TaskReviewDialog(props: {
             multiline
             value={props.feedback}
             onChange={props.onFeedback}
-            style={{ height: 92 }}
+            style={{ height: feedbackHeight.regular }}
           />
         </If>
         <If when={props.decision === "done"}>
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <TaskGlyph status="in_review" />
             <Label variant="small" tone="muted">
               {uiText("inReview")}
             </Label>
             <Label variant="small">→</Label>
             <TaskGlyph status="done" />
-            <Label variant="small" weight={600}>
+            <Label variant="small" weight={weight.strong}>
               {uiText("completed")}
             </Label>
           </View>
@@ -118,9 +126,9 @@ export function TaskReviewDialog(props: {
         <If when={props.decision === "done" && props.task?.dependents?.length}>
           <View
             style={{
-              paddingVertical: props.phone ? 10 : 12,
-              paddingHorizontal: 12,
-              gap: props.phone ? 4 : 6,
+              paddingVertical: space[12],
+              paddingHorizontal: space[12],
+              gap: space[4],
               backgroundColor: c().selected,
             }}
           >
@@ -134,18 +142,22 @@ export function TaskReviewDialog(props: {
                 },
               )}
             </Label>
-            <SmoothScroll style={{ maxHeight: 120 }}>
+            <SmoothScroll style={{ maxHeight: dependentsHeight }}>
               <Each
                 of={props.task?.dependents ?? []}
                 key={(edge) => edge.taskId}
               >
                 {(edge) => (
                   <View
-                    style={{ ...row, gap: props.phone ? 8 : 7, minHeight: 18 }}
+                    style={{
+                      ...row,
+                      gap: space[8],
+                      minHeight: dependentHeight,
+                    }}
                   >
                     <TaskGlyph
                       status={edge().status}
-                      size={props.phone ? 12 : 14}
+                      size={props.phone ? icon.sm : icon.md}
                     />
                     <Label variant="small">
                       {`#${edge().number} ${edge().title}`}
@@ -160,9 +172,9 @@ export function TaskReviewDialog(props: {
       <View
         style={{
           ...row,
-          paddingHorizontal: 16,
-          height: 56,
-          gap: 8,
+          paddingHorizontal: space[16],
+          height: footerHeight,
+          gap: space[8],
           justifyContent: "flex-end",
           borderTopWidth: 1,
           borderColor: c().border,
@@ -171,9 +183,9 @@ export function TaskReviewDialog(props: {
         <Button
           label={uiText("cancel")}
           disabled={props.submitting}
-          size={32}
+          size={control.lg}
           tone="ghost"
-          style={props.phone ? { paddingHorizontal: 12 } : undefined}
+          style={props.phone ? { paddingHorizontal: space[12] } : undefined}
           onPress={props.onClose}
         />
         <Button
@@ -182,9 +194,9 @@ export function TaskReviewDialog(props: {
               ? uiText("acceptAsDone")
               : uiText("sendBack")
           }
-          size={32}
+          size={control.lg}
           tone="primary"
-          style={props.phone ? { paddingHorizontal: 14 } : undefined}
+          style={props.phone ? { paddingHorizontal: space[16] } : undefined}
           disabled={
             props.submitting ||
             (props.decision === "todo" && !props.feedback.trim())

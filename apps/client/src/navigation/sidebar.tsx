@@ -14,12 +14,28 @@ import {
   sizes,
 } from "../components";
 import { pickerTarget } from "../components/element-picker";
+import { border, control, icon, space, weight } from "../components/tokens";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 import { CaptainCard, RailCaptain } from "./captain";
 import { ChatList } from "./chat-list";
 import { RailButton } from "./rail-controls";
 import { sections } from "./routes";
+
+/** A destination: a row in the wide sidebar, a cell in the tablet rail, a tab on a phone (the
+ * tab bar's height inside its top border). */
+const itemHeight = {
+  wide: 28,
+  rail: 48,
+  phone: sizes.phoneNav - border.hair,
+} as const;
+/** Five tabs across a phone. */
+const phoneItemWidth = "20%";
+/** An unread count over a rail or tab icon. */
+const badgeHeight = 16;
+/** The collapse toggle beside the wordmark. */
+const toggleWidth = 16;
+const footerHeight = 36;
 
 export function NavItem(props: {
   item: Destination;
@@ -47,11 +63,15 @@ export function NavItem(props: {
       focusVisibleStyle={focusRing(c())}
       style={{
         ...(wide() ? row : { alignItems: "center", justifyContent: "center" }),
-        height: wide() ? 28 : phone() ? 63 : 48,
-        width: phone() ? "20%" : "100%",
+        height: wide()
+          ? itemHeight.wide
+          : phone()
+            ? itemHeight.phone
+            : itemHeight.rail,
+        width: phone() ? phoneItemWidth : "100%",
         flexShrink: 0,
-        paddingHorizontal: wide() ? 7 : 0,
-        gap: wide() ? 8 : 4,
+        paddingHorizontal: wide() ? space[8] : 0,
+        gap: wide() ? space[8] : space[4],
         backgroundColor:
           props.selected && !phone() ? c().selected : "transparent",
         cursor: "pointer",
@@ -59,13 +79,13 @@ export function NavItem(props: {
     >
       <Icon
         name={props.item[2]}
-        size={wide() ? 14 : phone() ? 22 : 18}
+        size={wide() ? icon.md : phone() ? icon.lg : icon.md}
         tone={props.selected || wide() ? "ink" : "muted"}
       />
       <Label
         variant={wide() ? "body" : "caption"}
         tone={wide() || props.selected ? "ink" : "muted"}
-        weight={phone() && props.selected ? 600 : 400}
+        weight={phone() && props.selected ? weight.strong : weight.regular}
         style={wide() ? { flex: 1 } : undefined}
       >
         {text(props.item[1])}
@@ -79,8 +99,8 @@ export function NavItem(props: {
               ? {}
               : {
                   position: "absolute",
-                  height: 14,
-                  minWidth: 14,
+                  height: badgeHeight,
+                  minWidth: badgeHeight,
                   textAlign: "center",
                   top: phone() ? 8 : 4,
                   left: phone() ? "56%" : "62%",
@@ -132,8 +152,8 @@ export function DesktopSidebar(
         style={{
           ...row,
           justifyContent: props.collapsed ? "center" : "space-between",
-          height: 40,
-          paddingHorizontal: props.collapsed ? 4 : 14,
+          height: space[40],
+          paddingHorizontal: props.collapsed ? space[4] : space[16],
           borderBottomWidth: 1,
           borderColor: c().border,
           flexShrink: 0,
@@ -142,7 +162,9 @@ export function DesktopSidebar(
         <Label
           variant={props.collapsed ? "caption" : "subtitle"}
           tone={props.collapsed ? "muted" : "ink"}
-          style={{ letterSpacing: props.collapsed ? 0.8 : 3.2 }}
+          tracking={props.collapsed ? "caps" : undefined}
+          // design-value: the wordmark's own spacing, not a caption's
+          style={props.collapsed ? undefined : { letterSpacing: 3.2 }}
         >
           ETA
         </Label>
@@ -150,9 +172,9 @@ export function DesktopSidebar(
           <RailButton
             label={text("collapseSidebar")}
             icon="sidebar"
-            size={24}
-            width={16}
-            iconSize={12}
+            size={control.sm}
+            width={toggleWidth}
+            iconSize={icon.sm}
             expanded
             attach={attachToggle}
             onPress={toggleSidebar}
@@ -175,15 +197,15 @@ export function DesktopSidebar(
           borderBottomWidth: 1,
           borderColor: c().border,
           ...(props.collapsed
-            ? { alignItems: "center", paddingVertical: 7 }
-            : { paddingHorizontal: 7, paddingBottom: 5, gap: 1 }),
+            ? { alignItems: "center", paddingVertical: space[8] }
+            : { paddingHorizontal: space[8], paddingBottom: space[4], gap: 1 }),
         }}
       >
         <If when={props.collapsed}>
           <RailButton
             label={text("expandSidebar")}
             icon="sidebar"
-            size={22}
+            size={control.sm}
             expanded={false}
             attach={attachToggle}
             onPress={toggleSidebar}
@@ -228,8 +250,8 @@ export function DesktopSidebar(
       />
       <View
         style={{
-          paddingHorizontal: 7,
-          height: 37,
+          paddingHorizontal: space[8],
+          height: footerHeight,
           justifyContent: "center",
           flexShrink: 0,
           ...(props.collapsed

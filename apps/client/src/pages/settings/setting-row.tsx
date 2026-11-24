@@ -4,9 +4,13 @@ import { View } from "nsh";
 import { ActionItem, colors, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { useModels } from "../../components/model-select";
+import { avatar, icon, space, weight } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
-import { EntityRow, WarningLine } from "./section";
+import { EntityRow, leadingBoxWidth, WarningLine } from "./section";
+
+/** A setting: its title and the line under it. */
+const settingRow = 56;
 
 /** 48,213 → "48k": a token count the way a row's meta line says it. */
 export function tokens(count: number) {
@@ -32,23 +36,23 @@ export function SettingRow(props: {
       hoverStyle={props.onPress ? { backgroundColor: c().selected } : undefined}
       style={{
         ...row,
-        minHeight: 55,
-        gap: 10,
-        paddingHorizontal: 16,
-        paddingVertical: 7,
+        minHeight: settingRow,
+        gap: space[8],
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
     >
       <Icon name={props.icon} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Label weight={500}>{props.title}</Label>
+        <Label weight={weight.regular}>{props.title}</Label>
         <Label variant="small" tone="muted" lines={2}>
           {props.detail}
         </Label>
       </View>
       <If when={props.onPress}>
-        <Icon name="right" size={10} tone="muted" />
+        <Icon name="right" size={icon.sm} tone="muted" />
       </If>
     </View>
   );
@@ -91,8 +95,10 @@ export function AgentSetting(props: {
   return (
     <EntityRow
       title={props.agent.name}
-      leading={<AgentFace id={props.agent.id} size={props.avatar ?? 24} />}
-      leadingSize={props.phone ? 28 : props.avatar}
+      leading={
+        <AgentFace id={props.agent.id} size={props.avatar ?? avatar.md} />
+      }
+      leadingSize={props.phone ? leadingBoxWidth : props.avatar}
       stacked={props.phone}
       caret={props.phone}
       meta={

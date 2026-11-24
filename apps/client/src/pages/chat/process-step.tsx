@@ -11,8 +11,12 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { ToolOutput } from "./run/tool-code";
+
+/** A step's row in a reply's process. */
+const stepRowHeight = 32;
 
 export function ProcessStep(props: { value: RunBlock }) {
   const c = colors();
@@ -57,8 +61,8 @@ export function ProcessStep(props: { value: RunBlock }) {
           {/* Where the run took words inserted into it: a trace, not the words again. */}
           <View
             style={{
-              paddingVertical: 3,
-              paddingHorizontal: 10,
+              paddingVertical: space[4],
+              paddingHorizontal: space[12],
               borderBottomWidth: 1,
               borderColor: c().border,
               alignItems: "center",
@@ -78,9 +82,9 @@ export function ProcessStep(props: { value: RunBlock }) {
             onPress={step().output ? toggle : undefined}
             style={{
               ...row,
-              minHeight: 33,
-              paddingHorizontal: 10,
-              gap: 8,
+              minHeight: stepRowHeight,
+              paddingHorizontal: space[12],
+              gap: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -101,17 +105,16 @@ export function ProcessStep(props: { value: RunBlock }) {
                   ? {
                       backgroundColor: c().button,
                       color: c().buttonInk,
-                      paddingHorizontal: 8,
-                      paddingVertical: 2,
-                      letterSpacing: 1,
-                      fontWeight: 600,
+                      paddingHorizontal: space[8],
+                      paddingVertical: space[2],
+                      fontWeight: weight.strong,
                     }
-                  : { letterSpacing: 1, color: c().faint }
+                  : { color: c().faint }
               }
             />
           </View>
           <If when={expanded() && step().output}>
-            <View style={{ padding: 8, backgroundColor: c().surface }}>
+            <View style={{ padding: space[8], backgroundColor: c().surface }}>
               <ToolOutput text={step().output ?? ""} tone="muted" />
             </View>
           </If>
@@ -147,17 +150,17 @@ function TextStep(props: {
         }
         style={{
           ...row,
-          gap: 6,
-          paddingVertical: 4,
-          paddingHorizontal: 10,
+          gap: space[4],
+          paddingVertical: space[4],
+          paddingHorizontal: space[12],
           cursor: "pointer",
         }}
       >
-        <Icon name={open() ? "down" : "right"} size={8} tone="faint" />
+        <Icon name={open() ? "down" : "right"} size={icon.sm} tone="faint" />
         <Caption text={label()} style={{ color: c().faint }} />
       </View>
       <If when={open()}>
-        <View style={{ paddingHorizontal: 10, paddingBottom: 6 }}>
+        <View style={{ paddingHorizontal: space[12], paddingBottom: space[8] }}>
           <If
             when={props.kind === "note"}
             else={
@@ -169,7 +172,12 @@ function TextStep(props: {
             <Markdown
               value={props.text}
               dense
-              heading={{ variant: "small", weight: 600, space: 4, after: 2 }}
+              heading={{
+                variant: "small",
+                weight: weight.strong,
+                space: 4,
+                after: 2,
+              }}
               streaming
             />
           </If>

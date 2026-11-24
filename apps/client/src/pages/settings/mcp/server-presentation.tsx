@@ -2,6 +2,7 @@ import type { McpServerView } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Label, row } from "../../../components";
 import { BackButton } from "../../../components/navigation-buttons";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
 const stateLabels = {
@@ -39,7 +40,7 @@ export function toolsDescription(count: number) {
 
 export function statusTone(item: McpServerView) {
   if (item.state === "failed") return "red";
-  if (item.auth === "needs_login") return "amber";
+  if (item.auth === "needs_login") return "warning";
   return item.state === "connected" ? "green" : "muted";
 }
 
@@ -49,16 +50,20 @@ export function McpPhoneHeader(props: { title: string; onBack: () => void }) {
     <View
       style={{
         ...row,
-        height: 48,
+        height: space[48],
         flexShrink: 0,
-        paddingHorizontal: 8,
-        gap: 4,
+        paddingHorizontal: space[8],
+        gap: space[4],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
     >
-      <BackButton size={40} iconSize={16} onPress={props.onBack} />
-      <Label weight={600}>{props.title}</Label>
+      <BackButton
+        size={control.touch}
+        iconSize={icon.md}
+        onPress={props.onBack}
+      />
+      <Label weight={weight.strong}>{props.title}</Label>
     </View>
   );
 }

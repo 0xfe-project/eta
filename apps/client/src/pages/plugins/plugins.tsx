@@ -5,6 +5,7 @@ import {
   Button,
   Caption,
   colors,
+  dialogWidth,
   grow,
   Header,
   Icon,
@@ -13,6 +14,14 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import {
+  avatar,
+  control,
+  icon,
+  opacity,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { AddPlugin, ConfigurePlugin, sheetEdge } from "./configure";
@@ -33,6 +42,14 @@ import { ServersDialog } from "./servers-panel";
 import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
 import { pluginWarnings, PluginWarningsDialog } from "./warnings";
+
+/** A plugin's card in the grid. */
+const cardWidth = 268;
+/** The card's two lines of description, and its footer of actions. */
+const descriptionHeight = 36;
+const footerHeight = 36;
+/** A phone row: taller when it has a line asking for configuration. */
+const phoneRowHeight = { needsConfig: 64, other: 60 } as const;
 
 export function Plugins(props: { layout: Layout; onBack?: () => void }) {
   const host = useHost();
@@ -86,10 +103,14 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
       <View
         style={{
           ...row,
-          paddingHorizontal: tablet ? 14 : phone() ? 16 : 24,
-          height: tablet ? 40 : undefined,
-          paddingTop: tablet ? 0 : phone() ? 12 : 16,
-          paddingBottom: tablet ? 0 : phone() ? 4 : 8,
+          paddingHorizontal: tablet
+            ? space[16]
+            : phone()
+              ? space[16]
+              : space[24],
+          height: tablet ? space[40] : undefined,
+          paddingTop: tablet ? 0 : phone() ? space[12] : space[16],
+          paddingBottom: tablet ? 0 : phone() ? space[4] : space[8],
           flexShrink: 0,
           borderBottomWidth: tablet ? 1 : 0,
           borderColor: c().border,
@@ -100,7 +121,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
             ...row,
             alignItems: "stretch",
             flex: tablet || phone() ? 1 : undefined,
-            height: 28,
+            height: control.md,
             borderWidth: 1,
             borderColor: c().strong,
             backgroundColor: c().canvas,
@@ -120,7 +141,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                   flex: tablet || phone() ? 1 : undefined,
                   alignItems: "center",
                   justifyContent: "center",
-                  paddingHorizontal: 12,
+                  paddingHorizontal: space[12],
                   backgroundColor: tab() === item() ? c().button : undefined,
                   cursor: "pointer",
                 }}
@@ -164,21 +185,21 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
     <SmoothScroll style={grow} scrollbar={false}>
       <View
         style={{
-          paddingHorizontal: 24,
-          paddingTop: 8,
-          paddingBottom: 16,
-          gap: 16,
+          paddingHorizontal: space[24],
+          paddingTop: space[8],
+          paddingBottom: space[16],
+          gap: space[16],
         }}
       >
         <If when={!list().length}>
-          <NoPlugins width={300} />
+          <NoPlugins />
         </If>
         <View
           style={{
             ...row,
             flexWrap: "wrap",
             alignItems: "flex-start",
-            gap: 12,
+            gap: space[12],
           }}
         >
           <Each of={list()} key={(item) => item.name}>
@@ -214,21 +235,21 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                     onBack={props.onBack}
                   >
                     {/* Touch-sized outline buttons, 8pt apart. */}
-                    <View style={{ ...row, gap: 8 }}>
+                    <View style={{ ...row, gap: space[8] }}>
                       <Button
                         label={uiText("refreshPlugins")}
                         icon="refresh"
                         iconOnly
-                        iconSize={14}
-                        size={32}
+                        iconSize={icon.md}
+                        size={control.lg}
                         onPress={() => void refreshPlugins()}
                       />
                       <Button
                         label={uiText("addFromGit")}
                         icon="plus"
-                        iconSize={14}
-                        size={32}
-                        style={{ gap: 6, paddingHorizontal: 10 }}
+                        iconSize={icon.md}
+                        size={control.lg}
+                        style={{ gap: space[4], paddingHorizontal: space[12] }}
                         onPress={() => add.set(true)}
                       />
                     </View>
@@ -238,16 +259,16 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                   <Header
                     title={uiText("plugins")}
                     layout={props.layout}
-                    inset={10}
+                    inset={space[12]}
                   >
                     <View style={{ flex: 1 }} />
-                    <View style={{ ...row, gap: 12 }}>
+                    <View style={{ ...row, gap: space[12] }}>
                       <Button
                         label={uiText("refreshPlugins")}
                         icon="refresh"
                         iconOnly
-                        iconSize={16}
-                        size={16}
+                        iconSize={icon.md}
+                        size={control.sm}
                         style={{ paddingHorizontal: 0 }}
                         tone="ghost"
                         onPress={() => void refreshPlugins()}
@@ -287,12 +308,15 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                       <Label
                         variant="small"
                         tone="muted"
-                        style={{ paddingHorizontal: 16, paddingVertical: 12 }}
+                        style={{
+                          paddingHorizontal: space[16],
+                          paddingVertical: space[12],
+                        }}
                       >
                         {uiText("pluginsIntroPhone")}
                       </Label>
                       <If when={!list().length}>
-                        <NoPlugins width={240} />
+                        <NoPlugins />
                       </If>
                       <If when={needsConfig().length}>
                         <PluginRows
@@ -375,8 +399,8 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           plainSheetHeader={phone()}
           panelStyle={phone() ? sheetEdge : undefined}
           compact={!phone()}
-          titleWeight={500}
-          width={480}
+          titleWeight={weight.regular}
+          width={dialogWidth.md}
           overPhoneNavigation={phone()}
           onClose={() => remove.set("")}
         >
@@ -384,13 +408,15 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
               sharing the row. */}
           <View
             style={
-              phone() ? { paddingHorizontal: 16, paddingBottom: 24 } : undefined
+              phone()
+                ? { paddingHorizontal: space[16], paddingBottom: space[24] }
+                : undefined
             }
           >
             <Label
               variant="small"
               tone="muted"
-              style={phone() ? undefined : { paddingTop: 6 }}
+              style={phone() ? undefined : { paddingTop: space[8] }}
             >
               {uiText("removePluginDescription")}
             </Label>
@@ -398,21 +424,21 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
               style={{
                 ...row,
                 justifyContent: "flex-end",
-                gap: 8,
-                paddingTop: 20,
+                gap: space[8],
+                paddingTop: space[20],
               }}
             >
               <Button
                 label={uiText("cancel")}
-                size={phone() ? 44 : 28}
+                size={phone() ? control.touch : control.md}
                 style={phone() ? { flex: 1 } : undefined}
                 onPress={() => remove.set("")}
               />
               <Button
                 label={uiText("remove2")}
                 tone="primary"
-                size={phone() ? 44 : 28}
-                labelWeight={phone() ? 500 : undefined}
+                size={phone() ? control.touch : control.md}
+                labelWeight={phone() ? weight.regular : undefined}
                 style={phone() ? { flex: 1 } : undefined}
                 onPress={() =>
                   void host.action(async () => {
@@ -449,18 +475,18 @@ function PluginCard(props: {
       accessibilityLabel={props.item.name}
       onPress={props.onServers}
       style={{
-        width: 267,
-        padding: 12,
+        width: cardWidth,
+        padding: space[12],
         backgroundColor: c().canvas,
         borderWidth: 1,
         borderColor: c().border,
-        gap: 8,
-        opacity: props.item.enabled ? 1 : 0.6,
+        gap: space[8],
+        opacity: props.item.enabled ? 1 : opacity.muted,
       }}
     >
-      <View style={{ ...row, alignItems: "flex-start", gap: 12 }}>
-        <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-          <View style={{ ...row, gap: 8 }}>
+      <View style={{ ...row, alignItems: "flex-start", gap: space[12] }}>
+        <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
+          <View style={{ ...row, gap: space[8] }}>
             <PluginLogo name={props.item.name} installed />
             <View style={{ flex: 1, minWidth: 0 }}>
               <PluginName name={props.item.name} />
@@ -471,8 +497,8 @@ function PluginCard(props: {
                   testID={`card-login:${props.item.name}`}
                   style={{
                     flexShrink: 0,
-                    opacity: props.item.enabled ? 1 : 0.6,
-                    paddingHorizontal: 6,
+                    opacity: props.item.enabled ? 1 : opacity.muted,
+                    paddingHorizontal: space[8],
                     paddingVertical: 1,
                     backgroundColor: c()[authStyle(state()).fill],
                     borderWidth: 1,
@@ -487,7 +513,7 @@ function PluginCard(props: {
               )}
             </If>
           </View>
-          <View style={{ ...row, height: 20, gap: 8 }}>
+          <View style={{ ...row, height: space[20], gap: space[8] }}>
             <If when={props.item.version}>
               <Label variant="small" tone="muted">
                 {props.item.version ?? ""}
@@ -497,11 +523,16 @@ function PluginCard(props: {
           </View>
         </View>
       </View>
-      <Label variant="small" tone="muted" lines={2} style={{ height: 36 }}>
+      <Label
+        variant="small"
+        tone="muted"
+        lines={2}
+        style={{ height: descriptionHeight }}
+      >
         {props.item.description}
       </Label>
-      <View style={{ gap: 4 }}>
-        <View style={{ ...row, height: 28, gap: 4 }}>
+      <View style={{ gap: space[4] }}>
+        <View style={{ ...row, height: control.md, gap: space[4] }}>
           <If
             when={git()}
             else={
@@ -531,7 +562,7 @@ function PluginCard(props: {
             )}
           </If>
         </View>
-        <View style={{ ...row, height: 28, gap: 4 }}>
+        <View style={{ ...row, height: control.md, gap: space[4] }}>
           <Label
             variant="small"
             tone="muted"
@@ -557,7 +588,7 @@ function PluginCard(props: {
               label={uiText("warningsFor", { name: props.item.name })}
               icon="warning"
               iconOnly
-              iconSize={14}
+              iconSize={icon.md}
               tone="ghost"
               labelTone={
                 props.item.problem || props.item.state === "needs_config"
@@ -572,11 +603,11 @@ function PluginCard(props: {
       <View
         style={{
           ...row,
-          height: 36,
+          height: footerHeight,
           borderTopWidth: 1,
           borderColor: c().border,
-          paddingTop: 8,
-          gap: 4,
+          paddingTop: space[8],
+          gap: space[4],
           alignItems: "center",
         }}
       >
@@ -617,11 +648,11 @@ function PluginSourceDialog(props: { item: PluginView; onClose: () => void }) {
   return (
     <Modal
       title={uiText("sourceFor", { name: props.item.name })}
-      width={384}
+      width={dialogWidth.md}
       blurBackdrop={false}
       onClose={props.onClose}
     >
-      <View style={{ padding: 16 }}>
+      <View style={{ padding: space[16] }}>
         <Label variant="small" tone="muted" style={{ userSelect: "text" }}>
           {source()}
         </Label>
@@ -630,8 +661,8 @@ function PluginSourceDialog(props: { item: PluginView; onClose: () => void }) {
         style={{
           ...row,
           justifyContent: "flex-end",
-          paddingHorizontal: 16,
-          paddingVertical: 12,
+          paddingHorizontal: space[16],
+          paddingVertical: space[12],
           borderTopWidth: 1,
           borderColor: c().border,
         }}
@@ -639,8 +670,8 @@ function PluginSourceDialog(props: { item: PluginView; onClose: () => void }) {
         <Button
           label={pluginText("ok")}
           tone="primary"
-          size={28}
-          style={{ paddingHorizontal: 14 }}
+          size={control.md}
+          style={{ paddingHorizontal: space[16] }}
           onPress={props.onClose}
         />
       </View>
@@ -659,14 +690,14 @@ function PluginRows(props: {
     <>
       <View
         style={{
-          paddingHorizontal: 16,
-          paddingTop: props.first ? 8 : 16,
-          paddingBottom: 6,
+          paddingHorizontal: space[16],
+          paddingTop: props.first ? space[8] : space[16],
+          paddingBottom: space[8],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
-        <Caption text={props.caption} phone />
+        <Caption text={props.caption} />
       </View>
       <View>
         <Each of={props.items} key={(item) => item.name}>
@@ -678,17 +709,20 @@ function PluginRows(props: {
               activeStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: item().state === "needs_config" ? 63 : 60,
-                gap: 12,
-                paddingLeft: 16,
-                paddingRight: 12,
+                height:
+                  item().state === "needs_config"
+                    ? phoneRowHeight.needsConfig
+                    : phoneRowHeight.other,
+                gap: space[12],
+                paddingLeft: space[16],
+                paddingRight: space[12],
                 borderBottomWidth: 1,
                 borderColor: c().border,
                 backgroundColor: c().canvas,
               }}
             >
-              <PluginGlyph size={32} />
-              <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+              <PluginGlyph size={avatar.lg} />
+              <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                 <PluginName name={item().name} />
                 <Label variant="caption" tone="muted" lines={1}>
                   {[
@@ -705,8 +739,8 @@ function PluginRows(props: {
               <If when={item().state === "needs_config"}>
                 <Status item={item()} />
               </If>
-              <View style={{ width: 16, alignItems: "center" }}>
-                <Icon name="right" size={14} />
+              <View style={{ width: space[16], alignItems: "center" }}>
+                <Icon name="right" size={icon.md} />
               </View>
             </View>
           )}

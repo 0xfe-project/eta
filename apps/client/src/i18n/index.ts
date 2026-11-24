@@ -26,8 +26,8 @@ const messages = {
   pending: ["Pending", "待处理"],
   captain: ["Captain", "Captain"],
   captainNoConversation: [
-    "no conversation with it in this group yet",
-    "这个群组还没有与 Captain 的对话",
+    "No conversation with Captain yet",
+    "还没有和 Captain 对话",
   ],
   working: ["Working", "工作中"],
   idle: ["Idle", "空闲"],

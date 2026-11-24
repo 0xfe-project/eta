@@ -10,6 +10,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
@@ -56,13 +57,13 @@ export function TabletOverview(props: {
       <SmoothScroll style={grow} scrollbar={false}>
         <View
           style={{
-            paddingHorizontal: 20,
-            paddingTop: 14,
-            paddingBottom: 12,
-            gap: 12,
+            paddingHorizontal: space[20],
+            paddingTop: space[16],
+            paddingBottom: space[12],
+            gap: space[12],
           }}
         >
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <Label variant="caption" tone="muted" style={{ flex: 1 }}>
               {parent()
                 ? uiText("parentCreatedBy", {
@@ -86,21 +87,21 @@ export function TabletOverview(props: {
                   { value: "plan", label: uiText("plan") },
                 ]}
                 value={plan() ? "plan" : "overview"}
-                height={20}
+                height={control.sm}
                 labelVariant="caption"
-                paddingHorizontal={8}
+                paddingHorizontal={space[8]}
                 strong
                 onChange={(value) => plan.set(value === "plan")}
               />
             </If>
           </View>
-          <View style={{ ...row, gap: 8 }}>
-            <TaskGlyph status={item().status} size={18} />
+          <View style={{ ...row, gap: space[8] }}>
+            <TaskGlyph status={item().status} size={icon.md} />
             <TitleInPlace
               title={item().title}
               state={props.state}
               variant="subtitle"
-              weight={600}
+              weight={weight.strong}
             />
             <If
               when={!parent()}
@@ -149,14 +150,14 @@ export function TabletOverview(props: {
             />
           </If>
           <If when={!describing()}>
-            <View style={{ gap: parent() ? 3 : 4 }}>
+            <View style={{ gap: parent() ? space[2] : space[4] }}>
               <If
                 when={
                   item().description &&
                   (parent() || !/^\s*#/.test(item().description))
                 }
               >
-                <Label variant="small" weight={600}>
+                <Label variant="small" weight={weight.strong}>
                   {parent() ? uiText("description") : uiText("goal")}
                 </Label>
               </If>
@@ -166,14 +167,14 @@ export function TabletOverview(props: {
                   dense
                   heading={{
                     variant: "small",
-                    weight: 600,
+                    weight: weight.strong,
                     space: 0,
                     after: -8,
                   }}
                   compactHeadings
                 />
               </If>
-              <View style={{ paddingTop: item().description ? 4 : 0 }}>
+              <View style={{ paddingTop: item().description ? space[4] : 0 }}>
                 <EditDescriptionLink
                   onPress={() => {
                     editDescription.set(item().description);
@@ -197,7 +198,13 @@ export function TabletOverview(props: {
           />
         </View>
       </SmoothScroll>
-      <View style={{ paddingHorizontal: 20, paddingBottom: 14, gap: 12 }}>
+      <View
+        style={{
+          paddingHorizontal: space[20],
+          paddingBottom: space[16],
+          gap: space[12],
+        }}
+      >
         <RunLine item={item()} state={props.state} tablet />
         <TaskCommentBox state={props.state} />
       </View>
@@ -206,6 +213,10 @@ export function TabletOverview(props: {
 }
 
 /** Every property of the task in two columns: what it is on the left, what it waits on the right. */
+/** A property's label column (a parent has shorter labels); the inline Rerun under the run. */
+const fieldLabelWidth = { parent: 64, task: 76 } as const;
+const rerunHeight = 20;
+
 function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
   const c = colors();
   const host = useHost();
@@ -221,11 +232,7 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
     item().workspace.mode === "worktree"
       ? uiText("taskOwnWorktree")
       : uiText("taskProjectDirectory");
-  const group = () =>
-    host
-      .conversations()
-      .find((conversation) => conversation.id === item().originConversationId)
-      ?.name;
+  const group = () => host.conversation(item().originConversationId)?.name;
   const belongsTo = () => {
     const entry = item().ancestors?.at(-1);
     return entry ? `#${entry.number} ${entry.title}` : undefined;
@@ -278,9 +285,9 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
       style={{
         ...row,
         alignItems: "flex-start",
-        gap: 24,
-        paddingVertical: parent() ? 8 : 10,
-        paddingHorizontal: 12,
+        gap: space[24],
+        paddingVertical: parent() ? space[8] : space[12],
+        paddingHorizontal: space[12],
         borderWidth: 1,
         borderColor: c().border,
         backgroundColor: c().surface,
@@ -295,14 +302,21 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
         key="index"
       >
         {(column) => (
-          <View style={{ flex: 1, minWidth: 0, gap: parent() ? 5 : 6 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
             <Each of={column()} key={(field) => field[0]!}>
               {(field) => (
-                <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
+                <View
+                  style={{ ...row, alignItems: "flex-start", gap: space[8] }}
+                >
                   <Label
                     variant="caption"
                     tone="muted"
-                    style={{ width: parent() ? 64 : 74, flexShrink: 0 }}
+                    style={{
+                      width: parent()
+                        ? fieldLabelWidth.parent
+                        : fieldLabelWidth.task,
+                      flexShrink: 0,
+                    }}
                   >
                     {field()[0]}
                   </Label>
@@ -316,7 +330,7 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
                   >
                     <Label
                       variant="caption"
-                      weight={600}
+                      weight={weight.strong}
                       style={{ flex: 1, minWidth: 0 }}
                     >
                       {field()[1]}
@@ -338,16 +352,16 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
                         hoverStyle={{ backgroundColor: c().selected }}
                         style={{
                           ...row,
-                          height: 18,
-                          marginVertical: -2,
-                          paddingHorizontal: 4,
-                          gap: 4,
+                          height: rerunHeight,
+                          marginVertical: -space[2],
+                          paddingHorizontal: space[4],
+                          gap: space[4],
                           flexShrink: 0,
                           cursor: "pointer",
                         }}
                       >
-                        <Icon name="refresh" size={11} />
-                        <Label variant="caption" weight={600}>
+                        <Icon name="refresh" size={icon.sm} />
+                        <Label variant="caption" weight={weight.strong}>
                           {uiText("rerun")}
                         </Label>
                       </View>

@@ -1,0 +1,13 @@
+# ast-grep (https://ast-grep.github.io): the design-value lint of the client.
+# `bun run lint` runs it through scripts/check-design-values.ts, which adds what ast-grep
+# cannot say: the `// design-value: <reason>` allowance. Every other match fails.
+ruleDirs:
+  - lint/ast-grep/rules
+utilDirs:
+  - lint/ast-grep/utils
+testConfigs:
+  - testDir: lint/ast-grep/tests
+    snapshotDir: lint/ast-grep/__snapshots__
+# .ts files are read as TSX too, so one rule covers both (no file here casts with `<T>x`).
+languageGlobs:
+  tsx: ["*.ts"]

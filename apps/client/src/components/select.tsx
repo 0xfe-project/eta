@@ -13,6 +13,12 @@ import {
 } from "./menu";
 import { Icon, Label } from "./text";
 import { colors, row, Screen } from "./theme";
+import { control, icon, space } from "./tokens";
+
+/** The menu of a select on a desktop, unless its caller says. */
+const menuWidth = 220;
+/** A choice's row in a phone sheet. */
+const sheetRowHeight = 52;
 
 /**
  * NSH's `Select`, shown as the layout says (`menuPresentation`): a sheet at
@@ -45,7 +51,7 @@ export function LayoutSelect(
           align={props.align === "end" ? "end" : "start"}
           offset={props.offset}
           popupStyle={{
-            width: props.menuWidth ?? 220,
+            width: props.menuWidth ?? menuWidth,
             ...(props.popupStyle as ViewStyle | undefined),
           }}
           trigger={
@@ -71,15 +77,15 @@ export function LayoutSelect(
                   disabled={item().disabled}
                   style={{
                     ...row,
-                    gap: 8,
+                    gap: space[8],
                     minHeight: inSheet()
-                      ? 52
+                      ? sheetRowHeight
                       : touchScreen
                         ? touchRow
-                        : (itemStyle().minHeight ?? 28),
+                        : (itemStyle().minHeight ?? control.md),
                     paddingHorizontal: inSheet()
-                      ? 16
-                      : (itemStyle().paddingHorizontal ?? 8),
+                      ? space[16]
+                      : (itemStyle().paddingHorizontal ?? space[8]),
                     backgroundColor: chosen() ? c().selected : undefined,
                   }}
                   onSelect={() => choose(item().value)}
@@ -96,9 +102,9 @@ export function LayoutSelect(
                         >
                           {item().title}
                         </Label>
-                        <View style={{ width: 12, flexShrink: 0 }}>
+                        <View style={{ width: space[12], flexShrink: 0 }}>
                           <If when={chosen()}>
-                            <Icon name="check" size={12} />
+                            <Icon name="check" size={icon.sm} />
                           </If>
                         </View>
                       </>

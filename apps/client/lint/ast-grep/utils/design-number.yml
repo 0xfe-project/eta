@@ -1,0 +1,37 @@
+# A design value written as a number: a numeric literal other than 0 and ±1 (the hairline), or a
+# numeric string other than "100%" ("50%", "600"); or such a value in an arm of a ternary or of
+# `??` / `||` / `&&`. A value reached through a name (`inset`, `sizes.panel`, `type("small").size`)
+# is not one: it is said once, where the name is.
+id: design-number
+language: tsx
+rule:
+  any:
+    - kind: number
+      not:
+        regex: ^(0|1)$
+    - kind: unary_expression
+      regex: ^-\s*\d
+      not:
+        regex: ^-\s*(0|1)$
+    - kind: string
+      regex: ^["']-?\d+(\.\d+)?(px|%)?["']$
+      not:
+        regex: ^["'](0|1|100%)["']$
+    - kind: parenthesized_expression
+      has:
+        matches: design-number
+    - kind: ternary_expression
+      any:
+        - has: { field: consequence, matches: design-number }
+        - has: { field: alternative, matches: design-number }
+    - kind: binary_expression
+      has:
+        field: operator
+        regex: ^(\?\?|\|\||&&)$
+      any:
+        - has: { field: left, matches: design-number }
+        - has: { field: right, matches: design-number }
+    - kind: as_expression
+      has: { nthChild: 1, matches: design-number }
+    - kind: satisfies_expression
+      has: { nthChild: 1, matches: design-number }

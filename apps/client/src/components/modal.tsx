@@ -1,14 +1,26 @@
 import type { JSX, ViewStyle } from "nsh";
 import { cleanup, keymap, Overlay, platform, View, windowSize } from "nsh";
 import { Dialog } from "nsh/base";
+import { Regular } from "./density";
 import { Header } from "./header";
 import { CloseButton } from "./navigation-buttons";
 import { screenInsets } from "./safe-area";
 import { Label } from "./text";
 import { colors, fill, row } from "./theme";
 import { ToastLayer } from "./toast";
+import { control, icon, layer, shadow, space, weight } from "./tokens";
 
 const modalStack: (() => void)[] = [];
+
+/** A centred dialog's width: `sm` a confirmation, `md` a short form (the default), `lg` a form
+ * with rows, `xl` a dialog with its own layout. Not tokens: only a dialog takes them. */
+export const dialogWidth = { sm: 360, md: 448, lg: 560, xl: 640 } as const;
+
+/** The grabber atop a phone sheet. */
+const grabberWidth = 36;
+
+/** The header bar: a phone sheet's (44 with no divider under it), a stepped dialog's. */
+const headerHeight = { sheet: 40, plainSheet: 44, step: 48 } as const;
 
 function closeTopModal() {
   modalStack.at(-1)?.();
@@ -17,7 +29,7 @@ function closeTopModal() {
 export function Modal(props: {
   title: string;
   subtitle?: string;
-  subtitleTone?: "green" | "amber" | "muted";
+  subtitleTone?: "green" | "warning" | "muted";
   width?: number;
   height?: ViewStyle["height"];
   phone?: boolean;
@@ -63,7 +75,7 @@ export function Modal(props: {
   const centred = () => !props.phone && !props.side;
   const stepHeader = () => Boolean(props.stepHeader) && centred();
   const popupStyle = (): ViewStyle => ({
-    width: props.phone ? "100%" : (props.width ?? 480),
+    width: props.phone ? "100%" : (props.width ?? dialogWidth.md),
     maxWidth: "100%",
     maxHeight: "100%",
     height: props.height,
@@ -72,10 +84,8 @@ export function Modal(props: {
     borderLeftWidth: props.phonePage ? 0 : 1,
     borderColor: color().strong,
     overflow: "hidden",
-    boxShadow: centred()
-      ? [{ x: 0, y: 8, blur: 24, color: "#0000001f" }]
-      : undefined,
-    ...(props.compact ? { padding: 14 } : {}),
+    boxShadow: centred() ? [shadow.popover] : undefined,
+    ...(props.compact ? { padding: space[16] } : {}),
     ...props.panelStyle,
   });
   const backdropStyle = (): ViewStyle => {
@@ -88,8 +98,8 @@ export function Modal(props: {
       backgroundColor: props.phonePage
         ? color().canvas
         : props.phone || props.side || tablet()
-          ? color().sheetShade
-          : color().modalShade,
+          ? color().sheetScrim
+          : color().scrim,
       backdropFilter: blur ? "blur(3px)" : undefined,
       // A solid mask keeps Apple's blur while removing the system material tint.
       maskImage:
@@ -98,8 +108,9 @@ export function Modal(props: {
           : undefined,
     };
   };
+  // A dialog is drawn regular even when a compact part (a side panel, a menu) opens it.
   const panel = () => (
-    <>
+    <Regular>
       <View
         style={{ ...fill, ...backdropStyle() }}
         onPress={props.dismissible === false ? undefined : close}
@@ -108,29 +119,36 @@ export function Modal(props: {
         <If when={props.sheet}>
           <View
             style={{
-              height: props.plainSheetHeader ? 16 : 20,
-              paddingTop: props.plainSheetHeader ? 8 : 0,
+              height: props.plainSheetHeader ? space[16] : space[20],
+              paddingTop: props.plainSheetHeader ? space[8] : 0,
               alignItems: "center",
               justifyContent: props.plainSheetHeader ? "flex-start" : "center",
               flexShrink: 0,
             }}
           >
             <View
-              style={{ width: 36, height: 4, backgroundColor: color().strong }}
+              style={{
+                width: grabberWidth,
+                height: space[4],
+                backgroundColor: color().strong,
+              }}
             />
           </View>
         </If>
         <If when={!props.hideHeader && props.compact}>
-          <View style={{ ...row, gap: 12, flexShrink: 0 }}>
-            <Label weight={props.titleWeight ?? 600} style={{ flex: 1 }}>
+          <View style={{ ...row, gap: space[12], flexShrink: 0 }}>
+            <Label
+              weight={props.titleWeight ?? weight.strong}
+              style={{ flex: 1 }}
+            >
               {props.title}
             </Label>
             {props.headerActions}
             <If when={props.dismissible !== false}>
               <CloseButton
                 onPress={close}
-                iconSize={14}
-                style={{ marginVertical: -5, marginRight: -5 }}
+                iconSize={icon.md}
+                style={{ marginVertical: -space[4], marginRight: -space[4] }}
               />
             </If>
           </View>
@@ -142,22 +160,28 @@ export function Modal(props: {
             subtitleTone={props.subtitleTone}
             layout={props.phone ? "phone" : "desktop"}
             inset={
-              sheetChrome() ? 16 : sideDrawer() ? 12 : stepHeader() ? 20 : 14
+              sheetChrome()
+                ? space[16]
+                : sideDrawer()
+                  ? space[12]
+                  : stepHeader()
+                    ? space[20]
+                    : space[16]
             }
             end={
               sheetChrome() || sideDrawer() || props.phonePage
-                ? 8
+                ? space[8]
                 : stepHeader()
-                  ? 16
-                  : 6
+                  ? space[16]
+                  : space[8]
             }
             height={
               sheetChrome()
                 ? props.plainSheetHeader
-                  ? 44
-                  : 40
+                  ? headerHeight.plainSheet
+                  : headerHeight.sheet
                 : stepHeader()
-                  ? 48
+                  ? headerHeight.step
                   : undefined
             }
             divider={!(sheetChrome() && props.plainSheetHeader)}
@@ -166,7 +190,9 @@ export function Modal(props: {
               sheetChrome() || sideDrawer() || stepHeader() ? "body" : undefined
             }
             titleWeight={
-              sheetChrome() || sideDrawer() || stepHeader() ? 600 : undefined
+              sheetChrome() || sideDrawer() || stepHeader()
+                ? weight.strong
+                : undefined
             }
             dialog={!props.phonePage}
             onBack={props.phonePage ? close : undefined}
@@ -176,8 +202,8 @@ export function Modal(props: {
             <If when={props.dismissible !== false && !props.phonePage}>
               <CloseButton
                 onPress={close}
-                size={sheetChrome() ? 32 : undefined}
-                iconSize={sheetChrome() || stepHeader() ? 16 : 14}
+                size={sheetChrome() ? control.lg : undefined}
+                iconSize={icon.md}
               />
             </If>
           </Header>
@@ -185,7 +211,7 @@ export function Modal(props: {
         {props.children}
       </View>
       <ToastLayer phone={props.phone} />
-    </>
+    </Regular>
   );
   if (focused)
     return (
@@ -214,7 +240,7 @@ export function Modal(props: {
         paddingBottom: overlay ? insets().bottom : 0,
         paddingLeft: overlay ? insets().left : 0,
         paddingRight: overlay ? insets().right : 0,
-        zIndex: 100,
+        zIndex: layer.modal,
         alignItems: props.side ? "flex-end" : "center",
         justifyContent: props.phone ? "flex-end" : "center",
       }}

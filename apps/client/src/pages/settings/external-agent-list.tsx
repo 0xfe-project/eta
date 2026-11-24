@@ -6,6 +6,7 @@ import type {
 import { View } from "nsh";
 import { ActionItem, colors, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { acpStatus } from "./external-agent";
 import { EntityRow, LetterBox, SectionHeader, WarningLine } from "./section";
@@ -52,7 +53,7 @@ export function ExternalAgentList(props: {
       ? c().green
       : status === "error"
         ? c().red
-        : c().amber;
+        : c().warning;
   const groupMeta = (primary: boolean, count: number) =>
     [
       primary && uiText("externalAgentPrimary"),
@@ -73,9 +74,9 @@ export function ExternalAgentList(props: {
               <View
                 style={{
                   ...row,
-                  gap: 10,
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
+                  gap: space[8],
+                  paddingHorizontal: space[16],
+                  paddingVertical: space[8],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                 }}

@@ -4,15 +4,25 @@ import { View } from "nsh";
 import {
   Button,
   colors,
+  focusRing,
   Icon,
   Label,
   row,
   textFaces,
 } from "../../../components";
 import { LayoutSelect } from "../../../components/select";
+import { control, icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { GroupHeading } from "./group-heading";
+
+/** A setting, the channel row with its two lines, the channel menu and one of its items, and
+ * the Advanced toggle. */
+const settingRow = 56;
+const channelRow = 72;
+const channelWidth = 160;
+const itemRow = 28;
+const advancedWidth = 100;
 
 function SettingBand(props: {
   title: string;
@@ -25,10 +35,10 @@ function SettingBand(props: {
       style={{
         ...row,
         justifyContent: "space-between",
-        gap: 8,
-        minHeight: 55,
-        paddingHorizontal: 16,
-        paddingVertical: 7,
+        gap: space[8],
+        minHeight: settingRow,
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -85,16 +95,20 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
       <View
         style={{
           ...(props.phone ? {} : row),
-          minHeight: 71,
-          gap: props.phone ? 4 : 14,
-          paddingHorizontal: 16,
-          paddingVertical: 7,
+          minHeight: channelRow,
+          gap: props.phone ? space[4] : space[12],
+          paddingHorizontal: space[16],
+          paddingVertical: space[8],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
         <View
-          style={{ flex: props.phone ? undefined : 1, minWidth: 0, gap: 2 }}
+          style={{
+            flex: props.phone ? undefined : 1,
+            minWidth: 0,
+            gap: space[2],
+          }}
         >
           <Label>{uiText("channel")}</Label>
           <If when={!props.phone}>
@@ -103,7 +117,9 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
             </Label>
           </If>
         </View>
-        <View style={{ width: props.phone ? "100%" : 160, flexShrink: 0 }}>
+        <View
+          style={{ width: props.phone ? "100%" : channelWidth, flexShrink: 0 }}
+        >
           <LayoutSelect
             accessibilityLabel={uiText("channel")}
             items={[
@@ -122,16 +138,16 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
             itemStyle={{
               color: c().ink,
               fontSize: type("small").size,
-              minHeight: 29,
-              paddingHorizontal: 10,
+              minHeight: itemRow,
+              paddingHorizontal: space[12],
             }}
             trigger={
               <View
                 style={{
                   ...row,
-                  height: props.phone ? 32 : 24,
-                  gap: 6,
-                  paddingHorizontal: 10,
+                  height: props.phone ? space[32] : space[24],
+                  gap: space[4],
+                  paddingHorizontal: space[12],
                   borderWidth: 1,
                   borderColor: c().strong,
                   backgroundColor: c().canvas,
@@ -140,7 +156,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
                 <Label variant="small" lines={1} style={{ flex: 1 }}>
                   {channelName()}
                 </Label>
-                <Icon name="down" size={12} tone="muted" />
+                <Icon name="down" size={icon.sm} tone="muted" />
               </View>
             }
             onChange={({ value }) => {
@@ -162,12 +178,12 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
           accessibilityState={{ expanded: advancedOpen() }}
           onPress={() => advanced.set(!advancedOpen())}
           hoverStyle={{ backgroundColor: c().selected }}
-          focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+          focusVisibleStyle={focusRing(c(), "inset")}
           style={{
             ...row,
-            height: props.phone ? 28 : 24,
-            width: 98,
-            paddingHorizontal: 10,
+            height: props.phone ? control.md : space[24],
+            width: advancedWidth,
+            paddingHorizontal: space[12],
             justifyContent: "space-between",
             borderWidth: 1,
             borderColor: c().strong,
@@ -180,7 +196,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
               transform: advancedOpen() ? [{ rotate: "180deg" }] : undefined,
             }}
           >
-            <Icon name="down" size={12} tone="muted" />
+            <Icon name="down" size={icon.sm} tone="muted" />
           </View>
         </View>
       </GroupHeading>

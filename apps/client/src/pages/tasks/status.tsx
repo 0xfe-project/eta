@@ -2,6 +2,7 @@ import type { BoardTaskStatus, BoardTaskView } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import { Image, View } from "nsh";
 import { Caption, colors, focusRing, Icon, Label, row } from "../../components";
+import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { UsageLine } from "./usage";
 
@@ -45,7 +46,7 @@ export const tones = {
   backlog: "faint",
   todo: "ink",
   in_progress: "blue",
-  in_review: "amber",
+  in_review: "warning",
   blocked: "red",
   done: "green",
   cancelled: "muted",
@@ -106,8 +107,8 @@ function ShapeImage(props: { shape: string; size?: number }) {
       src={src()}
       fadeDuration={0}
       style={{
-        width: props.size ?? 12.6,
-        height: props.size ?? 12.6,
+        width: props.size ?? icon.sm,
+        height: props.size ?? icon.sm,
         flexShrink: 0,
       }}
     />
@@ -118,7 +119,7 @@ const fills = {
   backlog: "selected",
   todo: "selected",
   in_progress: "blueFill",
-  in_review: "amberFill",
+  in_review: "warningFill",
   blocked: "redFill",
   done: "greenFill",
   cancelled: "selected",
@@ -133,9 +134,9 @@ export function TaskStatus(props: { task: BoardTaskView }) {
       style={{
         ...row,
         paddingVertical: 1,
-        paddingLeft: waiting() ? 4 : 6,
-        paddingRight: 6,
-        gap: 4,
+        paddingLeft: waiting() ? space[4] : space[8],
+        paddingRight: space[8],
+        gap: space[4],
         flexShrink: 0,
         backgroundColor: waiting() ? c().canvas : c()[fills[props.task.status]],
         borderWidth: waiting() ? 1 : 0,
@@ -143,7 +144,7 @@ export function TaskStatus(props: { task: BoardTaskView }) {
       }}
     >
       <If when={waiting()}>
-        <Icon name="lock" size={12} tone="mutedInk" />
+        <Icon name="lock" size={icon.sm} tone="mutedInk" />
       </If>
       <Label
         variant="small"
@@ -171,7 +172,7 @@ const segmentTones = {
   backlog: "border",
   todo: "border",
   in_progress: "blue",
-  in_review: "amber",
+  in_review: "warning",
   blocked: "red",
   done: "green",
   cancelled: "border",
@@ -189,8 +190,8 @@ export function SubtaskSegments(props: {
         {(task) => (
           <View
             style={{
-              width: props.width ?? 5,
-              height: 5,
+              width: props.width ?? space[4],
+              height: space[4],
               backgroundColor: c()[segmentTones[task().status]],
             }}
           />
@@ -221,9 +222,9 @@ function TaskCardStatus(props: { task: BoardTaskView }) {
       style={{
         ...row,
         paddingVertical: 1,
-        paddingLeft: 4,
-        paddingRight: 6,
-        gap: 4,
+        paddingLeft: space[4],
+        paddingRight: space[8],
+        gap: space[4],
         flexShrink: 1,
         minWidth: 0,
         backgroundColor: waitingFor()
@@ -236,7 +237,7 @@ function TaskCardStatus(props: { task: BoardTaskView }) {
       }}
     >
       <If when={!waitingFor()}>
-        <TaskGlyph status={task().status} size={10} />
+        <TaskGlyph status={task().status} size={icon.sm} />
       </If>
       <Label
         variant="small"
@@ -286,6 +287,10 @@ export function progressColor(
  * task, and so is the body under the head while the card is open; pressing them is spent there and
  * does not also fold the card.
  */
+/** A summary row's link to its task, at its narrowest; the segments of a parent's progress. */
+const openMinWidth = 48;
+const segmentWidth = 44;
+
 export function TaskSummary(props: {
   task: BoardTaskView;
   subtasks?: BoardTaskView[];
@@ -326,35 +331,38 @@ export function TaskSummary(props: {
         focusVisibleStyle={focusRing(c())}
         style={{
           ...row,
-          paddingHorizontal: 10,
-          paddingVertical: 6,
-          gap: 8,
+          paddingHorizontal: space[12],
+          paddingVertical: space[8],
+          gap: space[8],
           cursor: "pointer",
         }}
       >
         <Icon
           name={props.open ? "down" : "right"}
-          size={props.open ? 8 : 10}
+          size={icon.sm}
           tone={props.open ? "muted" : "faint"}
         />
-        <TaskGlyph status={props.task.status} size={12} />
-        <Caption
-          text={kind()}
-          style={{ letterSpacing: 1.4, color: c().faint, flexShrink: 0 }}
-        />
+        <TaskGlyph status={props.task.status} size={icon.sm} />
+        <Caption text={kind()} style={{ color: c().faint, flexShrink: 0 }} />
         <View
           role="link"
           accessibilityLabel={openTask()}
           onPress={() => props.onPress()}
           focusVisibleStyle={focusRing(c())}
-          style={{ ...row, gap: 8, flex: 1, minWidth: 50, cursor: "pointer" }}
+          style={{
+            ...row,
+            gap: space[8],
+            flex: 1,
+            minWidth: openMinWidth,
+            cursor: "pointer",
+          }}
         >
           <Label variant="small" tone="muted">
             {`#${props.task.number}`}
           </Label>
           <Label
             variant="small"
-            weight={500}
+            weight={weight.regular}
             lines={1}
             style={{ flex: 1, minWidth: 0 }}
           >
@@ -380,9 +388,9 @@ export function TaskSummary(props: {
               <View
                 style={{
                   ...row,
-                  paddingVertical: 8,
-                  paddingHorizontal: 10,
-                  gap: 12,
+                  paddingVertical: space[8],
+                  paddingHorizontal: space[12],
+                  gap: space[12],
                   justifyContent: "space-between",
                 }}
               >
@@ -398,11 +406,25 @@ export function TaskSummary(props: {
               </View>
             }
           >
-            <View style={{ paddingVertical: 8, paddingHorizontal: 10, gap: 6 }}>
+            <View
+              style={{
+                paddingVertical: space[8],
+                paddingHorizontal: space[12],
+                gap: space[4],
+              }}
+            >
               <View
-                style={{ ...row, gap: 12, justifyContent: "space-between" }}
+                style={{
+                  ...row,
+                  gap: space[12],
+                  justifyContent: "space-between",
+                }}
               >
-                <SubtaskSegments subtasks={subtasks()} width={44} gap={4} />
+                <SubtaskSegments
+                  subtasks={subtasks()}
+                  width={segmentWidth}
+                  gap={space[4]}
+                />
                 <UsageLine task={props.task} tone="mutedInk" />
               </View>
               <If when={plan()}>

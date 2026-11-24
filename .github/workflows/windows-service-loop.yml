@@ -1,0 +1,108 @@
+# Uninstalls the Windows service and installs it again at once, round after round, on a real
+# `windows-latest`, the way every scenario of the upgrade end-to-end test starts. An install reads
+# several expected Windows error codes (1060 for a service not there yet, 1062 for stopping one
+# that never ran); on main about one install in 125 lost one of them to a 0 and failed (#367). Too
+# slow and too random for every pull request: by hand, against a branch, optionally next to another
+# ref's build for a before and after.
+#
+#   gh workflow run windows-service-loop.yml --ref <branch> -f rounds=50 -f compare=main
+#
+# Each build's tally is in the run's summary, and every round in the `reinstall-loop` artifact.
+name: Windows service reinstall loop
+
+on:
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: Reinstalls per build
+        default: "50"
+      absent:
+        description: Runs of uninstall-service with nothing installed per build, before the reinstalls
+        default: "500"
+      compare:
+        description: Another ref to run the same loop with, first (empty for none)
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  loop:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    # A build that cannot compile the error-code shim fails, rather than reading codes the old way.
+    env:
+      ETA_REQUIRE_WIN32_SHIM: "1"
+    steps:
+      - run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      # The page is not what this tests: an empty one is embedded instead of building it.
+      - name: Build the hosts
+        env:
+          COMPARE: ${{ inputs.compare }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/web" "$RUNNER_TEMP/hosts"
+          echo '<!doctype html><title>eta</title>' > "$RUNNER_TEMP/web/index.html"
+          build() {
+            (cd "$1" && bun install --frozen-lockfile --ignore-scripts > /dev/null &&
+              ETA_WEB_DIR="$RUNNER_TEMP/web" bun apps/eta/scripts/build-host.ts "$RUNNER_TEMP/hosts/$2")
+          }
+          if [ -n "$COMPARE" ]; then
+            git worktree add "$RUNNER_TEMP/compare" "origin/$COMPARE" || git worktree add "$RUNNER_TEMP/compare" "$COMPARE"
+            build "$RUNNER_TEMP/compare" compare
+          fi
+          build . this
+
+      - name: Give the account a password
+        shell: pwsh
+        run: |
+          $password = "Eta-" + [guid]::NewGuid().ToString("N") + "-1a"
+          Write-Output "::add-mask::$password"
+          net user $env:USERNAME $password | Out-Null
+          "ETA_E2E_PASSWORD=$password" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Ask the compared build about services that are not there
+        if: inputs.compare != ''
+        continue-on-error: true
+        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/compare/eta-host.exe" "${{ inputs.absent }}" "${{ inputs.compare }}" absent
+
+      - name: Ask this build about services that are not there
+        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/this/eta-host.exe" "${{ inputs.absent }}" "${{ github.ref_name }}" absent
+
+      - name: Loop the compared build
+        if: inputs.compare != ''
+        continue-on-error: true
+        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/compare/eta-host.exe" "${{ inputs.rounds }}" "${{ inputs.compare }}"
+
+      - name: Loop this build
+        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/this/eta-host.exe" "${{ inputs.rounds }}" "${{ github.ref_name }}"
+
+      - name: What Windows said
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 2000 |
+            Format-List TimeCreated,Id,Message | Out-File scm-events.txt
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: reinstall-loop
+          path: |
+            reinstall-loop.jsonl
+            scm-events.txt
+            ~/.eta/service/*.log
+          retention-days: 14

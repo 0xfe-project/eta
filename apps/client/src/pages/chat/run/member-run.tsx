@@ -6,12 +6,13 @@ import type {
   TranscriptSection,
   ViewCore,
 } from "@eta/client-contracts";
-import type { ViewRef } from "nsh";
+import type { JSX, ViewRef } from "nsh";
 import { logBlocks, savedSteps, savedTools } from "@eta/client-contracts";
 import { cleanup, computed, effect, signal, View } from "nsh";
 import {
   Button,
   colors,
+  focusRing,
   grow,
   Icon,
   Label,
@@ -21,6 +22,14 @@ import {
 import { AgentFace } from "../../../components/agent-face";
 import { CloseButton } from "../../../components/navigation-buttons";
 import { StatusDot } from "../../../components/status-dot";
+import {
+  avatar,
+  control,
+  icon,
+  opacity,
+  space,
+  weight,
+} from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { clock, followSession, useHost } from "../../../services/host";
 import { activeReply } from "../member-status";
@@ -82,6 +91,10 @@ function runLength(ms: number, clockFace: boolean) {
  * by the run's times, `reply` by where the reply's run sits in the session, and a finished reply
  * the session no longer holds is read from what its row kept.
  */
+/** The bar of a run's timing, and a row of its legend under it. */
+const timingBarHeight = 8;
+const legendRowHeight = { phone: 16, desktop: 20 } as const;
+
 export function MemberRun(props: {
   /** The member's session; a finished reply can be read without one. */
   session?: string | null;
@@ -93,6 +106,8 @@ export function MemberRun(props: {
   executorName?: string;
   /** Replaces the date and thinking level after the name, such as a task run's caption. */
   meta?: string;
+  /** Tabs drawn in the header row before Expand and Close, off a phone (the member's Inspect). */
+  tabs?: JSX.Element;
   onClose: () => void;
 }) {
   const host = useHost();
@@ -271,24 +286,30 @@ export function MemberRun(props: {
       <View
         style={{
           paddingHorizontal: inset,
-          paddingTop: props.phone ? 12 : 10,
-          paddingBottom: props.phone ? 12 : 8,
+          paddingTop: space[12],
+          paddingBottom: props.phone ? space[12] : space[8],
           flexShrink: 0,
-          gap: props.phone ? 8 : 6,
+          gap: props.phone ? space[8] : space[4],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
-        <View style={{ ...row, height: props.phone ? 24 : 28, gap: 8 }}>
-          <AgentFace id={props.agentId} size={18} />
-          <Label variant="small" weight={props.phone ? 400 : 500} lines={1}>
+        <View
+          style={{
+            ...row,
+            height: props.phone ? space[24] : control.md,
+            gap: space[8],
+          }}
+        >
+          <AgentFace id={props.agentId} size={avatar.sm} />
+          <Label variant="small" weight={weight.regular} lines={1}>
             {props.executorName ??
               host.agent(props.agentId)?.name ??
               uiText("agent")}
           </Label>
           <If when={runState()}>
             {(state) => (
-              <View style={{ ...row, flex: 1, minWidth: 0, gap: 8 }}>
+              <View style={{ ...row, flex: 1, minWidth: 0, gap: space[8] }}>
                 <StatusDot color={state().color} />
                 <Label variant="small" lines={1}>
                   {state().word}
@@ -336,28 +357,30 @@ export function MemberRun(props: {
                   (stamp() ? "· " : "") + details().filter(Boolean).join(" · ")}
               </Label>
             </If>
+            {props.tabs}
             <View
               role="button"
               accessibilityLabel={uiText(
                 expanded() ? "collapseDetails" : "expandDetails",
               )}
               onPress={toggleAll}
-              focusVisibleStyle={{
-                outlineWidth: 1,
-                outlineColor: c().blue,
-                outlineOffset: 1,
+              focusVisibleStyle={focusRing(c())}
+              style={{
+                ...row,
+                gap: space[4],
+                flexShrink: 0,
+                cursor: "pointer",
               }}
-              style={{ ...row, gap: 4, flexShrink: 0, cursor: "pointer" }}
             >
               <Label variant="caption" tone="muted">
                 {uiText(expanded() ? "collapseDetails" : "expandDetails")}
               </Label>
-              <Icon name="down" size={12} tone="muted" />
+              <Icon name="down" size={icon.sm} tone="muted" />
             </View>
             <CloseButton
-              size={24}
-              iconSize={16}
-              style={{ marginRight: -4 }}
+              size={control.sm}
+              iconSize={icon.md}
+              style={{ marginRight: -space[4] }}
               onPress={props.onClose}
             />
           </If>
@@ -371,7 +394,7 @@ export function MemberRun(props: {
               icon="down"
               iconOnly
               tone="ghost"
-              size={24}
+              size={control.sm}
               onPress={toggleAll}
             />
           </If>
@@ -379,7 +402,12 @@ export function MemberRun(props: {
         <If when={timing()}>
           {(trail) => (
             <>
-              <View style={{ height: 10, backgroundColor: c().selected }}>
+              <View
+                style={{
+                  height: timingBarHeight,
+                  backgroundColor: c().selected,
+                }}
+              >
                 <Each of={trail().segments} key={(segment) => segment.id}>
                   {(segment) => (
                     <View
@@ -391,10 +419,7 @@ export function MemberRun(props: {
                         selected: segment().blocks.includes(selected()),
                       }}
                       onPress={() => select(segment().blocks)}
-                      focusVisibleStyle={{
-                        outlineWidth: 1,
-                        outlineColor: c().ink,
-                      }}
+                      focusVisibleStyle={focusRing(c(), "inset")}
                       style={{
                         position: "absolute",
                         top: 0,
@@ -404,7 +429,7 @@ export function MemberRun(props: {
                         backgroundColor: runKinds[segment().kind].color,
                         opacity:
                           selected() && !segment().blocks.includes(selected())
-                            ? 0.65
+                            ? opacity.muted
                             : 1,
                         cursor: "pointer",
                       }}
@@ -416,8 +441,8 @@ export function MemberRun(props: {
                 style={{
                   ...row,
                   flexWrap: "wrap",
-                  columnGap: 12,
-                  rowGap: props.phone ? 4 : 1,
+                  columnGap: space[12],
+                  rowGap: props.phone ? space[4] : 1,
                 }}
               >
                 <Each
@@ -435,25 +460,19 @@ export function MemberRun(props: {
                           onPress={() =>
                             selectKind(trail().blocksByKind.get(kind()) ?? [])
                           }
-                          focusVisibleStyle={{
-                            outlineColor: c().ink,
-                            outlineWidth: 1,
-                          }}
+                          focusVisibleStyle={focusRing(c(), "inset")}
                           style={{
                             ...row,
-                            gap: 4,
-                            minHeight: props.phone ? 14 : 18,
+                            gap: space[4],
+                            minHeight: props.phone
+                              ? legendRowHeight.phone
+                              : legendRowHeight.desktop,
                             cursor: "pointer",
                           }}
                         >
                           <If
                             when={props.phone}
-                            else={
-                              <StatusDot
-                                color={runKinds[kind()].color}
-                                size={8}
-                              />
-                            }
+                            else={<StatusDot color={runKinds[kind()].color} />}
                           >
                             <Label
                               variant="caption"
@@ -465,7 +484,7 @@ export function MemberRun(props: {
                           <Label variant="caption" tone="muted">
                             {uiText(runKinds[kind()].label)}
                           </Label>
-                          <Label variant="caption" weight={500}>
+                          <Label variant="caption" weight={weight.regular}>
                             {runDuration(duration())}
                           </Label>
                         </View>
@@ -483,8 +502,8 @@ export function MemberRun(props: {
           style={{
             ...row,
             paddingHorizontal: inset,
-            paddingVertical: 5,
-            gap: 8,
+            paddingVertical: space[4],
+            gap: space[8],
             backgroundColor: c().selected,
           }}
         >
@@ -533,7 +552,7 @@ export function MemberRun(props: {
               body's last line, in plain ink. */}
           <If when={!props.taskRun && failure()}>
             {(reason) => (
-              <Label variant="small" tone="red" style={{ marginTop: 8 }}>
+              <Label variant="small" tone="red" style={{ marginTop: space[8] }}>
                 {`${uiText("runFailed")} · ${reason()}`}
               </Label>
             )}
@@ -552,7 +571,7 @@ export function MemberRun(props: {
               <Label
                 variant="small"
                 tone="mutedInk"
-                style={{ marginTop: visible().length ? 8 : 4 }}
+                style={{ marginTop: visible().length ? space[8] : space[4] }}
               >
                 {reason()}
               </Label>

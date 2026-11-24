@@ -6,6 +6,12 @@ import { uiText } from "../i18n";
 import { useHost } from "../services/host";
 import { Icon, Label } from "./text";
 import { colors, row, textFaces, textStyle } from "./theme";
+import { control, icon, space } from "./tokens";
+
+/** The model picker's popup: wide enough for a provider's long model ids. */
+const popupWidth = 336;
+const popupHeight = 312;
+const searchHeight = 36;
 
 /**
  * The models an eta agent can run on, each with the thinking levels it declares
@@ -74,25 +80,29 @@ export function ModelSelect(props: {
       cover={false}
       offset={2}
       popupStyle={{
-        minWidth: 336,
+        minWidth: popupWidth,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
-        maxHeight: 312,
+        maxHeight: popupHeight,
       }}
       searchStyle={{
         color: c().ink,
         placeholderColor: c().muted,
         ...textStyle(type("small")),
-        paddingHorizontal: 10,
-        height: 34,
+        paddingHorizontal: space[12],
+        height: searchHeight,
         backgroundColor: "transparent",
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
-      groupStyle={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: 4 }}
+      groupStyle={{
+        paddingHorizontal: space[12],
+        paddingTop: space[8],
+        paddingBottom: space[4],
+      }}
       itemStyle={{
-        minHeight: 28,
+        minHeight: control.md,
         paddingHorizontal: 0,
         color: c().ink,
         fontSize: type("small").size,
@@ -101,8 +111,8 @@ export function ModelSelect(props: {
         <View
           style={{
             alignItems: "center",
-            paddingVertical: 24,
-            paddingHorizontal: 10,
+            paddingVertical: space[24],
+            paddingHorizontal: space[12],
           }}
         >
           <Label variant="small" tone="muted">
@@ -115,9 +125,9 @@ export function ModelSelect(props: {
           style={{
             ...row,
             flex: 1,
-            height: 28,
-            gap: 8,
-            paddingHorizontal: 10,
+            height: control.md,
+            gap: space[8],
+            paddingHorizontal: space[12],
             backgroundColor:
               item.value === props.value ? c().selected : "transparent",
           }}
@@ -130,9 +140,9 @@ export function ModelSelect(props: {
           >
             {item.title}
           </Label>
-          <View style={{ width: 12, height: 12, flexShrink: 0 }}>
+          <View style={{ width: space[12], height: space[12], flexShrink: 0 }}>
             <If when={item.value === props.value}>
-              <Icon name="check" size={12} />
+              <Icon name="check" size={icon.sm} />
             </If>
           </View>
         </View>
@@ -141,9 +151,9 @@ export function ModelSelect(props: {
         <View
           style={{
             ...row,
-            height: 28,
-            gap: 8,
-            paddingHorizontal: 8,
+            height: control.md,
+            gap: space[8],
+            paddingHorizontal: space[8],
             borderWidth: 1,
             borderColor: c().border,
             backgroundColor: c().canvas,
@@ -155,7 +165,7 @@ export function ModelSelect(props: {
               props.placeholder ??
               uiText("selectModel")}
           </Label>
-          <Icon name="down" size={10} tone="muted" />
+          <Icon name="down" size={icon.sm} tone="muted" />
         </View>
       }
       onChange={({ value }) => props.onChange(value ?? "")}

@@ -22,8 +22,12 @@ import { uiText } from "../../../i18n";
 import { SmoothScroll } from "../../smooth-scroll";
 import { Caption, Label } from "../../text";
 import { colors, row } from "../../theme";
+import { control, opacity, shadow, space, weight } from "../../tokens";
 import { MentionChip } from "../chip";
 import { standIn } from "../view-source";
+
+const menuWidth = 300;
+const listHeight = 224;
 
 /** What may come right before `@` or `#`: a space, or a CJK or Latin punctuation mark. */
 const PREFIXES = [
@@ -284,24 +288,27 @@ function SuggestionList(props: {
           bottom: "100%",
           left: wide() ? -1 : props.anchor(),
           right: wide() ? -1 : undefined,
+          // design-value: over the composer's own layers (its text, the send row), not the app's
           zIndex: 3,
-          width: wide() ? undefined : 300,
+          width: wide() ? undefined : menuWidth,
           maxWidth: wide() ? undefined : "100%",
           borderWidth: 1,
           borderColor: c().strong,
           backgroundColor: c().canvas,
-          boxShadow: wide()
-            ? undefined
-            : [{ x: 0, y: 4, blur: 12, color: `${c().ink}1f` }],
+          boxShadow: wide() ? undefined : [shadow.popover],
         }}
       >
         <Caption
           text={uiText(
             props.menu()?.kind === "hash" ? "taskSuggestions" : "mentions",
           )}
-          style={{ paddingHorizontal: 10, paddingTop: 6, paddingBottom: 4 }}
+          style={{
+            paddingHorizontal: space[12],
+            paddingTop: space[8],
+            paddingBottom: space[4],
+          }}
         />
-        <SmoothScroll style={{ maxHeight: 224, flexShrink: 1 }}>
+        <SmoothScroll style={{ maxHeight: listHeight, flexShrink: 1 }}>
           <Each
             of={props.menu()?.items ?? []}
             key={(entry) => entry.kind + entry.value}
@@ -324,9 +331,9 @@ function SuggestionList(props: {
                 }
                 style={{
                   ...row,
-                  height: 28,
-                  paddingHorizontal: 10,
-                  gap: 8,
+                  height: control.md,
+                  paddingHorizontal: space[12],
+                  gap: space[8],
                   cursor: "pointer",
                   backgroundColor:
                     props.selected() === i() ? c().ink : "transparent",
@@ -334,7 +341,7 @@ function SuggestionList(props: {
               >
                 <Label
                   variant="small"
-                  weight={600}
+                  weight={weight.strong}
                   lines={1}
                   tone={props.selected() === i() ? "canvas" : "ink"}
                 >
@@ -344,7 +351,9 @@ function SuggestionList(props: {
                   variant="small"
                   lines={1}
                   tone={props.selected() === i() ? "canvas" : "muted"}
-                  style={{ opacity: props.selected() === i() ? 0.75 : 1 }}
+                  style={{
+                    opacity: props.selected() === i() ? opacity.muted : 1,
+                  }}
                 >
                   {props.describe?.(entry()) ?? ""}
                 </Label>
