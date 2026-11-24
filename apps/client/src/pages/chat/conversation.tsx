@@ -323,7 +323,7 @@ export function Conversation(props: {
                 ...row,
                 gap: space[4],
                 paddingVertical: space[2],
-                paddingHorizontal: 6,
+                paddingHorizontal: space[8],
                 borderWidth: 1,
                 borderColor: c().border,
                 flexShrink: 0,
@@ -346,7 +346,7 @@ export function Conversation(props: {
           <If when={!phone() && members().length > 1}>
             <View style={{ ...row, gap: space[8], marginLeft: space[4] }}>
               <Each of={members()} key={(entry) => entry.agentId}>
-                {(entry) => <AgentFace id={entry().agentId} size={12} />}
+                {(entry) => <AgentFace id={entry().agentId} size={avatar.sm} />}
               </Each>
             </View>
           </If>
@@ -368,7 +368,7 @@ export function Conversation(props: {
                     size={phone() ? 40 : undefined}
                     iconSize={phone() ? icon.md : undefined}
                     labelVariant="caption"
-                    style={{ gap: 6 }}
+                    style={{ gap: space[4] }}
                     onPress={() => drawer.set(true)}
                   />
                 }
@@ -385,7 +385,7 @@ export function Conversation(props: {
                   labelTone="muted"
                   hoverTone="ink"
                   size={control.md}
-                  iconSize={14}
+                  iconSize={icon.md}
                   onPress={() => setDesktopPanelOpen(!desktopPanelOpen())}
                 />
               </If>
@@ -439,7 +439,7 @@ export function Conversation(props: {
               {uiText("reviewProposals")}
             </Label>
             <View style={{ opacity: opacity.disabled }}>
-              <Icon name="right" size={14} />
+              <Icon name="right" size={icon.md} />
             </View>
           </View>
         </If>
@@ -457,7 +457,7 @@ export function Conversation(props: {
               borderColor: c().warning,
             }}
           >
-            <Icon name="warning" tone="warningInk" size={14} />
+            <Icon name="warning" tone="warningInk" size={icon.md} />
             <Label variant="small" tone="warningInk" style={{ flex: 1 }}>
               {uiText("connectionLostReconnectingWhatYouSee")}
             </Label>
@@ -567,7 +567,7 @@ export function Conversation(props: {
                   width: phone() ? undefined : 356,
                   gap: space[8],
                   paddingVertical: space[12],
-                  paddingHorizontal: 14,
+                  paddingHorizontal: space[16],
                   borderWidth: 1,
                   borderColor: c().border,
                   backgroundColor: c().canvas,

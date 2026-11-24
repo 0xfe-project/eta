@@ -36,7 +36,14 @@ import {
   shownFiles,
   shownMentions,
 } from "../../components/eta-editor";
-import { opacity, shadow, space, weight } from "../../components/tokens";
+import {
+  avatar,
+  icon,
+  opacity,
+  shadow,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
 import { subtasksOf, TaskSummary } from "../tasks/status";
@@ -245,16 +252,16 @@ export function Message(props: {
         paddingVertical: card()
           ? 0
           : review() || item().status === "failed"
-            ? 6
+            ? space[8]
             : props.phone
               ? 0
-              : 16,
+              : space[16],
         paddingHorizontal:
           props.phone || props.compact || card() ? 0 : space[16],
       }}
     >
       <If when={item().author === "user"}>
-        <View style={{ alignItems: "flex-end", gap: props.phone ? 4 : 6 }}>
+        <View style={{ alignItems: "flex-end", gap: space[4] }}>
           <View
             style={{
               maxWidth: props.phone ? "84%" : "72%",
@@ -274,9 +281,9 @@ export function Message(props: {
               {(addition) => (
                 <View
                   style={{
-                    gap: 3,
-                    marginTop: 6,
-                    paddingTop: 6,
+                    gap: space[2],
+                    marginTop: space[8],
+                    paddingTop: space[8],
                     borderTopWidth: 1,
                     borderColor: c().border,
                   }}
@@ -297,9 +304,9 @@ export function Message(props: {
             <Label
               variant="caption"
               tone={props.phone ? "muted" : "faint"}
+              tracking={props.phone ? undefined : "caps"}
               style={{
                 textTransform: props.phone ? "none" : "uppercase",
-                letterSpacing: props.phone ? 0 : 0.4,
               }}
             >
               {stamp()}
@@ -327,16 +334,17 @@ export function Message(props: {
                     hoverStyle={{ borderColor: c().ink }}
                     style={{
                       paddingVertical: 1,
-                      paddingHorizontal: 6,
+                      paddingHorizontal: space[8],
                       borderWidth: 1,
                       borderColor: props.inserting ? c().ink : c().border,
                       cursor: "pointer",
                     }}
                   >
                     <Label
+                      tracking="caps"
                       variant="caption"
                       tone={props.inserting ? "ink" : "muted"}
-                      style={{ letterSpacing: 1, textTransform: "uppercase" }}
+                      style={{ textTransform: "uppercase" }}
                     >
                       {uiText("insert")}
                     </Label>
@@ -397,25 +405,25 @@ export function Message(props: {
                 ...row,
                 flexWrap: props.phone ? "wrap" : "nowrap",
                 columnGap: space[8],
-                rowGap: 6,
-                paddingVertical: 6,
-                paddingHorizontal: 10,
+                rowGap: space[4],
+                paddingVertical: space[8],
+                paddingHorizontal: space[12],
                 cursor: draftDescription() ? "pointer" : undefined,
               }}
             >
               <If when={draftDescription()}>
                 <Icon
                   name={cardIsOpen() ? "down" : "right"}
-                  size={10}
+                  size={icon.sm}
                   tone="faint"
                 />
               </If>
               <Label
+                tracking="caps"
                 variant="caption"
                 tone="faint"
                 style={{
                   flexShrink: 0,
-                  letterSpacing: 1.4,
                   textTransform: "uppercase",
                 }}
               >
@@ -435,7 +443,7 @@ export function Message(props: {
                   <View
                     style={{
                       flexShrink: 0,
-                      paddingHorizontal: 5,
+                      paddingHorizontal: space[4],
                       borderWidth: 1,
                       borderColor: c().border,
                     }}
@@ -449,7 +457,7 @@ export function Message(props: {
                 <View
                   style={{
                     flexShrink: 0,
-                    paddingHorizontal: 5,
+                    paddingHorizontal: space[4],
                     borderWidth: 1,
                     borderColor: c().warning,
                   }}
@@ -480,7 +488,7 @@ export function Message(props: {
             <If when={cardIsOpen() && draftDescription()}>
               <View
                 style={{
-                  padding: 10,
+                  padding: space[12],
                   borderTopWidth: 1,
                   borderColor: c().border,
                 }}
@@ -508,14 +516,14 @@ export function Message(props: {
           <View
             style={{
               ...row,
-              gap: props.phone && !active() ? 6 : 8,
+              gap: props.phone && !active() ? space[4] : space[8],
               // The name sits 10 from the first block on wider screens.
               marginBottom: props.phone ? 0 : 10 - replyBlockGap,
             }}
           >
             <AgentFace
               id={item().agentId}
-              size={props.phone ? (active() ? 18 : 16) : 14}
+              size={props.phone ? avatar.sm : avatar.sm}
             />
             <Label variant="small" weight={weight.strong}>
               {host.agent(item().agentId)?.name ??
@@ -537,7 +545,7 @@ export function Message(props: {
                   ...row,
                   height: 26,
                   gap: space[8],
-                  paddingHorizontal: 10,
+                  paddingHorizontal: space[12],
                   borderWidth: 1,
                   borderColor: c().border,
                   cursor: "pointer",
@@ -545,16 +553,16 @@ export function Message(props: {
               >
                 <Icon
                   name="right"
-                  size={props.phone ? 10 : 8}
+                  size={icon.sm}
                   tone={props.phone ? "faint" : "muted"}
                 />
                 <Caption
                   text={uiText("thinkingProcess")}
-                  style={{ letterSpacing: 0.8, color: c().faint }}
+                  style={{ color: c().faint }}
                 />
                 <View style={{ flex: 1 }} />
                 <Caption
-                  style={{ letterSpacing: 0.8, color: c().faint }}
+                  style={{ color: c().faint }}
                   text={`${props.phone ? "· " : ""}${uiText(
                     stepCount() === 1 ? "oneProcessStep" : "processStepCount",
                     { count: stepCount() },
@@ -577,7 +585,7 @@ export function Message(props: {
               style={{
                 ...row,
                 height: space[24],
-                paddingLeft: 10,
+                paddingLeft: space[12],
                 paddingRight: space[4],
                 justifyContent: "space-between",
                 borderBottomWidth: 1,
@@ -600,7 +608,7 @@ export function Message(props: {
                 size={18}
                 labelVariant="caption"
                 labelWeight={weight.strong}
-                style={{ paddingHorizontal: 7 }}
+                style={{ paddingHorizontal: space[8] }}
                 disabled={item().status === "stopping"}
                 onPress={() =>
                   void host.action(() =>
@@ -647,9 +655,10 @@ export function Message(props: {
           {/* A failed reply is its time, then why, as a warning line. */}
           <View style={{ gap: space[8] }}>
             <Label
+              tracking="caps"
               variant="caption"
               tone="muted"
-              style={{ letterSpacing: 1, textTransform: "uppercase" }}
+              style={{ textTransform: "uppercase" }}
             >
               {messageTime(item().createdAt, false)}
             </Label>
@@ -718,8 +727,8 @@ export function Message(props: {
           <Label
             variant="caption"
             tone={props.phone ? "muted" : "faint"}
+            tracking={props.phone ? undefined : "caps"}
             style={{
-              letterSpacing: props.phone ? 0 : 0.4,
               textTransform: props.phone ? "none" : "uppercase",
             }}
           >

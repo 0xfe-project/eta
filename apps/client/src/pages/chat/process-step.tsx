@@ -11,7 +11,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { space, weight } from "../../components/tokens";
+import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { ToolOutput } from "./run/tool-code";
 
@@ -58,8 +58,8 @@ export function ProcessStep(props: { value: RunBlock }) {
           {/* Where the run took words inserted into it: a trace, not the words again. */}
           <View
             style={{
-              paddingVertical: 3,
-              paddingHorizontal: 10,
+              paddingVertical: space[4],
+              paddingHorizontal: space[12],
               borderBottomWidth: 1,
               borderColor: c().border,
               alignItems: "center",
@@ -80,7 +80,7 @@ export function ProcessStep(props: { value: RunBlock }) {
             style={{
               ...row,
               minHeight: 33,
-              paddingHorizontal: 10,
+              paddingHorizontal: space[12],
               gap: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
@@ -104,10 +104,9 @@ export function ProcessStep(props: { value: RunBlock }) {
                       color: c().buttonInk,
                       paddingHorizontal: space[8],
                       paddingVertical: space[2],
-                      letterSpacing: 1,
                       fontWeight: weight.strong,
                     }
-                  : { letterSpacing: 1, color: c().faint }
+                  : { color: c().faint }
               }
             />
           </View>
@@ -148,17 +147,17 @@ function TextStep(props: {
         }
         style={{
           ...row,
-          gap: 6,
+          gap: space[4],
           paddingVertical: space[4],
-          paddingHorizontal: 10,
+          paddingHorizontal: space[12],
           cursor: "pointer",
         }}
       >
-        <Icon name={open() ? "down" : "right"} size={8} tone="faint" />
+        <Icon name={open() ? "down" : "right"} size={icon.sm} tone="faint" />
         <Caption text={label()} style={{ color: c().faint }} />
       </View>
       <If when={open()}>
-        <View style={{ paddingHorizontal: 10, paddingBottom: 6 }}>
+        <View style={{ paddingHorizontal: space[12], paddingBottom: space[8] }}>
           <If
             when={props.kind === "note"}
             else={

@@ -48,8 +48,12 @@ export function TranscriptLine(props: {
       else={
         <View
           style={{
-            paddingTop: props.afterTool ? (props.phone ? 32 : 11) : 5,
-            paddingBottom: 5,
+            paddingTop: props.afterTool
+              ? props.phone
+                ? space[32]
+                : space[12]
+              : space[4],
+            paddingBottom: space[4],
             backgroundColor: props.selected ? c().selected : c().canvas,
           }}
         >
@@ -126,7 +130,7 @@ export function TranscriptLine(props: {
             style={{
               ...row,
               height: 31,
-              paddingHorizontal: 10,
+              paddingHorizontal: space[12],
               gap: space[4],
               cursor: "pointer",
               backgroundColor: props.selected ? c().selected : c().canvas,
@@ -157,7 +161,13 @@ export function TranscriptLine(props: {
             />
           </View>
           <If when={props.opened}>
-            <View style={{ padding: 10, gap: 6, backgroundColor: c().surface }}>
+            <View
+              style={{
+                padding: space[12],
+                gap: space[4],
+                backgroundColor: c().surface,
+              }}
+            >
               <If when={entry().input !== undefined}>
                 <Caption text={uiText("runInput")} />
                 <ToolInput name={entry().name} input={entry().input} />

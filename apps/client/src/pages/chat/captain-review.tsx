@@ -10,7 +10,7 @@ import {
   row,
 } from "../../components";
 import { StatusDot } from "../../components/status-dot";
-import { space, weight } from "../../components/tokens";
+import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -122,8 +122,8 @@ export function CaptainReview(props: {
         style={{
           ...row,
           gap: space[8],
-          paddingVertical: 5,
-          paddingHorizontal: 10,
+          paddingVertical: space[4],
+          paddingHorizontal: space[12],
         }}
       >
         <Label
@@ -134,17 +134,19 @@ export function CaptainReview(props: {
           {uiText("captainReviewTitle")}
         </Label>
         <Label
+          tracking="caps"
           variant="caption"
           tone="faint"
           lines={1}
-          style={{ flex: 1, letterSpacing: 0.8, textTransform: "uppercase" }}
+          style={{ flex: 1, textTransform: "uppercase" }}
         >
           {uiText("captainObservations", { count: props.items.length })}
         </Label>
         <Label
+          tracking="caps"
           variant="caption"
           tone="faint"
-          style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
+          style={{ textTransform: "uppercase" }}
         >
           {props.time}
         </Label>
@@ -187,18 +189,19 @@ function Observation(props: {
       style={{
         gap: space[4],
         paddingVertical: space[8],
-        paddingHorizontal: 10,
+        paddingHorizontal: space[12],
         borderTopWidth: 1,
         borderColor: c().border,
       }}
     >
       <View style={{ ...row, gap: space[8] }}>
-        <View style={{ ...row, flex: 1, gap: 6 }}>
+        <View style={{ ...row, flex: 1, gap: space[4] }}>
           <StatusDot color={c()[marks[tone()]]} />
           <Label
+            tracking="caps"
             variant="caption"
             tone={ordinary() ? "muted" : "ink"}
-            style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
+            style={{ textTransform: "uppercase" }}
           >
             {uiText(kind()?.label ?? "reviewOther")}
           </Label>
@@ -209,7 +212,7 @@ function Observation(props: {
       </View>
       <Label tone={ordinary() ? "muted" : "ink"}>{props.item.body}</Label>
       <If when={context().length}>
-        <View style={{ ...row, gap: 5, paddingTop: space[2] }}>
+        <View style={{ ...row, gap: space[4], paddingTop: space[2] }}>
           <Each of={context()}>
             {(value) => (
               <View
@@ -218,7 +221,7 @@ function Observation(props: {
                 onPress={value().open}
                 style={{
                   cursor: value().open ? "pointer" : undefined,
-                  paddingHorizontal: 5,
+                  paddingHorizontal: space[4],
                   borderWidth: 1,
                   borderColor: c().border,
                 }}
@@ -240,11 +243,12 @@ function Observation(props: {
             onPress={() => raw.set(!raw())}
             style={{ ...row, gap: space[4], cursor: "pointer" }}
           >
-            <Icon name={raw() ? "down" : "right"} size={8} tone="faint" />
+            <Icon name={raw() ? "down" : "right"} size={icon.sm} tone="faint" />
             <Label
+              tracking="caps"
               variant="caption"
               tone="faint"
-              style={{ letterSpacing: 0.6, textTransform: "uppercase" }}
+              style={{ textTransform: "uppercase" }}
             >
               {uiText("reviewRawDetails")}
             </Label>

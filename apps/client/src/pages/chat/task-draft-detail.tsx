@@ -50,7 +50,7 @@ function Detail(props: { label: string; value: string }) {
 
 function FormRow(props: { label: string; children: JSX.Element }) {
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: space[4] }}>
       <Label variant="small" tone="mutedInk">
         {props.label}
       </Label>
@@ -188,7 +188,7 @@ export function TaskDraftDetail(props: {
     return task ? `#${task.number} ${task.title}` : id;
   };
   const input = {
-    paddingHorizontal: 10,
+    paddingHorizontal: space[12],
     ...textStyle(type("small")),
     borderColor: color().strong,
   };
@@ -277,7 +277,7 @@ export function TaskDraftDetail(props: {
               </Label>
             </FormRow>
             <If when={execution().length}>
-              <View style={{ gap: 6 }}>
+              <View style={{ gap: space[4] }}>
                 <Caption text={uiText("draftExecution")} />
                 <Each of={execution()} key={(field) => field.label}>
                   {(field) => (
@@ -287,7 +287,7 @@ export function TaskDraftDetail(props: {
               </View>
             </If>
             <If when={data().dependsOn?.length}>
-              <View style={{ gap: 6 }}>
+              <View style={{ gap: space[4] }}>
                 <Caption text={uiText("dependencies")} />
                 <Each of={data().dependsOn ?? []} key={(edge) => edge.taskId}>
                   {(edge) => (
@@ -333,7 +333,7 @@ export function TaskDraftDetail(props: {
           ...row,
           gap: space[8],
           justifyContent: "flex-end",
-          paddingVertical: 10,
+          paddingVertical: space[12],
           paddingHorizontal: props.phone ? space[16] : space[20],
           borderTopWidth: 1,
           borderColor: color().border,

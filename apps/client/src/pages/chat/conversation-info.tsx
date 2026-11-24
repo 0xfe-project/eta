@@ -16,7 +16,14 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { BackButton, CloseButton } from "../../components/navigation-buttons";
-import { control, icon, opacity, space, weight } from "../../components/tokens";
+import {
+  avatar,
+  control,
+  icon,
+  opacity,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskGlyph } from "../tasks/status";
@@ -103,7 +110,7 @@ export function PhoneConversationInfo(props: {
                 title={`#${task().number} ${task().title}`}
                 onPress={() => props.onTask(task().id)}
               >
-                <TaskGlyph status={task().status} size={14} />
+                <TaskGlyph status={task().status} size={icon.md} />
               </InfoRow>
             )}
           </Each>
@@ -142,7 +149,7 @@ export function PhoneConversationInfo(props: {
           <If when={!artifacts().length}>
             <Empty
               icon="appWindow"
-              iconSize={24}
+              iconSize={icon.lg}
               title={uiText("noArtifactsYet")}
               description={uiText("artifactsEmptyHelp")}
               descriptionVariant="caption"
@@ -208,7 +215,7 @@ export function PhoneConversationInfo(props: {
         style={{
           ...row,
           height: space[32],
-          gap: 6,
+          gap: space[4],
           paddingHorizontal: space[16],
           flexShrink: 0,
           backgroundColor: c().selected,
@@ -266,12 +273,12 @@ function MemberRow(props: {
               flexShrink: 0,
             }}
           >
-            <AgentFace id={props.member.agentId} size={20} />
+            <AgentFace id={props.member.agentId} size={avatar.md} />
           </View>
         }
       >
-        <ContextRing usage={usage} size={32} label={false}>
-          <AgentFace id={props.member.agentId} size={20} />
+        <ContextRing usage={usage} size={avatar.lg} label={false}>
+          <AgentFace id={props.member.agentId} size={avatar.md} />
         </ContextRing>
       </If>
     </InfoRow>
@@ -317,7 +324,7 @@ function InfoRow(props: {
         </If>
       </View>
       <View style={{ opacity: opacity.disabled }}>
-        <Icon name="right" size={14} />
+        <Icon name="right" size={icon.md} />
       </View>
     </View>
   );

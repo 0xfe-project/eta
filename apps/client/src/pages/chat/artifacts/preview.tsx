@@ -357,7 +357,7 @@ export function ArtifactPreview(props: {
             style={{
               ...row,
               padding: space[8],
-              gap: 10,
+              gap: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -464,7 +464,7 @@ export function ArtifactPreview(props: {
           sheet={phone()}
           onClose={() => confirmingShare.set(false)}
         >
-          <View style={{ padding: space[16], gap: 10 }}>
+          <View style={{ padding: space[16], gap: space[8] }}>
             <Label>{uiText("anyoneWithTheLinkCanOpen")}</Label>
             <View style={{ ...row, justifyContent: "flex-end", gap: space[8] }}>
               <Button

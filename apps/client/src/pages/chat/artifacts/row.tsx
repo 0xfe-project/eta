@@ -119,16 +119,16 @@ export function ArtifactRow(props: {
         style={{
           ...row,
           alignItems: "flex-start",
-          gap: list() ? 10 : 8,
+          gap: space[8],
           minHeight: props.phone ? control.touch : undefined,
-          paddingHorizontal: list() ? 10 : 12,
-          paddingVertical: list() ? 10 : 8,
+          paddingHorizontal: space[12],
+          paddingVertical: list() ? space[12] : space[8],
           pointerEvents: "box-none",
         }}
       >
         <View
           style={{
-            marginTop: list() ? 3 : 2,
+            marginTop: list() ? space[4] : space[2],
             flexShrink: 0,
             pointerEvents: "none",
           }}
@@ -157,7 +157,7 @@ export function ArtifactRow(props: {
               )}
             </Each>
           </Label>
-          <View style={{ ...row, gap: 6, pointerEvents: "box-none" }}>
+          <View style={{ ...row, gap: space[4], pointerEvents: "box-none" }}>
             <Label
               variant="caption"
               tone="muted"

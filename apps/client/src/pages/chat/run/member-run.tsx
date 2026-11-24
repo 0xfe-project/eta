@@ -21,7 +21,14 @@ import {
 import { AgentFace } from "../../../components/agent-face";
 import { CloseButton } from "../../../components/navigation-buttons";
 import { StatusDot } from "../../../components/status-dot";
-import { control, icon, space, weight } from "../../../components/tokens";
+import {
+  avatar,
+  control,
+  icon,
+  opacity,
+  space,
+  weight,
+} from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { clock, followSession, useHost } from "../../../services/host";
 import { activeReply } from "../member-status";
@@ -272,10 +279,10 @@ export function MemberRun(props: {
       <View
         style={{
           paddingHorizontal: inset,
-          paddingTop: props.phone ? 12 : 10,
+          paddingTop: space[12],
           paddingBottom: props.phone ? space[12] : space[8],
           flexShrink: 0,
-          gap: props.phone ? 8 : 6,
+          gap: props.phone ? space[8] : space[4],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
@@ -287,7 +294,7 @@ export function MemberRun(props: {
             gap: space[8],
           }}
         >
-          <AgentFace id={props.agentId} size={18} />
+          <AgentFace id={props.agentId} size={avatar.sm} />
           <Label variant="small" weight={weight.regular} lines={1}>
             {props.executorName ??
               host.agent(props.agentId)?.name ??
@@ -416,7 +423,7 @@ export function MemberRun(props: {
                         backgroundColor: runKinds[segment().kind].color,
                         opacity:
                           selected() && !segment().blocks.includes(selected())
-                            ? 0.65
+                            ? opacity.muted
                             : 1,
                         cursor: "pointer",
                       }}
@@ -495,7 +502,7 @@ export function MemberRun(props: {
           style={{
             ...row,
             paddingHorizontal: inset,
-            paddingVertical: 5,
+            paddingVertical: space[4],
             gap: space[8],
             backgroundColor: c().selected,
           }}

@@ -110,7 +110,7 @@ export function ArtifactToolbar(props: {
           style={{
             ...row,
             paddingLeft: space[12],
-            paddingRight: 14,
+            paddingRight: space[16],
             gap: space[8],
             flexShrink: 0,
             height: props.layout === "desktop" ? 40 : 36,
@@ -118,7 +118,7 @@ export function ArtifactToolbar(props: {
             borderColor: c().border,
           }}
         >
-          <Icon name="appWindow" size={14} tone="muted" />
+          <Icon name="appWindow" size={icon.md} tone="muted" />
           <Label
             variant="small"
             weight={weight.regular}
@@ -156,9 +156,9 @@ export function ArtifactToolbar(props: {
           </View>
           {/* The actions end 48pt from the edge, the bare close glyph 14pt. */}
           <CloseButton
-            iconSize={14}
+            iconSize={icon.md}
             onPress={props.onClose}
-            style={{ marginLeft: 7, marginRight: -5 }}
+            style={{ marginLeft: space[8], marginRight: -space[4] }}
           />
         </View>
       }
@@ -170,7 +170,7 @@ export function ArtifactToolbar(props: {
           flexWrap: "wrap",
           flexShrink: 0,
           paddingHorizontal: space[16],
-          paddingVertical: 6,
+          paddingVertical: space[8],
           minHeight: control.touch,
           borderBottomWidth: 1,
           borderColor: c().border,

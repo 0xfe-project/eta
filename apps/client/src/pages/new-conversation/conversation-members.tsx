@@ -3,7 +3,7 @@ import { View } from "nsh";
 import { Button, colors, grow, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { CheckControl } from "../../components/check-control";
-import { avatar, control, space, weight } from "../../components/tokens";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { localizedText, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -25,11 +25,11 @@ export function ConversationMembers(props: {
           ...row,
           gap: space[8],
           marginHorizontal: space[16],
-          marginTop: props.phone ? 12 : 10,
+          marginTop: space[12],
           height: props.phone ? space[32] : undefined,
         }}
       >
-        <Icon name="folder" size={14} />
+        <Icon name="folder" size={icon.md} />
         <Label
           variant="small"
           lines={1}
@@ -70,7 +70,7 @@ export function ConversationMembers(props: {
                 checked={checked()}
                 onChange={() => props.onToggleAgent(agent().id)}
                 hoverStyle={{ backgroundColor: c().selected }}
-                size={14}
+                size={icon.md}
                 indicatorStyle={{
                   borderColor: checked() ? c().ink : c().strong,
                 }}
@@ -115,7 +115,7 @@ export function ConversationMembers(props: {
                     selected={steward()}
                     labelWeight={weight.regular}
                     size={props.phone ? control.md : control.sm}
-                    style={{ paddingHorizontal: 10 }}
+                    style={{ paddingHorizontal: space[12] }}
                     onPress={() =>
                       props.onSteward(steward() ? null : agent().id)
                     }

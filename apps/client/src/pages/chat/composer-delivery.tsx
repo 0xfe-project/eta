@@ -27,7 +27,10 @@ export function OutboxRows(props: {
               </Label>
             }
           >
-            <View role="alert" style={{ ...row, gap: 6, flexWrap: "wrap" }}>
+            <View
+              role="alert"
+              style={{ ...row, gap: space[4], flexWrap: "wrap" }}
+            >
               <Label variant="small" tone="warning">
                 {message().failure}
               </Label>

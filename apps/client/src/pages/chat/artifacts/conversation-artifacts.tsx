@@ -98,7 +98,7 @@ export function ConversationArtifacts(props: {
             >
               <Empty
                 icon={host.state().missing.artifacts ? "warning" : "appWindow"}
-                iconSize={24}
+                iconSize={icon.lg}
                 iconTone={host.state().missing.artifacts ? "red" : "muted"}
                 descriptionVariant="caption"
                 style={{
@@ -228,8 +228,8 @@ export function ArtifactBrowser(props: {
     <View style={grow}>
       <View
         style={{
-          gap: 6,
-          padding: 10,
+          gap: space[4],
+          padding: space[12],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
@@ -370,9 +370,9 @@ export function ArtifactBrowser(props: {
                       variant="small"
                       tone="muted"
                       style={{
-                        paddingHorizontal: 10,
-                        paddingTop: 14,
-                        paddingBottom: 6,
+                        paddingHorizontal: space[12],
+                        paddingTop: space[16],
+                        paddingBottom: space[8],
                       }}
                     >
                       {uiText(groupLabels[group()])}
@@ -405,7 +405,7 @@ export function ArtifactBrowser(props: {
             borderColor: c().border,
             backgroundColor: c().surface,
             justifyContent: "space-between",
-            paddingHorizontal: 10,
+            paddingHorizontal: space[12],
           }}
         >
           <Label variant="caption" tone="muted">
@@ -416,7 +416,7 @@ export function ArtifactBrowser(props: {
             })}
           </Label>
           <If when={view().pages > 1}>
-            <View style={{ ...row, gap: props.phone ? 4 : 10 }}>
+            <View style={{ ...row, gap: props.phone ? space[4] : space[8] }}>
               <PageButton
                 label="‹"
                 phone={props.phone}
@@ -469,14 +469,14 @@ export function ArtifactBrowser(props: {
         popupWidth={208}
         lifted
         leading={
-          <View style={{ ...row, gap: 6 }}>
+          <View style={{ ...row, gap: space[4] }}>
             <Icon name="funnel" size={icon.sm} />
             <Label variant="small">{uiText("artifactsFilter")}</Label>
           </View>
         }
         triggerStyle={{
           height: props.phone ? 32 : 26,
-          paddingHorizontal: 10,
+          paddingHorizontal: space[12],
           borderWidth: 1,
           borderColor: filterOn() ? c().ink : c().border,
         }}
@@ -532,7 +532,7 @@ export function ArtifactBrowser(props: {
         style={{
           ...row,
           minHeight: props.phone ? control.md : space[24],
-          paddingHorizontal: props.phone ? 16 : 9,
+          paddingHorizontal: props.phone ? space[16] : space[8],
           borderTopWidth: section.divided ? 1 : 0,
           borderColor: c().border,
         }}
@@ -572,7 +572,7 @@ function PageButton(props: {
         minWidth: props.phone ? control.md : space[20],
         borderWidth: props.selected ? 1 : 0,
         borderColor: c().ink,
-        opacity: props.disabled ? 0.45 : 1,
+        opacity: props.disabled ? opacity.disabled : 1,
         cursor: props.disabled ? "default" : "pointer",
       }}
     >

@@ -14,9 +14,9 @@ export function SectionHeading(props: {
     <View
       style={{
         ...row,
-        gap: 6,
+        gap: space[4],
         minHeight: space[32],
-        paddingTop: 6,
+        paddingTop: space[8],
         paddingBottom: space[2],
         paddingHorizontal: space[12],
       }}
