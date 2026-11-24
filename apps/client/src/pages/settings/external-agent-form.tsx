@@ -158,6 +158,19 @@ export function ExternalAgentForm(props: {
     problems.update(({ id: _id, ...rest }) => rest);
   }
 
+  function useAntigravityPreset() {
+    draft.set({
+      ...emptyAcpDraft,
+      label: "Antigravity",
+      id: "antigravity",
+      command: "agy",
+      args: "acp",
+    });
+    idTouched = false;
+    problems.set({});
+    outcome.set(undefined);
+  }
+
   function checked(): AcpAgentConfig | undefined {
     const result = checkAcpDraft(draft(), taken());
     if (!result.ok) {
@@ -427,6 +440,17 @@ export function ExternalAgentForm(props: {
   const fields = () => (
     <View style={{ gap: space[12] }}>
       {machineField()}
+      <If when={!editing}>
+        <View style={{ alignItems: "flex-start" }}>
+          <Button
+            label={uiText("acpAntigravityPreset")}
+            size={props.phone ? control.lg : control.md}
+            style={{ paddingHorizontal: space[12] }}
+            disabled={testing() || saving() || !usable()}
+            onPress={useAntigravityPreset}
+          />
+        </View>
+      </If>
       {field({
         name: "label",
         title: uiText("acpName"),
@@ -451,6 +475,14 @@ export function ExternalAgentForm(props: {
         hint: () => uiText("acpArgsHint"),
         multiline: true,
       })}
+      <If when={draft().command === "agy" && draft().args === "acp"}>
+        {hint(
+          uiText("runtimeHowToSignIn", {
+            command: "agy acp --login",
+            machine: machine()?.name ?? machineId(),
+          }),
+        )}
+      </If>
       {field({
         name: "env",
         title: uiText("acpEnv"),

@@ -60,6 +60,26 @@ for (const [width, height] of sizes) {
   });
 }
 
+test("the Antigravity preset saves as an external runtime on the selected machine", async () => {
+  const app = await settings(1440, 900);
+  await app.press("label:Add agent");
+  await app.press("label:Machine");
+  await app.press("label:gpu-box");
+  await app.press("label:Use Antigravity preset");
+  expect(app.value("label:Name")).toBe("Antigravity");
+  expect(app.value("label:ID")).toBe("antigravity");
+  expect(app.value("label:Command")).toBe("agy");
+  expect(app.value("label:Arguments")).toBe("acp");
+  expect(app.texts()).toContain(
+    "Run agy acp --login in a terminal on gpu-box to sign in.",
+  );
+  await app.press("label:Add");
+  await app.waitUntil(() => !app.shows("label:Add external agent"));
+  await app.press("label:Antigravity >> nth=0");
+  expect(app.texts()).toContain("acp.antigravity");
+  expect(app.texts()).toContain("gpu-box");
+});
+
 test("an edit can change the id, and the open detail follows it", async () => {
   const app = await settings(1440, 900);
   await app.press("label:Fake Agent >> nth=0");
