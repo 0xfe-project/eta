@@ -66,6 +66,8 @@ export function createRovingFocus<T extends string = string>(
 
   const prevKey = orientation === "horizontal" ? "ArrowLeft" : "ArrowUp";
   const nextKey = orientation === "horizontal" ? "ArrowRight" : "ArrowDown";
+  const prevStroke = orientation === "horizontal" ? "left" : "up";
+  const nextStroke = orientation === "horizontal" ? "right" : "down";
 
   function onKeyDown(event: KeyEvent): boolean {
     if (event.key === nextKey) {
@@ -93,7 +95,7 @@ export function createRovingFocus<T extends string = string>(
     move,
     focusEdge,
     onKeyDown,
-    captureKeys: [prevKey, nextKey, "Home", "End"] as readonly string[],
+    captureKeys: [prevStroke, nextStroke, "home", "end"] as readonly string[],
     register(id: T, node: ViewRef | null | undefined) {
       if (node) refs.set(id, node);
       else refs.delete(id);
