@@ -25,6 +25,7 @@ import {
   Label,
   palette,
   Palette,
+  Revealed,
   row,
   SafeArea,
   Screen,
@@ -34,6 +35,7 @@ import {
   ElementPickerOverlay,
   ElementPicking,
 } from "./src/components/element-picker";
+import { settled } from "./src/components/pending";
 import { ToastLayer } from "./src/components/toast";
 import { control, icon, layer, space } from "./src/components/tokens";
 import { createLanguagePreference, LanguageSettings, uiText } from "./src/i18n";
@@ -117,6 +119,8 @@ function App() {
       !host.hasConnected()
     );
   };
+  // The workspace's skeleton, once it appeared, stays its least time before the workspace.
+  const workspaceSettled = settled(() => !loadingWebWorkspace());
   const startingLocal = signal(false);
   const offeredAddress = signal<HostAddress | undefined>(openedWith);
   const dismissCompatibility = signal(false);
@@ -229,11 +233,12 @@ function App() {
                         when={
                           host.hasConnected() &&
                           !host.paused() &&
-                          !forcedConnect()
+                          !forcedConnect() &&
+                          workspaceSettled()
                         }
                         else={
                           <If
-                            when={loadingWebWorkspace()}
+                            when={loadingWebWorkspace() || !workspaceSettled()}
                             else={
                               <Connection
                                 initial={offeredAddress() ?? host.address()}
@@ -244,7 +249,9 @@ function App() {
                               />
                             }
                           >
-                            <WorkspaceSkeleton layout={layout()} />
+                            <Revealed>
+                              <WorkspaceSkeleton layout={layout()} />
+                            </Revealed>
                           </If>
                         }
                       >

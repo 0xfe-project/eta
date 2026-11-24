@@ -1,5 +1,6 @@
-import type { ViewStyle } from "nsh";
+import type { JSX, ViewStyle } from "nsh";
 import { View } from "nsh";
+import { shownWhile } from "./pending";
 import { colors, row } from "./theme";
 import { avatar, icon, space } from "./tokens";
 
@@ -13,6 +14,16 @@ const barWidth = {
   message: 220,
   reply: 152,
 } as const;
+
+/**
+ * A skeleton drawn only once its wait has lasted `motion.reveal` (#380): a quicker load shows
+ * nothing in its place, not a flash of grey. Its region keeps it at least `motion.minShown` with
+ * `settled` (pending.ts).
+ */
+export function Revealed(props: { children: JSX.Element }) {
+  const shown = shownWhile(() => true);
+  return <If when={shown()}>{props.children}</If>;
+}
 
 /** A placeholder bar: the muted fill inside a border, as the design's loading states draw it. */
 function Bar(props: { width: ViewStyle["width"]; height: number }) {
@@ -35,50 +46,54 @@ function Bar(props: { width: ViewStyle["width"]; height: number }) {
 /** Loading · list: 36pt rows of a glyph, a title bar and a trailing bar. */
 export function ListSkeleton(props: { label: string; style?: ViewStyle }) {
   return (
-    <View
-      role="progressbar"
-      accessibilityLabel={props.label}
-      style={{ paddingVertical: space[8], ...props.style }}
-    >
-      <Each of={[208, 140, 176, 244, 104]}>
-        {(width) => (
-          <View
-            style={{
-              ...row,
-              height: barHeight.row,
-              flexShrink: 0,
-              paddingHorizontal: space[8],
-              gap: space[12],
-            }}
-          >
-            <Bar width={icon.md} height={icon.md} />
-            <Bar width={width()} height={barHeight.line} />
-            <View style={{ marginLeft: "auto" }}>
-              <Bar width={barWidth.trailing} height={barHeight.line} />
+    <Revealed>
+      <View
+        role="progressbar"
+        accessibilityLabel={props.label}
+        style={{ paddingVertical: space[8], ...props.style }}
+      >
+        <Each of={[208, 140, 176, 244, 104]}>
+          {(width) => (
+            <View
+              style={{
+                ...row,
+                height: barHeight.row,
+                flexShrink: 0,
+                paddingHorizontal: space[8],
+                gap: space[12],
+              }}
+            >
+              <Bar width={icon.md} height={icon.md} />
+              <Bar width={width()} height={barHeight.line} />
+              <View style={{ marginLeft: "auto" }}>
+                <Bar width={barWidth.trailing} height={barHeight.line} />
+              </View>
             </View>
-          </View>
-        )}
-      </Each>
-    </View>
+          )}
+        </Each>
+      </View>
+    </Revealed>
   );
 }
 
 /** Loading · detail: a title bar, a meta bar and five lines of text. */
 export function DetailSkeleton(props: { label: string; style?: ViewStyle }) {
   return (
-    <View
-      role="progressbar"
-      accessibilityLabel={props.label}
-      style={{ padding: space[16], gap: space[12], ...props.style }}
-    >
-      <Bar width={barWidth.title} height={barHeight.title} />
-      <Bar width={barWidth.meta} height={barHeight.line} />
-      <View style={{ gap: space[8], paddingTop: space[12] }}>
-        <Each of={[212, 364, 184, 364, 120]}>
-          {(width) => <Bar width={width()} height={barHeight.line} />}
-        </Each>
+    <Revealed>
+      <View
+        role="progressbar"
+        accessibilityLabel={props.label}
+        style={{ padding: space[16], gap: space[12], ...props.style }}
+      >
+        <Bar width={barWidth.title} height={barHeight.title} />
+        <Bar width={barWidth.meta} height={barHeight.line} />
+        <View style={{ gap: space[8], paddingTop: space[12] }}>
+          <Each of={[212, 364, 184, 364, 120]}>
+            {(width) => <Bar width={width()} height={barHeight.line} />}
+          </Each>
+        </View>
       </View>
-    </View>
+    </Revealed>
   );
 }
 
@@ -98,16 +113,18 @@ function MessageBars(props: { width: number }) {
 /** Loading · messages: two messages around a reply bubble. */
 export function MessagesSkeleton(props: { label: string; style?: ViewStyle }) {
   return (
-    <View
-      role="progressbar"
-      accessibilityLabel={props.label}
-      style={{ padding: space[16], gap: space[20], ...props.style }}
-    >
-      <MessageBars width={barWidth.message} />
-      <View style={{ alignItems: "flex-end" }}>
-        <Bar width={barWidth.reply} height={barHeight.reply} />
+    <Revealed>
+      <View
+        role="progressbar"
+        accessibilityLabel={props.label}
+        style={{ padding: space[16], gap: space[20], ...props.style }}
+      >
+        <MessageBars width={barWidth.message} />
+        <View style={{ alignItems: "flex-end" }}>
+          <Bar width={barWidth.reply} height={barHeight.reply} />
+        </View>
+        <MessageBars width={barWidth.reply} />
       </View>
-      <MessageBars width={barWidth.reply} />
-    </View>
+    </Revealed>
   );
 }

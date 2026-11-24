@@ -10,6 +10,7 @@ import {
   Modal,
   row,
 } from "../../components";
+import { settled } from "../../components/pending";
 import { control, icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -56,6 +57,8 @@ export function TaskDetail(props: {
   } = state;
   /** The phone's … sheet, titled with the task. */
   const more = signal(false);
+  // The skeleton, once it appeared, stays its least time before the task (#380).
+  const shown = settled(() => !!task());
   const parent = () => !!task()?.children?.length;
   const run = () => {
     const item = task();
@@ -244,7 +247,7 @@ export function TaskDetail(props: {
         </TaskTopBar>
       </If>
       <If
-        when={task()}
+        when={shown() ? task() : undefined}
         else={<TaskDetailSkeleton label={uiText("loadingTask")} />}
       >
         {(item) => (

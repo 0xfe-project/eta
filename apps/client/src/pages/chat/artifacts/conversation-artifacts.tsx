@@ -18,6 +18,7 @@ import {
   textFaces,
   textStyle,
 } from "../../../components";
+import { settled } from "../../../components/pending";
 import {
   control,
   icon,
@@ -82,6 +83,10 @@ export function ConversationArtifacts(props: {
     host
       .artifacts()
       .filter((entry) => entry.conversationId === props.conversationId);
+  // Whether the artifacts came (or could not): the skeleton, once it appeared, stays its least time.
+  const artifactsShown = settled(
+    () => !!(host.state().targets.artifacts || host.state().missing.artifacts),
+  );
   return (
     <If
       when={props.tab === "Artifacts"}
@@ -97,12 +102,10 @@ export function ConversationArtifacts(props: {
     >
       <View style={grow}>
         <If
-          when={artifacts().length}
+          when={artifacts().length && artifactsShown()}
           else={
             <If
-              when={
-                host.state().targets.artifacts || host.state().missing.artifacts
-              }
+              when={artifactsShown()}
               else={<ListSkeleton label={uiText("artifactsLoading")} />}
             >
               <Empty
