@@ -23,6 +23,8 @@ export const motion = {
   /** A page pushed in on the phone (a conversation over the chat list, a task, a page of More),
    * or the one under it coming back. */
   pageIn: 320,
+  /** The same page going back off the one under it: a little quicker than it came. */
+  pageOut: 260,
   /** How far a dialog, sheet, drawer or page travels while it fades. */
   shift: space[16],
   /** In and out of a screen: `cubic-bezier(.32,.72,0,1)`, the spec's opening curve. */
@@ -89,6 +91,70 @@ export function passing() {
       const result = await moving.play(spec);
       if (run === runs) playing.set(false);
       return result;
+    },
+    /** How far in it is (its opacity): 1 at rest. */
+    async shown() {
+      return playing() ? moving.opacity.getValue() : 1;
+    },
+  };
+}
+
+/**
+ * A page pushed over another on a phone (a conversation over the chat list, a task over the page
+ * it opened from, Settings): it comes in over the page under it and goes back off it, so the
+ * page under is drawn through the move instead of a blank frame. Its owner draws the page under
+ * while `under()` (as it comes in) and itself while `leaving()` (as it goes, taking no presses
+ * then), and spreads `style()` into the pushed page's layer, which is opaque.
+ *
+ * Going back mid-way starts from where it got to; `settle()` drops what is moving (a tab change
+ * changes at once). With less motion asked for NSH lands each move at once, so the page under is
+ * there for no frame longer.
+ */
+export function pushed() {
+  const moving = passing();
+  const under = signal(false);
+  const leaving = signal(false);
+  let runs = 0;
+  return {
+    style: moving.style,
+    under: () => under(),
+    leaving: () => leaving(),
+    /** It came in over the page under it. */
+    async enter() {
+      const run = ++runs;
+      leaving.set(false);
+      under.set(true);
+      await moving.play(fadeIn("end", motion.pageIn));
+      if (run === runs) under.set(false);
+    },
+    /** It goes back off the page under it. */
+    async leave() {
+      const run = ++runs;
+      under.set(false);
+      leaving.set(true);
+      const from = await moving.shown();
+      if (run !== runs) return;
+      await moving.play({
+        keyframes: {
+          opacity: [from, 0],
+          translateX: [motion.shift * (1 - from), motion.shift],
+        },
+        duration: motion.pageOut * from,
+        easing: motion.close,
+      });
+      if (run === runs) leaving.set(false);
+    },
+    /** Another page took its place within it: that one comes in from `from`. */
+    swap(from: MotionFrom) {
+      ++runs;
+      under.set(false);
+      leaving.set(false);
+      void moving.play(fadeIn(from, motion.pageIn));
+    },
+    settle() {
+      ++runs;
+      under.set(false);
+      leaving.set(false);
     },
   };
 }
