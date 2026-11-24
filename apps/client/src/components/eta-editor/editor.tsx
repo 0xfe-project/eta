@@ -21,6 +21,7 @@ import { colors, densityDefaults } from "../theme";
 import { baseText, editorLook, useTextTheme } from "./look";
 import { asRich, markdownToDoc } from "./markdown";
 import { refusedFile } from "./plugins/attachment";
+import { CaretReport, CaretTicks, caretDebug } from "./caret-debug";
 import { LineRoom } from "./room";
 
 // The composer's editor: nsh's RichEditor (a ProseMirror state in Rust, edited natively — typing,
@@ -296,11 +297,14 @@ export function EtaEditor(props: {
           onFileDrop={({ uris }) => editor.view.dropFiles(uris)}
           onContentSizeChange={() => editor.view.laidOut()}
           contentLayer={
-            layers.length ? (
+            <>
               <Each of={layers}>
                 {(plugin) => plugin().editor!.contentLayer!(editor)}
               </Each>
-            ) : undefined
+              <If when={caretDebug()}>
+                <CaretTicks editor={editor} />
+              </If>
+            </>
           }
           classes={looks().classes}
           styles={{
@@ -326,6 +330,9 @@ export function EtaEditor(props: {
           }}
         />
       </LineRoom.Provider>
+      <If when={caretDebug()}>
+        <CaretReport editor={editor} />
+      </If>
     </View>
   );
 }

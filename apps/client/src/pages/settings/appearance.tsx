@@ -17,6 +17,10 @@ import {
 } from "../../components";
 import { ElementPicking, pickerTarget } from "../../components/element-picker";
 import { flavors, paletteIds } from "../../components/palettes";
+import {
+  caretDebug,
+  setCaretDebug,
+} from "../../components/eta-editor/caret-debug";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, space } from "../../components/tokens";
 import { languageChoices, LanguageSettings, useText } from "../../i18n";
@@ -366,6 +370,13 @@ export function Appearance(props: AppearanceProps & { phone: boolean }) {
         checked={props.chatRail}
         phone={props.phone}
         set={props.onChatRail}
+      />
+      <ToggleRow
+        title="Caret debug overlay (#366)"
+        hint="Diagnostic build: draws where the editor measures each character and prints its caret state under the message box."
+        checked={caretDebug()}
+        phone={props.phone}
+        set={setCaretDebug}
       />
       <If when={picker}>
         {(setting) => (
