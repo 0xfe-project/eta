@@ -19,6 +19,8 @@ function pinOf(names: readonly string[]) {
   let writes = 0;
   const session = {
     kernel: {
+      // The other hooks on the way in listen on the kernel's bus; nothing is emitted here.
+      ctx: { on: () => () => true },
       config: {
         read: () => pinned,
         update: (config: { activeToolNames?: string[] }) => {

@@ -6,6 +6,7 @@ import { View } from "nsh";
 import {
   Button,
   colors,
+  grow,
   Icon,
   inCompact,
   Label,
@@ -33,6 +34,7 @@ import { taskMoment } from "./facts";
 import { activeTaskRun, latestExecutorRun } from "./run-log";
 import { statusName, TaskGlyph } from "./status";
 import { StatusSelect } from "./status-select";
+import { TaskStepsBlock } from "./steps-block";
 import { TaskQuestions } from "./task-questions";
 
 /** The width of a rail row's label; what goes under its value starts there. */
@@ -381,7 +383,7 @@ export function TaskRail(detail: {
     });
   }
   return (
-    <View style={{ gap: space[12] }}>
+    <View style={{ ...grow, gap: space[12] }}>
       <RailRow label={uiText("status")}>
         <StatusSelect item={item()} state={detail.state} />
       </RailRow>
@@ -615,6 +617,7 @@ export function TaskRail(detail: {
           {taskMoment(item().updatedAt)}
         </Label>
       </RailRow>
+      <TaskStepsBlock taskId={item().id} />
       <If when={item().status === "in_review" && !item().children?.length}>
         <TaskReviewActions state={detail.state} />
       </If>

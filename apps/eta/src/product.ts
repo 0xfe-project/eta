@@ -35,7 +35,7 @@ import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
-import { thinkingLevelsFor } from "@eta/core";
+import { kernelOn, thinkingLevelsFor } from "@eta/core";
 import { parseModelId, peerAddressOf, redactionMiddleware } from "@eta/server";
 import { acpPlugin } from "./acp/plugin";
 import { AcpService, projectMachinesOf } from "./acp/service";
@@ -127,6 +127,7 @@ import { TaskDraftExpirer } from "./tasks/draft-timeout";
 import { tasksPlugin } from "./tasks/plugin";
 import { TaskRunner } from "./tasks/runner";
 import { TaskRunStore } from "./tasks/runs";
+import { TaskSteps } from "./tasks/steps";
 import { executorOf, TaskStore } from "./tasks/store";
 import { taskSessionTools } from "./tasks/tools";
 import { TaskUsageStore } from "./tasks/usage";
@@ -426,6 +427,11 @@ export function createProduct(options: {
       return task === undefined ? null : executorOf(task);
     },
     warn,
+  });
+  // The plan each task's executor keeps in its session, read from the session's journal.
+  const taskSteps = new TaskSteps({
+    dataDir,
+    taskOfSession: (sessionId) => runRows.bySession(sessionId)?.taskId,
   });
   const originOf = (meta: SessionMeta): SessionMeta => ({
     ...meta,
@@ -910,6 +916,18 @@ export function createProduct(options: {
     },
     { sessionTools: runner.sessionTools },
     {
+      // A step moved in a task's session: its page is told. The journal takes the ledger a moment
+      // after the event, so the page reads it a moment later.
+      sessionAttach: ({ meta, session }) => {
+        const on = kernelOn(session.kernel.ctx);
+        const moved = () => taskSteps.changedSoon(meta.id, 100);
+        on("task:created", moved);
+        on("task:updated", moved);
+        on("task:removed", moved);
+        return Promise.resolve();
+      },
+    },
+    {
       sessionTools: taskSessionTools({
         board,
         agents,
@@ -1009,6 +1027,7 @@ export function createProduct(options: {
       archiver.stop();
       draftExpirer.stop();
       captainSupervisor.stop();
+      taskSteps.stop();
       await taskRunner.detach();
       hub.close();
       mirrors.detach();
@@ -1230,6 +1249,7 @@ export function createProduct(options: {
             board,
             runner: taskRunner,
             usage: taskUsage,
+            steps: taskSteps,
             workspaceFor: taskWorkspaceFor,
             settings: taskSettings,
             settingsChanged: () => {

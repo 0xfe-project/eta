@@ -275,7 +275,6 @@ export function ConversationTimeline(props: {
           initialScrollAtEnd
           // design-value: a virtual list's first guess at a row's height, not a drawn size
           estimatedItemSize={134}
-          scrollbar={false}
           scrollEventThrottle={onWindows ? 16 : undefined}
           onScroll={(event) => {
             // The button was placed against the selection where it was.

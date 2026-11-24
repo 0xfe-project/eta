@@ -78,6 +78,14 @@ What a task's runs used, in tokens and by model (no money: the cost fields of th
 - **Reading it.** `tasks.usage { taskId, includeSubtasks? }` returns totals, per model (with how many runs used it) and per run (agent, times, tokens, models). With `includeSubtasks`, every task under it at any depth is included; each run belongs to exactly one task, so nothing is counted twice. `tasks.<id>` carries the same as a `usage` section (subtasks included), pushed when a request is counted or a run's transcript is recorded, to the task and every task above it.
 - **On the board.** Every `BoardTaskView` of the `tasks` list (and `tasks.list`) carries `usage`, a brief of its own runs (total tokens, the main model and how many models, runs, runs without data, and the session of a run going now, where the client reads the live `metrics.tokensPerSec`), and for a task with subtasks `usageWithSubtasks`, its tree's. `TaskUsageStore.briefs` reads them for the whole board in one pass, so a card needs no `tasks.<id>`; the list is pushed again (paced) when a run's tokens are counted. Null is a task none of whose runs got a session.
 
+## Steps
+
+A step is one line of the plan an agent keeps in its own session (`create_step` / `update_step`); the board does not store them. The session writes its whole ledger as the value `eta.tasks.state` into its journal each time a step moves, and the last write is the current plan. The `steps` section of `tasks.<id>` is that plan for the executor's latest run (`runs` with `agentId: null`; an agent mentioned on the task keeps a plan of its own and is not shown), read from `<dataDir>/sessions/<run.sessionId>/journal.jsonl` (`tasks/steps.ts`). Read only, and nothing else on the wire changes.
+
+- **Live.** A task's session is told on its `task:created` / `task:updated` / `task:removed` events (`sessionAttach` in `product.ts`); the page is then pushed (paced) a moment later, once the journal has the write.
+- **After the run.** The last known plan stays, until a later run of the executor in another session replaces it. A task that has not run, or whose run made no steps, has an empty list.
+- **Not on this machine.** A session whose journal is on a daemon has none here: the list is empty, not an error.
+
 ## Actions on the wire
 
 | action                | Meaning                                                                  |
@@ -90,7 +98,7 @@ What a task's runs used, in tokens and by model (no money: the cost fields of th
 | `link` / `delete`     | Link a conversation / delete a task (can't delete while a run is active) |
 | `usage`               | Tokens by model and by run, optionally with the subtasks                 |
 
-`tasks` is one eager list (each row carries `runStatus`); each task is `tasks.<id>`: `task` (details, including the workspace and `runs`), `activity` (the timeline, containing `run_queued/started/completed/failed/interrupted/nudged`) and `usage` (see Usage).
+`tasks` is one eager list (each row carries `runStatus`); each task is `tasks.<id>`: `task` (details, including the workspace and `runs`), `activity` (the timeline, containing `run_queued/started/completed/failed/interrupted/nudged`) `usage` (see Usage) and `steps` (see Steps).
 
 ## Agent tools
 

@@ -343,7 +343,7 @@ function DesktopOverview(props: {
   const opensWithHeading = () => /^\s*#/.test(item().description);
   return (
     <View style={{ ...row, ...grow, alignItems: "stretch" }}>
-      <SmoothScroll style={grow} scrollbar={false}>
+      <SmoothScroll style={grow}>
         <View
           style={{
             paddingTop: space[16],
