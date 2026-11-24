@@ -1,5 +1,5 @@
-import { expect, open, test } from "nsh/test";
 import type { BoardTaskView } from "@eta/client-contracts";
+import { expect, open, test } from "nsh/test";
 import { dependentsOf, stepOf } from "../src/pages/tasks/facts";
 
 // The Plan view keeps one graph per plan and passes it on only when the plan's shape changed, so
@@ -22,7 +22,7 @@ function columns(
   return lefts.map((left) => distinct.indexOf(left));
 }
 
-test("each subtask is in its step, and a task under nothing has its own frame", async () => {
+test("each subtask is in its step; orphan tasks are hidden in plan view", async () => {
   const app = await open_();
   await app.waitFor("text:Ship the login page");
   expect(
@@ -32,8 +32,8 @@ test("each subtask is in its step, and a task under nothing has its own frame", 
       "Wire up the login form",
     ]),
   ).toEqual([0, 1, 0]);
-  expect(app.shows("text:Not part of anything")).toBe(true);
-  expect(app.shows("label:Tidy the changelog")).toBe(true);
+  expect(app.shows("text:Not part of anything")).toBe(false);
+  expect(app.shows("label:Tidy the changelog")).toBe(false);
 });
 
 test("a push that changes no step keeps the cards and shows what changed", async () => {
