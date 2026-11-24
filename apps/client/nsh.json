@@ -31,7 +31,12 @@
     "picker": true,
     "share": true,
     "fs": {
-      "read": ["${dataDir}/artifact-exports", "${dataDir}/downloads"],
+      "read": [
+        "${dataDir}/artifact-exports",
+        "${dataDir}/downloads",
+        "${homeDir}",
+        "/"
+      ],
       "write": ["${dataDir}/artifact-exports", "${dataDir}/downloads"]
     },
     "openUrl": {

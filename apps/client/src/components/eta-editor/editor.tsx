@@ -5,6 +5,7 @@ import type {
 import type { ViewStyle } from "nsh";
 import type { RichEditorFile, RichEditorSession, RichNodeJSON } from "nsh/base";
 import type { TextPlugin } from "./plugin";
+import { MAX_ATTACHMENT_BYTES } from "@eta/client-contracts";
 import { classifyClipboard } from "@eta/client-contracts/composer-doc";
 import { cleanup, Clipboard, effect, signal, View } from "nsh";
 import {
@@ -18,9 +19,10 @@ import {
 } from "nsh/base";
 import { uiText } from "../../i18n";
 import { colors, densityDefaults } from "../theme";
+import { nameOfUri, readUri } from "./local-file";
 import { baseText, editorLook, useTextTheme } from "./look";
 import { asRich, markdownToDoc } from "./markdown";
-import { refusedFile } from "./plugins/attachment";
+import { refusedFile, tooLarge } from "./plugins/attachment";
 import { LineRoom } from "./room";
 import { selectionMade, shownSelection } from "./shown-selection";
 
@@ -78,14 +80,6 @@ export interface EtaEditorHandle {
 
 function fileOf(file: RichEditorFile): File {
   return new File([file.data], file.name, { type: file.mime });
-}
-
-/** A local file a file manager copied or dragged in, read through its `file:` URL. */
-async function readUri(uri: string): Promise<File> {
-  const name = decodeURIComponent(uri.split("/").pop() || "file");
-  const response = await fetch(uri);
-  const blob = await response.blob();
-  return new File([blob], name, { type: blob.type });
 }
 
 export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
@@ -174,11 +168,23 @@ export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
   async function filesFromUris(uris: string[]) {
     const files: File[] = [];
     for (const uri of uris) {
+      const name = nameOfUri(uri);
       try {
-        files.push(await readUri(uri));
-      } catch {
+        const read = await readUri(uri, MAX_ATTACHMENT_BYTES);
+        // Too large to send, or a folder: its bytes stay on disk, its block says why.
+        files.push(
+          read.kind === "file"
+            ? read.file
+            : refusedFile(
+                name,
+                read.kind === "folder"
+                  ? uiText("fileIsFolder", { name })
+                  : tooLarge(name),
+              ),
+        );
+      } catch (error) {
         // A file the app may not read: a block that says so, not a paste that does nothing.
-        const name = decodeURIComponent(uri.split("/").pop() || uri);
+        console.warn(`eta: could not read ${uri}`, error);
         files.push(refusedFile(name, uiText("fileUnreadable", { name })));
       }
     }

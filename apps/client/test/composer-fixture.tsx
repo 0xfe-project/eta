@@ -1,6 +1,7 @@
 import type { MemberView, MessageView } from "@eta/client-contracts";
 import { mount, signal, Text, View, windowSize } from "nsh";
 import { Button } from "../src/components";
+import { ToastLayer } from "../src/components/toast";
 import { Composer } from "../src/pages/chat/composer";
 import { resumeComposerOutbox } from "../src/pages/chat/composer-draft";
 import { createHost, Host } from "../src/services/host";
@@ -174,6 +175,7 @@ function Fixture() {
         <Text>{result()}</Text>
         <Text>{resultBlocks()}</Text>
         <Text>{resultFiles()}</Text>
+        <ToastLayer />
       </View>
     </Host.Provider>
   );

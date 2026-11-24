@@ -162,14 +162,26 @@ export const chatMessages = {
   uploadRefused: ["can't attach", "无法添加"],
   uploadLost: ["upload lost", "上传已丢失"],
   retryUpload: ["Retry uploading {{name}}", "重试上传 {{name}}"],
-  fileUnreadable: ["Can't read {{name}}", "无法读取 {{name}}"],
+  attachRefused: ["Can't attach {{name}}", "无法添加 {{name}}"],
+  attachRefusedWhy: [
+    "Can't attach {{name}}: {{reason}}",
+    "无法添加 {{name}}：{{reason}}",
+  ],
+  fileUnreadable: [
+    "Eta couldn't open {{name}}. It may have been moved or deleted, or Eta isn't allowed to read where it is.",
+    "Eta 打不开 {{name}}：文件可能已被移动或删除，或者 Eta 无权读取它所在的位置。",
+  ],
+  fileIsFolder: [
+    "{{name}} is a folder. Attach the files in it instead.",
+    "{{name}} 是文件夹，请添加其中的文件。",
+  ],
   attachmentCountLimit: [
     "A message can carry up to {{count}} attachments.",
     "每条消息最多可带 {{count}} 个附件。",
   ],
   composerFileTooLarge: [
-    "{{name}} exceeds the attachment size limit.",
-    "附件 {{name}} 超出大小限制。",
+    "{{name}} is larger than {{limit}}, the most one attachment can be.",
+    "{{name}} 超过了 {{limit}}，单个附件最大只能是 {{limit}}。",
   ],
   composerTooLong: [
     "Messages can contain up to 100,000 characters.",
