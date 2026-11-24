@@ -19,6 +19,8 @@ export function createAdjustable(options: AdjustableOptions) {
   const largeStep = options.largeStep ?? 64;
   const decKey = orientation === "horizontal" ? "ArrowLeft" : "ArrowDown";
   const incKey = orientation === "horizontal" ? "ArrowRight" : "ArrowUp";
+  const decStroke = orientation === "horizontal" ? "left" : "down";
+  const incStroke = orientation === "horizontal" ? "right" : "up";
 
   function clamp(next: number) {
     return Math.max(options.min(), Math.min(options.max(), next));
@@ -47,7 +49,7 @@ export function createAdjustable(options: AdjustableOptions) {
 
   return {
     onKeyDown,
-    captureKeys: [decKey, incKey, "Home", "End"] as readonly string[],
+    captureKeys: [decStroke, incStroke, "home", "end"] as readonly string[],
     accessibilityValue: () => ({
       min: options.min(),
       max: options.max(),
