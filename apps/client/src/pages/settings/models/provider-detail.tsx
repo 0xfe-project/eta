@@ -22,7 +22,7 @@ import {
 } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
 import { ToggleSwitch } from "../../../components/toggle-switch";
-import { weight } from "../../../components/tokens";
+import { border, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { LetterBox, PaneBack, SectionHeader, WarningLine } from "../section";
@@ -161,10 +161,10 @@ export function ProviderDetail(props: {
       .join(" · ");
   const preference = {
     ...row,
-    minHeight: 40,
-    gap: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    minHeight: space[40],
+    gap: space[16],
+    paddingHorizontal: space[16],
+    paddingVertical: space[8],
     borderBottomWidth: 1,
     borderColor: c().border,
   } as const;
@@ -231,10 +231,10 @@ export function ProviderDetail(props: {
         style={{
           ...row,
           alignItems: "stretch",
-          height: 40,
+          height: space[40],
           flexShrink: 0,
-          gap: props.phone ? 0 : 20,
-          paddingHorizontal: props.phone ? 0 : 16,
+          gap: props.phone ? 0 : space[20],
+          paddingHorizontal: props.phone ? 0 : space[16],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
@@ -254,7 +254,7 @@ export function ProviderDetail(props: {
                 ...row,
                 gap: 6,
                 ...(props.phone ? { flex: 1, justifyContent: "center" } : {}),
-                borderBottomWidth: 2,
+                borderBottomWidth: border.thick,
                 borderColor: tab() === item() ? c().ink : "transparent",
                 cursor: "pointer",
               }}
@@ -289,8 +289,8 @@ export function ProviderDetail(props: {
           tone="red"
           variant="small"
           style={{
-            paddingHorizontal: 16,
-            paddingVertical: 8,
+            paddingHorizontal: space[16],
+            paddingVertical: space[8],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
@@ -317,7 +317,7 @@ export function ProviderDetail(props: {
                   onBlur={() => void rename()}
                   style={{
                     width: props.phone ? 160 : 200,
-                    height: 24,
+                    height: space[24],
                     ...textStyle(type("small")),
                     paddingHorizontal: 10,
                     paddingVertical: 3,
@@ -326,7 +326,7 @@ export function ProviderDetail(props: {
                 />
               </View>
               <View style={preference}>
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                   <Label>{uiText("sourceApiKey")}</Label>
                   <Label variant="small" tone="muted">
                     {provider()?.hasApiKey
@@ -346,11 +346,11 @@ export function ProviderDetail(props: {
                 accessibilityState={{ expanded: advanced() }}
                 onPress={() => advanced.set(!advanced())}
                 hoverStyle={{ backgroundColor: c().selected }}
-                style={{ ...preference, gap: 8, cursor: "pointer" }}
+                style={{ ...preference, gap: space[8], cursor: "pointer" }}
               >
                 <Icon
                   name={advanced() ? "down" : "right"}
-                  size={12}
+                  size={icon.sm}
                   tone="mutedInk"
                 />
                 <Label>{uiText("sourceAdvanced")}</Label>
@@ -396,9 +396,9 @@ export function ProviderDetail(props: {
         <View
           style={{
             ...row,
-            gap: 8,
-            paddingHorizontal: 16,
-            paddingVertical: 8,
+            gap: space[8],
+            paddingHorizontal: space[16],
+            paddingVertical: space[8],
             flexShrink: 0,
             borderBottomWidth: 1,
             borderColor: c().border,
@@ -407,15 +407,15 @@ export function ProviderDetail(props: {
           <View
             style={{
               ...row,
-              height: 24,
-              gap: 8,
+              height: space[24],
+              gap: space[8],
               paddingHorizontal: 10,
               borderWidth: 1,
               borderColor: c().strong,
               ...(props.phone ? { flex: 1, minWidth: 0 } : { width: 240 }),
             }}
           >
-            <Icon name="search" size={12} tone="muted" />
+            <Icon name="search" size={icon.sm} tone="muted" />
             <Field
               label={uiText("searchModels")}
               placeholder={uiText("searchModels")}
@@ -453,13 +453,13 @@ export function ProviderDetail(props: {
                 style={{
                   ...row,
                   gap: 10,
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
+                  paddingHorizontal: space[16],
+                  paddingVertical: space[8],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                 }}
               >
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                   <Label
                     weight={weight.regular}
                     tone={configured(model().id) ? "ink" : "muted"}
@@ -487,7 +487,7 @@ export function ProviderDetail(props: {
             )}
           </Each>
           <If when={!shown().length}>
-            <Label variant="small" tone="muted" style={{ padding: 16 }}>
+            <Label variant="small" tone="muted" style={{ padding: space[16] }}>
               {query().trim()
                 ? uiText("noMatchingModels")
                 : uiText("refreshTheListToFindModels")}
@@ -510,9 +510,9 @@ export function ProviderDetail(props: {
           sheet={props.phone}
           onClose={() => removing.set(false)}
         >
-          <View style={{ padding: 16, gap: 8 }}>
+          <View style={{ padding: space[16], gap: space[8] }}>
             <Label>{uiText("agentsUsingTheseModelsWillNeed")}</Label>
-            <View style={{ ...row, gap: 8, justifyContent: "flex-end" }}>
+            <View style={{ ...row, gap: space[8], justifyContent: "flex-end" }}>
               <Button
                 label={uiText("cancel")}
                 disabled={!!busy()}

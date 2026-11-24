@@ -17,7 +17,7 @@ import {
 } from "../../../components";
 import { DownloadProgressBar } from "../../../components/download-progress";
 import { LayoutSelect } from "../../../components/select";
-import { weight } from "../../../components/tokens";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import {
   clientPlatform,
@@ -85,7 +85,7 @@ export function ClientUpdateConfirm(props: { onClose: () => void }) {
       dismissible={!update.restarting()}
       onClose={props.onClose}
     >
-      <View style={{ ...grow, padding: 20, gap: 10 }}>
+      <View style={{ ...grow, padding: space[20], gap: 10 }}>
         <Label weight={weight.regular}>
           {uiText("updateTheDesktopAppTo", { version: version() })}
         </Label>
@@ -109,7 +109,7 @@ export function ClientUpdateConfirm(props: { onClose: () => void }) {
             </If>
           </View>
         </SmoothScroll>
-        <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
+        <View style={{ ...row, justifyContent: "flex-end", gap: space[8] }}>
           <Button
             label={uiText("cancel")}
             disabled={update.restarting()}
@@ -144,7 +144,13 @@ function ChannelSelect(props: { phone: boolean }) {
         gap: props.phone ? 4 : 14,
       }}
     >
-      <View style={{ flex: props.phone ? undefined : 1, minWidth: 0, gap: 2 }}>
+      <View
+        style={{
+          flex: props.phone ? undefined : 1,
+          minWidth: 0,
+          gap: space[2],
+        }}
+      >
         <Label variant="small">{uiText("channel")}</Label>
         <Label variant="small" tone="muted">
           {uiText("preReleasesRcBetaGetNew")}
@@ -176,7 +182,7 @@ function ChannelSelect(props: { phone: boolean }) {
             <View
               style={{
                 ...row,
-                height: props.phone ? 32 : 24,
+                height: props.phone ? space[32] : space[24],
                 gap: 6,
                 paddingHorizontal: 10,
                 borderWidth: 1,
@@ -187,7 +193,7 @@ function ChannelSelect(props: { phone: boolean }) {
               <Label variant="small" lines={1} style={{ flex: 1 }}>
                 {names[update.channel()]}
               </Label>
-              <Icon name="down" size={12} tone="muted" />
+              <Icon name="down" size={icon.sm} tone="muted" />
             </View>
           }
           onChange={({ value }) => {
@@ -209,13 +215,13 @@ export function ClientAppUpdate(props: { phone: boolean }) {
   return (
     <View
       style={{
-        padding: 16,
+        padding: space[16],
         gap: 9,
         borderTopWidth: 1,
         borderColor: c().border,
       }}
     >
-      <View style={{ ...row, gap: 8 }}>
+      <View style={{ ...row, gap: space[8] }}>
         <Label weight={weight.strong} style={{ flex: 1 }}>
           {clientPlatform === "android"
             ? uiText("androidApp")
@@ -232,7 +238,7 @@ export function ClientAppUpdate(props: { phone: boolean }) {
                 ? uiText("checkAgain")
                 : uiText("checkAppUpdate")
           }
-          size={props.phone ? 28 : 24}
+          size={props.phone ? control.md : control.sm}
           disabled={update.busy() || update.ready()}
           onPress={() => void update.check()}
         />
@@ -248,7 +254,7 @@ export function ClientAppUpdate(props: { phone: boolean }) {
       <If when={update.offer()}>
         {(offer) => (
           <View style={{ gap: 6 }}>
-            <View style={{ ...row, gap: 8 }}>
+            <View style={{ ...row, gap: space[8] }}>
               <Label variant="small" style={{ flex: 1 }}>
                 {uiText("versionAvailable", { version: offer().version })}
               </Label>

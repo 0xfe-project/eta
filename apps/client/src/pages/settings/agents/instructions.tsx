@@ -10,6 +10,7 @@ import {
   textFaces,
   textStyle,
 } from "../../../components";
+import { space } from "../../../components/tokens";
 import { formatLocale, localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
@@ -114,7 +115,12 @@ export function AgentInstructions(props: { form: AgentForm }) {
                   {count()}
                 </Label>
               </SectionHeader>
-              <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+              <View
+                style={{
+                  paddingHorizontal: space[16],
+                  paddingVertical: space[12],
+                }}
+              >
                 <Field
                   label={uiText("instructions")}
                   multiline
@@ -134,9 +140,9 @@ export function AgentInstructions(props: { form: AgentForm }) {
         >
           <View
             style={{
-              gap: 8,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
+              gap: space[8],
+              paddingHorizontal: space[16],
+              paddingVertical: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -156,7 +162,7 @@ export function AgentInstructions(props: { form: AgentForm }) {
               style={{
                 height: 240,
                 ...textStyle(type("small"), "prose"),
-                padding: 12,
+                padding: space[12],
                 borderColor: c().strong,
               }}
               value={instructions()}
@@ -169,7 +175,13 @@ export function AgentInstructions(props: { form: AgentForm }) {
         </If>
       }
     >
-      <View style={{ paddingVertical: 16, paddingHorizontal: 14, gap: 16 }}>
+      <View
+        style={{
+          paddingVertical: space[16],
+          paddingHorizontal: 14,
+          gap: space[16],
+        }}
+      >
         <View style={{ gap: 6 }}>
           <View style={{ ...row, justifyContent: "space-between" }}>
             <Label variant="caption">{uiText("instructions")}</Label>

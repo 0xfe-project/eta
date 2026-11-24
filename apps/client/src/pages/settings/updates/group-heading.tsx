@@ -1,7 +1,7 @@
 import type { JSX } from "nsh";
 import { View } from "nsh";
 import { colors, Label, row } from "../../../components";
-import { weight } from "../../../components/tokens";
+import { space, weight } from "../../../components/tokens";
 
 export function GroupHeading(props: {
   title: string;
@@ -14,8 +14,8 @@ export function GroupHeading(props: {
       style={{
         ...row,
         justifyContent: "space-between",
-        gap: 8,
-        paddingHorizontal: 16,
+        gap: space[8],
+        paddingHorizontal: space[16],
         minHeight: props.phone ? 45 : 41,
         borderBottomWidth: 1,
         borderColor: c().border,

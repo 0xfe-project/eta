@@ -4,6 +4,7 @@ import { levelSupport } from "@eta/client-contracts";
 import { View } from "nsh";
 import { ActionItem, ActionMenu, Field, Label, row } from "../../../components";
 import { ModelSelect } from "../../../components/model-select";
+import { space } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 import { RuntimeHints } from "../runtimes/runtime-hints";
 import { reasonText, runtimeReason } from "../runtimes/status";
@@ -89,7 +90,7 @@ export function AgentGeneral(props: {
             </View>
           }
         >
-          <View style={{ alignItems: "flex-start", gap: 2 }}>
+          <View style={{ alignItems: "flex-start", gap: space[2] }}>
             <If
               when={missingModel()}
               else={
@@ -157,7 +158,11 @@ export function AgentGeneral(props: {
     <View
       style={
         creating
-          ? { paddingVertical: 16, paddingHorizontal: 14, gap: 16 }
+          ? {
+              paddingVertical: space[16],
+              paddingHorizontal: 14,
+              gap: space[16],
+            }
           : undefined
       }
     >

@@ -13,7 +13,7 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
-import { weight } from "../../../components/tokens";
+import { border, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { LetterBox, PaneBack, SectionHeader } from "../section";
@@ -71,7 +71,10 @@ function MonthlyAccount(props: {
       .filter(Boolean)
       .join(" · ");
   return (
-    <View android={{ accessibilityLiveRegion: "polite" }} style={{ gap: 2 }}>
+    <View
+      android={{ accessibilityLiveRegion: "polite" }}
+      style={{ gap: space[2] }}
+    >
       <If
         when={problem()}
         else={
@@ -88,7 +91,7 @@ function MonthlyAccount(props: {
                     )
                   : uiText("modelQuotaUsed", { percent: percentText(used()!) });
               return (
-                <View style={{ gap: 2 }}>
+                <View style={{ gap: space[2] }}>
                   <Label variant="small">{`${title()} · ${uiText("modelQuotaMonthly")} · ${usage()}`}</Label>
                   <Label variant="small" tone="muted">
                     {localTime(window().resetsAt)
@@ -165,9 +168,9 @@ export function SubscriptionDetail(props: {
   const summary = () => (
     <View
       style={{
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        gap: 4,
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
+        gap: space[4],
         alignItems: "flex-start",
       }}
     >
@@ -226,10 +229,10 @@ export function SubscriptionDetail(props: {
           style={{
             ...row,
             alignItems: "stretch",
-            height: 40,
+            height: space[40],
             flexShrink: 0,
-            gap: props.phone ? 0 : 20,
-            paddingHorizontal: props.phone ? 0 : 16,
+            gap: props.phone ? 0 : space[20],
+            paddingHorizontal: props.phone ? 0 : space[16],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
@@ -249,7 +252,7 @@ export function SubscriptionDetail(props: {
                   ...row,
                   gap: 6,
                   ...(props.phone ? { flex: 1, justifyContent: "center" } : {}),
-                  borderBottomWidth: 2,
+                  borderBottomWidth: border.thick,
                   borderColor: tab() === item() ? c().ink : "transparent",
                   cursor: "pointer",
                 }}
@@ -289,7 +292,7 @@ export function SubscriptionDetail(props: {
             <Each of={connections()} key={(item) => item.id}>
               {(item) => (
                 <Label
-                  style={{ padding: 16 }}
+                  style={{ padding: space[16] }}
                 >{`${item().label} · ${item().state}`}</Label>
               )}
             </Each>
@@ -298,11 +301,16 @@ export function SubscriptionDetail(props: {
           <If when={props.phone}>{summary()}</If>
           <Label
             weight={weight.strong}
-            style={{ padding: 16 }}
+            style={{ padding: space[16] }}
           >{`${uiText("models2")} ${models().length}`}</Label>
           <Each of={models()} key={(item) => item.id}>
             {(model) => (
-              <Label style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+              <Label
+                style={{
+                  paddingHorizontal: space[16],
+                  paddingVertical: space[8],
+                }}
+              >
                 {model().name}
               </Label>
             )}

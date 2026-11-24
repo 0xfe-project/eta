@@ -10,6 +10,7 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
+import { icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
 export function SkillFileTree(props: {
@@ -36,7 +37,7 @@ export function SkillFileTree(props: {
       }
       scrollbar={false}
     >
-      <View style={{ padding: 4, gap: phone() ? 2 : 0 }}>
+      <View style={{ padding: space[4], gap: phone() ? space[2] : 0 }}>
         <If when={props.directory}>
           <Button
             label={uiText("parentDirectory")}
@@ -72,7 +73,7 @@ export function SkillFileTree(props: {
                 hoverStyle={{ backgroundColor: c().selected }}
                 style={{
                   ...row,
-                  height: phone() ? 32 : 24,
+                  height: phone() ? space[32] : space[24],
                   paddingHorizontal: phone() ? 10 : 8,
                   gap: 5,
                   opacity: item().kind === "blocked" ? 0.45 : 1,
@@ -82,7 +83,7 @@ export function SkillFileTree(props: {
                 }}
               >
                 <If when={item().kind === "directory"}>
-                  <Icon name="folder" size={12} />
+                  <Icon name="folder" size={icon.sm} />
                 </If>
                 <Label variant="small" lines={1}>
                   {item().path}

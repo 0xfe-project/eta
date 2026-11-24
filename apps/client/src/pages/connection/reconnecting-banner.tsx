@@ -1,5 +1,6 @@
 import { View } from "nsh";
 import { Button, colors, Label, row } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 export function ReconnectingBanner(props: {
   phone: boolean;
@@ -11,8 +12,8 @@ export function ReconnectingBanner(props: {
       style={{
         ...row,
         paddingVertical: props.phone ? 10 : 8,
-        paddingHorizontal: 16,
-        gap: 8,
+        paddingHorizontal: space[16],
+        gap: space[8],
         backgroundColor: c().selected,
         borderBottomWidth: 1,
         borderColor: c().border,
@@ -41,7 +42,7 @@ export function ReconnectingBanner(props: {
         <Button
           label={uiText("changeHost")}
           size={20}
-          style={{ marginVertical: -2 }}
+          style={{ marginVertical: -space[2] }}
           onPress={props.onConnect}
         />
       </If>

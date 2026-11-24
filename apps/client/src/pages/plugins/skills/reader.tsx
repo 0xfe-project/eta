@@ -12,6 +12,7 @@ import {
   textFaces,
   textStyle,
 } from "../../../components";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
 export type SkillReadingPosition =
@@ -154,8 +155,8 @@ function SkillKeyboardLink(props: {
         focusVisibleStyle={{ backgroundColor: c().blue }}
         style={{
           position: "absolute",
-          width: 2,
-          height: 16,
+          width: space[2],
+          height: space[16],
           left: -3,
           top: -14,
           pointerEvents: "none",
@@ -357,7 +358,7 @@ export function SkillFile(props: {
                   fontFamily: fontFamily(fonts().interface),
                   ...textStyle(type("body")),
                   color: c().ink,
-                  gap: 12,
+                  gap: space[12],
                 },
                 heading: { marginTop: 0, marginBottom: 0 },
                 heading1: textStyle(type("title"), "prose"),

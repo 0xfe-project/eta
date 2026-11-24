@@ -3,6 +3,7 @@ import { View } from "nsh";
 import { desktopPanelOpen } from "../../app/desktop-panel";
 import { paneWidth } from "../../app/pane-width";
 import { colors, fill, grow, row, sizes } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { PhoneTabItem, phoneTabs } from "../../navigation/phone-tabs";
 
@@ -46,8 +47,8 @@ function SkeletonRows(props: { widths: number[]; height: number }) {
           style={{
             ...row,
             height: props.height,
-            paddingHorizontal: 8,
-            gap: 12,
+            paddingHorizontal: space[8],
+            gap: space[12],
           }}
         >
           <SkeletonBlock width={14} height={14} />
@@ -94,8 +95,14 @@ export function WorkspaceSkeleton(props: {
           <If
             when={desktop()}
             else={
-              <View style={{ alignItems: "center", gap: 20, paddingTop: 20 }}>
-                <View style={{ marginBottom: 8 }}>
+              <View
+                style={{
+                  alignItems: "center",
+                  gap: space[20],
+                  paddingTop: space[20],
+                }}
+              >
+                <View style={{ marginBottom: space[8] }}>
                   <SkeletonBlock width={28} height={28} round />
                 </View>
                 <Each of={railLabels}>
@@ -109,33 +116,51 @@ export function WorkspaceSkeleton(props: {
               </View>
             }
           >
-            <View style={{ ...bar(), height: 40 }} />
+            <View style={{ ...bar(), height: space[40] }} />
             <View
               style={{
-                paddingHorizontal: 8,
-                paddingTop: 8,
-                paddingBottom: 4,
+                paddingHorizontal: space[8],
+                paddingTop: space[8],
+                paddingBottom: space[4],
                 borderBottomWidth: 1,
                 borderColor: c().border,
               }}
             >
               <SkeletonRows widths={[107, 71, 89, 119]} height={32} />
             </View>
-            <View style={{ ...grow, paddingHorizontal: 8, paddingTop: 8 }}>
-              <View style={{ ...bar(), height: 24, paddingHorizontal: 8 }}>
+            <View
+              style={{
+                ...grow,
+                paddingHorizontal: space[8],
+                paddingTop: space[8],
+              }}
+            >
+              <View
+                style={{
+                  ...bar(),
+                  height: space[24],
+                  paddingHorizontal: space[8],
+                }}
+              >
                 <SkeletonBlock width={48} height={10} />
               </View>
               <SkeletonRows widths={[107, 71, 89, 119]} height={50} />
             </View>
             <View
               style={{
-                paddingHorizontal: 8,
-                paddingTop: 8,
+                paddingHorizontal: space[8],
+                paddingTop: space[8],
                 borderTopWidth: 1,
                 borderColor: c().border,
               }}
             >
-              <View style={{ ...bar(), height: 24, paddingHorizontal: 8 }}>
+              <View
+                style={{
+                  ...bar(),
+                  height: space[24],
+                  paddingHorizontal: space[8],
+                }}
+              >
                 <SkeletonBlock width={48} height={10} />
               </View>
               <View style={{ paddingVertical: 6 }}>
@@ -143,7 +168,11 @@ export function WorkspaceSkeleton(props: {
               </View>
             </View>
             <View
-              style={{ padding: 4, borderTopWidth: 1, borderColor: c().border }}
+              style={{
+                padding: space[4],
+                borderTopWidth: 1,
+                borderColor: c().border,
+              }}
             >
               <SkeletonRows widths={[89]} height={32} />
             </View>
@@ -154,13 +183,18 @@ export function WorkspaceSkeleton(props: {
         <View
           style={{ width: 320, borderRightWidth: 1, borderColor: c().border }}
         >
-          <View style={{ ...bar(), height: 40, paddingHorizontal: 14 }}>
+          <View style={{ ...bar(), height: space[40], paddingHorizontal: 14 }}>
             <SkeletonBlock width={96} height={12} />
           </View>
           <Each of={tabletRows}>
             {(widths) => (
               <View
-                style={{ ...bar(), height: 52, paddingHorizontal: 14, gap: 12 }}
+                style={{
+                  ...bar(),
+                  height: 52,
+                  paddingHorizontal: 14,
+                  gap: space[12],
+                }}
               >
                 <SkeletonBlock width={20} height={20} round />
                 <View style={{ ...grow, gap: 6 }}>
@@ -177,7 +211,7 @@ export function WorkspaceSkeleton(props: {
         <View
           style={{
             ...bar(),
-            height: phone() ? 48 : 40,
+            height: phone() ? space[48] : space[40],
             paddingHorizontal: desktop() ? 16 : phone() ? 16 : 14,
           }}
         >
@@ -188,12 +222,18 @@ export function WorkspaceSkeleton(props: {
           />
         </View>
         <If when={tablet()}>
-          <View style={{ paddingVertical: 32, paddingHorizontal: 16, gap: 28 }}>
+          <View
+            style={{
+              paddingVertical: space[32],
+              paddingHorizontal: space[16],
+              gap: 28,
+            }}
+          >
             <Each of={[360, 240]}>
               {(width, index) => (
                 <>
                   <View style={{ gap: 10 }}>
-                    <View style={{ ...row, gap: 8 }}>
+                    <View style={{ ...row, gap: space[8] }}>
                       <SkeletonBlock width={18} height={18} round />
                       <SkeletonBlock width={96} height={12} />
                     </View>
@@ -211,16 +251,22 @@ export function WorkspaceSkeleton(props: {
           </View>
         </If>
         <If when={phone()}>
-          <View style={{ paddingVertical: 20, paddingHorizontal: 16, gap: 28 }}>
+          <View
+            style={{
+              paddingVertical: space[20],
+              paddingHorizontal: space[16],
+              gap: 28,
+            }}
+          >
             <Each of={[215, 143, 179]}>
               {(width, index) => (
                 <>
                   <View style={{ gap: 10 }}>
-                    <View style={{ ...row, gap: 8 }}>
+                    <View style={{ ...row, gap: space[8] }}>
                       <SkeletonBlock width={18} height={18} light />
                       <SkeletonBlock width={96} height={12} light />
                     </View>
-                    <View style={{ gap: 8 }}>
+                    <View style={{ gap: space[8] }}>
                       <SkeletonBlock width="100%" height={12} light />
                       <SkeletonBlock width={width()} height={12} light />
                     </View>
@@ -236,16 +282,18 @@ export function WorkspaceSkeleton(props: {
           </View>
         </If>
         <If when={desktop()}>
-          <View style={{ paddingTop: 24, paddingHorizontal: 24 }}>
+          <View style={{ paddingTop: space[24], paddingHorizontal: space[24] }}>
             <Each of={[0, 1]}>
               {(width) => (
                 <>
                   <View style={{ gap: 10, marginBottom: 28 }}>
-                    <View style={{ ...row, gap: 8 }}>
+                    <View style={{ ...row, gap: space[8] }}>
                       <SkeletonBlock width={18} height={18} />
                       <SkeletonBlock width={96} height={12} />
                     </View>
-                    <View style={{ gap: 8, paddingHorizontal: 2 }}>
+                    <View
+                      style={{ gap: space[8], paddingHorizontal: space[2] }}
+                    >
                       <SkeletonBlock width="97%" height={12} />
                       <SkeletonBlock width={[408, 272][width()]!} height={12} />
                     </View>
@@ -285,7 +333,7 @@ export function WorkspaceSkeleton(props: {
             style={{
               marginTop: "auto",
               marginBottom: 14,
-              marginHorizontal: 16,
+              marginHorizontal: space[16],
               height: 83,
               borderWidth: 1,
               borderColor: c().border,
@@ -302,7 +350,7 @@ export function WorkspaceSkeleton(props: {
             borderColor: c().border,
           }}
         >
-          <View style={{ ...bar(), height: 40 }} />
+          <View style={{ ...bar(), height: space[40] }} />
         </View>
       </If>
       <If when={props.backdrop}>

@@ -10,6 +10,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
 
@@ -78,7 +79,7 @@ export function PluginTablet(props: {
                 }}
               >
                 <PluginGlyph size={28} />
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                   <Label variant="small" lines={1}>
                     {item().name}
                   </Label>
@@ -107,7 +108,7 @@ export function PluginTablet(props: {
             borderTopWidth: 1,
             borderColor: c().border,
             paddingHorizontal: 14,
-            paddingVertical: 12,
+            paddingVertical: space[12],
           }}
         >
           <Label variant="caption" tone="muted">
@@ -122,7 +123,7 @@ export function PluginTablet(props: {
           <View style={grow}>
             <View
               style={{
-                height: 40,
+                height: space[40],
                 flexShrink: 0,
                 backgroundColor: c().surface,
                 borderBottomWidth: 1,

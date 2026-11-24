@@ -29,7 +29,7 @@ import {
 } from "../../components";
 import { BackButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
-import { weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { acpStatus } from "./external-agent";
@@ -270,9 +270,9 @@ export function ExternalAgentForm(props: {
   ) => (
     <View
       style={{
-        gap: 2,
+        gap: space[2],
         paddingHorizontal: 10,
-        paddingVertical: 8,
+        paddingVertical: space[8],
         borderWidth: 1,
         borderColor: c().border,
       }}
@@ -286,7 +286,11 @@ export function ExternalAgentForm(props: {
         </Label>
       </View>
       <If when={detail}>
-        <Label variant="small" tone="warning" style={{ paddingLeft: 12 }}>
+        <Label
+          variant="small"
+          tone="warning"
+          style={{ paddingLeft: space[12] }}
+        >
           {detail}
         </Label>
       </If>
@@ -384,7 +388,7 @@ export function ExternalAgentForm(props: {
             width: "100%",
             height: props.phone ? 36 : 30,
             paddingLeft: 10,
-            paddingRight: 8,
+            paddingRight: space[8],
           }}
         >
           <Each of={listed()} key={(item) => item.id}>
@@ -411,7 +415,7 @@ export function ExternalAgentForm(props: {
     </View>
   );
   const fields = () => (
-    <View style={{ gap: 12 }}>
+    <View style={{ gap: space[12] }}>
       {machineField()}
       {field({
         name: "label",
@@ -468,17 +472,17 @@ export function ExternalAgentForm(props: {
         <View
           style={{
             ...row,
-            height: 48,
+            height: space[48],
             flexShrink: 0,
-            gap: 4,
-            paddingHorizontal: 8,
+            gap: space[4],
+            paddingHorizontal: space[8],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
           <BackButton
             size={40}
-            iconSize={16}
+            iconSize={icon.md}
             disabled={saving()}
             onPress={props.onClose}
           />
@@ -492,7 +496,7 @@ export function ExternalAgentForm(props: {
         <View
           style={{
             paddingHorizontal: props.phone ? 16 : 14,
-            paddingVertical: 12,
+            paddingVertical: space[12],
           }}
         >
           {fields()}
@@ -501,10 +505,10 @@ export function ExternalAgentForm(props: {
       <View
         style={{
           ...row,
-          gap: 8,
+          gap: space[8],
           flexShrink: 0,
           paddingHorizontal: props.phone ? 16 : 14,
-          paddingVertical: 12,
+          paddingVertical: space[12],
           borderTopWidth: props.phone ? 1 : 0,
           borderColor: c().border,
         }}
@@ -512,7 +516,7 @@ export function ExternalAgentForm(props: {
         <If when={host.can("acp.test")}>
           <Button
             label={testing() ? uiText("testing") : uiText("test")}
-            size={props.phone ? 32 : 28}
+            size={props.phone ? control.lg : control.md}
             style={{ paddingHorizontal: props.phone ? 14 : 8 }}
             disabled={testing() || saving() || !usable()}
             onPress={() => void test()}
@@ -522,8 +526,8 @@ export function ExternalAgentForm(props: {
           <View style={{ flex: 1 }} />
           <Button
             label={uiText("cancel")}
-            size={28}
-            style={{ paddingHorizontal: 8 }}
+            size={control.md}
+            style={{ paddingHorizontal: space[8] }}
             disabled={saving()}
             onPress={props.onClose}
           />
@@ -531,11 +535,11 @@ export function ExternalAgentForm(props: {
         <Button
           label={saveLabel()}
           tone="primary"
-          size={props.phone ? 32 : 28}
+          size={props.phone ? control.lg : control.md}
           style={
             props.phone
               ? { flex: 1, justifyContent: "center" }
-              : { paddingHorizontal: 8 }
+              : { paddingHorizontal: space[8] }
           }
           disabled={saving() || !usable()}
           onPress={() => void save()}

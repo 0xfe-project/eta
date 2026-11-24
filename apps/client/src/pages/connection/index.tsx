@@ -4,6 +4,7 @@ import type { ConnectionFailure } from "./diagnostics";
 import { parseConnectLink } from "@eta/client-contracts/connect-link";
 import { cleanup, effect, platform, signal, View } from "nsh";
 import { Button, colors, grow, Header, Label, row } from "../../components";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { addressFrom, useHost } from "../../services/host";
 import { ConnectionError, LostPhoneConnection } from "./connection-errors";
@@ -229,7 +230,7 @@ export function Connection(props: {
           ...grow,
           justifyContent: phone() ? "flex-start" : "center",
           alignItems: "center",
-          padding: phone() ? 0 : 24,
+          padding: phone() ? 0 : space[24],
         }}
       >
         <If when={failure() && !phone() && !remoteFailure()}>
@@ -319,7 +320,12 @@ export function Connection(props: {
               </PhoneConnectionForm>
             </If>
             <If when={!phone()}>
-              <View style={{ padding: 16, gap: tablet() ? 16 : 12 }}>
+              <View
+                style={{
+                  padding: space[16],
+                  gap: tablet() ? space[16] : space[12],
+                }}
+              >
                 <If
                   when={desktop()}
                   else={
@@ -330,7 +336,7 @@ export function Connection(props: {
                     </Label>
                   }
                 >
-                  <View style={{ gap: 8 }}>
+                  <View style={{ gap: space[8] }}>
                     <LocationOption
                       title={
                         localBusy()
@@ -382,17 +388,17 @@ export function Connection(props: {
                   justifyContent: "space-between",
                   borderTopWidth: 1,
                   borderColor: c().border,
-                  gap: tablet() ? 8 : 12,
-                  padding: 12,
-                  paddingHorizontal: 16,
+                  gap: tablet() ? space[8] : space[12],
+                  padding: space[12],
+                  paddingHorizontal: space[16],
                 }}
               >
                 <If when={tablet() && !remoteFailure()}>
                   <Button
                     label={scanLabel}
-                    size={44}
+                    size={control.touch}
                     labelVariant="body"
-                    style={{ flex: 1, paddingHorizontal: 12 }}
+                    style={{ flex: 1, paddingHorizontal: space[12] }}
                     onPress={scan}
                     disabled={busy()}
                     dimDisabled={false}
@@ -416,14 +422,14 @@ export function Connection(props: {
                           : uiText("connect")
                     }
                     tone="primary"
-                    size={tablet() ? 44 : undefined}
+                    size={tablet() ? control.touch : undefined}
                     style={
                       tablet()
                         ? {
-                            paddingHorizontal: 24,
+                            paddingHorizontal: space[24],
                             opacity: !draft().trim() || busy() ? 0.5 : 1,
                           }
-                        : { paddingHorizontal: 12 }
+                        : { paddingHorizontal: space[12] }
                     }
                     disabled={!draft().trim() || busy()}
                     onPress={connect}
