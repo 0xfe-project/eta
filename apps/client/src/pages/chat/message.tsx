@@ -20,7 +20,6 @@ import {
 import { pasteBlocksOf } from "@eta/client-contracts/composer-draft";
 import { mentionLabel } from "@eta/client-contracts/composer-target";
 import { effect, signal, View } from "nsh";
-import { Popover } from "nsh/base";
 import {
   Button,
   Caption,
@@ -42,12 +41,12 @@ import {
   control,
   icon,
   opacity,
-  shadow,
   space,
   weight,
 } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
+import { Popover } from "../../ui";
 import { subtasksOf, TaskSummary } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
 import { ArtifactRow } from "./artifacts/row";
@@ -360,20 +359,16 @@ export function Message(props: {
                   align="end"
                   offset={6}
                   margin={8}
-                  onOpenChange={(event) => {
-                    if (event.open) props.onInsert();
+                  onOpenChange={(open) => {
+                    if (open) props.onInsert();
                     else props.onInsertClose?.();
-                  }}
-                  popupStyle={{
-                    borderWidth: 1,
-                    borderColor: c().border,
-                    backgroundColor: c().canvas,
-                    boxShadow: [shadow.float],
                   }}
                   trigger={
                     <View
+                      role="button"
                       accessibilityLabel={uiText("insertMessage")}
                       hoverStyle={{ borderColor: c().ink }}
+                      focusVisibleStyle={focusRing(c())}
                       style={{
                         paddingVertical: 1,
                         paddingHorizontal: space[8],
