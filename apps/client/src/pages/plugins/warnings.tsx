@@ -4,6 +4,7 @@ import { signal, View } from "nsh";
 import {
   Button,
   colors,
+  dialogWidth,
   Icon,
   Label,
   Modal,
@@ -91,6 +92,9 @@ function WarningsText(props: { item: PluginView; inline?: boolean }) {
   );
 }
 
+/** How far the dialog's list of warnings grows before it scrolls. */
+const listHeight = 300;
+
 export function PluginWarningsDialog(props: {
   item: PluginView;
   onClose: () => void;
@@ -99,7 +103,7 @@ export function PluginWarningsDialog(props: {
   return (
     <Modal
       title={uiText("warningsFor", { name: props.item.name })}
-      width={384}
+      width={dialogWidth.md}
       modalFocus
       overPhoneNavigation
       hideHeader
@@ -124,7 +128,7 @@ export function PluginWarningsDialog(props: {
           style={{ marginVertical: -space[2], marginRight: -space[8] }}
         />
       </View>
-      <SmoothScroll style={{ maxHeight: 300 }} scrollbar={false}>
+      <SmoothScroll style={{ maxHeight: listHeight }} scrollbar={false}>
         <View style={{ paddingHorizontal: space[16], gap: space[4] }}>
           <WarningsText item={props.item} />
         </View>

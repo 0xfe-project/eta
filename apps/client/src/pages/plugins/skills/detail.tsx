@@ -12,6 +12,7 @@ import {
   Button,
   colors,
   Empty,
+  emptyWidth,
   grow,
   Header,
   Icon,
@@ -19,6 +20,7 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
+import { dotSize } from "../../../components/status-dot";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { SkillFileTree } from "./file-tree";
@@ -304,7 +306,7 @@ export function SkillDetail(props: {
               icon="warning"
               iconSize={icon.xl}
               iconTone="red"
-              descriptionWidth={320}
+              descriptionWidth={emptyWidth.narrow}
               style={{
                 flex: undefined,
                 alignSelf: "stretch",
@@ -409,8 +411,8 @@ export function SkillDetail(props: {
             <View style={{ ...row, alignItems: "flex-start", gap: space[8] }}>
               <View
                 style={{
-                  width: 6,
-                  height: 6,
+                  width: dotSize,
+                  height: dotSize,
                   marginTop: space[4],
                   flexShrink: 0,
                   backgroundColor: c().warning,

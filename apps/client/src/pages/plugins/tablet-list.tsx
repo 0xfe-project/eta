@@ -9,11 +9,15 @@ import {
   Header,
   Label,
   row,
+  sizes,
   SmoothScroll,
 } from "../../components";
 import { avatar, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
+
+/** A plugin's row in the tablet list. */
+const rowHeight = 60;
 
 export function PluginTablet(props: {
   items: PluginView[];
@@ -28,7 +32,11 @@ export function PluginTablet(props: {
   return (
     <View style={{ ...row, ...grow, alignItems: "stretch" }}>
       <View
-        style={{ width: 320, borderRightWidth: 1, borderColor: c().border }}
+        style={{
+          width: sizes.tabletList,
+          borderRightWidth: 1,
+          borderColor: c().border,
+        }}
       >
         <Header
           title={uiText("plugins")}
@@ -68,7 +76,7 @@ export function PluginTablet(props: {
                 style={{
                   ...row,
                   gap: space[8],
-                  height: 60,
+                  height: rowHeight,
                   paddingHorizontal: space[16],
                   borderBottomWidth: 1,
                   borderColor: c().border,
@@ -101,7 +109,7 @@ export function PluginTablet(props: {
             )}
           </Each>
           <If when={!props.items.length}>
-            <NoPlugins width={240} />
+            <NoPlugins />
           </If>
         </SmoothScroll>
         <View

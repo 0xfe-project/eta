@@ -50,14 +50,13 @@ export function Status(props: { item: PluginView; phone?: boolean }) {
 }
 
 /** No plugins: the design's empty state, under the intro. */
-export function NoPlugins(props: { width: number }) {
+export function NoPlugins() {
   return (
     <Empty
       title={uiText("noPluginsYet")}
       description={uiText("noPluginsHint")}
       icon="plugins"
       iconSize={icon.xl}
-      descriptionWidth={props.width}
       style={{
         flex: undefined,
         justifyContent: "flex-start",

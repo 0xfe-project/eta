@@ -24,6 +24,9 @@ import {
   shortDate,
 } from "./schedule";
 
+/** The schedule and brief labels, and the time column of the timeline under them. */
+const labelWidth = 72;
+
 export function RoutineDetail(props: {
   routine: RoutineInfo;
   brief?: BriefView;
@@ -42,7 +45,7 @@ export function RoutineDetail(props: {
 }) {
   const c = colors();
   const phone = () => props.layout === "phone";
-  const inset = () => (phone() ? 16 : 24);
+  const inset = () => (phone() ? space[16] : space[24]);
   const latest = () => props.runs.find((run) => run.status === "sent");
   const earlier = () => props.runs.filter((run) => run.id !== latest()?.id);
   // Two cards a row on the desktop, one on the narrower layouts.
@@ -113,7 +116,7 @@ export function RoutineDetail(props: {
             </View>
           </View>
           <View style={{ ...row, gap: space[12] }}>
-            <Label variant="small" tone="muted" style={{ width: 72 }}>
+            <Label variant="small" tone="muted" style={{ width: labelWidth }}>
               {uiText("schedule")}
             </Label>
             <Label variant="small" tone="mutedInk" style={{ flex: 1 }}>
@@ -121,7 +124,7 @@ export function RoutineDetail(props: {
             </Label>
           </View>
           <View style={{ ...row, gap: space[12] }}>
-            <Label variant="small" tone="muted" style={{ width: 72 }}>
+            <Label variant="small" tone="muted" style={{ width: labelWidth }}>
               {uiText("briefV", {
                 value1: props.brief?.version ?? 1,
               })}
@@ -196,7 +199,7 @@ export function RoutineDetail(props: {
               <Label
                 variant="small"
                 tone="mutedInk"
-                style={{ width: 72, flexShrink: 0 }}
+                style={{ width: labelWidth, flexShrink: 0 }}
               >
                 {clockTime(at())}
               </Label>
@@ -306,7 +309,7 @@ export function RoutineDetail(props: {
             <Label
               variant="small"
               tone="muted"
-              style={{ width: 72, flexShrink: 0 }}
+              style={{ width: labelWidth, flexShrink: 0 }}
             >
               {shortDate(props.routine.createdAt)}
             </Label>

@@ -136,6 +136,12 @@ export function reportBody(run: RunView) {
 }
 
 /** The newest report, in full, at the top of a routine's feed. */
+/** How much of the latest report its card shows before it is opened. */
+const reportPreviewHeight = 280;
+
+/** An earlier run's card when the run was missed, outside the compact list. */
+const missedCardHeight = 112;
+
 export function LatestReportCard(props: {
   run: RunView;
   /** The phone shows the whole report in a tighter card. */
@@ -158,7 +164,9 @@ export function LatestReportCard(props: {
           <If when={props.run.report}>
             <View
               style={
-                props.phone ? undefined : { maxHeight: 280, overflow: "hidden" }
+                props.phone
+                  ? undefined
+                  : { maxHeight: reportPreviewHeight, overflow: "hidden" }
               }
             >
               <chatText.View
@@ -253,7 +261,7 @@ export function EarlierReportCard(props: {
         borderWidth: 1,
         borderColor: c().border,
         cursor: "pointer",
-        height: missed() && !props.compact ? 110 : undefined,
+        height: missed() && !props.compact ? missedCardHeight : undefined,
       }}
     >
       <Label variant="small" tone="muted">

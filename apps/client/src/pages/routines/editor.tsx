@@ -13,6 +13,7 @@ import {
   ActionMenu,
   Button,
   colors,
+  dialogWidth,
   Field,
   focusRing,
   fontFamily,
@@ -50,9 +51,26 @@ interface ScheduleOption {
   onSelect: () => void;
 }
 
+/** A schedule select's menu. */
+const selectMenuWidth = { phone: 240, tablet: 200, desktop: 180 } as const;
+/** A row of that menu off touch screens. */
+const optionHeight = { tablet: 36, desktop: 32 } as const;
+/** The time of day beside the frequency. */
+const timeFieldWidth = { sheet: 140, tablet: 112, desktop: 116 } as const;
+/** The phone sheet's frequency and interval selects. */
+const frequencyWidth = { cron: 152, other: 120 } as const;
+/** The cron expression field. */
+const cronWidth = 160;
+/** The time zone field. */
+const timezoneWidth = { tablet: 240, desktop: 368 } as const;
+/** The brief: in the phone sheet when editing or creating, and on wider screens. */
+const briefHeight = { edit: 96, create: 124, wide: 112 } as const;
+/** The inline form's column. */
+const formWidth = 800;
+
 /**
- * The phone form's select: a 36pt trigger with 14pt text, opening the
- * design's titled bottom sheet of 48pt rows with the selected one tinted.
+ * The phone form's select: a 44pt trigger, opening the design's titled
+ * bottom sheet of 48pt rows with the selected one tinted.
  */
 function PhoneSelect(props: {
   label: string;
@@ -65,7 +83,7 @@ function PhoneSelect(props: {
   return (
     <MenuFrame
       popupStyle={{
-        width: 240,
+        width: selectMenuWidth.phone,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
@@ -89,7 +107,7 @@ function PhoneSelect(props: {
           focusVisibleStyle={focusRing(c(), "inset")}
           style={{
             ...row,
-            height: 36,
+            height: controlHeight.touch,
             gap: space[8],
             paddingHorizontal: space[12],
             cursor: "pointer",
@@ -170,7 +188,9 @@ function ScheduleSelect(props: {
     >
       <MenuFrame
         popupStyle={{
-          width: props.tablet ? 200 : 180,
+          width: props.tablet
+            ? selectMenuWidth.tablet
+            : selectMenuWidth.desktop,
           borderWidth: 1,
           borderColor: c().strong,
           backgroundColor: c().canvas,
@@ -213,7 +233,11 @@ function ScheduleSelect(props: {
               label={option().label}
               style={{
                 ...row,
-                height: touchScreen ? touchRow : props.tablet ? 34 : 30,
+                height: touchScreen
+                  ? touchRow
+                  : props.tablet
+                    ? optionHeight.tablet
+                    : optionHeight.desktop,
                 gap: space[8],
                 paddingHorizontal: space[12],
                 backgroundColor: option().checked ? c().selected : undefined,
@@ -337,8 +361,13 @@ export function RoutineEditor(props: {
   // The phone sheet: 36px controls with 14px text, a footer bar under the fields.
   const sheet = () => props.phone && !props.inline;
   // The tablet form uses 32px controls with a 10px inset; the desktop one 28px and 8px.
-  const control = () => (sheet() ? 36 : props.tablet ? 32 : 28);
-  const controlInset = () => (sheet() || props.tablet ? 10 : 8);
+  const control = () =>
+    sheet()
+      ? controlHeight.touch
+      : props.tablet
+        ? controlHeight.lg
+        : controlHeight.md;
+  const controlInset = () => (sheet() || props.tablet ? space[12] : space[8]);
   const input = () => ({
     height: control(),
     paddingHorizontal: controlInset(),
@@ -365,7 +394,11 @@ export function RoutineEditor(props: {
       <View
         style={{
           ...row,
-          width: sheet() ? 140 : props.tablet ? 110 : 114,
+          width: sheet()
+            ? timeFieldWidth.sheet
+            : props.tablet
+              ? timeFieldWidth.tablet
+              : timeFieldWidth.desktop,
           height: control(),
           gap: space[8],
           paddingHorizontal: controlInset(),
@@ -417,7 +450,7 @@ export function RoutineEditor(props: {
     >
       <Button
         label={uiText("cancel")}
-        size={sheet() ? 36 : 28}
+        size={sheet() ? controlHeight.touch : controlHeight.md}
         disabled={busy()}
         style={{ paddingHorizontal: space[16] }}
         onPress={props.onClose}
@@ -425,7 +458,7 @@ export function RoutineEditor(props: {
       <Button
         label={props.item ? uiText("save") : uiText("routineCreate")}
         tone="primary"
-        size={sheet() ? 36 : 28}
+        size={sheet() ? controlHeight.touch : controlHeight.md}
         disabled={!valid() || busy()}
         dimDisabled={!sheet()}
         style={{
@@ -452,7 +485,7 @@ export function RoutineEditor(props: {
             : space[16],
         gap: props.tablet ? space[12] : space[16],
         width: "100%",
-        maxWidth: props.inline ? 800 : undefined,
+        maxWidth: props.inline ? formWidth : undefined,
         borderTopWidth: sheet() ? 1 : 0,
         borderColor: c().border,
       }}
@@ -504,13 +537,13 @@ export function RoutineEditor(props: {
             style={
               sheet()
                 ? {
-                    height: props.item ? 96 : 124,
+                    height: props.item ? briefHeight.edit : briefHeight.create,
                     paddingVertical: space[8],
                     paddingHorizontal: space[12],
                     ...textStyle(type("small"), "prose"),
                   }
                 : {
-                    height: props.tablet ? 110 : 112,
+                    height: briefHeight.wide,
                     padding: space[12],
                     ...textStyle(type("small"), "prose"),
                   }
@@ -547,7 +580,13 @@ export function RoutineEditor(props: {
                 sheet()
                   ? kind() === "hourly"
                     ? { flex: 1, minWidth: 0 }
-                    : { width: kind() === "cron" ? 150 : 120, flexShrink: 0 }
+                    : {
+                        width:
+                          kind() === "cron"
+                            ? frequencyWidth.cron
+                            : frequencyWidth.other,
+                        flexShrink: 0,
+                      }
                   : select()
               }
               options={(Object.keys(kinds) as RoutineSchedule["kind"][]).map(
@@ -621,7 +660,9 @@ export function RoutineEditor(props: {
                 tablet={props.tablet}
                 phone={props.phone}
                 triggerStyle={
-                  sheet() ? { width: 120, flexShrink: 0 } : select()
+                  sheet()
+                    ? { width: frequencyWidth.other, flexShrink: 0 }
+                    : select()
                 }
                 options={HOURLY_STEPS.map((hours) => ({
                   label: interval(hours),
@@ -638,7 +679,9 @@ export function RoutineEditor(props: {
                 onChange={cron.set}
                 style={{
                   ...input(),
-                  ...(sheet() ? { flex: 1, minWidth: 0 } : { width: 160 }),
+                  ...(sheet()
+                    ? { flex: 1, minWidth: 0 }
+                    : { width: cronWidth }),
                 }}
               />
             </If>
@@ -708,7 +751,11 @@ export function RoutineEditor(props: {
             }))}
           />
         </If>,
-        sheet() ? undefined : props.tablet ? 240 : 366,
+        sheet()
+          ? undefined
+          : props.tablet
+            ? timezoneWidth.tablet
+            : timezoneWidth.desktop,
       )}
       <If when={!sheet()}>{actions()}</If>
     </View>
@@ -729,7 +776,7 @@ export function RoutineEditor(props: {
           sheet={props.phone}
           plainSheetHeader={props.phone}
           overPhoneNavigation={props.phone}
-          width={540}
+          width={dialogWidth.lg}
           onClose={props.onClose}
         >
           <SmoothScroll style={{ flexShrink: 1 }}>{form()}</SmoothScroll>
