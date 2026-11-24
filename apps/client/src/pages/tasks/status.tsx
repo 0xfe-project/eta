@@ -4,7 +4,7 @@ import { Image, View } from "nsh";
 import { Caption, colors, focusRing, Icon, Label, row } from "../../components";
 import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
-import { Badge } from "../../ui";
+import { Badge, Card } from "../../ui";
 import { UsageLine } from "./usage";
 
 export const statusKeys = {
@@ -286,7 +286,7 @@ export function TaskSummary(props: {
   const openTask = () =>
     uiText("taskCardOpenTask", { number: props.task.number });
   return (
-    <View style={{ borderWidth: 1, borderColor: c().border }}>
+    <Card>
       <View
         ref={(node) => props.controlRef?.(node)}
         role="button"
@@ -402,6 +402,6 @@ export function TaskSummary(props: {
           </If>
         </View>
       </If>
-    </View>
+    </Card>
   );
 }
