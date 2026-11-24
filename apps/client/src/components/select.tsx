@@ -12,7 +12,14 @@ import {
   touchScreen,
 } from "./menu";
 import { Icon, Label } from "./text";
-import { colors, row, Screen } from "./theme";
+import {
+  colors,
+  Fonts,
+  groupHeaderStyle,
+  row,
+  Screen,
+  textFaces,
+} from "./theme";
 import { control, icon, space } from "./tokens";
 
 /** The menu of a select on a desktop, unless its caller says. */
@@ -37,6 +44,8 @@ export function LayoutSelect(
   },
 ) {
   const c = colors();
+  const type = textFaces();
+  const fonts = Fonts();
   const layout = Screen();
   const native = () => menuEngine(menuPresentation(layout())) === "menu";
   const items = () => props.items ?? [];
@@ -127,7 +136,13 @@ export function LayoutSelect(
         </MenuFrame>
       }
     >
-      <Select {...props} />
+      <Select
+        {...props}
+        groupStyle={{
+          ...groupHeaderStyle(type("caption"), fonts(), c()),
+          ...(props.groupStyle as TextStyle | undefined),
+        }}
+      />
     </If>
   );
 }
