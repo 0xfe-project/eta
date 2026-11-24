@@ -643,6 +643,30 @@ export interface TaskDetailSections {
    * Absent from an older host.
    */
   usage?: TaskUsageView;
+  /**
+   * The plan its executor keeps with `create_step` / `update_step`, as it stood in the session of
+   * the executor's latest run: the last known state once the run is over. Empty when the task has
+   * not run, or its run made no steps. Read only. Absent from an older host.
+   */
+  steps?: TaskStepView[];
+}
+
+/* ------------------------------------------------------------------ steps */
+
+export const TASK_STEP_STATUSES = [
+  "pending",
+  "in_progress",
+  "completed",
+  "cancelled",
+] as const;
+export type TaskStepStatus = (typeof TASK_STEP_STATUSES)[number];
+
+/** One step of an executor's plan, in the order it made them. */
+export interface TaskStepView {
+  /** The session's own id for it (`t1`, `t2`…), never reused in that session. */
+  id: string;
+  content: string;
+  status: TaskStepStatus;
 }
 
 /* ------------------------------------------------------------------ usage */

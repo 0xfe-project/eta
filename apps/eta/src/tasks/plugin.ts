@@ -23,6 +23,7 @@ import type {
   TaskBoard,
 } from "./board";
 import type { TaskRunner } from "./runner";
+import type { TaskSteps } from "./steps";
 import type { WorkspaceChoice } from "./tools";
 import type { TaskUsageStore } from "./usage";
 import { TASK_ARCHIVED_FILTERS } from "@eta/client-contracts";
@@ -37,6 +38,8 @@ export interface TasksDeps {
     TaskUsageStore,
     "ofTask" | "onChange" | "ancestorsOf" | "briefs"
   >;
+  /** The plan of each task's executor (each task's `steps` section). */
+  steps?: Pick<TaskSteps, "ofRuns" | "onChange">;
   /** The workspace a task made in a conversation gets, when its parent does not say. */
   workspaceFor?: WorkspaceChoice;
   /** Where the board's settings (how soon quiet tasks are archived) are kept. */
@@ -131,7 +134,7 @@ function newTasksOf(call: CallFrame): NewTaskInput[] {
 }
 
 export function tasksPlugin(deps: TasksDeps, applied: () => void) {
-  const { board, runner, workspaceFor, settings, usage } = deps;
+  const { board, runner, workspaceFor, settings, usage, steps } = deps;
   // The board's tasks with their usage in brief, read in one pass for the whole list.
   const listed = (tasks: BoardTaskView[]): BoardTaskView[] => {
     if (usage === undefined) return tasks;
@@ -160,6 +163,9 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
             ...(usage === undefined
               ? {}
               : { usage: () => usage.ofTask(id, true) }),
+            ...(steps === undefined
+              ? {}
+              : { steps: () => steps.ofRuns(board.detail(id)!.runs) }),
           }),
         );
       };
@@ -184,6 +190,11 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           wire.push("tasks");
           for (const id of [taskId, ...usage.ancestorsOf(taskId)])
             if (targets.has(id)) wire.push(`tasks.${id}`);
+        }) ?? (() => undefined),
+
+        // A step of the executor's plan moved: its task's page, paced like the usage.
+        steps?.onChange((taskId) => {
+          if (targets.has(taskId)) wire.push(`tasks.${taskId}`);
         }) ?? (() => undefined),
 
         wire.handle("tasks", "usage", (call) => {
