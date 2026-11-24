@@ -6,7 +6,7 @@ import type {
   TranscriptSection,
   ViewCore,
 } from "@eta/client-contracts";
-import type { ViewRef } from "nsh";
+import type { JSX, ViewRef } from "nsh";
 import { logBlocks, savedSteps, savedTools } from "@eta/client-contracts";
 import { cleanup, computed, effect, signal, View } from "nsh";
 import {
@@ -106,6 +106,8 @@ export function MemberRun(props: {
   executorName?: string;
   /** Replaces the date and thinking level after the name, such as a task run's caption. */
   meta?: string;
+  /** Tabs drawn in the header row before Expand and Close, off a phone (the member's Inspect). */
+  tabs?: JSX.Element;
   onClose: () => void;
 }) {
   const host = useHost();
@@ -355,6 +357,7 @@ export function MemberRun(props: {
                   (stamp() ? "· " : "") + details().filter(Boolean).join(" · ")}
               </Label>
             </If>
+            {props.tabs}
             <View
               role="button"
               accessibilityLabel={uiText(

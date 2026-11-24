@@ -57,7 +57,7 @@ import { InviteAgents, StewardMenu } from "./members";
 import { deliveries, outgoingRow, waitsForOf } from "./outbox";
 import { questionRowIndex, questionSource } from "./question-row";
 import { RemoveMember } from "./remove-member";
-import { MemberRun } from "./run/member-run";
+import { MemberInspect } from "./run/member-inspect";
 import { RunPanel } from "./run/run-panel";
 
 /** The toast that says a late insert went in, as wide as the app's toasts. */
@@ -860,11 +860,11 @@ export function Conversation(props: {
       </If>
       <If when={member()}>
         <RunPanel
-          title={uiText("runTranscript")}
+          title={uiText("inspectRun")}
           phone={phone()}
           onClose={() => member.set(undefined)}
         >
-          <MemberRun
+          <MemberInspect
             session={member()!.session}
             agentId={member()!.id}
             phone={phone()}
