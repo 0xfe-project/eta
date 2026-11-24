@@ -3,6 +3,7 @@ import { View } from "nsh";
 import { colors, Empty, Icon, Label } from "../../components";
 import { icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { Badge } from "../../ui";
 
 export function PluginGlyph(props: { size: number }) {
   const c = colors();
@@ -108,25 +109,31 @@ export function Status(props: {
   phone?: boolean;
   hideOff?: boolean;
 }) {
-  const c = colors();
   const missing = () => props.item.state === "needs_config";
   const off = () => !props.item.enabled && props.hideOff !== true;
   return (
     <If when={off() || missing()}>
-      <Label
-        variant="caption"
-        lines={1}
-        tone={missing() ? "warningInk" : "muted"}
-        style={{
-          alignSelf: props.phone ? "flex-start" : "center",
-          paddingHorizontal: missing() ? space[8] : 0,
-          paddingVertical: 1,
-          borderWidth: missing() ? 1 : 0,
-          borderColor: c().warning,
-        }}
+      <If
+        when={missing() && !off()}
+        else={
+          <Label
+            variant="caption"
+            lines={1}
+            tone="muted"
+            style={{ alignSelf: props.phone ? "flex-start" : "center" }}
+          >
+            {uiText("pluginOffForAll")}
+          </Label>
+        }
       >
-        {off() ? uiText("pluginOffForAll") : uiText("needsConfiguring")}
-      </Label>
+        <Badge
+          label={uiText("needsConfiguring")}
+          tone="warning"
+          variant="outline"
+          size="caption"
+          style={{ alignSelf: props.phone ? "flex-start" : "center" }}
+        />
+      </If>
     </If>
   );
 }
