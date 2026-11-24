@@ -122,7 +122,7 @@ export function ArtifactRow(props: {
           gap: space[8],
           minHeight: props.phone ? control.touch : undefined,
           paddingHorizontal: space[12],
-          paddingVertical: list() ? space[12] : space[8],
+          paddingVertical: space[8],
           pointerEvents: "box-none",
         }}
       >
