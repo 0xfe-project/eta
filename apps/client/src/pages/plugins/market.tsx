@@ -6,7 +6,7 @@ import type {
   MarketPreview,
   PluginResults,
 } from "@eta/client-contracts";
-import type { JSX } from "nsh";
+import type { JSX, ScrollProps } from "nsh";
 import type { Layout } from "../../components";
 import {
   cleanup,
@@ -64,6 +64,8 @@ const POLL_LIMIT = 60;
 
 /** How many Composio toolkits the market draws at first, and each time Show more is pressed. */
 const BATCH = 48;
+/** How near the end of the list, in points, the next batch is drawn without Show more being pressed. */
+const NEAR_END = 400;
 /** How long a search waits for the next key before the list follows it. */
 const SEARCH_MS = 175;
 
@@ -146,10 +148,27 @@ export function Market(props: {
     );
   /** How many of the matching toolkits are drawn. A new search starts again from the first batch. */
   const drawn = signal(BATCH);
+  /** The height of the content when scrolling last drew a batch: another is drawn only once the content has grown. */
+  let drawnAt = 0;
   effect(() => {
     needle();
-    untracked(() => drawn.set(BATCH));
+    untracked(() => {
+      drawn.set(BATCH);
+      drawnAt = 0;
+    });
   });
+  /** Scrolled near the end of the list: draw the next batch. Show more stays for a list that does not fill the view. */
+  const nearEnd: NonNullable<ScrollProps["onScroll"]> = (event) => {
+    const end = event.contentSize.height;
+    if (
+      toolkits().length <= drawn() ||
+      end === drawnAt ||
+      event.offset.y + event.size.height < end - NEAR_END
+    )
+      return;
+    drawnAt = end;
+    drawn.update((n) => n + BATCH);
+  };
   const shownToolkits = () => toolkits().slice(0, drawn());
   const currentToolkit = () =>
     allToolkits().find((item) => toolkitKey(item) === detail());
@@ -656,7 +675,12 @@ export function Market(props: {
         </View>
       </Header>
       {props.tabs()}
-      <SmoothScroll style={grow} scrollbar={false}>
+      <SmoothScroll
+        style={grow}
+        scrollbar={false}
+        onScroll={nearEnd}
+        scrollEventThrottle={16}
+      >
         <View
           style={{
             paddingHorizontal: phone() ? space[16] : space[24],
