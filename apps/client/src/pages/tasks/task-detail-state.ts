@@ -130,6 +130,12 @@ export function createTaskDetailState(props: {
       describing.set(false);
     });
   }
+  /**
+   * Changes the status ahead of the host (#380): every place that shows the task shows the new
+   * status at once, and the menu, the sheet or the dialog that asked closes. If the host refuses
+   * it, the old status comes back and why is said under the status, where it was changed (not in
+   * the app's error strip too).
+   */
   function change(next: BoardTaskStatus) {
     if (submitting()) return;
     // The current status again changes nothing: no call, as on the web.
@@ -139,24 +145,24 @@ export function createTaskDetailState(props: {
     }
     statusError.set("");
     changing.set(next);
-    void mutate(async () => {
-      try {
-        await host.call("tasks", "update", { taskId: props.id, status: next });
-      } catch (problem) {
+    status.set(false);
+    cancelling.set(false);
+    review.set(undefined);
+    void host
+      .optimistic(props.id, { status: next }, () =>
+        host.call("tasks", "update", { taskId: props.id, status: next }),
+      )
+      .catch((problem: unknown) => {
         statusError.set(
           uiText("statusChangeFailed", {
             message:
               problem instanceof Error ? problem.message : String(problem),
           }),
         );
-        throw problem;
-      } finally {
-        changing.set(undefined);
-      }
-      status.set(false);
-      cancelling.set(false);
-      review.set(undefined);
-    });
+      })
+      .finally(() => {
+        if (changing() === next) changing.set(undefined);
+      });
   }
   function submitReview(next: "done" | "todo") {
     if (next === "done") {

@@ -141,7 +141,11 @@ export function PanelTask(props: {
                   onSelect={() => {
                     if (item().archivedAt)
                       void host.action(() =>
-                        host.call("tasks", "unarchive", { taskId: props.id }),
+                        host.optimistic(props.id, { archivedAt: null }, () =>
+                          host.call("tasks", "unarchive", {
+                            taskId: props.id,
+                          }),
+                        ),
                       );
                     else state.archive.set(true);
                   }}

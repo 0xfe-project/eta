@@ -67,8 +67,11 @@ export function Tasks(props: {
   const boardDrag = taskDropZones<BoardTaskStatus>((id, status) => {
     const task = host.tasks().find((item) => item.id === id);
     if (task && !task.subtasks && task.status !== status) {
+      // The card lands in its column at once (#380); a refused move puts it back.
       void host.action(() =>
-        host.call("tasks", "update", { taskId: id, status }),
+        host.optimistic(id, { status }, () =>
+          host.call("tasks", "update", { taskId: id, status }),
+        ),
       );
     }
   });

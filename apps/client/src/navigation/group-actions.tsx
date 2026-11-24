@@ -10,6 +10,7 @@ import { ActionItem, Button, Label, Modal, row } from "../components";
 import { FieldDialog } from "../components/field-dialog";
 import { MenuFrame } from "../components/menu";
 import { colors } from "../components/theme";
+import { showToast } from "../components/toast";
 import { control, shadow, space, weight } from "../components/tokens";
 import { uiText } from "../i18n";
 import { useHost } from "../services/host";
@@ -171,6 +172,14 @@ export function ArchiveGroup(props: {
   const running = () => runningReplies(props.group);
   async function archive() {
     if (busy()) return;
+    // A group with no reply running is archived ahead of the host (#380), with a toast to take it
+    // back; stopping replies cannot be taken back quietly, so that one waits for the host.
+    if (!running()) {
+      archiveGroupAhead(host, id);
+      props.onArchived(id);
+      props.onClose();
+      return;
+    }
     busy.set(true);
     const result = await host.action(() =>
       host.call("conversations", "update", {
@@ -234,7 +243,7 @@ export function ArchiveGroup(props: {
                 label={uiText("archive")}
                 tone="danger"
                 size={control.md}
-                disabled={busy()}
+                busy={busy()}
                 onPress={() => void archive()}
               />
             </View>
@@ -261,7 +270,7 @@ export function ArchiveGroup(props: {
             label={uiText("archive")}
             tone="danger"
             size={control.touch}
-            disabled={busy()}
+            busy={busy()}
             onPress={() => void archive()}
           />
           <Button
@@ -274,4 +283,27 @@ export function ArchiveGroup(props: {
       </If>
     </Modal>
   );
+}
+
+/** Archives a group ahead of the host: it leaves the sidebar at once, and a toast can bring it back. */
+function archiveGroupAhead(host: ReturnType<typeof useHost>, id: string) {
+  const update = (archived: boolean) =>
+    host.optimistic(id, { archived }, () =>
+      host.call("conversations", "update", { conversationId: id, archived }),
+    );
+  const archived = update(true);
+  archived.catch((problem: unknown) =>
+    showToast({
+      title: uiText("groupArchiveFailed"),
+      body: problem instanceof Error ? problem.message : String(problem),
+      tone: "red",
+    }),
+  );
+  showToast({
+    title: uiText("groupArchivedToast"),
+    action: {
+      label: uiText("undo"),
+      onPress: () => void archived.then(() => update(false)).catch(() => {}),
+    },
+  });
 }

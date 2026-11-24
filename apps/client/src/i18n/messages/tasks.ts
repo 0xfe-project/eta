@@ -531,4 +531,6 @@ export const tasksMessages = {
     "This turn failed: {{reason}}",
     "这一轮失败了：{{reason}}",
   ],
+  taskArchivedToast: ["Task archived", "任务已归档"],
+  taskArchiveFailed: ["Could not archive the task", "没能归档这个任务"],
 } as const;
