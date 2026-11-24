@@ -535,11 +535,11 @@ export function ConfigurePlugin(props: {
           labelVariant="caption"
           style={{ paddingHorizontal: props.phone ? space[20] : space[12] }}
           disabled={
-            busy() ||
             accessBusy() ||
             props.item.fields.some(numericIssue) ||
             !(Object.keys(values()).length || Object.keys(numberInput()).length)
           }
+          busy={busy()}
           onPress={() => void submit()}
         />
       </View>

@@ -311,9 +311,8 @@ export function NewConversation(props: {
             label={localizedText("Start", "开始")}
             tone="primary"
             size={control.sm}
-            disabled={
-              !agents().length || saving() || !host.can("conversations.create")
-            }
+            disabled={!agents().length || !host.can("conversations.create")}
+            busy={saving()}
             onPress={() => void start()}
           />
         </If>

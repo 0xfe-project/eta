@@ -453,7 +453,8 @@ export function AgentEditor(props: AgentEditorProps) {
               />
               <Button
                 label={localizedText("Delete", "删除")}
-                disabled={busy()}
+                tone="danger"
+                busy={busy()}
                 onPress={() => void remove()}
               />
             </View>

@@ -7,7 +7,7 @@ import type {
 import type { Signal } from "nsh";
 import type { Layout } from "../../components";
 import type { ArtifactFilters } from "./artifacts/filter";
-import { View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Button,
   Caption,
@@ -90,6 +90,7 @@ export function ConversationPanel(props: {
   const c = colors();
   const panel = props.tab;
   const model = props.model;
+  const savingModel = signal(false);
   const phone = () => props.layout === "phone";
   const tasks = () =>
     host.tasks().filter((entry) => entry.conversationId === props.id);
@@ -236,14 +237,19 @@ export function ConversationPanel(props: {
                               label={uiText("saveModel")}
                               tone="primary"
                               disabled={!model()}
-                              onPress={() =>
-                                void host.action(async () => {
-                                  await host.call("captain", "setModel", {
-                                    model: model(),
-                                  });
-                                  model.set("");
-                                })
-                              }
+                              busy={savingModel()}
+                              onPress={() => {
+                                if (savingModel() || !model()) return;
+                                savingModel.set(true);
+                                void host
+                                  .action(async () => {
+                                    await host.call("captain", "setModel", {
+                                      model: model(),
+                                    });
+                                    model.set("");
+                                  })
+                                  .finally(() => savingModel.set(false));
+                              }}
                             />
                           </View>
                           <Label variant="caption" tone="muted">

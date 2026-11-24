@@ -65,7 +65,10 @@ export function McpDetail(props: {
   const login = signal<McpResults["login"]>();
   const callback = signal("");
   const confirm = signal(false);
-  const busy = signal(false);
+  const busyAction = signal<"" | "login" | "complete" | "logout" | "reconnect">(
+    "",
+  );
+  const busy = () => !!busyAction();
   const feedback = signal("");
   const phone = () => props.layout === "phone";
   const server = props.item;
@@ -74,14 +77,17 @@ export function McpDetail(props: {
   const ref = () => ({ agentId: server().agentId, server: server().server });
   const operating = () =>
     !server().overriddenBy && server().state !== "disabled";
-  async function run(action: () => Promise<void>) {
+  async function run(
+    actionName: "login" | "complete" | "logout" | "reconnect",
+    action: () => Promise<void>,
+  ) {
     if (busy()) return;
-    busy.set(true);
+    busyAction.set(actionName);
     feedback.set("");
     try {
       await host.action(action);
     } finally {
-      busy.set(false);
+      busyAction.set("");
     }
   }
 
@@ -180,9 +186,12 @@ export function McpDetail(props: {
               />
               <Button
                 label={uiText("finishSignIn")}
-                disabled={!callback().trim() || busy()}
+                disabled={
+                  !callback().trim() || (busy() && busyAction() !== "complete")
+                }
+                busy={busyAction() === "complete"}
                 onPress={() =>
-                  void run(async () => {
+                  void run("complete", async () => {
                     await host.call("mcp", "completeLogin", {
                       pendingId: flow().pendingId,
                       callbackUrl: callback().trim(),
@@ -212,9 +221,10 @@ export function McpDetail(props: {
               label={uiText("signIn")}
               tone="primary"
               size={phone() ? control.lg : control.sm}
-              disabled={busy()}
+              disabled={busy() && busyAction() !== "login"}
+              busy={busyAction() === "login"}
               onPress={() =>
-                void run(async () => {
+                void run("login", async () => {
                   const result = await host.call<McpResults["login"]>(
                     "mcp",
                     "login",
@@ -241,10 +251,12 @@ export function McpDetail(props: {
             <Button
               label={uiText("mcpReload")}
               icon="refresh"
+              spinIcon
               size={phone() ? control.lg : control.sm}
-              disabled={busy()}
+              disabled={busy() && busyAction() !== "reconnect"}
+              busy={busyAction() === "reconnect"}
               onPress={() =>
-                void run(async () => {
+                void run("reconnect", async () => {
                   const result = await host.call<McpResults["reconnect"]>(
                     "mcp",
                     "reconnect",
@@ -277,9 +289,10 @@ export function McpDetail(props: {
               />
               <Button
                 label={uiText("signOut")}
-                disabled={busy()}
+                disabled={busy() && busyAction() !== "logout"}
+                busy={busyAction() === "logout"}
                 onPress={() =>
-                  void run(async () => {
+                  void run("logout", async () => {
                     await host.call("mcp", "logout", ref());
                     confirm.set(false);
                   })

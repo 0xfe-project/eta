@@ -16,9 +16,11 @@ import {
   grow,
   Label,
   MessagesSkeleton,
+  row,
 } from "../../components";
-import { settled } from "../../components/pending";
+import { settled, shownWhile } from "../../components/pending";
 import { wheelScroll } from "../../components/scroll-follow";
+import { Spinner } from "../../components/spinner";
 import {
   control,
   icon,
@@ -223,6 +225,7 @@ export function ConversationTimeline(props: {
   }
   // The skeleton, once it appeared, stays its least time before the messages (#380).
   const loaded = settled(() => props.loaded);
+  const pagingShown = shownWhile(() => props.paging);
   return (
     <If
       when={loaded() && !props.noCachedMessages}
@@ -305,18 +308,22 @@ export function ConversationTimeline(props: {
                 <View
                   role="button"
                   accessibilityLabel={uiText("loadEarlierMessages")}
-                  accessibilityState={{ disabled: props.paging }}
+                  accessibilityState={{ busy: props.paging }}
                   onPress={() => {
                     if (!props.paging) props.onPageOlder();
                   }}
                   hoverStyle={{ opacity: opacity.muted }}
                   focusVisibleStyle={focusRing(c())}
                   style={{
+                    ...row,
+                    gap: space[8],
                     paddingVertical: space[4],
-                    opacity: props.paging ? opacity.disabled : 1,
                     cursor: props.paging ? "default" : "pointer",
                   }}
                 >
+                  <If when={pagingShown()}>
+                    <Spinner size={icon.sm} tone="muted" />
+                  </If>
                   <Label variant="small" tone="muted">
                     {uiText("loadEarlierMessages")}
                   </Label>
