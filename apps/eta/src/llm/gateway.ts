@@ -14,14 +14,17 @@ import type {
   LlmModel,
   LlmProblem,
   LlmQuota,
+  SourceSummary,
+  SourceSummaryUpdate,
 } from "@eta/client-contracts";
 import type { Connector, KeyGroups } from "./connectors";
 import type { Connection } from "./state";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { CpaHttpError } from "@cpajs/cpa/client";
-import { billingRetryAt } from "@eta/client-contracts";
+import { billingRetryAt, isMonthDuration } from "@eta/client-contracts";
 import { excludesAll, updateKeys } from "./connectors";
 import { codeOf, LlmError, notFound, problem } from "./problems";
+import { selectSourceQuota } from "./source-quota";
 import {
   connectionReason,
   connectionView,
@@ -59,6 +62,7 @@ interface AccountRead {
   abort: AbortController;
   retryAt: number;
   failures: number;
+  succeeded: boolean;
 }
 
 interface Check {
@@ -490,46 +494,177 @@ export class Gateway {
     const reads = enabled.flatMap((connection) => {
       const connector = this.#byId.get(connection.connector);
       if (!connector?.usage) return [];
-      if (this.#usage.get(connection.id)?.revision !== connection.quotaRevision)
-        this.#forgetUsage(connection.id);
-      const current = this.#usage.get(connection.id);
-      if (current && this.#now() < current.retryAt) return [current];
-      const abort = new AbortController();
-      const entry: AccountRead = {
-        revision: connection.quotaRevision,
-        abort,
-        retryAt: Infinity,
-        failures: current?.failures ?? 0,
-        reading: this.#accountUsage(connection, connector, abort.signal),
-      };
-      this.#usage.set(connection.id, entry);
-      entry.reading = entry.reading.then(
-        (quota) => {
-          entry.retryAt = quota.retryAt
-            ? Math.max(this.#now() + 15_000, Date.parse(quota.retryAt))
-            : this.#now() + 15_000;
-          if (
-            quota.error?.code === "model_forbidden" ||
-            quota.error?.code === "invalid_api_key" ||
-            quota.error?.code === "login_expired"
-          )
-            entry.retryAt = Infinity;
-          entry.failures =
-            quota.error?.code === "rate_limited" ? entry.failures + 1 : 0;
-          return quota;
-        },
-        (error) => {
-          if (this.#usage.get(connection.id) === entry)
-            this.#usage.delete(connection.id);
-          throw error;
-        },
-      );
-      return [entry];
+      return [this.#readUsage(connection, connector)];
     });
     const result = await Promise.all(reads.map((entry) => entry.reading));
     return result.filter(
       (quota, index) => this.#usage.get(quota.connectionId) === reads[index],
     );
+  }
+
+  /** Read-only: each result belongs to one credential and one unambiguous monthly window. */
+  async monthlySummaries(
+    schedule: (read: () => Promise<LlmQuota>) => Promise<LlmQuota>,
+    warn: (message: string) => void,
+  ): Promise<SourceSummary[]> {
+    const connections = await this.#connections();
+    const items = await Promise.all(
+      connections.map(async (connection) => {
+        const { id, quotaRevision } = connection;
+        const empty = {
+          source: "account" as const,
+          id,
+          quotaRevision: quotaRevision ?? null,
+          value: null,
+        };
+        const quota = await this.#readSummaryQuota(connection, schedule, warn);
+        if (!quota) return empty;
+        const windows = quota.windows.filter(
+          (w) =>
+            w.kind === "monthly" &&
+            (w.durationSeconds === undefined ||
+              isMonthDuration(w.durationSeconds)),
+        );
+        const window = windows[0];
+        if (
+          windows.length !== 1 ||
+          !window ||
+          !Number.isFinite(window.used) ||
+          window.used < 0 ||
+          window.used > 100 ||
+          (window.resetsAt !== undefined &&
+            !(Date.parse(window.resetsAt) > this.#now()))
+        )
+          return empty;
+        return {
+          ...empty,
+          value: {
+            monthly: {
+              usedPercent: window.used,
+              ...(window.resetsAt ? { resetsAt: window.resetsAt } : {}),
+            },
+          },
+        };
+      }),
+    );
+    const current = new Map((await this.#connections()).map((c) => [c.id, c]));
+    return items.map((item) =>
+      current.get(item.id)?.quotaRevision === item.quotaRevision &&
+      current.get(item.id)?.state === "active"
+        ? item
+        : { ...item, value: null },
+    );
+  }
+
+  async streamQuotaSummaries(
+    schedule: (read: () => Promise<LlmQuota>) => Promise<LlmQuota>,
+    warn: (message: string) => void,
+    publish: (item: SourceSummaryUpdate) => void,
+  ): Promise<void> {
+    const connections = await this.#connections();
+    await Promise.all(
+      connections.map(async (connection) => {
+        const { id, quotaRevision } = connection;
+        const quota = await this.#readSummaryQuota(connection, schedule, warn);
+        let selected = null;
+        if (quota) {
+          const current = await this.#connection(id).catch(() => undefined);
+          if (
+            current?.state === "active" &&
+            current.quotaRevision === quotaRevision &&
+            this.#usage.get(id)?.revision === quotaRevision
+          )
+            selected = selectSourceQuota(quota.windows, this.#now());
+        }
+        publish({
+          source: "account",
+          id,
+          quotaRevision: quotaRevision ?? null,
+          value: selected === null ? null : { quota: selected },
+        });
+      }),
+    );
+  }
+
+  async #readSummaryQuota(
+    connection: Connection,
+    schedule: (read: () => Promise<LlmQuota>) => Promise<LlmQuota>,
+    warn: (message: string) => void,
+  ): Promise<LlmQuota | undefined> {
+    const { id, quotaRevision } = connection;
+    const connector = this.#byId.get(connection.connector);
+    if (!quotaRevision || !connector?.usage || connection.state !== "active")
+      return undefined;
+    const entry = this.#readUsage(connection, connector, schedule, warn);
+    const quota = await entry.reading.catch(() => {
+      warn(
+        `[eta] billing ${connector.info.id} source=${quotaRevision.slice(0, 12)} failure=unavailable`,
+      );
+      return undefined;
+    });
+    return quota && !quota.error && this.#usage.get(id) === entry
+      ? quota
+      : undefined;
+  }
+
+  #readUsage(
+    connection: Connection,
+    connector: Connector,
+    schedule?: (read: () => Promise<LlmQuota>) => Promise<LlmQuota>,
+    warn?: (message: string) => void,
+  ): AccountRead {
+    if (this.#usage.get(connection.id)?.revision !== connection.quotaRevision)
+      this.#forgetUsage(connection.id);
+    const current = this.#usage.get(connection.id);
+    if (
+      current &&
+      this.#now() < current.retryAt &&
+      !(schedule && current.succeeded)
+    )
+      return current;
+    const abort = new AbortController();
+    const read = () =>
+      this.#accountUsage(connection, connector, abort.signal, !schedule);
+    const entry: AccountRead = {
+      revision: connection.quotaRevision,
+      abort,
+      retryAt: Infinity,
+      failures: current?.failures ?? 0,
+      succeeded: false,
+      reading: schedule ? schedule(read) : read(),
+    };
+    this.#usage.set(connection.id, entry);
+    entry.reading = entry.reading.then(
+      (quota) => {
+        entry.succeeded = !quota.error;
+        entry.retryAt = quota.retryAt
+          ? Math.max(this.#now() + 15_000, Date.parse(quota.retryAt))
+          : this.#now() + 15_000;
+        if (
+          quota.error?.code === "model_forbidden" ||
+          quota.error?.code === "invalid_api_key" ||
+          quota.error?.code === "login_expired"
+        )
+          entry.retryAt = Infinity;
+        entry.failures =
+          quota.error?.code === "rate_limited" ? entry.failures + 1 : 0;
+        if (quota.error && warn && !abort.signal.aborted) {
+          const retry = Number.isFinite(entry.retryAt)
+            ? new Date(entry.retryAt).toISOString()
+            : "credential_change";
+          warn(
+            `[eta] billing ${connector.info.id} source=${connection.quotaRevision?.slice(0, 12)} failure=${quota.error.code} retry=${retry}`,
+          );
+        }
+        return quota;
+      },
+      (error) => {
+        if (this.#usage.get(connection.id) === entry)
+          this.#usage.delete(connection.id);
+        throw error;
+      },
+    );
+    return entry;
   }
 
   #forgetUsage(id: string): void {
@@ -541,6 +676,7 @@ export class Gateway {
     connection: Connection,
     connector: Connector,
     cancel: AbortSignal,
+    checkHealth: boolean,
   ): Promise<LlmQuota> {
     const signal = AbortSignal.any([
       AbortSignal.timeout(USAGE_TIMEOUT_MS),
@@ -556,6 +692,7 @@ export class Gateway {
       failure = error;
     }
     if (
+      checkHealth &&
       rejected(codeOf(failure)) &&
       !apiKey &&
       connection.source.kind === "file"
@@ -572,7 +709,7 @@ export class Gateway {
         if (codeOf(error) !== undefined) failure = error;
       }
     }
-    if (!cancel.aborted)
+    if (checkHealth && !cancel.aborted)
       this.#record(connection.id, {
         started,
         done: this.#now(),

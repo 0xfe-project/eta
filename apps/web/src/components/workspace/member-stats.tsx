@@ -1,15 +1,8 @@
+import type { MemberSpend } from "@eta/client-contracts";
+import { displayContext, displaySpend } from "@eta/client-contracts";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useSession, useSessionActions } from "@/queries/sessions";
-
-const tokens = (count: number | undefined) =>
-  count === undefined
-    ? "—"
-    : count >= 1_000_000
-      ? `${(count / 1_000_000).toFixed(1)}M`
-      : count >= 1_000
-        ? `${(count / 1_000).toFixed(1)}k`
-        : String(count);
 
 /**
  * What one member's session has spent and is chasing — the numbers that belong to a member rather
@@ -29,7 +22,10 @@ export function MemberStats({
   inline?: boolean;
   className?: string;
 }) {
-  const { t: translateText } = useTranslation(["chat", "common"] as const);
+  const { t: translateText, i18n } = useTranslation([
+    "chat",
+    "common",
+  ] as const);
   const session = useSession(sessionId);
   const { goal: setGoal } = useSessionActions();
   if (sessionId === undefined)
@@ -38,7 +34,10 @@ export function MemberStats({
         {translateText("chat:groups.members.noSession")}
       </p>
     );
-  const { usage, goal, tools, model } = session ?? {};
+  const { spend, goal, tools, model } = session ?? {};
+  const count = (key: keyof MemberSpend) =>
+    displaySpend(spend?.[key], i18n.language);
+  const context = displayContext(session?.context, sessionId, i18n.language);
   const rate = Math.round((session?.metrics?.tokensPerSec ?? 0) * 10) / 10;
   const act = (action: "pause" | "resume" | "clear") =>
     setGoal.mutate(
@@ -57,16 +56,10 @@ export function MemberStats({
         className={`flex min-w-0 items-baseline gap-2 font-mono text-[10px] text-muted-foreground tabular-nums ${className ?? ""}`}
       >
         <span className="min-w-0 truncate">
-          in <span className="text-foreground">{tokens(usage?.input)}</span> ·
-          out <span className="text-foreground">{tokens(usage?.output)}</span> ·
-          cache{" "}
-          <span className="text-foreground">
-            {tokens(
-              usage === undefined
-                ? undefined
-                : usage.cacheRead + usage.cacheWrite,
-            )}
-          </span>
+          <span title={context.detail}>{context.label}</span> · in{" "}
+          <span className="text-foreground">{count("input")}</span> · out{" "}
+          <span className="text-foreground">{count("output")}</span> · cache{" "}
+          <span className="text-foreground">{count("cache")}</span>
           {" · "}
           {tools === undefined ? "tools —" : `tools ${tools.length}`}
         </span>
@@ -84,16 +77,10 @@ export function MemberStats({
           now" are one question, and the rate is the half that proves the session is alive. */}
       <p className="flex items-baseline gap-2">
         <span className="min-w-0 flex-1 truncate">
-          in <span className="text-foreground">{tokens(usage?.input)}</span> ·
-          out <span className="text-foreground">{tokens(usage?.output)}</span> ·
-          cache{" "}
-          <span className="text-foreground">
-            {tokens(
-              usage === undefined
-                ? undefined
-                : usage.cacheRead + usage.cacheWrite,
-            )}
-          </span>
+          <span title={context.detail}>{context.label}</span> · in{" "}
+          <span className="text-foreground">{count("input")}</span> · out{" "}
+          <span className="text-foreground">{count("output")}</span> · cache{" "}
+          <span className="text-foreground">{count("cache")}</span>
         </span>
         {rate === 0 ? null : (
           <span className="shrink-0 text-state-success">{rate} tok/s</span>

@@ -197,6 +197,8 @@ export function EntityRow(props: {
   /** The leading slot's side: 24, or 28 for the tablet's agent avatars. */
   leadingSize?: number;
   meta?: JSX.Element | string;
+  /** Let phone metadata use the full width beneath the title and status. */
+  wideMeta?: boolean;
   titleTone?: "ink" | "muted";
   strike?: boolean;
   lane?: boolean;
@@ -218,6 +220,20 @@ export function EntityRow(props: {
 }) {
   const c = colors();
   const trailingHeight = () => (props.stacked ? 28 : 24);
+  const title = () => (
+    <Label
+      weight={weight.regular}
+      tone={props.titleTone ?? "ink"}
+      style={{
+        ...(props.wideMeta ? { flexShrink: 1 } : {}),
+        ...(props.strike
+          ? { textDecorationLine: "line-through" as const }
+          : {}),
+      }}
+    >
+      {props.title}
+    </Label>
+  );
   return (
     <View
       style={{
@@ -263,15 +279,14 @@ export function EntityRow(props: {
           </View>
         </If>
         <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-          <Label
-            weight={weight.regular}
-            tone={props.titleTone ?? "ink"}
-            style={
-              props.strike ? { textDecorationLine: "line-through" } : undefined
-            }
-          >
-            {props.title}
-          </Label>
+          <If when={props.wideMeta} else={title()}>
+            <View style={{ ...row, justifyContent: "space-between" }}>
+              {title()}
+              <If when={props.status}>
+                {(status) => <StatusLine status={status()} />}
+              </If>
+            </View>
+          </If>
           <If when={props.stacked ? props.status : undefined}>
             {(status) => <StatusLine status={status()} />}
           </If>
@@ -284,7 +299,7 @@ export function EntityRow(props: {
             {props.meta}
           </If>
         </View>
-        <If when={props.lane !== false && !props.stacked}>
+        <If when={props.lane !== false && !props.stacked && !props.wideMeta}>
           <StatusLane status={props.status} width={props.laneWidth} />
         </If>
       </View>

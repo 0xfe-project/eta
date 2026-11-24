@@ -99,6 +99,50 @@ const stateOf = (managed: ManagedSession) => {
 };
 
 describe("a session on an ACP agent", () => {
+  it("publishes the ACP pair while billing stays unknown, then records field coverage", async () => {
+    const { manager } = setup();
+    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    await run(managed, "[usage:none]");
+    const view = () => managed.session.view.snapshot().sections;
+    expect(view().context).toMatchObject({
+      source: "acp",
+      session: managed.meta.id,
+      model: "acp.fake:model-a",
+      used: 64000,
+      window: 128000,
+      reason: null,
+    });
+    expect(view().spend).toEqual({ input: null, output: null, cache: null });
+    await run(
+      managed,
+      '[usage:{"inputTokens":10,"outputTokens":0,"cachedReadTokens":0,"totalTokens":10}]',
+    );
+    expect(view().spend).toEqual({
+      input: { value: 10, coverage: "partial" },
+      output: { value: 0, coverage: "partial" },
+      cache: { value: 0, coverage: "partial" },
+    });
+  });
+
+  it("keeps a silent prompt's explicit zeros and a later gap in coverage", async () => {
+    const { manager } = setup();
+    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const spend = () => managed.session.view.snapshot().sections.spend;
+    await run(
+      managed,
+      '[silent][usage:{"inputTokens":0,"outputTokens":0,"cachedReadTokens":0,"cachedWriteTokens":0,"totalTokens":0}]',
+    );
+    const zero = { value: 0, coverage: "complete" };
+    expect(spend()).toEqual({ input: zero, output: zero, cache: zero });
+    await run(managed, "[silent][usage:none]");
+    const partial = { value: 0, coverage: "partial" };
+    expect(spend()).toEqual({
+      input: partial,
+      output: partial,
+      cache: partial,
+    });
+  });
+
   it("streams the agent's turn into the journal as an eta turn", async () => {
     const { manager, agent } = setup();
     const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });

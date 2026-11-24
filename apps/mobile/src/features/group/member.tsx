@@ -1,5 +1,6 @@
 import type {
   ConversationResults,
+  MemberSpend,
   MemberView,
   MessageView,
   StoredTask,
@@ -9,9 +10,10 @@ import type {
 } from "@eta/client-contracts";
 // 03k Member details: one member's numbers and what can be done about it, and Only, its side of the group.
 
+import { displayContext, displaySpend } from "@eta/client-contracts";
 import { computed, signal, Text, View } from "nsh";
 import { agentById } from "../../app/lists";
-import { t } from "../../i18n";
+import { language, t } from "../../i18n";
 import { go } from "../../nav/links";
 import { nav, open } from "../../nav/stack";
 import { AgentAvatar } from "../../ui/AgentAvatar";
@@ -22,7 +24,7 @@ import { Body, Header, Page } from "../../ui/Page";
 import { Sheet } from "../../ui/Sheet";
 import { Empty, Loading } from "../../ui/States";
 import { call, useTarget } from "../../wire/target";
-import { ContextPanel, contextUse, useWindow } from "./context";
+import { ContextPanel } from "./context";
 import {
   act,
   agentName,
@@ -30,7 +32,6 @@ import {
   RowCaret,
   SheetRow,
   statusLabel,
-  tokens,
   useSession,
 } from "./shared";
 
@@ -119,24 +120,11 @@ function MemberBody(props: {
       : statusLabel(props.member.status);
   const rate = () =>
     Math.round((session()?.metrics?.tokensPerSec ?? 0) * 10) / 10;
-  const cache = () => {
-    const usage = session()?.usage;
-    return usage === undefined ? undefined : usage.cacheRead + usage.cacheWrite;
-  };
+  const count = (key: keyof MemberSpend) =>
+    displaySpend(session()?.spend?.[key], language());
   const model = () => {
     const current = session()?.model?.id;
     return current === undefined ? "—" : modelName(current);
-  };
-  const windowOf = useWindow();
-  const context = () => {
-    const view = session();
-    return contextUse({
-      messages: view?.transcript?.messages ?? [],
-      before: view?.transcript?.messagesBefore ?? 0,
-      tools: view?.tools ?? [],
-      prompt: view?.prompt,
-      window: windowOf(view?.model?.id),
-    });
   };
   /** The context panel is open: how full the window is, and Compact. */
   const contextOpen = signal(false);
@@ -186,7 +174,7 @@ function MemberBody(props: {
           <Text class="text-md leading-[18px] text-foreground">{model()}</Text>
           <View class="flex-row items-center gap-2">
             <Text class="truncate grow basis-0 text-sm leading-[18px] text-muted-foreground">
-              {`in ${tokens(session()?.usage?.input)} · out ${tokens(session()?.usage?.output)} · cache ${tokens(cache())}`}
+              {`in ${count("input")} · out ${count("output")} · cache ${count("cache")}`}
             </Text>
             <If when={rate() !== 0}>
               <Text class="text-sm leading-[18px] text-state-success">{`${rate()} tok/s`}</Text>
@@ -207,11 +195,13 @@ function MemberBody(props: {
         </If>
         <SheetRow
           title={t("group.context.row")}
-          subtitle={t("group.context.summary", {
-            percent: context().percent,
-            used: tokens(context().used),
-            window: tokens(context().window),
-          })}
+          subtitle={
+            displayContext(
+              session()?.context,
+              props.member.sessionId,
+              language(),
+            ).detail
+          }
           testID="member-context"
           trailing={<RowCaret />}
           onPress={() => contextOpen.set(!contextOpen())}
@@ -219,7 +209,7 @@ function MemberBody(props: {
         <If when={contextOpen()}>
           <ContextPanel
             session={props.member.sessionId as string}
-            use={context()}
+            reading={session()?.context}
           />
         </If>
       </If>

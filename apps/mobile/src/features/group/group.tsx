@@ -9,7 +9,11 @@ import type {
   TimelineSection,
 } from "@eta/client-contracts";
 import type { JSX } from "nsh";
-import { runningFirst } from "@eta/client-contracts";
+import {
+  displayContext,
+  displaySpend,
+  runningFirst,
+} from "@eta/client-contracts";
 import { computed, Scroll, signal, Text, View } from "nsh";
 import {
   agents,
@@ -18,7 +22,7 @@ import {
   machineById,
   projectById,
 } from "../../app/lists";
-import { t } from "../../i18n";
+import { language, t } from "../../i18n";
 import { go } from "../../nav/links";
 import { open } from "../../nav/stack";
 import { AgentAvatar } from "../../ui/AgentAvatar";
@@ -40,7 +44,6 @@ import {
   SheetRow,
   SheetTitle,
   statusLabel,
-  tokens,
   useSession,
 } from "./shared";
 import { StewardSheet } from "./steward";
@@ -122,7 +125,7 @@ function MemberRow(props: {
     if (props.member.sessionId === null) return t("group.member.noSession");
     const view = session();
     const model = view?.model?.id;
-    return `${model === undefined ? "—" : modelName(model)} · in ${tokens(view?.usage?.input)} · out ${tokens(view?.usage?.output)}`;
+    return `${model === undefined ? "—" : modelName(model)} · ${displayContext(view?.context, props.member.sessionId, language()).label} · in ${displaySpend(view?.spend?.input, language())} · out ${displaySpend(view?.spend?.output, language())} · cache ${displaySpend(view?.spend?.cache, language())}`;
   };
   return (
     <View

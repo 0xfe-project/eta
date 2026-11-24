@@ -178,6 +178,9 @@ function runtimeModel(
     input: model.input ?? ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow,
+    ...(model.contextWindow === undefined
+      ? { assumedContextWindow: true }
+      : {}),
     maxTokens: model.maxTokens ?? Math.min(8_192, contextWindow),
     // pi-ai opts tool calls into `strict` by default, and a provider either ignores the
     // key or rejects it outright — Gemini's FunctionDeclaration has four fields and

@@ -453,7 +453,7 @@
     "assistant": "助手",
     "tooldefs": "工具定义",
     "tool": "工具结果",
-    "ring": "上下文 {{percent}}%：已用 {{used}}，窗口 {{window}}k"
+    "ring": "上下文 {{detail}}"
   },
   "sections": {
     "groups": "群聊",

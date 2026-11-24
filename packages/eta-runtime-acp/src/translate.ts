@@ -30,7 +30,7 @@ import type {
   RunDelegateContext,
   Usage,
 } from "@eta/core";
-import { unreportedUsage } from "@eta/core";
+import { unreportedUsage, withUsageEvidence } from "@eta/core";
 
 type Block = AssistantMessage["content"][number];
 
@@ -108,15 +108,23 @@ export function usageOfTurn(reported: AcpUsage): Usage {
     thought > 0 &&
     parts + thought === count(reported.totalTokens);
   const output = count(reported.outputTokens) + (beside ? thought : 0);
-  return {
-    ...emptyUsage(),
-    input,
-    output,
-    cacheRead,
-    cacheWrite,
-    ...(thought === undefined ? {} : { reasoning: thought }),
-    totalTokens: input + output + cacheRead + cacheWrite,
-  };
+  return withUsageEvidence(
+    {
+      ...emptyUsage(),
+      input,
+      output,
+      cacheRead,
+      cacheWrite,
+      ...(thought === undefined ? {} : { reasoning: thought }),
+      totalTokens: input + output + cacheRead + cacheWrite,
+    },
+    {
+      input: reported.inputTokens,
+      output: reported.outputTokens,
+      cacheRead: reported.cachedReadTokens,
+      cacheWrite: reported.cachedWriteTokens,
+    },
+  );
 }
 
 function emptyUsage(): Usage {
@@ -222,7 +230,17 @@ export class Translator {
 
   /** The agent said which model is in effect: the messages from here on are that model's. */
   setModel(model: string): void {
-    this.#identity.model = model;
+    if (model !== this.#identity.model) {
+      this.#identity.model = model;
+      this.#target.emit("context:observed", {
+        runId: this.#target.runId,
+        model,
+        observedAt: Date.now(),
+        used: null,
+        window: null,
+        reason: "model",
+      });
+    }
   }
 
   /** Whether the agent has told of this call: a permission request may be the first to name it. */
@@ -245,6 +263,13 @@ export class Translator {
       case "usage_update":
         // How full the context is (`used`, `size`) and the running cost: no tokens used to count.
         // Those come with the prompt's answer, if the agent gives them (`usageOfTurn`).
+        this.#target.emit("context:observed", {
+          runId: this.#target.runId,
+          model: this.#identity.model,
+          observedAt: Date.now(),
+          used: update.used,
+          window: update.size,
+        });
         if (typeof update.cost?.amount === "number")
           this.#cost = update.cost.amount;
         break;
@@ -303,6 +328,12 @@ export class Translator {
   ): void {
     if (tokens !== undefined && tokens !== null)
       this.#tokens = usageOfTurn(tokens);
+    if (!this.#open) {
+      this.#target.emit("usage:detached", {
+        usage: this.#tokens ?? unreportedUsage(),
+      });
+      this.#tokens = undefined;
+    }
     this.#close(
       outcome === "aborted"
         ? "aborted"
@@ -310,6 +341,7 @@ export class Translator {
           ? "error"
           : "stop",
       error,
+      true,
     );
     for (const [callId, call] of [...this.#pending]) {
       this.#result(
@@ -579,6 +611,7 @@ export class Translator {
   #close(
     stopReason: AssistantMessage["stopReason"],
     errorMessage?: string,
+    final = false,
   ): void {
     const open = this.#open;
     if (open === undefined) return;
@@ -597,6 +630,8 @@ export class Translator {
     // A message is charged the turn's tokens only when it is the turn's last; the others, and every
     // message of an agent that never says, report none (which is not zero).
     message.usage = this.#tokens ?? unreportedUsage();
+    // ACP bills the entire prompt once. Its intermediate tool messages are not missing bills.
+    if (!final) Object.assign(message.usage, { billedWithPrompt: true });
     this.#tokens = undefined;
     message.usage.cost.total = cost;
     this.#open = open;

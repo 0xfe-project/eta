@@ -215,12 +215,13 @@ const app = acp
         sessionId,
         update: {
           sessionUpdate: "usage_update",
-          used: 99_999,
-          size: 200_000,
+          used: 64_000,
+          size: 128_000,
           cost: { amount: 0.5, currency: "USD" },
         },
       });
-      await say("worked. ");
+      const silent = asked.includes("[silent]");
+      if (!silent) await say("worked. ");
       if (stored.eta !== undefined)
         await fetch(stored.eta.url, {
           method: "POST",
@@ -238,7 +239,7 @@ const app = acp
             params: { name: "finish_task", arguments: { summary: "worked" } },
           }),
         });
-      await say("finished.");
+      if (!silent) await say("finished.");
       return usage === "none"
         ? { stopReason: "end_turn" }
         : ({
