@@ -518,13 +518,48 @@ function PluginCard(props: {
               )}
             </If>
           </View>
-          <View style={{ ...row, height: space[20], gap: space[8] }}>
+          {/* Version, then where the plugin comes from, which takes what is left and is cut to one line. */}
+          <View style={{ ...row, height: control.sm, gap: space[8] }}>
             <If when={props.item.version}>
-              <Label variant="small" tone="muted">
+              <Label variant="small" tone="muted" style={{ flexShrink: 0 }}>
                 {props.item.version ?? ""}
               </Label>
             </If>
+            <If
+              when={git()}
+              else={
+                <Label
+                  variant="small"
+                  tone="muted"
+                  lines={1}
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  {uiText("localDirectory")}
+                </Label>
+              }
+            >
+              {(source) => (
+                <Label
+                  variant="small"
+                  tone="muted"
+                  lines={1}
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  {`${source().repo} @ ${source().sha.slice(0, 12)}`}
+                </Label>
+              )}
+            </If>
             <Status item={props.item} hideOff />
+            <If when={git()}>
+              <Button
+                label={uiText("sourceFor", { name: props.item.name })}
+                icon="more"
+                iconOnly
+                tone="ghost"
+                size={control.sm}
+                onPress={props.onSource}
+              />
+            </If>
           </View>
         </View>
       </View>
@@ -537,36 +572,6 @@ function PluginCard(props: {
         {props.item.description}
       </Label>
       <View style={{ gap: space[4] }}>
-        <View style={{ ...row, height: control.md, gap: space[4] }}>
-          <If
-            when={git()}
-            else={
-              <Label variant="small" tone="muted">
-                {uiText("localDirectory")}
-              </Label>
-            }
-          >
-            {(source) => (
-              <>
-                <Label
-                  variant="small"
-                  tone="muted"
-                  lines={1}
-                  style={{ flex: 1, minWidth: 0 }}
-                >
-                  {`${source().repo} @ ${source().sha.slice(0, 12)}`}
-                </Label>
-                <Button
-                  label={uiText("sourceFor", { name: props.item.name })}
-                  icon="more"
-                  iconOnly
-                  tone="ghost"
-                  onPress={props.onSource}
-                />
-              </>
-            )}
-          </If>
-        </View>
         <View style={{ ...row, height: control.md, gap: space[4] }}>
           <Label
             variant="small"
