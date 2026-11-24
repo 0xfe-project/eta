@@ -12,7 +12,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { control, space, weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { EarlierReportCard, LatestReportCard } from "./history";
 import {
@@ -85,7 +85,7 @@ export function RoutineDetail(props: {
               <Button
                 label={uiText("runNow")}
                 icon="play"
-                iconSize={14}
+                iconSize={icon.md}
                 iconOnly
                 tone="ghost"
                 disabled={!props.canRun}
@@ -93,7 +93,7 @@ export function RoutineDetail(props: {
               />
               <ActionMenu
                 label={uiText("routineActions")}
-                iconSize={14}
+                iconSize={icon.md}
                 triggerStyle={{
                   minWidth: space[24],
                   width: space[24],
@@ -219,7 +219,7 @@ export function RoutineDetail(props: {
             icon="play"
             tone="ghost"
             disabled={!props.canRun}
-            style={{ gap: 6, paddingHorizontal: 0 }}
+            style={{ gap: space[4], paddingHorizontal: 0 }}
             onPress={props.onRun}
           />
         </View>

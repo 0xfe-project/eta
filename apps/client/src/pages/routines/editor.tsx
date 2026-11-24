@@ -35,6 +35,7 @@ import {
 import {
   control as controlHeight,
   icon,
+  opacity,
   space,
   weight,
 } from "../../components/tokens";
@@ -89,7 +90,7 @@ function PhoneSelect(props: {
             ...row,
             height: 36,
             gap: space[8],
-            paddingHorizontal: 10,
+            paddingHorizontal: space[12],
             cursor: "pointer",
             borderWidth: 1,
             borderColor: c().border,
@@ -100,7 +101,7 @@ function PhoneSelect(props: {
           <Label lines={1} style={{ flex: 1, minWidth: 0 }}>
             {props.value}
           </Label>
-          <Icon name="down" size={14} tone="muted" />
+          <Icon name="down" size={icon.md} tone="muted" />
         </View>
       }
     >
@@ -195,7 +196,11 @@ function ScheduleSelect(props: {
             <Label variant="small" lines={1} style={{ minWidth: 0 }}>
               {props.value}
             </Label>
-            <Icon name="down" size={10} tone={props.tablet ? "ink" : "muted"} />
+            <Icon
+              name="down"
+              size={icon.sm}
+              tone={props.tablet ? "ink" : "muted"}
+            />
           </View>
         }
       >
@@ -209,7 +214,7 @@ function ScheduleSelect(props: {
                 ...row,
                 height: touchScreen ? touchRow : props.tablet ? 34 : 30,
                 gap: space[8],
-                paddingHorizontal: 10,
+                paddingHorizontal: space[12],
                 backgroundColor: option().checked ? c().selected : undefined,
               }}
               onSelect={option().onSelect}
@@ -347,7 +352,7 @@ export function RoutineEditor(props: {
   const interval = (hours: number) =>
     hours === 1 ? uiText("intervalHour") : uiText("intervalHours", { hours });
   const field = (label: string, content: JSX.Element, width?: number) => (
-    <View style={{ gap: 6, width: width ?? "100%", maxWidth: "100%" }}>
+    <View style={{ gap: space[4], width: width ?? "100%", maxWidth: "100%" }}>
       <Label variant="small" tone={sheet() ? "mutedInk" : undefined}>
         {label}
       </Label>
@@ -388,7 +393,7 @@ export function RoutineEditor(props: {
             color: c().ink,
           }}
         />
-        <Icon name="routines" size={sheet() ? 14 : 12} />
+        <Icon name="routines" size={sheet() ? icon.md : icon.sm} />
       </View>
     </If>
   );
@@ -413,7 +418,7 @@ export function RoutineEditor(props: {
         label={uiText("cancel")}
         size={sheet() ? 36 : 28}
         disabled={busy()}
-        style={{ paddingHorizontal: 14 }}
+        style={{ paddingHorizontal: space[16] }}
         onPress={props.onClose}
       />
       <Button
@@ -423,9 +428,8 @@ export function RoutineEditor(props: {
         disabled={!valid() || busy()}
         dimDisabled={!sheet()}
         style={{
-          paddingHorizontal: 14,
-          opacity:
-            sheet() || (valid() && !busy()) ? 1 : props.tablet ? 0.55 : 0.5,
+          paddingHorizontal: space[16],
+          opacity: sheet() || (valid() && !busy()) ? 1 : opacity.disabled,
           // The phone sheet draws a disabled primary in the faint fill.
           ...(sheet() && (!valid() || busy())
             ? { backgroundColor: c().faint, borderColor: c().faint }
@@ -440,8 +444,12 @@ export function RoutineEditor(props: {
       style={{
         paddingVertical: props.inline && !props.tablet ? space[20] : space[16],
         paddingTop: sheet() ? space[12] : undefined,
-        paddingHorizontal: props.tablet ? 24 : props.inline ? 28 : 16,
-        gap: props.tablet ? 14 : 16,
+        paddingHorizontal: props.tablet
+          ? space[24]
+          : props.inline
+            ? space[32]
+            : space[16],
+        gap: props.tablet ? space[12] : space[16],
         width: "100%",
         maxWidth: props.inline ? 800 : undefined,
         borderTopWidth: sheet() ? 1 : 0,
@@ -449,7 +457,7 @@ export function RoutineEditor(props: {
       }}
     >
       <If when={props.inline}>
-        <View style={{ gap: props.tablet ? 14 : 4 }}>
+        <View style={{ gap: props.tablet ? space[12] : space[4] }}>
           <View
             role="button"
             accessibilityLabel={props.item?.name ?? uiText("routines2")}
@@ -458,7 +466,7 @@ export function RoutineEditor(props: {
             style={{
               ...row,
               height: props.tablet ? undefined : controlHeight.md,
-              gap: 6,
+              gap: space[4],
               alignSelf: "flex-start",
               cursor: "pointer",
             }}
@@ -497,12 +505,12 @@ export function RoutineEditor(props: {
                 ? {
                     height: props.item ? 96 : 124,
                     paddingVertical: space[8],
-                    paddingHorizontal: 10,
+                    paddingHorizontal: space[12],
                     ...textStyle(type("small"), "prose"),
                   }
                 : {
                     height: props.tablet ? 110 : 112,
-                    padding: 10,
+                    padding: space[12],
                     ...textStyle(type("small"), "prose"),
                   }
             }
@@ -579,7 +587,7 @@ export function RoutineEditor(props: {
                       }}
                       style={{
                         ...(props.tablet
-                          ? { paddingHorizontal: 7 }
+                          ? { paddingHorizontal: space[8] }
                           : { width: controlHeight.md }),
                         alignSelf: "stretch",
                         alignItems: "center",

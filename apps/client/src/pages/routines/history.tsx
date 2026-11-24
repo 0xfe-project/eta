@@ -77,7 +77,9 @@ export function PhoneRoutineRow(props: {
         cursor: "pointer",
       }}
     >
-      <View style={{ flex: 1, minWidth: 0, gap: 3, paddingBottom: 6 }}>
+      <View
+        style={{ flex: 1, minWidth: 0, gap: space[2], paddingBottom: space[8] }}
+      >
         <View style={{ ...row, gap: space[8] }}>
           <Label lines={1} style={{ flex: 1, minWidth: 0 }}>
             {props.item.name}
@@ -111,7 +113,7 @@ export function PhoneRoutineRow(props: {
           color={props.item.unseenFailures || failed() ? c().red : c().blue}
         />
       </If>
-      <Icon name="right" size={14} />
+      <Icon name="right" size={icon.md} />
     </View>
   );
 }
@@ -145,7 +147,7 @@ export function LatestReportCard(props: {
   const inset = () => (props.phone ? 12 : 16);
   return (
     <View style={{ borderWidth: 1, borderColor: c().border }}>
-      <View style={{ padding: inset(), gap: 6 }}>
+      <View style={{ padding: inset(), gap: space[4] }}>
         <Label variant="small" tone="muted">
           {feedTime(props.run.startedAt)}
         </Label>
@@ -185,7 +187,7 @@ export function LatestReportCard(props: {
           accessibilityLabel={uiText("readReport")}
           onPress={props.onOpen}
           focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
-          style={{ ...row, gap: 6, cursor: "pointer" }}
+          style={{ ...row, gap: space[4], cursor: "pointer" }}
         >
           <Label variant="small" weight={weight.strong}>
             {uiText("readReport")}
@@ -246,7 +248,7 @@ export function EarlierReportCard(props: {
         flex: 1,
         minWidth: 0,
         gap: props.compact && missed() ? space[2] : space[4],
-        paddingVertical: 10,
+        paddingVertical: space[12],
         paddingHorizontal: space[12],
         borderWidth: 1,
         borderColor: c().border,

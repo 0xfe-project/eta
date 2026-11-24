@@ -35,6 +35,10 @@ import { PendingReports } from "./pending-reports";
 import { RoutineDetail } from "./routine-detail";
 import { RoutineReport } from "./run-report";
 
+/** How far down an empty state stands: lower in a tablet's detail column, level with the
+ * list's first rows. */
+const emptyTop = { desktop: space[64], tablet: space[64] + space[48] };
+
 export function Routines(props: {
   layout: Layout;
   initialId?: string;
@@ -176,7 +180,7 @@ export function Routines(props: {
       <If when={phone() && info() && !current()}>
         <ActionMenu
           label={uiText("routineActions")}
-          iconSize={18}
+          iconSize={icon.md}
           triggerStyle={{ width: space[40], height: space[40] }}
         >
           <ActionItem
@@ -210,7 +214,7 @@ export function Routines(props: {
             maxWidth: 160,
             gap: space[4],
             paddingVertical: space[2],
-            paddingHorizontal: 6,
+            paddingHorizontal: space[8],
             borderWidth: 1,
             borderColor: c().border,
             cursor: "pointer",
@@ -226,9 +230,9 @@ export function Routines(props: {
           <Button
             label={uiText("panel")}
             icon="sidebar"
-            iconSize={14}
+            iconSize={icon.md}
             labelVariant="caption"
-            style={{ gap: 6 }}
+            style={{ gap: space[4] }}
             onPress={() => drawer.set(true)}
           />
           <If when={attention()}>
@@ -256,14 +260,26 @@ export function Routines(props: {
           // The desktop notice puts its button on the right; the others below the text.
           ...(props.layout === "desktop"
             ? { ...row, gap: space[12] }
-            : { gap: tablet() ? 10 : 6 }),
-          paddingHorizontal: phone() ? 12 : props.layout === "tablet" ? 14 : 11,
-          paddingTop: props.layout === "desktop" ? 7 : 12,
+            : { gap: tablet() ? space[8] : space[4] }),
+          paddingHorizontal: phone()
+            ? space[12]
+            : props.layout === "tablet"
+              ? space[16]
+              : space[12],
+          paddingTop: props.layout === "desktop" ? space[8] : space[12],
           // The phone notice without a button ends on a 6px spacer under its text.
           paddingBottom:
-            props.layout === "desktop" ? 7 : phone() && !turnOn() ? 18 : 12,
-          marginHorizontal: phone() ? 16 : props.layout === "tablet" ? 12 : 21,
-          marginTop: props.layout === "desktop" ? 11 : 12,
+            props.layout === "desktop"
+              ? space[8]
+              : phone() && !turnOn()
+                ? space[20]
+                : space[12],
+          marginHorizontal: phone()
+            ? space[16]
+            : props.layout === "tablet"
+              ? space[12]
+              : space[20],
+          marginTop: props.layout === "desktop" ? space[12] : space[12],
           marginBottom: phone()
             ? space[4]
             : props.layout === "tablet"
@@ -277,7 +293,7 @@ export function Routines(props: {
       >
         <View
           style={{
-            gap: props.layout === "desktop" ? 0 : phone() ? 6 : 4,
+            gap: props.layout === "desktop" ? 0 : space[4],
             ...(props.layout === "desktop" ? { flex: 1, minWidth: 0 } : {}),
           }}
         >
@@ -302,13 +318,13 @@ export function Routines(props: {
             style={{
               ...row,
               flexShrink: 0,
-              paddingTop: phone() ? 6 : 0,
+              paddingTop: phone() ? space[8] : 0,
             }}
           >
             <Button
               label={uiText("turnCaptainOn")}
               size={phone() ? 36 : 28}
-              style={{ paddingHorizontal: phone() ? 14 : 12 }}
+              style={{ paddingHorizontal: phone() ? space[16] : space[12] }}
               onPress={() =>
                 void host.action(() =>
                   host.call("captain", "setSetting", {
@@ -377,7 +393,7 @@ export function Routines(props: {
                       : undefined
                   }
                   icon="routines"
-                  iconSize={24}
+                  iconSize={icon.lg}
                   iconTone="ink"
                   titleVariant="body"
                   titleWeight={weight.regular}
@@ -387,9 +403,13 @@ export function Routines(props: {
                   style={{
                     flex: 0,
                     justifyContent: "flex-start",
-                    paddingTop: phone() ? 56 : tablet() ? 48 : 59,
+                    paddingTop: phone()
+                      ? space[64]
+                      : tablet()
+                        ? space[48]
+                        : space[64],
                     paddingBottom: phone() ? space[24] : 0,
-                    paddingHorizontal: phone() ? 32 : tablet() ? 20 : 30,
+                    paddingHorizontal: tablet() ? space[20] : space[32],
                   }}
                 >
                   <If when={host.can("routines.create") && !editing()}>
@@ -399,10 +419,14 @@ export function Routines(props: {
                         icon="plus"
                         tone="primary"
                         size={phone() ? 36 : tablet() ? 28 : 24}
-                        iconSize={phone() ? 14 : 12}
+                        iconSize={phone() ? icon.md : icon.sm}
                         style={{
-                          paddingHorizontal: phone() ? 14 : tablet() ? 12 : 8,
-                          gap: phone() ? 6 : 4,
+                          paddingHorizontal: phone()
+                            ? space[16]
+                            : tablet()
+                              ? space[12]
+                              : space[8],
+                          gap: space[4],
                         }}
                         onPress={() => editing.set("new")}
                       />
@@ -415,7 +439,10 @@ export function Routines(props: {
                 <View
                   style={
                     props.layout === "desktop"
-                      ? { paddingVertical: 11, paddingHorizontal: 14 }
+                      ? {
+                          paddingVertical: space[12],
+                          paddingHorizontal: space[16],
+                        }
                       : phone() && paused()
                         ? { borderTopWidth: 1, borderColor: c().border }
                         : undefined
@@ -475,7 +502,7 @@ export function Routines(props: {
                               : uiText("selectOneOnTheLeftTo")
                           }
                           icon="routines"
-                          iconSize={selected() ? undefined : 24}
+                          iconSize={selected() ? undefined : icon.lg}
                           iconTone={selected() ? undefined : "ink"}
                           titleWeight={tablet() ? weight.regular : undefined}
                           // Two lines on the desktop; tablet runs it across the pane.
@@ -485,7 +512,9 @@ export function Routines(props: {
                               ? undefined
                               : {
                                   justifyContent: "flex-start",
-                                  paddingTop: tablet() ? 110 : 60,
+                                  paddingTop: tablet()
+                                    ? emptyTop.tablet
+                                    : emptyTop.desktop,
                                   paddingHorizontal: tablet()
                                     ? space[40]
                                     : undefined,
@@ -499,13 +528,17 @@ export function Routines(props: {
                       title={uiText("routineGoneTitle")}
                       description={uiText("routineGoneBody")}
                       icon="routines"
-                      iconSize={24}
+                      iconSize={icon.lg}
                       iconTone="ink"
                       titleWeight={tablet() ? weight.regular : undefined}
                       // Where "Select a routine" stands, which the back button leads to.
                       style={{
                         justifyContent: "flex-start",
-                        paddingTop: phone() ? 56 : tablet() ? 110 : 60,
+                        paddingTop: phone()
+                          ? emptyTop.desktop
+                          : tablet()
+                            ? emptyTop.tablet
+                            : emptyTop.desktop,
                         paddingHorizontal: tablet() ? space[40] : undefined,
                       }}
                     >
@@ -513,7 +546,9 @@ export function Routines(props: {
                         <Button
                           label={uiText("backToRoutines")}
                           size={phone() ? 36 : 28}
-                          style={{ paddingHorizontal: phone() ? 14 : 12 }}
+                          style={{
+                            paddingHorizontal: phone() ? space[16] : space[12],
+                          }}
                           onPress={() => select("")}
                         />
                       </View>

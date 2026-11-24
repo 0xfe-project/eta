@@ -19,7 +19,7 @@ import {
 import { UserFace } from "../../components/agent-face";
 import { chatText, shownMentions } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
-import { icon, space, weight } from "../../components/tokens";
+import { avatar, icon, space, weight } from "../../components/tokens";
 import { formatLocale, localizedText, uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { reportBody, RoutineHistory } from "./history";
@@ -146,7 +146,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
       }
     >
       <SmoothScroll style={grow} scrollbar={false}>
-        <View style={{ padding: space[16], gap: 18 }}>
+        <View style={{ padding: space[16], gap: space[16] }}>
           <View style={{ gap: space[8] }}>
             <View style={{ ...row, gap: space[8] }}>
               <View
@@ -158,9 +158,10 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
                 }}
               >
                 <Label
+                  tracking="caps"
                   variant="caption"
                   tone="buttonInk"
-                  style={{ textTransform: "uppercase", letterSpacing: 0.4 }}
+                  style={{ textTransform: "uppercase" }}
                 >
                   {status()}
                 </Label>
@@ -175,7 +176,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
               {schedule()}
             </Label>
           </View>
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: space[4] }}>
             <Caption text={uiText("report")} />
             <Label>{error()}</Label>
             <If when={previous()}>
@@ -204,7 +205,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
           </View>
           <If when={previous()}>
             {(run) => (
-              <View style={{ gap: 6 }}>
+              <View style={{ gap: space[4] }}>
                 <Caption text={localizedText("Output", "输出")} />
                 <View
                   role="button"
@@ -218,14 +219,14 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
                   style={{
                     ...row,
                     minHeight: 56,
-                    gap: 10,
+                    gap: space[8],
                     paddingHorizontal: space[12],
                     borderWidth: 1,
                     borderColor: c().border,
                     cursor: "pointer",
                   }}
                 >
-                  <Icon name="panel" size={14} tone="muted" />
+                  <Icon name="panel" size={icon.md} tone="muted" />
                   <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                     <Label variant="small" lines={1}>
                       {run().title ?? uiText("report")}
@@ -235,12 +236,12 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
                       tone="muted"
                     >{`${uiText("report")} · ${routineTime(run().startedAt)}`}</Label>
                   </View>
-                  <Icon name="right" size={10} tone="muted" />
+                  <Icon name="right" size={icon.sm} tone="muted" />
                 </View>
               </View>
             )}
           </If>
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: space[4] }}>
             <Caption text={localizedText("Last 7 runs", "最近 7 次运行")} />
             <RoutineHistory runs={recent()} full />
             <View style={{ ...row, justifyContent: "space-between" }}>
@@ -278,7 +279,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
           icon="play"
           size={36}
           labelWeight={weight.strong}
-          style={{ paddingHorizontal: space[16], gap: 6 }}
+          style={{ paddingHorizontal: space[16], gap: space[4] }}
           disabled={!props.canRetry}
           onPress={props.onRetry}
         />
@@ -384,11 +385,11 @@ export function RoutineReport(props: RoutineReportProps) {
           <View
             style={{
               ...column,
-              gap: props.phone ? 8 : 6,
+              gap: props.phone ? space[8] : space[4],
               // On the phone a missed run sits in a card.
               ...(props.phone && failed()
                 ? {
-                    gap: 6,
+                    gap: space[4],
                     padding: space[12],
                     borderWidth: 1,
                     borderColor: c().border,
@@ -399,7 +400,9 @@ export function RoutineReport(props: RoutineReportProps) {
             <Label variant="small" tone="muted">
               {date()}
             </Label>
-            <View style={{ gap: props.phone && failed() ? 6 : 8 }}>
+            <View
+              style={{ gap: props.phone && failed() ? space[4] : space[8] }}
+            >
               <If
                 when={failed()}
                 else={
@@ -470,9 +473,11 @@ export function RoutineReport(props: RoutineReportProps) {
             <View style={{ ...column, gap: space[12] }}>
               <Each of={props.run.feedback} key={(entry) => entry.id}>
                 {(entry) => (
-                  <View style={{ ...row, alignItems: "flex-start", gap: 10 }}>
-                    <UserFace size={20} />
-                    <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                  <View
+                    style={{ ...row, alignItems: "flex-start", gap: space[8] }}
+                  >
+                    <UserFace size={avatar.md} />
+                    <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
                       <View
                         style={{
                           ...row,
@@ -509,7 +514,7 @@ export function RoutineReport(props: RoutineReportProps) {
                   ...row,
                   height: 38,
                   gap: space[8],
-                  paddingHorizontal: 10,
+                  paddingHorizontal: space[12],
                   borderWidth: 1,
                   borderColor: c().border,
                 }}
@@ -533,12 +538,12 @@ export function RoutineReport(props: RoutineReportProps) {
                 <Button
                   label={uiText("sendFeedback")}
                   icon="send"
-                  iconSize={14}
+                  iconSize={icon.md}
                   labelTone="muted"
                   iconOnly
                   tone="ghost"
                   // The glyph sits on the box's 10px inset.
-                  style={{ marginRight: -5 }}
+                  style={{ marginRight: -space[4] }}
                   disabled={!sendable()}
                   onPress={props.onSend}
                 />
