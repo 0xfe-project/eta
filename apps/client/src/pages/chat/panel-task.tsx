@@ -12,6 +12,7 @@ import {
   Button,
   colors,
   DetailSkeleton,
+  Empty,
   grow,
   Label,
   Markdown,
@@ -77,7 +78,26 @@ export function PanelTask(props: {
   return (
     <If
       when={shown() ? task() : undefined}
-      else={<DetailSkeleton label={uiText("loadingTask")} />}
+      else={
+        <If
+          when={state.missing()}
+          else={<DetailSkeleton label={uiText("loadingTask")} />}
+        >
+          <Empty
+            title={uiText("taskUnavailable")}
+            icon="warning"
+            iconSize={icon.lg}
+            iconTone="red"
+          >
+            <Button
+              label={uiText("retry")}
+              icon="refresh"
+              style={{ marginTop: space[8], paddingHorizontal: space[12] }}
+              onPress={state.retryTask}
+            />
+          </Empty>
+        </If>
+      }
     >
       {(item) => {
         // What is going on the task: one line per run that has not ended, each its own agent's.

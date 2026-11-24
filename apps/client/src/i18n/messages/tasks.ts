@@ -351,6 +351,7 @@ export const tasksMessages = {
   keepIt: ["Keep it", "先不取消"],
   loadingTask: ["Loading task…", "正在加载任务…"],
   loadingTasks: ["Loading tasks…", "正在加载任务…"],
+  taskUnavailable: ["Couldn’t load this task", "无法加载此任务"],
   newTask: ["New task", "新建任务"],
   noLogEntriesYet: ["No log entries yet.", "暂无日志。"],
   notPartOfAnything: ["Not part of anything", "独立任务"],

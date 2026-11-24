@@ -2,6 +2,7 @@ import type { ViewedPicture } from "./picture-viewer";
 import { effect, Image, signal, View } from "nsh";
 import { uiText } from "../i18n";
 import { Chip } from "./eta-editor/chip";
+import { SkeletonBar } from "./loading-skeleton";
 import { picturePreview } from "./picture-viewer";
 import { Label } from "./text";
 import { colors, focusRing, row } from "./theme";
@@ -99,7 +100,16 @@ export function PictureCards(props: {
                   overflow: "hidden",
                 }}
               >
-                <If when={picture().src()}>
+                <If
+                  when={picture().src()}
+                  else={
+                    <SkeletonBar
+                      width="100%"
+                      height={CARD_PICTURE}
+                      borderless
+                    />
+                  }
+                >
                   {(src) => (
                     <Image
                       src={src()}

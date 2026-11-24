@@ -18,9 +18,12 @@ import {
   grow,
   Icon,
   Label,
+  ListSkeleton,
   row,
   textFaces,
 } from "../../components";
+import { shownWhile } from "../../components/pending";
+import { Spinner } from "../../components/spinner";
 import { control, icon, opacity, space } from "../../components/tokens";
 import { localizedText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -57,6 +60,9 @@ export function DirectoryOptions(props: {
     cancelling,
     cancelClone,
   } = props.picker;
+  const refreshingShown = shownWhile(
+    () => (loading() || busy()) && rows().length > 0,
+  );
   const placeholder = () => {
     switch (kind()) {
       case "machine":
@@ -135,6 +141,11 @@ export function DirectoryOptions(props: {
               />
             )}
           </Each>
+          <If when={refreshingShown()}>
+            <View style={{ paddingRight: space[8] }}>
+              <Spinner size={icon.sm} tone="muted" />
+            </View>
+          </If>
         </View>
       </If>
       <If when={kind() === "method"}>
@@ -316,10 +327,11 @@ export function DirectoryOptions(props: {
           </View>
         )}
       </Each>
-      <If when={loading() || busy()}>
-        <Label tone="muted" style={{ padding: space[16] }}>
-          {localizedText("Waiting for the machine…", "正在等待机器响应…")}
-        </Label>
+      <If when={(loading() || busy()) && rows().length === 0}>
+        <ListSkeleton
+          label={localizedText("Waiting for the machine…", "正在等待机器响应…")}
+          style={{ paddingHorizontal: space[8] }}
+        />
       </If>
       <If
         when={

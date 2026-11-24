@@ -21,9 +21,18 @@ export function createTaskDetailState(props: {
   docked?: boolean;
 }) {
   const host = useHost();
+  const retryTick = signal(0);
   const target = () => `tasks.${props.id}`;
-  follow(target);
+  follow(() => {
+    retryTick();
+    return target();
+  });
   const task = () => host.section<BoardTaskDetail>(target(), "task");
+  const missing = () => Boolean(host.state().missing[target()]);
+  const retryTask = () => {
+    retryTick.update((count) => count + 1);
+    host.reconnect();
+  };
   const activity = () => host.list<TaskActivityView>(target(), "activity");
   const posting = signal(false);
   const archive = signal(false);
@@ -227,6 +236,8 @@ export function createTaskDetailState(props: {
     id: props.id,
     activity,
     task,
+    missing,
+    retryTask,
     posting,
     archive,
     editing,

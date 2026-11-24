@@ -12,6 +12,7 @@ import { cleanup, computed, effect, signal, View } from "nsh";
 import {
   Button,
   colors,
+  DetailSkeleton,
   focusRing,
   grow,
   Icon,
@@ -585,19 +586,32 @@ export function MemberRun(props: {
               !(props.taskRun && transcript() && online())
             }
           >
-            <Label tone="muted" variant="small">
-              {!target
-                ? uiText("noRunTranscript")
-                : host.state().missing[target]
-                  ? uiText("sessionUnavailable")
-                  : !transcript() && !online()
-                    ? uiText("offlineRunTranscript")
-                    : !transcript()
-                      ? uiText("loadingRunTranscript")
-                      : running()
-                        ? uiText("waitingForAgent")
-                        : uiText("noRunTranscript")}
-            </Label>
+            <If
+              when={
+                !!target &&
+                !host.state().missing[target] &&
+                !transcript() &&
+                online()
+              }
+              else={
+                <Label tone="muted" variant="small">
+                  {!target
+                    ? uiText("noRunTranscript")
+                    : host.state().missing[target]
+                      ? uiText("sessionUnavailable")
+                      : !transcript() && !online()
+                        ? uiText("offlineRunTranscript")
+                        : running()
+                          ? uiText("waitingForAgent")
+                          : uiText("noRunTranscript")}
+                </Label>
+              }
+            >
+              <DetailSkeleton
+                label={uiText("loadingRunTranscript")}
+                style={{ padding: 0 }}
+              />
+            </If>
           </If>
         </View>
       </SmoothScroll>

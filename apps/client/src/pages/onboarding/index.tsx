@@ -58,10 +58,14 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
   const activeCard = signal("");
   const error = signal("");
   const total = signal(0);
+  const retryTick = signal(0);
   const cardsMissing = () =>
     host.state().missing.personas || host.state().status === "reconnecting";
   const loadingCards = () => !host.state().targets.personas && !cardsMissing();
-  follow(() => "personas");
+  follow(() => {
+    retryTick();
+    return "personas";
+  });
   const providers = () => host.section<ProvidersView>("providers", "config");
   const models = useModels();
   const sources = () =>
@@ -342,6 +346,10 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                     : [...ids, id],
                 )
               }
+              onRetry={() => {
+                retryTick.update((count) => count + 1);
+                host.reconnect();
+              }}
             />
           </If>
           <If when={step() === 3}>
@@ -446,11 +454,6 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
             </If>
           </View>
           <View style={{ ...row, flexShrink: 1, gap: space[12] }}>
-            <If when={step() === 2 && loadingCards()}>
-              <Label variant="small" tone="muted">
-                {uiText("loadingEllipsis")}
-              </Label>
-            </If>
             <If when={showCount()}>
               <Label
                 variant="small"
