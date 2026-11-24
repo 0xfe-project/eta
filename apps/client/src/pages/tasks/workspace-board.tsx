@@ -23,8 +23,8 @@ export const visibleStatuses: BoardTaskStatus[] = [
 
 /** Fixed column width for board view. */
 const columnWidth = {
-  desktop: 280,
-  tablet: 200,
+  desktop: 240,
+  tablet: 160,
 };
 const headerHeight = 24;
 
@@ -51,9 +51,12 @@ export function TaskWorkspaceBoard(props: {
         paddingTop: space[12],
         paddingBottom: tablet() ? space[12] : 0,
         gap: space[8],
+        height: "100%",
       }}
     >
-      <View style={{ ...row, gap: space[8], alignItems: "stretch" }}>
+      <View
+        style={{ ...row, gap: space[8], alignItems: "stretch", height: "100%" }}
+      >
         <Each of={visibleStatuses}>
           {(status) => {
             const folded = () =>
