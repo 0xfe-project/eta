@@ -18,6 +18,7 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { ModelSelect, useModels } from "../../components/model-select";
 import { BackButton } from "../../components/navigation-buttons";
+import { avatar, control, icon, space } from "../../components/tokens";
 import { localizedText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { templates, templateSource } from "./catalog";
@@ -30,6 +31,13 @@ import {
 
 /** A row of the template list, fixed so the list can scroll to one by its index. */
 const rowHeight = 52;
+/** The gallery's dialog: wider than a standard dialog, a list and a detail side by side. */
+const galleryWidth = 820;
+const galleryHeight = 600;
+/** The template list's column on a desktop. */
+const galleryListWidth = 300;
+/** The phone's bar with its Back, over the list or a template. */
+const phoneBarHeight = 48;
 
 export interface TemplateGalleryProps {
   phone: boolean;
@@ -119,9 +127,9 @@ export function TemplateGallery(props: TemplateGalleryProps) {
   }
 
   const fieldStyle = () => ({
-    height: props.phone ? 36 : 28,
+    height: props.phone ? control.touch : control.md,
     ...textStyle(type("small")),
-    paddingHorizontal: 10,
+    paddingHorizontal: space[12],
     borderColor: c().border,
   });
 
@@ -129,8 +137,8 @@ export function TemplateGallery(props: TemplateGalleryProps) {
     return (
       <View
         style={{
-          gap: 8,
-          padding: 12,
+          gap: space[8],
+          padding: space[12],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
@@ -142,13 +150,13 @@ export function TemplateGallery(props: TemplateGalleryProps) {
           onChange={(value) => query.set(value)}
           style={fieldStyle()}
         />
-        <View style={{ ...row, flexWrap: "wrap", gap: 4 }}>
+        <View style={{ ...row, flexWrap: "wrap", gap: space[4] }}>
           <Button
             label={localizedText("All", "全部")}
             tone="ghost"
-            size={24}
+            size={control.sm}
             selected={!category()}
-            style={{ paddingHorizontal: 8 }}
+            style={{ paddingHorizontal: space[8] }}
             onPress={() => category.set(undefined)}
           />
           <Each of={Object.keys(templateCategories)} key={(item) => item}>
@@ -156,9 +164,9 @@ export function TemplateGallery(props: TemplateGalleryProps) {
               <Button
                 label={categoryName(item())}
                 tone="ghost"
-                size={24}
+                size={control.sm}
                 selected={category() === item()}
-                style={{ paddingHorizontal: 8 }}
+                style={{ paddingHorizontal: space[8] }}
                 onPress={() =>
                   category.set(category() === item() ? undefined : item())
                 }
@@ -188,12 +196,12 @@ export function TemplateGallery(props: TemplateGalleryProps) {
           revealInitial();
         }}
         style={grow}
-        contentStyle={{ paddingVertical: 4 }}
+        contentStyle={{ paddingVertical: space[4] }}
       >
         <If
           when={shown().length}
           else={
-            <Label variant="small" tone="muted" style={{ padding: 16 }}>
+            <Label variant="small" tone="muted" style={{ padding: space[16] }}>
               {localizedText("No template matches.", "没有匹配的模版。")}
             </Label>
           }
@@ -212,15 +220,15 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                 style={{
                   ...row,
                   height: rowHeight,
-                  gap: 10,
-                  paddingHorizontal: 12,
+                  gap: space[12],
+                  paddingHorizontal: space[12],
                   backgroundColor:
                     chosen()?.id === template().id ? c().selected : undefined,
                   cursor: "pointer",
                 }}
               >
-                <AgentFace id={template().id} size={24} />
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <AgentFace id={template().id} size={avatar.md} />
+                <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                   <Label variant="small" weight={500} lines={1}>
                     {template().name}
                   </Label>
@@ -239,7 +247,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
   function points(title: string, items: string[]) {
     return (
       <If when={items.length}>
-        <View style={{ gap: 4 }}>
+        <View style={{ gap: space[4] }}>
           <Label variant="small" weight={600}>
             {title}
           </Label>
@@ -252,10 +260,13 @@ export function TemplateGallery(props: TemplateGalleryProps) {
   function detail(template: AgentTemplate) {
     const agentName = () => name().trim() || template.name;
     return (
-      <SmoothScroll style={grow} contentStyle={{ padding: 16, gap: 14 }}>
-        <View style={{ ...row, gap: 12 }}>
-          <AgentFace id={template.id} size={40} />
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+      <SmoothScroll
+        style={grow}
+        contentStyle={{ padding: space[16], gap: space[12] }}
+      >
+        <View style={{ ...row, gap: space[12] }}>
+          <AgentFace id={template.id} size={avatar.xl} />
+          <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
             <Label variant="subtitle" weight={600}>
               {template.name}
             </Label>
@@ -273,14 +284,14 @@ export function TemplateGallery(props: TemplateGalleryProps) {
           localizedText("Asks you first", "需要你批准"),
           template.needsApproval,
         )}
-        <View style={{ gap: 6 }}>
+        <View style={{ gap: space[4] }}>
           <Label variant="small" weight={600}>
             {localizedText("Instructions it gets", "它会拿到的指令")}
           </Label>
           <View
             testID="template-instructions"
             style={{
-              padding: 10,
+              padding: space[12],
               borderWidth: 1,
               borderColor: c().border,
               backgroundColor: c().surface,
@@ -294,8 +305,8 @@ export function TemplateGallery(props: TemplateGalleryProps) {
         </View>
         <View
           style={{
-            gap: 8,
-            paddingTop: 14,
+            gap: space[8],
+            paddingTop: space[12],
             borderTopWidth: 1,
             borderColor: c().border,
           }}
@@ -337,7 +348,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
           <If
             when={models().length}
             else={
-              <View style={{ ...row, gap: 8 }}>
+              <View style={{ ...row, gap: space[8] }}>
                 <Label variant="small" tone="muted" style={{ flex: 1 }}>
                   {localizedText(
                     "Add a model service first.",
@@ -346,8 +357,8 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                 </Label>
                 <Button
                   label={localizedText("Model services", "模型服务")}
-                  size={28}
-                  style={{ paddingHorizontal: 10 }}
+                  size={control.md}
+                  style={{ paddingHorizontal: space[12] }}
                   onPress={props.onModelServices}
                 />
               </View>
@@ -360,7 +371,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
               {error()}
             </Label>
           </If>
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <Label variant="caption" tone="muted" style={{ flex: 1 }}>
               {localizedText(
                 `From ${templateSource.repo} · ${templateSource.license}`,
@@ -374,9 +385,9 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                   : localizedText("Import", "导入")
               }
               tone="primary"
-              size={props.phone ? 36 : 28}
+              size={props.phone ? control.touch : control.md}
               disabled={busy() || !chosenModel()}
-              style={{ paddingHorizontal: 14 }}
+              style={{ paddingHorizontal: space[12] }}
               onPress={() => void create(template)}
             />
           </View>
@@ -400,8 +411,8 @@ export function TemplateGallery(props: TemplateGalleryProps) {
       phone={props.phone}
       phonePage={props.phone}
       overPhoneNavigation={props.phone}
-      width={820}
-      height={props.phone ? "100%" : 600}
+      width={galleryWidth}
+      height={props.phone ? "100%" : galleryHeight}
       modalFocus
       hideHeader={props.phone}
       dismissible={!busy()}
@@ -413,7 +424,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
           <View style={{ ...grow, flexDirection: "row" }}>
             <View
               style={{
-                width: 300,
+                width: galleryListWidth,
                 borderRightWidth: 1,
                 borderColor: c().border,
               }}
@@ -430,16 +441,16 @@ export function TemplateGallery(props: TemplateGalleryProps) {
           <View
             style={{
               ...row,
-              height: 48,
-              gap: 4,
-              paddingHorizontal: 4,
+              height: phoneBarHeight,
+              gap: space[4],
+              paddingHorizontal: space[4],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
           >
             <BackButton
-              size={40}
-              iconSize={16}
+              size={control.touch}
+              iconSize={icon.md}
               disabled={busy()}
               onPress={() =>
                 chosen() ? chosenId.set(undefined) : props.onClose()

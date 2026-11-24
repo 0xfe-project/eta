@@ -172,9 +172,9 @@ export function AgentEditor(props: AgentEditorProps) {
             label={localizedText("From a template", "从模版创建")}
             icon="book"
             tone="ghost"
-            size={24}
+            size={control.sm}
             disabled={busy()}
-            style={{ gap: 6, paddingHorizontal: 8 }}
+            style={{ gap: space[4], paddingHorizontal: space[8] }}
             onPress={() => props.onTemplates?.()}
           />
         </If>
