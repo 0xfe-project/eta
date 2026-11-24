@@ -104,7 +104,10 @@ test("panel at 390px: the status opens the phone's sheet, the same seven, and a 
     app.texts().includes("Status not changed: the host is busy"),
   );
   expect(app.enabled(`${trigger} >> nth=0`)).toBe(true);
+  // The sheet closed as the change was made; the refused change put the old status back.
+  expect(app.texts()).toContain("In progress");
 
+  await app.press(trigger);
   await app.press("label:In review");
   await app.press("text:Answer");
   await app.waitUntil(() => !app.texts().includes("Parked; it won't start"));

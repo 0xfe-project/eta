@@ -99,7 +99,9 @@ export function TaskDetail(props: {
             label: uiText("unarchive"),
             run: () =>
               void host.action(() =>
-                host.call("tasks", "unarchive", { taskId: props.id }),
+                host.optimistic(props.id, { archivedAt: null }, () =>
+                  host.call("tasks", "unarchive", { taskId: props.id }),
+                ),
               ),
           }
         : { label: uiText("archive"), run: () => archive.set(true) },

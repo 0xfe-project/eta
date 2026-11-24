@@ -40,6 +40,9 @@ export interface HostAddress {
   local?: boolean;
 }
 
+/** How long a change shown ahead of the host stays after the host took it, for its copy to land. */
+const optimisticHold = 2000;
+
 export function addressFrom(value: string): string {
   const trimmed = value.trim();
   const withScheme = trimmed.includes("://") ? trimmed : `http://${trimmed}`;
@@ -255,8 +258,67 @@ export function createHost(options: HostOptions = {}) {
     subscriptionWire.set(wire);
   }
 
+  /**
+   * What the screen shows ahead of the host (#380): fields of a row (a task, a conversation) by
+   * its id, set the moment a change is made and dropped once the host's own copy says the same,
+   * or when the change failed (`optimistic`).
+   */
+  const ahead = signal<Record<string, Record<string, unknown>>>({});
+
+  function withAhead(value: unknown): unknown {
+    const rows = ahead();
+    if (!Object.keys(rows).length || !value || typeof value !== "object")
+      return value;
+    const patch = (item: unknown) => {
+      const id = (item as { id?: unknown } | null)?.id;
+      const fields = typeof id === "string" ? rows[id] : undefined;
+      return fields ? { ...(item as object), ...fields } : item;
+    };
+    if (!Array.isArray(value)) return patch(value);
+    return value.some((item) => patch(item) !== item)
+      ? value.map(patch)
+      : value;
+  }
+
   function section<T>(target: string, key: string): T | undefined {
-    return state().targets[target]?.sections[key] as T | undefined;
+    return withAhead(state().targets[target]?.sections[key]) as T | undefined;
+  }
+
+  /** Each change ahead of the host by row, so an older one's answer does not undo a newer one. */
+  let aheadTurn = 0;
+  const aheadTurns = new Map<string, number>();
+  function dropAhead(id: string, turn: number) {
+    if (aheadTurns.get(id) !== turn) return;
+    aheadTurns.delete(id);
+    ahead.update((rows) => {
+      const { [id]: _, ...rest } = rows;
+      return rest;
+    });
+  }
+
+  /**
+   * Shows `fields` on the row `id` everywhere at once, then does `work`: on success the row keeps
+   * them until the host's copy has them (it usually sends it before it answers), on failure they
+   * go and the error is the caller's to say where the change was made. Rows only: what the change
+   * started on the host (a run, a notice) comes from the host as before.
+   */
+  async function optimistic<T>(
+    id: string,
+    fields: Record<string, unknown>,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const turn = ++aheadTurn;
+    aheadTurns.set(id, turn);
+    ahead.update((rows) => ({ ...rows, [id]: { ...rows[id], ...fields } }));
+    try {
+      const result = await work();
+      // The host's copy is in by now, or is a moment away.
+      setTimeout(dropAhead, optimisticHold, id, turn);
+      return result;
+    } catch (problem) {
+      dropAhead(id, turn);
+      throw problem;
+    }
   }
 
   function list<T>(target: string, key = "list"): T[] {
@@ -311,6 +373,7 @@ export function createHost(options: HostOptions = {}) {
     list,
     call,
     action,
+    optimistic,
     upgrade: upgrades.status,
     upgradeUnreachable: upgrades.unreachable,
     upgradeCheck,
@@ -342,7 +405,11 @@ export function createHost(options: HostOptions = {}) {
             ? captainConversation()
             : undefined))
         : undefined,
-    tasks: () => list<BoardTaskView>("tasks"),
+    /** The tasks, less one archived ahead of the host (`optimistic`), as the host will send them. */
+    tasks: () =>
+      list<BoardTaskView>("tasks").filter(
+        (task) => !(task.archivedAt && ahead()[task.id]?.archivedAt),
+      ),
     pending: () =>
       list<InteractionView>("inbox").filter(
         (item) => item.status === "pending",

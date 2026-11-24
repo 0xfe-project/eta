@@ -738,10 +738,12 @@ export function Conversation(props: {
             onResolveBlock={() => {
               if (info()?.archived ?? summary()?.archived)
                 void host.action(() =>
-                  host.call("conversations", "update", {
-                    conversationId: props.id,
-                    archived: false,
-                  }),
+                  host.optimistic(props.id, { archived: false }, () =>
+                    host.call("conversations", "update", {
+                      conversationId: props.id,
+                      archived: false,
+                    }),
+                  ),
                 );
               else invite.set(true);
             }}

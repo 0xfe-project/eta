@@ -176,4 +176,5 @@ export const commonMessages = {
   downloading: ["Downloading…", "下载中"],
   restarting: ["Restarting…", "正在重启…"],
   save: ["Save", "保存"],
+  undo: ["Undo", "撤销"],
 } as const;

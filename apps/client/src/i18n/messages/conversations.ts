@@ -28,4 +28,6 @@ export const conversationsMessages = {
   ],
   searchDirectories: ["Search directories", "搜索目录"],
   useThisDirectory: ["Use this directory", "使用此目录"],
+  groupArchivedToast: ["Group archived", "群组已归档"],
+  groupArchiveFailed: ["Could not archive the group", "没能归档这个群组"],
 } as const;
