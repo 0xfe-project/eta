@@ -41,8 +41,8 @@ const railLabelWidth = 76;
 /** A field's label column in the fields list. */
 const fieldLabelWidth = 68;
 
-/** The comment box's foot, under the editor, off phones. */
-const footHeight = { compact: 32, regular: 36 } as const;
+/** The comment box's foot, under the editor: `regular` is the chat composer's (composer.tsx). */
+const footHeight = { compact: 28, regular: 32, phone: 40 } as const;
 
 /**
  * The comment box: the chat's text (`chatText`: Markdown as you type, code blocks, long pastes
@@ -158,8 +158,8 @@ function CommentBox(props: {
     props.state,
     props.origin,
   );
-  // In the conversation panel (compact): small text, a 32px foot and a 24px button, as the
-  // panel's own rows; on a task's page the regular body text, 36 and 28.
+  // In the conversation panel (compact): small text and a 28px foot; on a task's page the regular
+  // body text and a 32px foot, the chat composer's. The button is 24 in both, 32 on a phone.
   const density = densityDefaults();
   const compact = inCompact();
   const line = () => type(density().editor).prose;
@@ -197,7 +197,7 @@ function CommentBox(props: {
             justifyContent: "flex-end",
             gap: space[8],
             height: props.phone
-              ? control.touch
+              ? footHeight.phone
               : compact()
                 ? footHeight.compact
                 : footHeight.regular,
@@ -213,9 +213,7 @@ function CommentBox(props: {
           <Button
             label={uiText("comment")}
             accessibilityLabel={uiText("sendComment")}
-            size={
-              props.phone ? control.lg : compact() ? control.sm : control.md
-            }
+            size={props.phone ? control.lg : control.sm}
             labelTone={disabled() ? "muted" : "ink"}
             dimDisabled={props.state.posting()}
             disabled={disabled()}
