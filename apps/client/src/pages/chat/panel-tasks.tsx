@@ -284,6 +284,7 @@ export function TasksTab(props: {
             { value: "all", label: uiText("allGroups") },
           ]}
           value={everywhere() ? "all" : "this"}
+          subtle
           onChange={(value) => everywhere.set(value === "all")}
         />
         <ActionMenu
