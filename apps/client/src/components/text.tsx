@@ -161,8 +161,23 @@ export function Markdown(props: {
         heading4: compact() ? heading() : undefined,
         heading5: compact() ? heading() : undefined,
         heading6: compact() ? heading() : undefined,
-        tableCell: fit(),
-        tableHeaderCell: fit(),
+        tableGrid: {
+          borderTopColor: c().border,
+          borderLeftColor: c().border,
+        },
+        tableHead: { backgroundColor: c().selectedSoft },
+        tableCell: {
+          ...fit(),
+          borderRightColor: c().border,
+          borderBottomColor: c().border,
+        },
+        tableHeaderCell: {
+          ...fit(),
+          color: c().mutedInk,
+          fontWeight: weight.strong,
+          borderRightColor: c().border,
+          borderBottomColor: c().border,
+        },
         link: { color: c().blue },
       }}
       codeBlockActions={[{ id: "copy" }]}
