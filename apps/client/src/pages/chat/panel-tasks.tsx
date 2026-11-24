@@ -58,9 +58,9 @@ export function SubtaskToggle(props: {
       style={{
         ...row,
         justifyContent: "center",
-        width: props.size ?? 24,
-        height: props.size ?? 24,
-        marginRight: -6,
+        width: props.size ?? control.sm,
+        height: props.size ?? control.sm,
+        marginRight: -space[8],
         flexShrink: 0,
         cursor: "pointer",
       }}
@@ -68,7 +68,7 @@ export function SubtaskToggle(props: {
       <View
         style={{ transform: props.open ? [{ rotate: "180deg" }] : undefined }}
       >
-        <Icon name="down" size={10} tone="muted" />
+        <Icon name="down" size={icon.sm} tone="muted" />
       </View>
     </View>
   );
@@ -136,7 +136,8 @@ export function ContextTasks(props: {
             style={{
               ...row,
               height: contextRowHeight,
-              paddingLeft: space[12] + entry().depth * 22,
+              // Under the parent's number: its mark and the gap, a step per level.
+              paddingLeft: space[12] + entry().depth * (icon.sm + space[8]),
               paddingRight: space[12],
               gap: space[8],
               borderBottomWidth: 1,
@@ -208,6 +209,8 @@ const inset = space[12];
 /** A task's row in the Tasks tab, and how far the line naming what it waits for runs. */
 const taskRowHeight = 52;
 const waitingWidth = 160;
+/** A subtask's row under its parent in the Tasks tab. */
+const subtaskRowHeight = 36;
 
 const folded = [
   ["done", "taskCompletedCount"],
@@ -524,16 +527,16 @@ function SubtaskRow(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        height: 34,
-        gap: 8,
+        height: subtaskRowHeight,
+        gap: space[8],
         flexShrink: 0,
-        // Under the parent's title: the inset, its 14px mark and the 10px gap, a step per level.
-        paddingLeft: inset + 24 * props.depth,
+        // Under the parent's title: the inset, its mark and the gap, a step per level.
+        paddingLeft: inset + (icon.sm + space[8]) * props.depth,
         paddingRight: inset,
         cursor: "pointer",
       }}
     >
-      <TaskGlyph status={props.task.status} size={12} />
+      <TaskGlyph status={props.task.status} size={icon.sm} />
       <Label variant="caption" tone="muted" style={{ flexShrink: 0 }}>
         {`#${props.task.number}`}
       </Label>
@@ -637,7 +640,7 @@ function TaskRow(props: {
             <Label
               variant="caption"
               tone="muted"
-              style={{ flexShrink: 0, marginHorizontal: 4 }}
+              style={{ flexShrink: 0, marginHorizontal: space[4] }}
             >
               ·
             </Label>

@@ -16,6 +16,7 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { BackButton, CloseButton } from "../../components/navigation-buttons";
+import { StatusDot } from "../../components/status-dot";
 import {
   avatar,
   control,
@@ -26,14 +27,13 @@ import {
 } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { StatusDot } from "../../components/status-dot";
 import { statusName, TaskGlyph } from "../tasks/status";
 import { ArtifactBrowser } from "./artifacts/conversation-artifacts";
 import { RECENT, recentArtifacts } from "./artifacts/filter";
 import { memberStatus } from "./member-status";
+import { messageTime } from "./message-time";
 import { SubtaskProgress, SubtaskToggle } from "./panel-tasks";
 import { needingYou, setParentOpen, taskRoots, treeRows } from "./panel-tree";
-import { messageTime } from "./message-time";
 import { ViewAll } from "./section-heading";
 
 /**
@@ -124,7 +124,8 @@ export function PhoneConversationInfo(props: {
             {(entry) => (
               <InfoRow
                 height={rowHeight.task}
-                indent={entry().depth * 26}
+                // Under the parent's title: its mark and the row's gap, a step per level.
+                indent={entry().depth * (icon.md + space[12])}
                 title={`#${entry().task.number} ${entry().task.title}`}
                 detail={
                   entry().depth ? statusName(entry().task.status) : undefined
@@ -145,7 +146,7 @@ export function PhoneConversationInfo(props: {
                       <SubtaskToggle
                         task={entry().task}
                         open={entry().open}
-                        size={36}
+                        size={control.touch}
                         onToggle={() =>
                           setParentOpen(entry().task.id, !entry().open)
                         }
@@ -379,7 +380,9 @@ function InfoRow(props: {
           </View>
         }
       >
-        <View style={{ ...row, gap: 8, flexShrink: 0 }}>{props.trailing}</View>
+        <View style={{ ...row, gap: space[8], flexShrink: 0 }}>
+          {props.trailing}
+        </View>
       </If>
     </View>
   );
