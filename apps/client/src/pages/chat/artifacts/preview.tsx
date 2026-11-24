@@ -28,6 +28,7 @@ import {
 import { icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { CopyButton } from "../../../ui";
 import { createArtifactFileSaver } from "./file";
 import { ArtifactPdfPreview, ArtifactPdfResourcesError } from "./pdf-preview";
 
@@ -343,11 +344,9 @@ export function ArtifactPreview(props: {
           <Label variant="small" style={{ flex: 1 }}>
             {uiText("artifactSavedTo", { path: files.savedPath() })}
           </Label>
-          <Button
+          <CopyButton
             label={uiText("artifactCopyPath")}
-            onPress={() =>
-              void host.action(() => Clipboard.writeText(files.savedPath()))
-            }
+            value={files.savedPath}
           />
         </View>
       </If>
