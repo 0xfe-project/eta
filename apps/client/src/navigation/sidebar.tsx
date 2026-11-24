@@ -35,8 +35,6 @@ const itemHeight = {
 const phoneItemWidth = "20%";
 /** An unread count over a rail or tab icon. */
 const badgeHeight = 16;
-/** The collapse toggle beside the wordmark. */
-const toggleWidth = 16;
 const footerHeight = 36;
 
 export function NavItem(props: {
@@ -202,9 +200,8 @@ export function DesktopSidebar(
           <RailButton
             label={text("collapseSidebar")}
             icon="sidebar"
-            size={control.sm}
-            width={toggleWidth}
-            iconSize={icon.sm}
+            size={control.md}
+            iconSize={icon.md}
             expanded
             attach={attachToggle}
             onPress={toggleSidebar}
@@ -243,7 +240,8 @@ export function DesktopSidebar(
           <RailButton
             label={text("expandSidebar")}
             icon="sidebar"
-            size={control.sm}
+            size={control.md}
+            iconSize={icon.md}
             expanded={false}
             attach={attachToggle}
             onPress={toggleSidebar}
