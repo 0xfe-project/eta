@@ -3,6 +3,7 @@ import { signal, View } from "nsh";
 import {
   Button,
   colors,
+  Empty,
   grow,
   Header,
   Icon,
@@ -250,7 +251,26 @@ export function TaskDetail(props: {
       </If>
       <If
         when={shown() ? task() : undefined}
-        else={<TaskDetailSkeleton label={uiText("loadingTask")} />}
+        else={
+          <If
+            when={state.missing()}
+            else={<TaskDetailSkeleton label={uiText("loadingTask")} />}
+          >
+            <Empty
+              title={uiText("taskUnavailable")}
+              icon="warning"
+              iconSize={icon.xl}
+              iconTone="red"
+            >
+              <Button
+                label={uiText("retry")}
+                icon="refresh"
+                style={{ marginTop: space[8], paddingHorizontal: space[12] }}
+                onPress={state.retryTask}
+              />
+            </Empty>
+          </If>
+        }
       >
         {(item) => (
           <>

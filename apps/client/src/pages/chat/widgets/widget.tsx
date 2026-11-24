@@ -6,11 +6,15 @@ import dwgLightFile from "../../../../assets/AKRDWGSCNFM-Light.woff2?url";
 import dwgFile from "../../../../assets/AKRDWGSCNFM-Regular.woff2?url";
 import {
   appFont,
+  Button,
   colors,
   fontFamily,
   Fonts,
   Label,
   monoFontFamily,
+  Revealed,
+  row,
+  SkeletonBar,
 } from "../../../components";
 import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
@@ -19,6 +23,7 @@ import { widgetDocument } from "./widget-document";
 const MAX_CODE = 60_000;
 const MAX_HEIGHT = 1_200;
 const STREAM_INTERVAL = 120;
+const widgetMinHeight = 160;
 
 /** The shipped faces by weight, as the app registers them (`theme.ts`). */
 const appFaces = [
@@ -87,19 +92,36 @@ export function Widget(props: {
   const ready = signal(false);
   const height = signal(0);
   const problem = signal(false);
+  const attempt = signal(0);
   let frame: WebViewRef | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let startup: ReturnType<typeof setTimeout> | undefined;
   let sent: { code: string; final: boolean } | undefined;
   let themeSent: string | undefined;
   let disposed = false;
-  const startup = setTimeout(() => {
-    if (!ready()) problem.set(true);
-  }, 8_000);
+
+  function armTimeout() {
+    clearTimeout(startup);
+    startup = setTimeout(() => {
+      if (!ready()) problem.set(true);
+    }, 8_000);
+  }
+  armTimeout();
   cleanup(() => {
     disposed = true;
     clearTimeout(startup);
     clearTimeout(timer);
   });
+
+  function retryWidget() {
+    problem.set(false);
+    ready.set(false);
+    height.set(0);
+    sent = undefined;
+    themeSent = undefined;
+    attempt.update((n) => n + 1);
+    armTimeout();
+  }
 
   function post(message: object) {
     frame?.postMessage(JSON.stringify({ token, message }));
@@ -197,27 +219,63 @@ export function Widget(props: {
 
   return (
     <View style={{ alignSelf: "stretch", minWidth: 0, gap: space[4] }}>
-      <If when={problem() || !height()}>
-        <Label variant="caption" tone="muted">
-          {problem()
-            ? uiText("unavailable", { title: props.value.title })
-            : uiText("drawing", { title: props.value.title })}
-        </Label>
+      <If when={problem()}>
+        <View
+          style={{
+            ...row,
+            justifyContent: "space-between",
+            gap: space[8],
+            padding: space[12],
+            borderWidth: 1,
+            borderColor: c().border,
+            backgroundColor: c().surface,
+          }}
+        >
+          <Label variant="small" tone="muted" style={{ flex: 1 }}>
+            {uiText("unavailable", { title: props.value.title })}
+          </Label>
+          <Button
+            label={uiText("retry")}
+            icon="refresh"
+            onPress={retryWidget}
+          />
+        </View>
       </If>
-      <WebView
-        accessibilityLabel={props.value.title}
-        html={html}
-        incognito
-        style={{
-          alignSelf: "stretch",
-          height: problem() ? 1 : Math.max(1, height()),
-        }}
-        ref={(node) => {
-          frame = node;
-        }}
-        onMessage={receive}
-        onError={() => problem.set(true)}
-      />
+      <If when={!problem() && !height()}>
+        <View style={{ minHeight: widgetMinHeight }}>
+          <Revealed>
+            <View
+              role="progressbar"
+              accessibilityLabel={uiText("drawing", {
+                title: props.value.title,
+              })}
+              accessibilityState={{ busy: true }}
+            >
+              <SkeletonBar width="100%" height={widgetMinHeight} />
+            </View>
+          </Revealed>
+        </View>
+      </If>
+      <If when={!problem()}>
+        <Each of={[attempt()]} key={(n) => String(n)}>
+          {() => (
+            <WebView
+              accessibilityLabel={props.value.title}
+              html={html}
+              incognito
+              style={{
+                alignSelf: "stretch",
+                height: Math.max(1, height()),
+              }}
+              ref={(node) => {
+                frame = node;
+              }}
+              onMessage={receive}
+              onError={() => problem.set(true)}
+            />
+          )}
+        </Each>
+      </If>
     </View>
   );
 }

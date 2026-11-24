@@ -11,6 +11,7 @@ import { cleanup, effect, openUrl, signal, untracked, View } from "nsh";
 import {
   Button,
   colors,
+  DetailSkeleton,
   Empty,
   emptyWidth,
   grow,
@@ -20,6 +21,7 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
+import { settled } from "../../../components/pending";
 import { dotSize } from "../../../components/status-dot";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
@@ -168,7 +170,9 @@ export function SkillDetail(props: {
     const content = file();
     return content?.kind === "text" ? content.preview : undefined;
   };
-  const reloading = () => !failure() && (reading() || !handle());
+  const loadingSkill = () => !failure() && (reading() || !handle());
+  const contentSettled = settled(() => !loadingSkill());
+  const reloading = loadingSkill;
   const refresh = () => retry.update((count) => count + 1);
   const reload = () => (
     <Button
@@ -361,18 +365,26 @@ export function SkillDetail(props: {
           </View>
         </If>
         <If
-          when={file()}
+          when={contentSettled() ? file() : undefined}
           else={
             <If when={!failure()}>
-              <Label
-                tone="muted"
-                variant="small"
-                style={{ paddingTop: space[8] }}
+              <If
+                when={!contentSettled()}
+                else={
+                  <Label
+                    tone="muted"
+                    variant="small"
+                    style={{ paddingTop: space[8] }}
+                  >
+                    {uiText("selectAFile")}
+                  </Label>
+                }
               >
-                {reading() || !handle()
-                  ? uiText("loadingSkill")
-                  : uiText("selectAFile")}
-              </Label>
+                <DetailSkeleton
+                  label={uiText("loadingSkill")}
+                  style={{ padding: 0, paddingTop: space[8] }}
+                />
+              </If>
             </If>
           }
         >

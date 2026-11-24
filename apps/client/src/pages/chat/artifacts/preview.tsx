@@ -19,12 +19,14 @@ import {
   ActionMenu,
   Button,
   colors,
+  DetailSkeleton,
   Empty,
   grow,
   Label,
   Modal,
   row,
 } from "../../../components";
+import { settled } from "../../../components/pending";
 import { icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
@@ -81,6 +83,9 @@ export function ArtifactPreview(props: {
   const downloadProblem = signal("");
   let downloadRequest: AbortController | undefined;
   const viewer = computed(() => item()?.viewer);
+  const previewSettled = settled(
+    () => Boolean(url()) || Boolean(problem()) || viewer() === "download",
+  );
   const pdfCapture = signal<CaptureArtifactPdf>();
   const exportingPdf = signal(false);
   const pdfProblem = signal("");
@@ -389,15 +394,19 @@ export function ArtifactPreview(props: {
         when={problem()}
         else={
           <If
-            when={url()}
+            when={previewSettled() ? url() : undefined}
             else={
-              <Empty
-                title={
-                  item()?.viewer === "download"
-                    ? uiText("availableAsAZipDownload")
-                    : uiText("openingPreview")
+              <If
+                when={item()?.viewer === "download"}
+                else={
+                  <DetailSkeleton
+                    label={uiText("openingPreview")}
+                    style={grow}
+                  />
                 }
-              />
+              >
+                <Empty title={uiText("availableAsAZipDownload")} />
+              </If>
             }
           >
             {(link) =>

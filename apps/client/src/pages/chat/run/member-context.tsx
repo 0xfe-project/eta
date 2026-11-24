@@ -5,8 +5,10 @@ import type {
 } from "@eta/client-contracts";
 import { Clipboard, signal, View } from "nsh";
 import {
+  Button,
   Caption,
   colors,
+  DetailSkeleton,
   focusRing,
   grow,
   Icon,
@@ -85,8 +87,12 @@ export function MemberContext(props: {
 }) {
   const host = useHost();
   const c = colors();
+  const retryTick = signal(0);
   const target = () => (props.session ? `sessions.${props.session}` : "");
-  followSession(() => props.session || undefined);
+  followSession(() => {
+    retryTick();
+    return props.session || undefined;
+  });
   const usage = useContextUsage(() => props.session || undefined);
   const open = signal<Record<string, boolean>>({});
   const copied = signal("");
@@ -149,6 +155,8 @@ export function MemberContext(props: {
       .filter(Boolean)
       .join(" · ");
   };
+  const loadingContext = () =>
+    !external() && !!target() && !failed() && !arrived();
   /** The state of the read, for an eta session: what to say instead of the lists. */
   const notice = () => {
     if (external())
@@ -161,7 +169,6 @@ export function MemberContext(props: {
       });
     if (!target()) return uiText("contextNoPrompt");
     if (failed()) return uiText("contextReadFailed");
-    if (!arrived()) return uiText("contextReading");
     return "";
   };
 
@@ -317,11 +324,33 @@ export function MemberContext(props: {
     <SmoothScroll style={grow} scrollbar={false}>
       <View style={{ padding: inset, gap: space[16] }}>
         <If
-          when={!notice()}
+          when={!loadingContext() && !notice()}
           else={
-            <Label variant="small" tone="muted">
-              {notice()}
-            </Label>
+            <If
+              when={loadingContext()}
+              else={
+                <View style={{ alignItems: "flex-start", gap: space[8] }}>
+                  <Label variant="small" tone="muted">
+                    {notice()}
+                  </Label>
+                  <If when={failed()}>
+                    <Button
+                      label={uiText("retry")}
+                      icon="refresh"
+                      onPress={() => {
+                        retryTick.update((count) => count + 1);
+                        host.reconnect();
+                      }}
+                    />
+                  </If>
+                </View>
+              }
+            >
+              <DetailSkeleton
+                label={uiText("contextReading")}
+                style={{ padding: 0 }}
+              />
+            </If>
           }
         >
           <If when={summary()}>

@@ -12,6 +12,7 @@ import {
   ActionMenu,
   Button,
   colors,
+  DetailSkeleton,
   dialogWidth,
   Empty,
   emptyWidth,
@@ -20,12 +21,14 @@ import {
   Header,
   Icon,
   Label,
+  ListSkeleton,
   Modal,
   row,
   sizes,
   SmoothScroll,
 } from "../../components";
 import { chatText, shownMentions } from "../../components/eta-editor";
+import { settled } from "../../components/pending";
 import { dotSize } from "../../components/status-dot";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -89,6 +92,8 @@ export function Routines(props: {
   const canDelete = () => host.can("routines.delete");
   const info = () =>
     gone() ? undefined : host.section<RoutineInfo>(target() ?? "", "info");
+  const listSettled = settled(() => !!host.state().targets.routines);
+  const detailSettled = settled(() => !selected() || !!info() || gone());
   const report = signal("");
   const reportIndex = () =>
     gone() ? -1 : runs().findIndex((run) => run.id === report());
@@ -395,105 +400,102 @@ export function Routines(props: {
               </Header>
             </If>
             <If
-              when={list().length}
-              else={
-                <Empty
-                  title={
-                    host.state().targets.routines
-                      ? uiText("noRoutinesYet")
-                      : uiText("loadingRoutine")
-                  }
-                  description={
-                    host.state().targets.routines
-                      ? uiText("emptyRoutineHelp")
-                      : undefined
-                  }
-                  icon="routines"
-                  iconSize={icon.lg}
-                  iconTone="ink"
-                  titleVariant="body"
-                  titleWeight={weight.regular}
-                  descriptionVariant="small"
-                  descriptionWidth={emptyWidth.wide}
-                  // The list's empty state sits at the top of the column.
-                  style={{
-                    flex: 0,
-                    justifyContent: "flex-start",
-                    paddingTop: phone()
-                      ? space[64]
-                      : tablet()
-                        ? space[48]
-                        : space[64],
-                    paddingBottom: phone() ? space[24] : 0,
-                    paddingHorizontal: tablet() ? space[20] : space[32],
-                  }}
-                >
-                  <If when={host.can("routines.create") && !editing()}>
-                    <View style={{ ...row, paddingTop: space[8] }}>
-                      <Button
-                        label={uiText("newRoutine")}
-                        icon="plus"
-                        tone="primary"
-                        size={
-                          phone()
-                            ? control.touch
-                            : tablet()
-                              ? control.md
-                              : control.sm
-                        }
-                        iconSize={phone() ? icon.md : icon.sm}
-                        style={{
-                          paddingHorizontal: phone()
-                            ? space[16]
-                            : tablet()
-                              ? space[12]
-                              : space[8],
-                          gap: space[4],
-                        }}
-                        onPress={() => editing.set("new")}
-                      />
-                    </View>
-                  </If>
-                </Empty>
-              }
+              when={listSettled()}
+              else={<ListSkeleton label={uiText("loadingRoutine")} />}
             >
-              <SmoothScroll style={grow} scrollbar={false}>
-                <View
-                  style={
-                    props.layout === "desktop"
-                      ? {
-                          paddingVertical: space[12],
-                          paddingHorizontal: space[16],
-                        }
-                      : phone() && paused()
-                        ? { borderTopWidth: 1, borderColor: c().border }
-                        : undefined
-                  }
-                >
-                  <Each of={list()} key={(item) => item.id}>
-                    {(item) => (
-                      <If
-                        when={phone()}
-                        else={
-                          <RoutineRow
+              <If
+                when={list().length}
+                else={
+                  <Empty
+                    title={uiText("noRoutinesYet")}
+                    description={uiText("emptyRoutineHelp")}
+                    icon="routines"
+                    iconSize={icon.lg}
+                    iconTone="ink"
+                    titleVariant="body"
+                    titleWeight={weight.regular}
+                    descriptionVariant="small"
+                    descriptionWidth={emptyWidth.wide}
+                    // The list's empty state sits at the top of the column.
+                    style={{
+                      flex: 0,
+                      justifyContent: "flex-start",
+                      paddingTop: phone()
+                        ? space[64]
+                        : tablet()
+                          ? space[48]
+                          : space[64],
+                      paddingBottom: phone() ? space[24] : 0,
+                      paddingHorizontal: tablet() ? space[20] : space[32],
+                    }}
+                  >
+                    <If when={host.can("routines.create") && !editing()}>
+                      <View style={{ ...row, paddingTop: space[8] }}>
+                        <Button
+                          label={uiText("newRoutine")}
+                          icon="plus"
+                          tone="primary"
+                          size={
+                            phone()
+                              ? control.touch
+                              : tablet()
+                                ? control.md
+                                : control.sm
+                          }
+                          iconSize={phone() ? icon.md : icon.sm}
+                          style={{
+                            paddingHorizontal: phone()
+                              ? space[16]
+                              : tablet()
+                                ? space[12]
+                                : space[8],
+                            gap: space[4],
+                          }}
+                          onPress={() => editing.set("new")}
+                        />
+                      </View>
+                    </If>
+                  </Empty>
+                }
+              >
+                <SmoothScroll style={grow} scrollbar={false}>
+                  <View
+                    style={
+                      props.layout === "desktop"
+                        ? {
+                            paddingVertical: space[12],
+                            paddingHorizontal: space[16],
+                          }
+                        : phone() && paused()
+                          ? { borderTopWidth: 1, borderColor: c().border }
+                          : undefined
+                    }
+                  >
+                    <Each of={list()} key={(item) => item.id}>
+                      {(item) => (
+                        <If
+                          when={phone()}
+                          else={
+                            <RoutineRow
+                              item={item()}
+                              selected={selected() === item().id}
+                              paused={!!paused()}
+                              tablet={tablet()}
+                              onOpen={() => select(item().id)}
+                            />
+                          }
+                        >
+                          <PhoneRoutineRow
                             item={item()}
-                            selected={selected() === item().id}
                             paused={!!paused()}
-                            tablet={tablet()}
                             onOpen={() => select(item().id)}
                           />
-                        }
-                      >
-                        <PhoneRoutineRow
-                          item={item()}
-                          paused={!!paused()}
-                          onOpen={() => select(item().id)}
-                        />
-                      </If>
-                    )}
-                  </Each>
-                </View>
-              </SmoothScroll>
+                        </If>
+                      )}
+                    </Each>
+                  </View>
+                </SmoothScroll>
+              </If>
             </If>
           </View>
         </If>
@@ -506,45 +508,40 @@ export function Routines(props: {
             <If when={!phone() && editing()}>{editor()}</If>
             <If when={(phone() && selected()) || (!phone() && !editing())}>
               <If
-                when={info()}
+                when={detailSettled() ? info() : undefined}
                 else={
                   <If
                     when={gone()}
                     else={
-                      <If when={selected() || list().length}>
-                        <Empty
-                          title={
-                            selected()
-                              ? uiText("loadingRoutine")
-                              : uiText("selectARoutine")
-                          }
-                          description={
-                            selected()
-                              ? undefined
-                              : uiText("selectOneOnTheLeftTo")
-                          }
-                          icon="routines"
-                          iconSize={selected() ? undefined : icon.lg}
-                          iconTone={selected() ? undefined : "ink"}
-                          titleWeight={tablet() ? weight.regular : undefined}
-                          // Tablet runs it across the pane.
-                          descriptionWidth={
-                            tablet() ? emptyWidth.wide : emptyWidth.narrow
-                          }
-                          style={
-                            selected()
-                              ? undefined
-                              : {
-                                  justifyContent: "flex-start",
-                                  paddingTop: tablet()
-                                    ? emptyTop.tablet
-                                    : emptyTop.desktop,
-                                  paddingHorizontal: tablet()
-                                    ? space[40]
-                                    : undefined,
-                                }
-                          }
-                        />
+                      <If
+                        when={!selected()}
+                        else={
+                          <DetailSkeleton label={uiText("loadingRoutine")} />
+                        }
+                      >
+                        <If when={list().length}>
+                          <Empty
+                            title={uiText("selectARoutine")}
+                            description={uiText("selectOneOnTheLeftTo")}
+                            icon="routines"
+                            iconSize={icon.lg}
+                            iconTone="ink"
+                            titleWeight={tablet() ? weight.regular : undefined}
+                            // Tablet runs it across the pane.
+                            descriptionWidth={
+                              tablet() ? emptyWidth.wide : emptyWidth.narrow
+                            }
+                            style={{
+                              justifyContent: "flex-start",
+                              paddingTop: tablet()
+                                ? emptyTop.tablet
+                                : emptyTop.desktop,
+                              paddingHorizontal: tablet()
+                                ? space[40]
+                                : undefined,
+                            }}
+                          />
+                        </If>
                       </If>
                     }
                   >

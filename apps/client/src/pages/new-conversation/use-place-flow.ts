@@ -101,15 +101,22 @@ export function usePlaceFlow() {
   const canSearchGitHub = computed(
     () => capabilities()?.gh === "ready" && host.can("places.repos"),
   );
+  let lastContext = "";
   effect(() => {
     const id = machineId();
     const mode = kind();
     const filter = mode === "browse" ? "" : query();
     const path = mode === "browse" ? browsePath() : null;
     const githubSearch = mode === "github" && canSearchGitHub();
-    listing.set(undefined);
-    matches.set([]);
-    repositories.set(undefined);
+    const contextKey = `${id ?? ""}:${mode}`;
+    if (contextKey !== lastContext) {
+      lastContext = contextKey;
+      listing.set(undefined);
+      matches.set([]);
+      repositories.set(undefined);
+    } else if (!filter && mode !== "browse" && !githubSearch) {
+      matches.set([]);
+    }
     loading.set(false);
     if (!id) return;
     const browsing = mode === "browse" && canBrowse();

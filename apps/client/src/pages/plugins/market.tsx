@@ -21,6 +21,7 @@ import {
 import {
   Button,
   colors,
+  CompactSkeleton,
   Field,
   grow,
   Header,
@@ -1195,9 +1196,7 @@ export function Market(props: {
                 {line(uiText("marketHomepage"), current()!.homepage ?? "")}
               </If>
               <If when={infoLoading()}>
-                <Label variant="small" tone="muted">
-                  {uiText("marketReading")}
-                </Label>
+                <CompactSkeleton label={uiText("marketReading")} />
               </If>
               <If when={infoError()}>
                 <Label
