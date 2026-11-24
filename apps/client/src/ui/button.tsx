@@ -10,23 +10,9 @@ import { icon, opacity, space, weight } from "../components/tokens";
 import { useText } from "../i18n";
 import { createPressable } from "./behaviors";
 import { Icon, Label } from "./text";
+import { hint } from "./tooltip";
 
-/** A hover hint drawn as a small dark label (a bare string tooltip draws nothing on the web). */
-export function hint(text: string | undefined, c: ReturnType<typeof colors>) {
-  return text ? (
-    <View
-      style={{
-        paddingHorizontal: space[8],
-        paddingVertical: space[4],
-        backgroundColor: c().ink,
-      }}
-    >
-      <Label variant="small" tone="canvas">
-        {text}
-      </Label>
-    </View>
-  ) : undefined;
-}
+export { hint } from "./tooltip";
 
 export function Button(props: {
   label: string;
