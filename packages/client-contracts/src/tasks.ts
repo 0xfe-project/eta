@@ -145,6 +145,12 @@ export interface BoardTaskView {
   /** The status of its newest run; null before the first. */
   runStatus: TaskRunStatus | null;
   /**
+   * When its executor's newest run started (or was queued, before it starts); null before the
+   * first. A mentioned agent's run is not counted: it is not the task running. Absent from an older
+   * host.
+   */
+  runStartedAt?: number | null;
+  /**
    * The tasks it waits for: its first run (and a rerun) starts only once every one is resolved.
    * Absent from a host older than dependencies, which is none.
    */

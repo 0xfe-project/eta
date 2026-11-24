@@ -73,6 +73,10 @@ export const tasksMessages = {
     "Run {{number}} · {{name}}",
     "第 {{number}} 次运行 · {{name}}",
   ],
+  taskRunMentioned: [
+    "Answer {{number}} · {{name}} (mentioned)",
+    "第 {{number}} 次回答 · {{name}}（被 @）",
+  ],
   taskWaitsForIt: ["Waits for it · {{state}}", "本任务在等它 · {{state}}"],
   taskWaitsForThisTask: ["Waits for this task", "在等本任务"],
   taskGoesNext: ["goes next", "接着开始"],
@@ -103,6 +107,12 @@ export const tasksMessages = {
   ],
   editDescription: ["Edit description", "编辑描述"],
   taskIsWorking: ["{{name}} is working", "{{name}} 正在工作"],
+  taskIsAnswering: [
+    "{{name}} is answering (mentioned)",
+    "{{name}} 正在回答（被 @）",
+  ],
+  taskIsStarting: ["{{name}} is starting", "{{name}} 正在启动"],
+  taskIsQueued: ["{{name}} is queued", "{{name}} 排队中"],
   taskDeliveredTurn: ["{{name}} delivered this turn", "{{name}} 交付了这一轮"],
   taskMe: ["Me", "我"],
   taskCreator: ["Creator", "创建者"],
@@ -444,6 +454,10 @@ export const tasksMessages = {
   taskRunTook: [
     "Run {{number}} · took {{elapsed}}",
     "第 {{number}} 次运行 · 用时 {{elapsed}}",
+  ],
+  taskAnswerTook: [
+    "Answer {{number}} · took {{elapsed}}",
+    "第 {{number}} 次回答 · 用时 {{elapsed}}",
   ],
   taskRunMachine: ["Machine {{name}}", "机器 {{name}}"],
   taskNow: ["Now: {{title}}", "当前：{{title}}"],

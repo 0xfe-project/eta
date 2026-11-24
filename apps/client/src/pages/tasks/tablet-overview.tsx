@@ -17,7 +17,7 @@ import { TaskActivity } from "./activity";
 import { actorLabel, CreatorChip } from "./creator";
 import { NeighbourStrip, Prerequisites, Subtasks } from "./dependencies";
 import { taskMoment } from "./facts";
-import { activeTaskRun } from "./run-log";
+import { activeTaskRun, latestExecutorRun } from "./run-log";
 import { Segmented } from "./segmented";
 import { statusName, TaskGlyph, tones } from "./status";
 import { StatusSelect } from "./status-select";
@@ -222,7 +222,7 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
   const host = useHost();
   const item = () => props.item;
   const parent = () => !!item().children?.length;
-  const run = () => item().runs.at(-1);
+  const run = () => latestExecutorRun(item());
   /** A stopped or finished run starts over from its row, as on the desktop rail. */
   const canStartOver = () => !parent() && !!run() && !activeTaskRun(run()!);
   const executor = () =>

@@ -128,6 +128,9 @@ describe("a mention on a task", () => {
     const detail = r.w.host.product.board.detail(r.task.id)!;
     expect(detail.status).toBe("in_review");
     expect(detail.runs.map((run) => run.agentId)).toEqual([null, r.bea.id]);
+    // The board's card times the executor's run, not her answer.
+    expect(detail.runStatus).toBe("completed");
+    expect(detail.runStartedAt).toBe(detail.runs[0]!.startedAt);
     // The comment was for Bea: the executor was not woken by it, nor by her answer.
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(runsOf(r.w, r.task.id)).toHaveLength(2);
