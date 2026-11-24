@@ -5,11 +5,18 @@ import type { light, TextVariant } from "./theme";
 import { Image, Text, View } from "nsh";
 import { TextView } from "nsh/base";
 import { iconPaths } from "./icons";
-import { colors, fontFamily, Fonts, monoFontFamily, textFaces } from "./theme";
+import {
+  colors,
+  densityDefaults,
+  fontFamily,
+  Fonts,
+  monoFontFamily,
+  textFaces,
+} from "./theme";
 
 export function Label(props: {
   children?: JSX.Element | string | number;
-  /** The text's role in the type scale; `body` by default. */
+  /** The text's role in the type scale; the density's (`body` in regular) by default. */
   variant?: TextVariant;
   tone?: keyof typeof light;
   weight?: number;
@@ -19,7 +26,8 @@ export function Label(props: {
   const color = colors();
   const fonts = Fonts();
   const type = textFaces();
-  const face = () => type(props.variant ?? "body");
+  const density = densityDefaults();
+  const face = () => type(props.variant ?? density().text);
   return (
     <Text
       style={{
@@ -43,6 +51,8 @@ export function Icon(props: {
   tone?: keyof typeof light;
 }) {
   const color = colors();
+  const density = densityDefaults();
+  const size = () => props.size ?? density().icon;
   const src = () =>
     `data:image/svg+xml,${encodeURIComponent(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path fill="${
@@ -54,8 +64,8 @@ export function Icon(props: {
       src={src()}
       fadeDuration={0}
       style={{
-        width: props.size ?? 14,
-        height: props.size ?? 14,
+        width: size(),
+        height: size(),
         flexShrink: 0,
       }}
     />

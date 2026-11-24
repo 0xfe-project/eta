@@ -392,7 +392,7 @@ export function SkillDetail(props: {
       >
         <Each of={diagnostics()} key={(message) => message}>
           {(message) => (
-            // A small warning mark beside foreground text: red or amber
+            // A small warning mark beside foreground text: red or warning
             // stays a status mark, never the message.
             <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
               <View

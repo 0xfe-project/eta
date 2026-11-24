@@ -306,7 +306,7 @@ export function WorkspaceSkeleton(props: {
         </View>
       </If>
       <If when={props.backdrop}>
-        <View style={{ ...fill, backgroundColor: c().shade }} />
+        <View style={{ ...fill, backgroundColor: c().scrim }} />
       </If>
     </View>
   );

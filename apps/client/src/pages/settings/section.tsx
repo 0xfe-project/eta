@@ -149,7 +149,7 @@ export function PaneBack(props: {
 }
 
 /**
- * An amber line with the design's 12px Warning mark before it: solid in list rows, the outline
+ * A warning line with the design's 12px Warning mark before it: solid in list rows, the outline
  * where the design draws one (an external agent's sign-in, the editor's missing model).
  */
 export function WarningLine(props: { text: string; outline?: boolean }) {

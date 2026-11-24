@@ -98,14 +98,14 @@ export function PhoneTaskList(props: {
                 <Label
                   variant="caption"
                   weight={600}
-                  tone={group().name === "Needs you" ? "amber" : "mutedInk"}
+                  tone={group().name === "Needs you" ? "warning" : "mutedInk"}
                   style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
                 >
                   {uiText(group().label)}
                 </Label>
                 <Label
                   variant="caption"
-                  tone={group().name === "Needs you" ? "amber" : "muted"}
+                  tone={group().name === "Needs you" ? "warning" : "muted"}
                 >
                   {entries().length}
                 </Label>
@@ -145,7 +145,7 @@ export function PhoneTaskList(props: {
                     const stateTone = () => {
                       const task = entry();
                       if (task.subtasks?.total) return undefined;
-                      if (task.status === "in_review") return "amber";
+                      if (task.status === "in_review") return "warning";
                       if (
                         task.status === "in_progress" &&
                         task.runStatus !== "queued" &&
@@ -338,7 +338,7 @@ export function TabletTaskList(props: {
     task.subtasks?.total
       ? "muted"
       : task.status === "in_review"
-        ? "amber"
+        ? "warning"
         : task.status === "in_progress"
           ? "blue"
           : task.status === "blocked"
@@ -420,7 +420,7 @@ export function TaskTableRow(props: {
   };
   const hintTone = () => {
     const status = props.item.status;
-    if (status === "in_review") return "amber";
+    if (status === "in_review") return "warning";
     if (status === "in_progress" && !props.item.subtasks?.total) return "blue";
     if (status === "todo" && !props.item.waitingOn?.length) return "ink";
     return status === "blocked" && !props.item.waitingOn?.length

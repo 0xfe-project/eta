@@ -561,7 +561,7 @@ export function ConfigurePlugin(props: {
             : { justifyContent: "center", paddingVertical: 24 }),
         }}
         backdropStyle={{
-          backgroundColor: props.tablet ? c().sheetShade : c().modalShade,
+          backgroundColor: props.tablet ? c().sheetScrim : c().scrim,
         }}
         onOpenChange={({ open }) => {
           if (!open) props.onClose();

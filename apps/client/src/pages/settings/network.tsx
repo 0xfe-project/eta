@@ -109,7 +109,7 @@ export function NetworkSettings(props: { phone?: boolean }) {
         when={editable()}
         else={
           <View style={rowStyle}>
-            <Label variant="small" tone="amber">
+            <Label variant="small" tone="warning">
               {uiText("privateNetworkUnsupported")}
             </Label>
           </View>

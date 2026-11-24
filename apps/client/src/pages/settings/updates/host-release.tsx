@@ -73,7 +73,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
     }
     if (check()?.error) return "red";
     if (offer()) return "blue";
-    if (check()?.blocked || check()?.heldOnPrerelease) return "amber";
+    if (check()?.blocked || check()?.heldOnPrerelease) return "warning";
     return "green";
   };
   const percent = () => downloadPercent(status()?.download);

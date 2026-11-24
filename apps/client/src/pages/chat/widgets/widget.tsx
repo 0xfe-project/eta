@@ -130,7 +130,7 @@ export function Widget(props: {
           "--color-border-tertiary": theme.border,
           "--color-text-info": theme.blue,
           "--color-text-success": theme.green,
-          "--color-text-warning": theme.amber,
+          "--color-text-warning": theme.warning,
           "--color-text-danger": theme.red,
           "--font-sans": sans,
           "--font-mono": mono,

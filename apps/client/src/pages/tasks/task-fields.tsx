@@ -141,7 +141,7 @@ function CommentBox(props: {
         <TaskCommentHint state={props.state} />
       </If>
       <If when={limits.tooLong()}>
-        <Label tone="amber" variant="caption">
+        <Label tone="warning" variant="caption">
           {uiText("composerTooLong")}
         </Label>
       </If>

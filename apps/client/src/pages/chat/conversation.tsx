@@ -416,7 +416,7 @@ export function Conversation(props: {
               cursor: "pointer",
             }}
           >
-            <StatusDot color={c().amber} />
+            <StatusDot color={c().warning} />
             <Label variant="small" lines={1} style={{ flex: 1 }}>
               {approvals().length === 1
                 ? uiText("proposalWaitingForApproval")

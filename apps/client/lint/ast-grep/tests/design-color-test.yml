@@ -1,0 +1,18 @@
+id: design-color
+valid:
+  - "const a = { color: c().ink, backgroundColor: c().selected };"
+  - "const a = { borderColor: \"transparent\" };"
+  - "const a = { backgroundColor: open() ? c().selected : undefined };"
+  - "const a = { label: \"#1\" };"
+  - "const a = { backgroundColor: `${c().selected}` };"
+  - "<StatusDot color={c().green} />"
+invalid:
+  - "const a = { color: \"#ffffff\" };"
+  - "const a = { backgroundColor: \"#0a0a0a14\" };"
+  - "const a = { borderColor: \"rgba(0, 0, 0, 0.12)\" };"
+  - "const a = { backgroundColor: `${c().warning}1f` };"
+  - "const a = { borderColor: hovered() ? `${c().ink}4d` : c().border };"
+  - "const a = { boxShadow: [{ x: 0, y: 8, blur: 24, color: \"#0000001f\" }] };"
+  - "const a = { color: theme.accent ?? \"#638eff\" };"
+  - "<StatusDot color=\"#e5a018\" />"
+  - "<View hoverStyle={{ backgroundColor: `${c().selected}80` }} />"

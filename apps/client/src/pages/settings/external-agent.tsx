@@ -122,7 +122,9 @@ export function ExternalAgentDetail(props: {
             gap: 6,
           }}
         >
-          <StatusDot color={status() === "available" ? c().green : c().amber} />
+          <StatusDot
+            color={status() === "available" ? c().green : c().warning}
+          />
           <Label variant="small" tone="mutedInk">
             {uiText(acpStatus[status()])}
           </Label>
@@ -184,7 +186,7 @@ export function ExternalAgentDetail(props: {
           >
             <Label
               variant="small"
-              tone={status() === "available" ? "muted" : "amber"}
+              tone={status() === "available" ? "muted" : "warning"}
             >
               {result()?.detail ??
                 props.agent.detail ??

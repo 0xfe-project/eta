@@ -17,7 +17,7 @@ import {
   setMeta,
 } from "nsh/base";
 import { uiText } from "../../i18n";
-import { colors } from "../theme";
+import { colors, densityDefaults } from "../theme";
 import { baseText, editorLook, useTextTheme } from "./look";
 import { asRich, markdownToDoc } from "./markdown";
 import { refusedFile } from "./plugins/attachment";
@@ -250,10 +250,12 @@ export function EtaEditor(props: {
   clip?: boolean;
   /** The text's padding inside the box. */
   padding?: { top: number; bottom: number; left: number; right: number };
+  /** The text's role; the density's (`body` in regular) by default. */
   variant?: "body" | "small";
   style?: ViewStyle;
 }) {
   const c = colors();
+  const density = densityDefaults();
   const theme = useTextTheme();
   /** The plugins' styles, over one another in their order. */
   const looks = () => editorLook(props.editor.plugins, theme());
@@ -315,7 +317,7 @@ export function EtaEditor(props: {
               paddingBottom: pad().bottom,
               paddingLeft: pad().left,
               paddingRight: pad().right,
-              ...baseText(theme(), props.variant),
+              ...baseText(theme(), props.variant ?? density().editor),
             },
             placeholder: { color: c().muted },
             caret: { backgroundColor: c().ink },

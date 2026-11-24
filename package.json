@@ -27,6 +27,7 @@
     "knip": "knip",
     "lint:repo": "eslint --cache --cache-location node_modules/.cache/eslint/repo . --ignore-pattern 'apps/**' --ignore-pattern 'packages/**'"
   },
+  "trustedDependencies": ["@ast-grep/cli"],
   "devDependencies": {
     "@antfu/eslint-config": "^9.5.1",
     "@eslint-react/eslint-plugin": "^5.28.8",

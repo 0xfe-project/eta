@@ -8,7 +8,8 @@
     "package:web": "bun ../../scripts/nsh-client.ts package App.tsx --target web --out dist",
     "client:check": "bun ../../scripts/nsh-client.ts check",
     "client:test": "bun ../../scripts/nsh-client.ts test",
-    "lint": "bun scripts/check-type-scale.ts",
+    "lint": "ast-grep test --skip-snapshot-tests && bun scripts/check-design-values.ts",
+    "lint:baseline": "bun scripts/check-design-values.ts --update",
     "package": "bun ../../scripts/nsh-client.ts package App.tsx",
     "publish:ios": "bun ../../scripts/nsh-client.ts publish ios",
     "publish:android": "bun ../../scripts/nsh-client.ts publish android"
@@ -21,5 +22,8 @@
     "html2canvas-pro": "2.6.4",
     "jsqr": "^1.4.0",
     "qrcode-generator": "^2.0.4"
+  },
+  "devDependencies": {
+    "@ast-grep/cli": "0.51.3"
   }
 }

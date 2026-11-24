@@ -120,7 +120,7 @@ function Swatches(props: { colors: ReturnType<typeof palette> }) {
             props.colors.ink,
             props.colors.blue,
             props.colors.green,
-            props.colors.amber,
+            props.colors.warning,
             props.colors.red,
           ] as const
         }

@@ -162,7 +162,7 @@ function InsertBody(props: {
     <View style={{ width: 288 }}>
       <View style={{ padding: 8, gap: 6 }}>
         <If when={limits.tooLong()}>
-          <Label variant="caption" tone="amber">
+          <Label variant="caption" tone="warning">
             {uiText("composerTooLong")}
           </Label>
         </If>

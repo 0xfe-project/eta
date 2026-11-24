@@ -411,7 +411,7 @@ function ComposerBody(
         />
       </If>
       <If when={limits.tooLong()}>
-        <Label tone="amber" variant="small">
+        <Label tone="warning" variant="small">
           {uiText("composerTooLong")}
         </Label>
       </If>

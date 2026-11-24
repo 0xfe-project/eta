@@ -15,7 +15,6 @@ import {
   grow,
   Icon,
   Label,
-  monoFontFamily,
   PaneHandle,
   row,
   SmoothScroll,
@@ -70,7 +69,7 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
             paddingHorizontal: 12,
             gap: 10,
             borderWidth: 1,
-            borderColor: review() ? c().amber : c().strong,
+            borderColor: review() ? c().warning : c().strong,
           }}
         >
           <If when={!review()}>
@@ -218,7 +217,7 @@ export function RunLine(props: {
               <Icon name="spinner" size={props.tablet ? 14 : 12} tone="muted" />
             </If>
             <If when={!props.tablet && review()}>
-              <StatusDot color={c().amber} />
+              <StatusDot color={c().warning} />
             </If>
             <Label variant="caption" weight={600}>
               {uiText(review() ? "taskDeliveredTurn" : "taskIsWorking", {
@@ -537,7 +536,7 @@ export function TaskOverview(props: {
     item().status === "in_progress"
       ? "blue"
       : item().status === "in_review"
-        ? "amber"
+        ? "warning"
         : "mutedInk";
   const prerequisiteState = (edge: TaskDependencyView) => {
     if (edge.status === "cancelled" || edge.state === "cancelled")

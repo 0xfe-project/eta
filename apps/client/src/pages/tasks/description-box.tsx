@@ -156,7 +156,7 @@ export function DescriptionBox(props: {
         </Label>
         <Label
           variant="caption"
-          tone={props.description.tooLong() ? "amber" : "faint"}
+          tone={props.description.tooLong() ? "warning" : "faint"}
         >
           {`${grouped(props.description.count())} / ${grouped(DESCRIPTION_MAX)}`}
         </Label>

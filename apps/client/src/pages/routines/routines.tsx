@@ -265,8 +265,8 @@ export function Routines(props: {
           marginTop: props.layout === "desktop" ? 11 : 12,
           marginBottom: phone() ? 4 : props.layout === "tablet" ? 12 : 0,
           borderWidth: 1,
-          // state-warning at 40% and 12%.
-          borderColor: `${c().warning}66`,
+          borderColor: c().warningLine,
+          // state-warning at 12%.
           backgroundColor: `${c().warning}1f`,
         }}
       >

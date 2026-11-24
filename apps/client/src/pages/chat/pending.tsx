@@ -233,7 +233,7 @@ export function Pending(props: {
   function PanelRow(props: {
     title: string;
     detail: string;
-    detailTone?: "amber" | "ink" | "muted";
+    detailTone?: "warning" | "ink" | "muted";
     detailVariant?: TextVariant;
     action: string;
     actionLink?: boolean;
@@ -361,7 +361,7 @@ export function Pending(props: {
                       ? uiText("prerequisiteCancelledShort")
                       : uiText("taskInReview")
                   }
-                  detailTone={item().status === "blocked" ? "ink" : "amber"}
+                  detailTone={item().status === "blocked" ? "ink" : "warning"}
                   detailVariant={
                     item().status === "blocked" ? "caption" : "small"
                   }
@@ -440,7 +440,7 @@ export function Pending(props: {
       >
         <Label
           variant="caption"
-          tone="amber"
+          tone="warning"
           lines={1}
           style={{ letterSpacing: 1, textTransform: "uppercase" }}
         >

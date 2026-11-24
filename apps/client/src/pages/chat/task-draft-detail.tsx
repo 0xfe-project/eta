@@ -205,9 +205,9 @@ export function TaskDraftDetail(props: {
       <If when={host.state().status !== "open"}>
         <View
           role="alert"
-          style={{ padding: 8, backgroundColor: color().amberFill }}
+          style={{ padding: 8, backgroundColor: color().warningFill }}
         >
-          <Label tone="amber">{uiText("connectionLostReconnecting")}</Label>
+          <Label tone="warning">{uiText("connectionLostReconnecting")}</Label>
         </View>
       </If>
       <SmoothScroll

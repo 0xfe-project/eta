@@ -35,7 +35,7 @@ export function reasonTone(reason: RuntimeReason | undefined) {
     ? "green"
     : reason === "timeout" || reason === "failed"
       ? "red"
-      : "amber";
+      : "warning";
 }
 
 /** What signs a runtime in, run in a terminal on its machine; eta never signs one in itself. */

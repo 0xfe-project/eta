@@ -58,7 +58,7 @@ export function ModelSourceList(props: {
   const providerStatus = (item: ProviderSummary): EntityStatus => {
     const check = checks()[item.id];
     if (keyMissing(item))
-      return { label: uiText("sourceNeedsKey"), color: c().amber };
+      return { label: uiText("sourceNeedsKey"), color: c().warning };
     if (check?.state === "invalid_key")
       return { label: uiText("sourceKeyRefused"), color: c().red };
     if (check?.state === "unreachable")
@@ -100,7 +100,7 @@ export function ModelSourceList(props: {
     if (item.state === "needs_login" || item.state === "error")
       return item.error?.code === "invalid_api_key"
         ? { label: uiText("sourceKeyRefused"), color: c().red }
-        : { label: uiText("sourceNeedsLogin"), color: c().amber };
+        : { label: uiText("sourceNeedsLogin"), color: c().warning };
     return { label: uiText("sourceWorking"), color: c().green };
   };
   return (
