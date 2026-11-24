@@ -18,12 +18,10 @@ import {
   untracked,
   View,
 } from "nsh";
-import { Input } from "nsh/base";
 import {
   Button,
   colors,
-  fontFamily,
-  Fonts,
+  Field,
   grow,
   Header,
   Label,
@@ -31,7 +29,6 @@ import {
   row,
   SmoothScroll,
   textFaces,
-  textStyle,
 } from "../../components";
 import { hint } from "../../components/controls";
 import { CloseButton } from "../../components/navigation-buttons";
@@ -95,7 +92,6 @@ export function Market(props: {
   const host = useHost();
   const c = colors();
   const type = textFaces();
-  const fonts = Fonts();
   const catalog = signal<MarketCatalog | undefined>(lastCatalog);
   const show = (next: MarketCatalog) => {
     lastCatalog = next;
@@ -531,25 +527,17 @@ export function Market(props: {
     value: () => string,
     onChange: (value: string) => void,
   ) => (
-    <Input
-      accessibilityLabel={label}
+    <Field
+      label={label}
       placeholder={label}
       value={value()}
-      submitBehavior="submit"
-      onChange={(event) => onChange(event.value)}
-      focusStyle={{ borderColor: c().ink }}
-      style={{
-        color: c().ink,
-        placeholderColor: c().faint,
-        backgroundColor: c().canvas,
-        fontFamily: fontFamily(fonts().interface),
-        ...textStyle(type("small")),
-        height: phone() ? control.touch : control.md,
-        paddingHorizontal: phone() ? space[12] : space[8],
-        borderWidth: 1,
-        borderColor: c().strong,
-        borderRadius: 0,
-      }}
+      compact
+      onChange={onChange}
+      style={
+        phone()
+          ? { height: control.touch, paddingHorizontal: space[12] }
+          : undefined
+      }
     />
   );
   const authLabel = (auth: ComposioAuth) =>

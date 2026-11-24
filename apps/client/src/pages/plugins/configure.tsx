@@ -6,15 +6,13 @@ import type {
   PluginView,
 } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { Dialog, Input } from "nsh/base";
+import { Dialog } from "nsh/base";
 import {
   Button,
   colors,
   dialogWidth,
   Field,
   fill,
-  fontFamily,
-  Fonts,
   grow,
   Label,
   Modal,
@@ -51,9 +49,6 @@ export const sheetEdge = {
 
 export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
   const host = useHost();
-  const c = colors();
-  const type = textFaces();
-  const fonts = Fonts();
   const repo = signal("");
   const rev = signal("");
   const path = signal("");
@@ -78,27 +73,19 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
     onChange: (value: string) => void,
     first = false,
   ) => (
-    <Input
-      accessibilityLabel={label}
+    <Field
+      label={label}
       placeholder={label}
       value={value()}
       autoFocus={first && !props.phone}
-      submitBehavior="submit"
+      compact
       onSubmit={() => void submit()}
-      onChange={(event) => onChange(event.value)}
-      focusStyle={{ borderColor: c().ink }}
-      style={{
-        color: c().ink,
-        placeholderColor: c().faint,
-        backgroundColor: c().canvas,
-        fontFamily: fontFamily(fonts().interface),
-        ...textStyle(type("small")),
-        height: props.phone ? space[40] : control.md,
-        paddingHorizontal: props.phone ? space[12] : space[8],
-        borderWidth: 1,
-        borderColor: c().strong,
-        borderRadius: 0,
-      }}
+      onChange={onChange}
+      style={
+        props.phone
+          ? { height: space[40], paddingHorizontal: space[12] }
+          : undefined
+      }
     />
   );
   return (
