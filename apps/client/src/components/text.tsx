@@ -4,6 +4,7 @@ import type { IconName } from "./icons";
 import type { light, TextVariant } from "./theme";
 import { Image, Text, View } from "nsh";
 import { TextView } from "nsh/base";
+import { selectShown, takeShownCopies } from "./eta-editor/shown-selection";
 import { iconPaths } from "./icons";
 import {
   colors,
@@ -108,6 +109,9 @@ export function Markdown(props: {
   const fonts = Fonts();
   const type = textFaces();
   const compact = inCompact();
+  // Its selection, for an editor that keeps the focus meanwhile (eta-editor/shown-selection).
+  const self = {};
+  takeShownCopies(self);
   const code = () => ({ fontFamily: monoFontFamily(fonts()) });
   const base = props.dense
     ? { weight: weight.strong, space: 0, after: 0 }
@@ -136,7 +140,10 @@ export function Markdown(props: {
       document={props.document}
       options={{ html: false, streaming: props.streaming }}
       selectable
-      onSelectionChange={props.onSelectionChange}
+      onSelectionChange={(event) => {
+        selectShown(self, event.text, () => event.text);
+        props.onSelectionChange?.(event);
+      }}
       links="open"
       styles={{
         root: {

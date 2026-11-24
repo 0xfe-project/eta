@@ -19,6 +19,7 @@ import { createEtaEditor, EtaEditor } from "./editor";
 import { baseText, partsOf, useTextTheme, viewLook } from "./look";
 import { docToStoredMarkdown, markdownToDoc } from "./markdown";
 import { selectedText } from "./selected-text";
+import { selectShown, takeShownCopies } from "./shown-selection";
 import {
   lineEnds,
   neededExtensions,
@@ -224,6 +225,9 @@ export function createTextSystem(plugins: TextPlugin[]): TextSystem {
           : read();
         return selectedText(text, whole) ?? text;
       }
+      // This text's selection, for an editor that keeps the focus meanwhile (./shown-selection).
+      const self = {};
+      takeShownCopies(self);
       return (
         <View
           accessibilityLabel={props.label}
@@ -240,12 +244,11 @@ export function createTextSystem(plugins: TextPlugin[]): TextSystem {
             }
             options={{ html: false, streaming: props.streaming }}
             selectable={props.selectable ?? true}
-            onSelectionChange={(event) =>
-              props.onSelectionChange?.({
-                ...event,
-                read: () => untracked(() => readSelection(event.text)),
-              })
-            }
+            onSelectionChange={(event) => {
+              const read = () => untracked(() => readSelection(event.text));
+              selectShown(self, event.text, read);
+              props.onSelectionChange?.({ ...event, read });
+            }}
             links="open"
             styles={styles(own.plugins, theme(), props.variant ?? "body")}
             renderCustom={(read) => {

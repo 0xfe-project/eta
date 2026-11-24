@@ -6,7 +6,7 @@ import type { ViewStyle } from "nsh";
 import type { RichEditorFile, RichEditorSession, RichNodeJSON } from "nsh/base";
 import type { TextPlugin } from "./plugin";
 import { classifyClipboard } from "@eta/client-contracts/composer-doc";
-import { cleanup, Clipboard, signal, View } from "nsh";
+import { cleanup, Clipboard, effect, signal, View } from "nsh";
 import {
   createRichEditor,
   defineExtension,
@@ -22,6 +22,7 @@ import { baseText, editorLook, useTextTheme } from "./look";
 import { asRich, markdownToDoc } from "./markdown";
 import { refusedFile } from "./plugins/attachment";
 import { LineRoom } from "./room";
+import { selectionMade, shownSelection } from "./shown-selection";
 
 // The composer's editor: nsh's RichEditor (a ProseMirror state in Rust, edited natively — typing,
 // selection, input methods, undo) with the app's plugins on it. Each place that writes something
@@ -111,6 +112,22 @@ export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
       return route({ text: clipboard.text, html: clipboard.html });
     },
   );
+  // ⌘C copies what is selected in a shown text (a reply above the composer) when that was
+  // selected after anything here: the editor keeps the focus while the user selects there, and on
+  // macOS the key comes here, where nsh copies only the editor's own selection
+  // (./shown-selection). 0: nothing is selected here.
+  const ownSelection = signal(0);
+  const copyAround = new RichEditorPlugin("eta-copy-around").captureKeys(
+    ["Mod-c"],
+    () => {
+      const shown = shownSelection();
+      if (shown) void Clipboard.writeText(shown.read()).catch(() => {});
+    },
+  );
+  effect(() => {
+    const shown = shownSelection();
+    copyAround.capturing = !!shown && shown.made > ownSelection();
+  });
   const extensions = plugins.flatMap((plugin) => {
     const own = plugin.editor?.extensions;
     return typeof own === "function" ? own({ rich }) : (own ?? []);
@@ -122,6 +139,12 @@ export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
         name: "etaPaste",
         priority: 900,
         addProseMirrorPlugins: () => [paste],
+      }),
+      defineExtension({
+        name: "etaCopyAround",
+        // Above the base keymap, as the send keys (a plugin's own keys come first).
+        priority: 1000,
+        addProseMirrorPlugins: () => [copyAround],
       }),
     ],
     plugins: plugins.flatMap((plugin) => plugin.editor?.plugins ?? []),
@@ -224,6 +247,10 @@ export function createEtaEditor(profile: EtaEditorProfile): EtaEditorHandle {
   };
   self.handle = handle;
   session.on("revision", ({ revision: value }) => revision.set(value));
+  session.on("selectionUpdate", () => {
+    const { type, anchor, head } = session.selection;
+    ownSelection.set(type === "text" && anchor === head ? 0 : selectionMade());
+  });
   const stops = plugins.map((plugin) => plugin.editor?.setup?.(handle));
   cleanup(() => {
     for (const stop of stops) stop?.();
