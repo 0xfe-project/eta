@@ -22,13 +22,24 @@ import {
 } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
 import { ToggleSwitch } from "../../../components/toggle-switch";
-import { border, icon, space, weight } from "../../../components/tokens";
+import {
+  border,
+  control,
+  icon,
+  space,
+  weight,
+} from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { LetterBox, PaneBack, SectionHeader, WarningLine } from "../section";
 import { BalanceSummary } from "./balance-summary";
 import { logoKey, useSourceLogos } from "./logos";
 import { ProviderEditor } from "./provider-editor";
+
+/** The source's name field (narrower on phones) and the model search. */
+const nameWidth = 200;
+const phoneNameWidth = 160;
+const searchWidth = 240;
 
 export function ProviderDetail(props: {
   id: string;
@@ -316,7 +327,7 @@ export function ProviderDetail(props: {
                   onSubmit={() => void rename()}
                   onBlur={() => void rename()}
                   style={{
-                    width: props.phone ? 160 : 200,
+                    width: props.phone ? phoneNameWidth : nameWidth,
                     height: space[24],
                     ...textStyle(type("small")),
                     paddingHorizontal: space[12],
@@ -412,7 +423,9 @@ export function ProviderDetail(props: {
               paddingHorizontal: space[12],
               borderWidth: 1,
               borderColor: c().strong,
-              ...(props.phone ? { flex: 1, minWidth: 0 } : { width: 240 }),
+              ...(props.phone
+                ? { flex: 1, minWidth: 0 }
+                : { width: searchWidth }),
             }}
           >
             <Icon name="search" size={icon.sm} tone="muted" />
@@ -423,7 +436,7 @@ export function ProviderDetail(props: {
               onChange={query.set}
               style={{
                 flex: 1,
-                height: 22,
+                height: control.sm - 2 * border.hair,
                 paddingHorizontal: 0,
                 paddingVertical: space[4],
                 borderWidth: 0,

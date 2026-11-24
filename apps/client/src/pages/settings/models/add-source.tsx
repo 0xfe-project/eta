@@ -24,6 +24,7 @@ import {
   ActionMenu,
   Button,
   colors,
+  dialogWidth,
   Field,
   Fonts,
   grow,
@@ -43,6 +44,7 @@ import {
   space,
   weight,
 } from "../../../components/tokens";
+import { dotSize } from "../../../components/status-dot";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EntityRow, LetterBox, SectionHeader } from "../section";
@@ -67,6 +69,18 @@ import {
   wireErrorText,
 } from "./add-source-model";
 import { logoKey, useSourceLogos } from "./logos";
+
+/** The dialog: a sheet's height on phones, its height elsewhere at most, and a step's least. */
+const phoneSheetHeight = 712;
+const dialogMaxHeight = "92%";
+const stepMinHeight = 200;
+/** The step bar, a preset group's heading on phones. */
+const stepsHeight = 36;
+const phoneGroupRow = 20;
+/** The protocol menu, a model's state column, the model search. */
+const protocolWidth = 224;
+const stateWidth = 96;
+const searchWidth = 240;
 
 // Adding a model source in three steps, as apps/web does: pick where the models come from,
 // connect to it (a key, a sign-in, an address), pick the models. Connecting lists the models
@@ -238,8 +252,8 @@ export function AddSource(props: {
   return (
     <Modal
       title={title()}
-      width={576}
-      height={props.phone ? 712 : undefined}
+      width={dialogWidth.lg}
+      height={props.phone ? phoneSheetHeight : undefined}
       phone={props.phone}
       sheet={props.phone}
       plainSheetHeader={props.phone}
@@ -247,7 +261,7 @@ export function AddSource(props: {
       overPhoneNavigation
       blurBackdrop={false}
       dismissible={!busy()}
-      panelStyle={props.phone ? undefined : { maxHeight: "92%" }}
+      panelStyle={props.phone ? undefined : { maxHeight: dialogMaxHeight }}
       onClose={props.onClose}
     >
       <If when={!props.phone}>
@@ -255,7 +269,7 @@ export function AddSource(props: {
         <Header title={title()} layout="desktop" dialog inset={16} end={12}>
           <View style={grow} />
           <CloseButton
-            size={16}
+            size={control.sm}
             iconSize={icon.md}
             style={{ paddingHorizontal: 0 }}
             disabled={busy()}
@@ -295,7 +309,9 @@ export function AddSource(props: {
       <Each of={[step()]} key={(current) => String(current)}>
         {() => (
           <SmoothScroll
-            style={props.phone ? grow : { flexShrink: 1, minHeight: 200 }}
+            style={
+              props.phone ? grow : { flexShrink: 1, minHeight: stepMinHeight }
+            }
           >
             <If when={step() === 0 || preset() === undefined}>
               <PresetList phone={props.phone} onPick={pick} />
@@ -348,11 +364,11 @@ export function AddSource(props: {
                 </If>
                 <If when={custom() === "endpoint"}>
                   <FieldBlock label={uiText("addSourceProtocol")}>
-                    <View style={{ ...row, width: 224 }}>
+                    <View style={{ ...row, width: protocolWidth }}>
                       <ActionMenu
                         label={uiText("addSourceProtocol")}
                         value={protocolName(kind())}
-                        triggerStyle={{ width: 224 }}
+                        triggerStyle={{ width: protocolWidth }}
                       >
                         <Each
                           of={
@@ -535,7 +551,7 @@ function SourceSteps(props: { step: number }) {
     <View
       style={{
         ...row,
-        height: 36,
+        height: stepsHeight,
         flexShrink: 0,
         alignItems: "stretch",
         borderBottomWidth: 1,
@@ -634,7 +650,7 @@ function PresetList(props: {
           <If when={offered().some((preset) => preset.group === group())}>
             <SectionHeader
               title={groupTitle(group())}
-              rowHeight={props.phone ? 20 : undefined}
+              rowHeight={props.phone ? phoneGroupRow : undefined}
             />
             <Each
               of={offered().filter((preset) => preset.group === group())}
@@ -703,8 +719,8 @@ function Alert(props: { text: string }) {
     >
       <View
         style={{
-          width: 6,
-          height: 6,
+          width: dotSize,
+          height: dotSize,
           marginTop: space[4],
           flexShrink: 0,
           backgroundColor: c().red,
@@ -885,7 +901,11 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
               style={{ ...row, gap: space[4], flexShrink: 1 }}
             >
               <View
-                style={{ width: 6, height: 6, backgroundColor: c().blue }}
+                style={{
+                  width: dotSize,
+                  height: dotSize,
+                  backgroundColor: c().blue,
+                }}
               />
               <Label variant="small" tone="mutedInk">
                 {login()
@@ -1019,7 +1039,13 @@ function AccountReady(props: { connector: LlmConnector }) {
       }}
     >
       <View style={{ ...row, gap: space[4] }}>
-        <View style={{ width: 6, height: 6, backgroundColor: c().green }} />
+        <View
+          style={{
+            width: dotSize,
+            height: dotSize,
+            backgroundColor: c().green,
+          }}
+        />
         <Label variant="small">
           {models().length === 1
             ? uiText("addSourceAccountReadyOne", { name: props.connector.name })
@@ -1052,7 +1078,7 @@ function AccountReady(props: { connector: LlmConnector }) {
             <Label variant="small" tone="faint" style={{ width: space[64] }}>
               {uiText("addSourceContextColumn")}
             </Label>
-            <Label variant="small" tone="faint" style={{ width: 96 }}>
+            <Label variant="small" tone="faint" style={{ width: stateWidth }}>
               {uiText("addSourceStateColumn")}
             </Label>
           </View>
@@ -1084,7 +1110,7 @@ function AccountReady(props: { connector: LlmConnector }) {
                 <Label
                   variant="small"
                   tone={model().available ? "muted" : "red"}
-                  style={{ width: 96 }}
+                  style={{ width: stateWidth }}
                 >
                   {model().available
                     ? uiText("addSourceWorking")
@@ -1149,7 +1175,7 @@ function ModelPicker(props: {
             value={search()}
             onChange={search.set}
             style={{
-              width: props.phone ? undefined : 240,
+              width: props.phone ? undefined : searchWidth,
               flex: props.phone ? 1 : undefined,
             }}
           />

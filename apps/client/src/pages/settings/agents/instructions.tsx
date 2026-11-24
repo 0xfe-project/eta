@@ -17,6 +17,11 @@ import { useHost } from "../../../services/host";
 import { SectionHeader } from "../section";
 import { EditorRow, focusOnOpen } from "./editor-row";
 
+/** The instructions field: creating on a phone, creating elsewhere, and editing. */
+const phoneCreateHeight = 248;
+const createHeight = 240;
+const editHeight = 192;
+
 const agentInstructionsLimit = 10_000;
 export function PersonaField(props: { form: AgentForm }) {
   const {
@@ -126,7 +131,7 @@ export function AgentInstructions(props: { form: AgentForm }) {
                   multiline
                   maxLength={limit()}
                   style={{
-                    height: 250,
+                    height: phoneCreateHeight,
                     ...textStyle(type("small"), "prose"),
                     padding: space[12],
                     borderColor: c().strong,
@@ -160,7 +165,7 @@ export function AgentInstructions(props: { form: AgentForm }) {
               multiline
               maxLength={limit()}
               style={{
-                height: 240,
+                height: createHeight,
                 ...textStyle(type("small"), "prose"),
                 padding: space[12],
                 borderColor: c().strong,
@@ -197,7 +202,7 @@ export function AgentInstructions(props: { form: AgentForm }) {
             maxLength={limit()}
             inputRef={focusOnOpen}
             style={{
-              height: 192,
+              height: editHeight,
               ...textStyle(type("caption"), "prose"),
               padding: space[8],
             }}

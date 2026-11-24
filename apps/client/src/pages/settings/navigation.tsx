@@ -14,6 +14,11 @@ import { icon, space } from "../../components/tokens";
 
 import { useText } from "../../i18n";
 import { sections } from "./overview";
+
+/** Settings' section list: its column off phones and a row. */
+const navWidth = 160;
+const navRow = 32;
+const phoneNavRow = 48;
 export function SettingsNavigation(props: {
   current?: SettingsSection;
   phone: boolean;
@@ -36,7 +41,7 @@ export function SettingsNavigation(props: {
           props.phone
             ? grow
             : {
-                width: 158,
+                width: navWidth,
                 flexShrink: 0,
                 borderRightWidth: 1,
                 borderColor: c().border,
@@ -59,7 +64,7 @@ export function SettingsNavigation(props: {
                 hoverStyle={{ backgroundColor: c().selected }}
                 style={{
                   ...row,
-                  height: props.phone ? 48 : 30,
+                  height: props.phone ? phoneNavRow : navRow,
                   paddingHorizontal: props.phone ? space[16] : space[12],
                   gap: props.phone ? space[12] : space[8],
                   borderBottomWidth: props.phone ? 1 : 0,
@@ -91,10 +96,7 @@ export function SettingsNavigation(props: {
                   <View style={{ flex: 1 }} />
                   <View style={{ ...row, gap: space[4] }}>
                     <If when={props.summary(item()[0]).tone}>
-                      <StatusDot
-                        color={c()[props.summary(item()[0]).tone!]}
-                        size={6}
-                      />
+                      <StatusDot color={c()[props.summary(item()[0]).tone!]} />
                     </If>
                     <Label variant="small" tone={summaryTone(item()[0])}>
                       {props.summary(item()[0]).text}

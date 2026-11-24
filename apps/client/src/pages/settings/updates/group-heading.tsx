@@ -3,6 +3,10 @@ import { View } from "nsh";
 import { colors, Label, row } from "../../../components";
 import { space, weight } from "../../../components/tokens";
 
+/** A group's heading row, taller on phones. */
+const headingRow = 40;
+const phoneHeadingRow = 44;
+
 export function GroupHeading(props: {
   title: string;
   phone?: boolean;
@@ -16,7 +20,7 @@ export function GroupHeading(props: {
         justifyContent: "space-between",
         gap: space[8],
         paddingHorizontal: space[16],
-        minHeight: props.phone ? 45 : 41,
+        minHeight: props.phone ? phoneHeadingRow : headingRow,
         borderBottomWidth: 1,
         borderColor: c().border,
       }}

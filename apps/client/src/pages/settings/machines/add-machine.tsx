@@ -26,6 +26,11 @@ import { formatLocale, uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { PaneBack } from "../section";
 
+/** A field beside its label, the title row with its back link, and the method menu. */
+const fieldWidth = 240;
+const titleRow = 24;
+const methodWidth = 160;
+
 export function AddMachine(props: { phone: boolean; onClose: () => void }) {
   const host = useHost();
   const c = colors();
@@ -113,7 +118,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
       <Button
         label={uiText(command() ? "machineGenerateCommand" : "sshInstall")}
         tone="primary"
-        size={props.phone ? 40 : 24}
+        size={props.phone ? controlHeight.touch : controlHeight.sm}
         style={{ paddingHorizontal: space[12] }}
         disabled={busy() || installing() || (!command() && !sshReady())}
         onPress={() => void create()}
@@ -141,7 +146,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
               </If>
             </View>
             {row_.field({
-              width: 240,
+              width: fieldWidth,
               height: space[24],
               ...textStyle(type("small")),
               paddingHorizontal: space[12],
@@ -360,7 +365,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
               gap: space[4],
             }}
           >
-            <View style={{ ...row, gap: space[8], height: 22 }}>
+            <View style={{ ...row, gap: space[8], height: titleRow }}>
               <PaneBack label={uiText("machineBack")} onPress={props.onClose} />
               <Label weight={weight.strong}>{title()}</Label>
             </View>
@@ -383,7 +388,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
               label={uiText("machineMethod")}
               value={method()}
               triggerStyle={{
-                width: 160,
+                width: methodWidth,
                 height: space[24],
                 paddingLeft: space[12],
                 paddingRight: space[8],

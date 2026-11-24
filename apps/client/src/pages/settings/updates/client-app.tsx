@@ -7,6 +7,7 @@ import { BackHandler } from "nsh/mobile";
 import {
   Button,
   colors,
+  dialogWidth,
   grow,
   Icon,
   Label,
@@ -27,6 +28,11 @@ import {
 import { useHost } from "../../../services/host";
 
 import { BusyList } from "./busy-list";
+
+/** The update dialog's height, the channel menu and one of its items. */
+const dialogHeight = 248;
+const channelWidth = 160;
+const itemRow = 28;
 
 /** What the offer's one button says, from finding it to restarting into it. */
 export function clientUpdateAction(offer: ClientOffer) {
@@ -77,8 +83,8 @@ export function ClientUpdateConfirm(props: { onClose: () => void }) {
   return (
     <Modal
       title={uiText("updateTheDesktopAppTo", { version: version() })}
-      width={448}
-      height={250}
+      width={dialogWidth.md}
+      height={dialogHeight}
       hideHeader
       modalFocus
       blurBackdrop={false}
@@ -156,7 +162,9 @@ function ChannelSelect(props: { phone: boolean }) {
           {uiText("preReleasesRcBetaGetNew")}
         </Label>
       </View>
-      <View style={{ width: props.phone ? "100%" : 160, flexShrink: 0 }}>
+      <View
+        style={{ width: props.phone ? "100%" : channelWidth, flexShrink: 0 }}
+      >
         <LayoutSelect
           accessibilityLabel={uiText("appUpdateChannel")}
           items={[
@@ -175,7 +183,7 @@ function ChannelSelect(props: { phone: boolean }) {
           itemStyle={{
             color: c().ink,
             fontSize: type("small").size,
-            minHeight: 29,
+            minHeight: itemRow,
             paddingHorizontal: space[12],
           }}
           trigger={

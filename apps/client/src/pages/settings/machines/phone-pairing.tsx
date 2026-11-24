@@ -3,9 +3,13 @@ import { Clipboard, Image, Overlay, signal, View, windowSize } from "nsh";
 import qrCode from "qrcode-generator";
 import { Button, colors, Field, Label, Modal, row } from "../../../components";
 import { CloseButton } from "../../../components/navigation-buttons";
-import { space, weight } from "../../../components/tokens";
+import { control, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+
+/** The pairing code, square, and the sheet or popover around it: narrower than any dialog. */
+const qrWidth = { phone: 180, wide: 140 } as const;
+const pairingWidth = 280;
 
 /**
  * The pairing code. Beside the wide settings dialog it is a popover to its right; on a tablet it
@@ -79,7 +83,7 @@ export function PhonePairing(props: {
           <Label variant="small" weight={weight.strong}>
             {uiText("scanWithYourPhone")}
           </Label>
-          <CloseButton size={16} onPress={props.onClose} />
+          <CloseButton size={control.sm} onPress={props.onClose} />
         </View>
       </If>
       <If when={qr()}>
@@ -115,8 +119,8 @@ export function PhonePairing(props: {
             src={qr()!.image}
             style={
               props.phone
-                ? { width: 180, height: 180 }
-                : { width: 140, height: 140 }
+                ? { width: qrWidth.phone, height: qrWidth.phone }
+                : { width: qrWidth.wide, height: qrWidth.wide }
             }
             fadeDuration={0}
             accessibilityLabel={uiText("etaPairingCode")}
@@ -162,7 +166,7 @@ export function PhonePairing(props: {
           sheet={props.phone}
           plainSheetHeader={props.phone}
           overPhoneNavigation={props.phone}
-          width={280}
+          width={pairingWidth}
           onClose={props.onClose}
         >
           {body()}
@@ -183,7 +187,7 @@ export function PhonePairing(props: {
         offset={wide() ? 0 : 8}
         onCancel={props.onClose}
         onPressOutside={props.onClose}
-        style={{ width: 280 }}
+        style={{ width: pairingWidth }}
       >
         <View
           role="dialog"

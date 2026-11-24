@@ -1,6 +1,13 @@
 import type { HostUpdate } from "./host-update";
 import { View } from "nsh";
-import { Button, Field, Label, Modal, row } from "../../../components";
+import {
+  Button,
+  dialogWidth,
+  Field,
+  Label,
+  Modal,
+  row,
+} from "../../../components";
 import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
@@ -30,7 +37,7 @@ export function UpdateSourceEditor(props: {
               : uiText("setAccessToken")
           }
           phone={props.phone}
-          width={448}
+          width={dialogWidth.md}
           blurBackdrop={false}
           overPhoneNavigation
           dismissible={!pending()}
