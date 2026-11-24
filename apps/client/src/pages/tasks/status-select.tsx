@@ -2,7 +2,7 @@ import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { TaskDetailState } from "./task-detail-state";
 import { View } from "nsh";
 import { colors, Icon, inCompact, Label, row } from "../../components";
-import { control, icon, space, weight } from "../../components/tokens";
+import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { StatusOptions, TaskMenu } from "./menu";
 import { statusName, TaskGlyph, tones } from "./status";
@@ -65,16 +65,19 @@ export function StatusSelect(props: {
           minWidth: plain() ? undefined : 128,
           maxWidth: "100%",
           paddingHorizontal: space[8],
-          gap: 6,
+          gap: space[4],
           borderWidth: 1,
           borderColor: tint() ? c()[tones[props.item.status]] : c().strong,
           backgroundColor: tint() ? c()[tint()!] : c().canvas,
-          opacity: busy() ? 0.6 : 1,
+          opacity: busy() ? opacity.muted : 1,
           cursor: busy() ? "default" : "pointer",
         }}
       >
         <If when={!plain()}>
-          <TaskGlyph status={props.item.status} size={dense() ? icon.sm : 14} />
+          <TaskGlyph
+            status={props.item.status}
+            size={dense() ? icon.sm : icon.md}
+          />
         </If>
         <Label
           variant={plain() ? "caption" : "small"}
@@ -87,7 +90,7 @@ export function StatusSelect(props: {
         </Label>
         <Icon
           name="down"
-          size={plain() ? 10 : dense() ? icon.sm : 14}
+          size={plain() ? icon.sm : dense() ? icon.sm : icon.md}
           tone={ink()}
         />
       </View>

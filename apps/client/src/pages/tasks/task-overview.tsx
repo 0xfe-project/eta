@@ -66,9 +66,9 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
         <View
           style={{
             ...row,
-            paddingVertical: 10,
+            paddingVertical: space[12],
             paddingHorizontal: space[12],
-            gap: 10,
+            gap: space[8],
             borderWidth: 1,
             borderColor: review() ? c().warning : c().strong,
           }}
@@ -83,7 +83,7 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
               ...row,
               flex: 1,
               minWidth: 0,
-              gap: 10,
+              gap: space[8],
               cursor: "pointer",
             }}
             onPress={() => log.set(entry())}
@@ -100,7 +100,7 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
                 })}
               </Label>
             </View>
-            <Icon name="right" size={14} tone="muted" />
+            <Icon name="right" size={icon.md} tone="muted" />
           </View>
           <If when={activeTaskRun(entry())}>
             <Button
@@ -146,14 +146,14 @@ function RunRow(props: {
       style={{
         ...row,
         height: control.touch,
-        gap: 10,
+        gap: space[8],
         borderTopWidth: 1,
         borderBottomWidth: props.last ? 1 : 0,
         borderColor: c().border,
         cursor: "pointer",
       }}
     >
-      <View style={{ marginHorizontal: 6 }}>
+      <View style={{ marginHorizontal: space[8] }}>
         <StatusDot
           color={
             active()
@@ -185,7 +185,7 @@ function RunRow(props: {
         runId={props.run.id}
         session={props.run.sessionId}
       />
-      <Icon name="right" size={14} tone="muted" />
+      <Icon name="right" size={icon.md} tone="muted" />
     </View>
   );
 }
@@ -213,9 +213,15 @@ export function RunLine(props: {
             paddingBottom: props.tablet ? 0 : space[8],
           }}
         >
-          <View style={{ ...row, gap: props.tablet ? 8 : 6, flex: 1 }}>
+          <View
+            style={{ ...row, gap: props.tablet ? space[8] : space[4], flex: 1 }}
+          >
             <If when={!review()}>
-              <Icon name="spinner" size={props.tablet ? 14 : 12} tone="muted" />
+              <Icon
+                name="spinner"
+                size={props.tablet ? icon.md : icon.sm}
+                tone="muted"
+              />
             </If>
             <If when={!props.tablet && review()}>
               <StatusDot color={c().warning} />
@@ -226,7 +232,7 @@ export function RunLine(props: {
               })}
             </Label>
           </View>
-          <View style={{ ...row, gap: props.tablet ? 8 : 14 }}>
+          <View style={{ ...row, gap: props.tablet ? space[8] : space[12] }}>
             <View
               role="button"
               accessibilityLabel={uiText("executionLog")}
@@ -247,7 +253,7 @@ export function RunLine(props: {
                 }}
                 style={{ ...row, gap: space[4], cursor: "pointer" }}
               >
-                <Icon name="stop" size={props.tablet ? 12 : 10} />
+                <Icon name="stop" size={icon.sm} />
                 <Label variant="caption" weight={weight.strong}>
                   {uiText("stop")}
                 </Label>
@@ -292,9 +298,9 @@ function DesktopOverview(props: {
       <SmoothScroll style={grow} scrollbar={false}>
         <View
           style={{
-            paddingTop: parent() ? 16 : 14,
+            paddingTop: space[16],
             paddingBottom: space[20],
-            paddingHorizontal: 22,
+            paddingHorizontal: space[24],
             width: "100%",
             maxWidth: parent() ? 724 : 667,
             alignSelf: "center",
@@ -318,7 +324,13 @@ function DesktopOverview(props: {
                       : "",
                   })}
             </Label>
-            <View style={{ ...row, gap: 10, paddingBottom: parent() ? 0 : 22 }}>
+            <View
+              style={{
+                ...row,
+                gap: space[8],
+                paddingBottom: parent() ? 0 : space[24],
+              }}
+            >
               <TaskGlyph
                 status={item().status}
                 size={parent() ? icon.lg : icon.md}
@@ -423,11 +435,11 @@ function DesktopOverview(props: {
                       style={{
                         ...row,
                         alignSelf: "flex-start",
-                        gap: 5,
+                        gap: space[4],
                         cursor: "pointer",
                       }}
                     >
-                      <Icon name="pencil" size={10} tone="muted" />
+                      <Icon name="pencil" size={icon.sm} tone="muted" />
                       <Label variant="caption" tone="muted">
                         {uiText("editDescription")}
                       </Label>
@@ -436,7 +448,7 @@ function DesktopOverview(props: {
                 </View>
               }
             >
-              <View style={{ gap: 6 }}>
+              <View style={{ gap: space[4] }}>
                 <Label weight={weight.strong}>{uiText("description")}</Label>
                 <chatText.View
                   plugins={[shownMentions()]}
@@ -599,8 +611,8 @@ export function TaskOverview(props: {
                     value5: partOf(),
                   })}
                 </Label>
-                <View style={{ ...row, gap: phone() ? 8 : 10 }}>
-                  <TaskGlyph status={item().status} size={phone() ? 18 : 16} />
+                <View style={{ ...row, gap: space[8] }}>
+                  <TaskGlyph status={item().status} size={icon.md} />
                   <If
                     when={phone()}
                     else={
@@ -665,7 +677,7 @@ export function TaskOverview(props: {
               </If>
               <If when={phone() && !describing() && !item().description.trim()}>
                 <EditDescriptionLink
-                  iconSize={11}
+                  iconSize={icon.sm}
                   onPress={() => {
                     editDescription.set("");
                     describing.set(true);
@@ -675,9 +687,9 @@ export function TaskOverview(props: {
               <If when={item().description && !(phone() && describing())}>
                 <View
                   style={{
-                    gap: 6,
+                    gap: space[4],
                     // The first heading's space above is the section gap's already.
-                    marginTop: phone() && opensWithHeading() ? -9 : 0,
+                    marginTop: phone() && opensWithHeading() ? -space[8] : 0,
                   }}
                 >
                   <If when={!phone() || !opensWithHeading()}>
@@ -697,7 +709,7 @@ export function TaskOverview(props: {
                   />
                   <If when={phone()}>
                     <EditDescriptionLink
-                      iconSize={11}
+                      iconSize={icon.sm}
                       onPress={() => {
                         editDescription.set(item().description);
                         describing.set(true);
@@ -720,7 +732,7 @@ export function TaskOverview(props: {
                 <View>
                   <Caption
                     text={uiText("dependencies")}
-                    style={{ paddingBottom: 6 }}
+                    style={{ paddingBottom: space[8] }}
                   />
                   <Each
                     of={item().dependsOn ?? []}
@@ -774,7 +786,7 @@ export function TaskOverview(props: {
                 <View style={{ gap: phone() ? 0 : space[12] }}>
                   <Caption
                     text={uiText("runs", { length: item().runs.length })}
-                    style={phone() ? { paddingBottom: 6 } : undefined}
+                    style={phone() ? { paddingBottom: space[8] } : undefined}
                   />
                   <Each of={item().runs} key={(run) => run.id}>
                     {(run, index) => (
@@ -784,7 +796,7 @@ export function TaskOverview(props: {
                           <View
                             style={{
                               ...row,
-                              gap: 7,
+                              gap: space[8],
                               padding: space[8],
                               borderWidth: 1,
                               borderColor: c().border,
@@ -873,10 +885,10 @@ export function DescriptionEditor(props: {
   }
   const button = () =>
     props.phone
-      ? { size: 32, padding: 14 }
+      ? { size: 32, padding: space[16] }
       : props.tablet
-        ? { size: 24, padding: 10 }
-        : { size: undefined, padding: 10 };
+        ? { size: 24, padding: space[12] }
+        : { size: undefined, padding: space[12] };
   return (
     <View style={{ gap: props.phone ? space[16] : space[8] }}>
       <DescriptionBox
@@ -917,9 +929,14 @@ export function EditDescriptionLink(props: {
       role="button"
       accessibilityLabel={uiText("editDescription")}
       onPress={props.onPress}
-      style={{ ...row, alignSelf: "flex-start", gap: 5, cursor: "pointer" }}
+      style={{
+        ...row,
+        alignSelf: "flex-start",
+        gap: space[4],
+        cursor: "pointer",
+      }}
     >
-      <Icon name="pencil" size={props.iconSize ?? 10} tone="muted" />
+      <Icon name="pencil" size={props.iconSize ?? icon.sm} tone="muted" />
       <Label variant="caption" tone="muted">
         {uiText("editDescription")}
       </Label>

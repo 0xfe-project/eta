@@ -50,9 +50,9 @@ export function TaskMenu(props: {
         {(caption) => (
           <View
             style={{
-              paddingTop: 6,
+              paddingTop: space[8],
               paddingBottom: space[4],
-              paddingHorizontal: inSheet() ? 16 : 10,
+              paddingHorizontal: inSheet() ? space[16] : space[12],
             }}
           >
             <Caption text={caption()} />
@@ -113,8 +113,8 @@ export function TaskMenuItem(props: {
             : props.hint
               ? undefined
               : (props.height ?? 28),
-        paddingVertical: props.hint ? 6 : 0,
-        paddingHorizontal: inSheet() ? 16 : 10,
+        paddingVertical: props.hint ? space[8] : 0,
+        paddingHorizontal: inSheet() ? space[16] : space[12],
         gap: space[8],
         backgroundColor: props.checked ? c().selected : undefined,
         ...props.style,
@@ -187,7 +187,7 @@ export function FilterTrigger(props: {
       style={{
         ...row,
         height: 25,
-        paddingHorizontal: props.tablet ? 6 : 8,
+        paddingHorizontal: space[8],
         gap: space[4],
         flexShrink: 0,
         cursor: "pointer",
@@ -201,7 +201,7 @@ export function FilterTrigger(props: {
       >
         {props.label}
       </Label>
-      <Icon name="down" size={10} tone={props.active ? "ink" : "muted"} />
+      <Icon name="down" size={icon.sm} tone={props.active ? "ink" : "muted"} />
     </View>
   );
 }

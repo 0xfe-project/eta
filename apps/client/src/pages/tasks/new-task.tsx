@@ -75,7 +75,7 @@ export function NewTask(props: {
       props.onOpen(result.tasks[0].id);
     }
   }
-  const select = { width: 115, height: space[24], paddingHorizontal: 9 };
+  const select = { width: 115, height: space[24], paddingHorizontal: space[8] };
   const link = { height: space[24], paddingHorizontal: 0, borderWidth: 0 };
   return (
     <Modal
@@ -87,11 +87,13 @@ export function NewTask(props: {
     >
       <View
         style={
-          props.phone ? { padding: 14, gap: 14 } : { paddingTop: 14, gap: 14 }
+          props.phone
+            ? { padding: space[16], gap: space[12] }
+            : { paddingTop: space[16], gap: space[12] }
         }
       >
-        <View style={{ gap: 14 }}>
-          <View style={{ gap: 6 }}>
+        <View style={{ gap: space[12] }}>
+          <View style={{ gap: space[4] }}>
             <Label variant="caption">{uiText("title")}</Label>
             <Field
               label={uiText("title")}
@@ -100,13 +102,13 @@ export function NewTask(props: {
               onChange={title.set}
               style={{
                 height: 30,
-                paddingHorizontal: 10,
+                paddingHorizontal: space[12],
                 ...textStyle(type("small")),
                 borderColor: c().strong,
               }}
             />
           </View>
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: space[4] }}>
             <Label variant="caption">{uiText("description")}</Label>
             <DescriptionBox
               description={description}
@@ -116,7 +118,7 @@ export function NewTask(props: {
             />
           </View>
         </View>
-        <View style={{ gap: 10 }}>
+        <View style={{ gap: space[8] }}>
           <NewTaskRow label={uiText("executor")}>
             <ActionMenu
               label={uiText("executor")}
@@ -244,7 +246,7 @@ export function NewTask(props: {
 
 function NewTaskRow(props: { label: string; children: JSX.Element }) {
   return (
-    <View style={{ ...row, gap: 14 }}>
+    <View style={{ ...row, gap: space[12] }}>
       <Label variant="small" tone="mutedInk" style={{ width: 62 }}>
         {props.label}
       </Label>

@@ -147,7 +147,7 @@ export function DescriptionBox(props: {
           height: foot,
           flexShrink: 0,
           gap: space[8],
-          paddingHorizontal: 10,
+          paddingHorizontal: space[12],
           borderTopWidth: 1,
           borderColor: c().border,
         }}

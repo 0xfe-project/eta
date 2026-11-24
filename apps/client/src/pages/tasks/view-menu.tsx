@@ -73,8 +73,8 @@ export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
               style={{
                 ...row,
                 height: 25,
-                paddingHorizontal: props.tablet ? 6 : 8,
-                gap: 5,
+                paddingHorizontal: space[8],
+                gap: space[4],
                 flexShrink: 0,
                 cursor: "pointer",
                 backgroundColor: open() ? c().selected : undefined,
@@ -113,9 +113,9 @@ export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
       <If when={!props.phone}>
         <View
           style={{
-            paddingTop: 6,
+            paddingTop: space[8],
             paddingBottom: space[2],
-            paddingHorizontal: 10,
+            paddingHorizontal: space[12],
           }}
         >
           <Caption text={uiText("usageView")} />
@@ -141,8 +141,8 @@ function UsageRow(props: { phone?: boolean; on: boolean }) {
       style={{
         ...row,
         alignItems: "flex-start",
-        paddingVertical: sheet() ? 14 : 6,
-        paddingHorizontal: sheet() ? 16 : 10,
+        paddingVertical: sheet() ? space[16] : space[8],
+        paddingHorizontal: sheet() ? space[16] : space[12],
         gap: space[12],
       }}
       onSelect={() => setUsageShown(!props.on)}

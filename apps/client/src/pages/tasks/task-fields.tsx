@@ -35,6 +35,9 @@ import { activeTaskRun } from "./run-log";
 import { statusName, TaskGlyph } from "./status";
 import { StatusSelect } from "./status-select";
 
+/** The width of a rail row's label; what goes under its value starts there. */
+const railLabel = 76;
+
 /**
  * The comment box: the chat's text (`chatText`: Markdown as you type, code blocks, long pastes
  * folded) with `@` for the task's agents and a draft kept per task. ⏎ is a new line; ⌘⏎ or the
@@ -108,10 +111,14 @@ export function TaskCommentBox(props: {
                   borderTopWidth: 1,
                   borderColor: c().border,
                   paddingHorizontal: space[12],
-                  paddingVertical: 10,
+                  paddingVertical: space[12],
                   gap: space[8],
                 }
-              : { gap: 6, marginHorizontal: props.panelInset, flexShrink: 0 }
+              : {
+                  gap: space[4],
+                  marginHorizontal: props.panelInset,
+                  flexShrink: 0,
+                }
           }
         >
           <CommentBox
@@ -182,8 +189,8 @@ function CommentBox(props: {
             justifyContent: "flex-end",
             gap: space[8],
             height: props.phone ? control.touch : compact() ? space[32] : 36,
-            paddingLeft: compact() ? space[12] : 10,
-            paddingRight: compact() ? space[4] : 5,
+            paddingLeft: space[12],
+            paddingRight: space[4],
           }}
         >
           <If when={!props.phone && !touchScreen}>
@@ -198,7 +205,7 @@ function CommentBox(props: {
             labelTone={disabled() ? "muted" : "ink"}
             dimDisabled={props.state.posting()}
             disabled={disabled()}
-            style={{ paddingHorizontal: props.phone ? 14 : 10 }}
+            style={{ paddingHorizontal: props.phone ? space[16] : space[12] }}
             onPress={() => void submit()}
           />
         </View>
@@ -279,7 +286,7 @@ export function TaskFields(detail: {
       ["Updated", relativeTime(item().updatedAt)],
     ].filter(([, value]) => value);
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: space[8] }}>
       <View style={{ ...row, gap: space[8], alignItems: "flex-start" }}>
         <Label variant="caption" tone="muted" style={{ width: 68 }}>
           {uiText("status")}
@@ -354,7 +361,7 @@ export function TaskRail(detail: {
     });
   }
   return (
-    <View style={{ gap: 14 }}>
+    <View style={{ gap: space[12] }}>
       <RailRow label={uiText("status")}>
         <StatusSelect item={item()} state={detail.state} />
       </RailRow>
@@ -409,7 +416,7 @@ export function TaskRail(detail: {
         </Label>
       </RailRow>
       <RailRow label={uiText("taskRun")}>
-        <View style={{ ...row, gap: 6 }}>
+        <View style={{ ...row, gap: space[4] }}>
           <If when={run()}>
             {(last) => (
               <If
@@ -422,7 +429,7 @@ export function TaskRail(detail: {
                   />
                 }
               >
-                <Icon name="spinner" size={10} tone="muted" />
+                <Icon name="spinner" size={icon.sm} tone="muted" />
               </If>
             )}
           </If>
@@ -445,7 +452,7 @@ export function TaskRail(detail: {
                 cursor: "pointer",
               }}
             >
-              <Icon name="refresh" size={11} />
+              <Icon name="refresh" size={icon.sm} />
               <Label variant="caption" weight={weight.strong}>
                 {uiText("rerun")}
               </Label>
@@ -454,7 +461,7 @@ export function TaskRail(detail: {
         </View>
       </RailRow>
       <If when={canStartOver()}>
-        <View style={{ paddingLeft: 76, marginTop: -10 }}>
+        <View style={{ paddingLeft: railLabel, marginTop: -space[12] }}>
           <Label variant="caption" tone="muted">
             {uiText("startOverHint")}
           </Label>
@@ -462,15 +469,15 @@ export function TaskRail(detail: {
       </If>
       <If when={item().dependsOn?.length}>
         <RailRow label={uiText("taskWaitsForLabel")} top>
-          <View style={{ gap: 6, flex: 1 }}>
+          <View style={{ gap: space[4], flex: 1 }}>
             <Each of={item().dependsOn ?? []} key={(edge) => edge.taskId}>
               {(edge) => (
-                <View style={{ gap: 6 }}>
+                <View style={{ gap: space[4] }}>
                   <View
                     role="button"
                     accessibilityLabel={edge().title}
                     onPress={() => detail.onTask(edge().taskId)}
-                    style={{ ...row, gap: 5, cursor: "pointer" }}
+                    style={{ ...row, gap: space[4], cursor: "pointer" }}
                   >
                     <TaskGlyph status={edge().status} size={icon.sm} />
                     <Label
@@ -481,7 +488,9 @@ export function TaskRail(detail: {
                       {`#${edge().number} ${edge().title}`}
                     </Label>
                   </View>
-                  <View style={{ ...row, gap: space[8], paddingLeft: 17 }}>
+                  <View
+                    style={{ ...row, gap: space[8], paddingLeft: space[16] }}
+                  >
                     <Label variant="caption" tone="muted">
                       {edge().state === "resolved"
                         ? uiText("taskReady")
@@ -492,7 +501,7 @@ export function TaskRail(detail: {
                     <CheckControl
                       label={uiText("mustBeDone")}
                       checked={edge().requireDone}
-                      size={11}
+                      size={icon.sm}
                       disabled={submitting()}
                       style={{ ...row, gap: space[8] }}
                       onChange={(checked) =>
@@ -524,7 +533,7 @@ export function TaskRail(detail: {
                       }
                       style={{ cursor: "pointer" }}
                     >
-                      <Icon name="close" size={10} />
+                      <Icon name="close" size={icon.sm} />
                     </View>
                   </View>
                 </View>
@@ -537,7 +546,7 @@ export function TaskRail(detail: {
                 search.set("");
                 replacing.set(true);
               }}
-              style={{ paddingLeft: 17, cursor: "pointer" }}
+              style={{ paddingLeft: space[16], cursor: "pointer" }}
             >
               <Label variant="caption" tone="muted">
                 {uiText("editPrerequisites")}
@@ -548,7 +557,7 @@ export function TaskRail(detail: {
       </If>
       <If when={item().dependents?.length}>
         <RailRow label={uiText("waitedOnBy")} top>
-          <View style={{ gap: 6, flex: 1 }}>
+          <View style={{ gap: space[4], flex: 1 }}>
             <Label variant="caption" tone="muted">
               {item().dependents!.length === 1
                 ? uiText("oneTaskWaitsForIt")
@@ -564,7 +573,7 @@ export function TaskRail(detail: {
                   onPress={() => detail.onTask(edge().taskId)}
                   style={{ gap: space[2], cursor: "pointer" }}
                 >
-                  <View style={{ ...row, gap: 5 }}>
+                  <View style={{ ...row, gap: space[4] }}>
                     <TaskGlyph status={edge().status} size={icon.sm} />
                     <Label variant="caption" weight={weight.strong}>
                       {`#${edge().number} ${edge().title}`}
@@ -600,7 +609,7 @@ function RailRow(props: {
 }) {
   return (
     <View style={{ ...row, alignItems: props.top ? "flex-start" : "center" }}>
-      <Label variant="caption" tone="muted" style={{ width: 76 }}>
+      <Label variant="caption" tone="muted" style={{ width: railLabel }}>
         {props.label}
       </Label>
       {props.children}

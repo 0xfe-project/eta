@@ -10,7 +10,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { space, weight } from "../../components/tokens";
+import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
@@ -58,7 +58,7 @@ export function TabletOverview(props: {
         <View
           style={{
             paddingHorizontal: space[20],
-            paddingTop: 14,
+            paddingTop: space[16],
             paddingBottom: space[12],
             gap: space[12],
           }}
@@ -96,7 +96,7 @@ export function TabletOverview(props: {
             </If>
           </View>
           <View style={{ ...row, gap: space[8] }}>
-            <TaskGlyph status={item().status} size={18} />
+            <TaskGlyph status={item().status} size={icon.md} />
             <TitleInPlace
               title={item().title}
               state={props.state}
@@ -150,7 +150,7 @@ export function TabletOverview(props: {
             />
           </If>
           <If when={!describing()}>
-            <View style={{ gap: parent() ? 3 : 4 }}>
+            <View style={{ gap: parent() ? space[2] : space[4] }}>
               <If
                 when={
                   item().description &&
@@ -201,7 +201,7 @@ export function TabletOverview(props: {
       <View
         style={{
           paddingHorizontal: space[20],
-          paddingBottom: 14,
+          paddingBottom: space[16],
           gap: space[12],
         }}
       >
@@ -286,7 +286,7 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
         ...row,
         alignItems: "flex-start",
         gap: space[24],
-        paddingVertical: parent() ? 8 : 10,
+        paddingVertical: parent() ? space[8] : space[12],
         paddingHorizontal: space[12],
         borderWidth: 1,
         borderColor: c().border,
@@ -302,7 +302,7 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
         key="index"
       >
         {(column) => (
-          <View style={{ flex: 1, minWidth: 0, gap: parent() ? 5 : 6 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
             <Each of={column()} key={(field) => field[0]!}>
               {(field) => (
                 <View
@@ -355,7 +355,7 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
                           cursor: "pointer",
                         }}
                       >
-                        <Icon name="refresh" size={11} />
+                        <Icon name="refresh" size={icon.sm} />
                         <Label variant="caption" weight={weight.strong}>
                           {uiText("rerun")}
                         </Label>

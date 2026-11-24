@@ -120,7 +120,7 @@ export function TaskDetailDialogs(props: {
                     style={{
                       ...row,
                       alignItems: "flex-start",
-                      paddingVertical: 10,
+                      paddingVertical: space[12],
                       paddingHorizontal: space[16],
                       gap: space[8],
                       backgroundColor:
@@ -224,7 +224,7 @@ export function TaskDetailDialogs(props: {
           sheet={phone()}
           onClose={() => cancelling.set(false)}
         >
-          <View style={{ padding: space[16], gap: 10 }}>
+          <View style={{ padding: space[16], gap: space[8] }}>
             <Label>{uiText("thisWillCancelTheTaskAnd")}</Label>
             <Button
               label={uiText("cancelTask")}
@@ -297,7 +297,7 @@ export function TaskDetailDialogs(props: {
           <If
             when={phone()}
             else={
-              <View style={{ paddingTop: 6 }}>
+              <View style={{ paddingTop: space[8] }}>
                 <Label variant="small" tone="muted">
                   {archiveBody()}
                 </Label>
@@ -339,7 +339,7 @@ export function TaskDetailDialogs(props: {
             >
               <Label
                 weight={weight.strong}
-                style={{ flex: 1, minWidth: 0, paddingTop: 6 }}
+                style={{ flex: 1, minWidth: 0, paddingTop: space[8] }}
               >
                 {archiveTitle()}
               </Label>
@@ -376,7 +376,7 @@ export function TaskDetailDialogs(props: {
                 tone="primary"
                 size={control.lg}
                 labelVariant="small"
-                style={{ paddingHorizontal: 14 }}
+                style={{ paddingHorizontal: space[16] }}
                 disabled={submitting()}
                 onPress={archiveTask}
               />
@@ -437,10 +437,6 @@ function TaskContextPanel(props: {
       .find(
         (conversation) => conversation.id === props.item.originConversationId,
       )?.name;
-  const caption = {
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-  } as const;
   return (
     <View style={grow}>
       <View
@@ -448,7 +444,7 @@ function TaskContextPanel(props: {
           ...row,
           justifyContent: "space-between",
           height: space[40],
-          paddingLeft: 10,
+          paddingLeft: space[12],
           paddingRight: space[8],
           borderBottomWidth: 1,
           borderColor: c().border,
@@ -471,8 +467,8 @@ function TaskContextPanel(props: {
             style={{
               ...row,
               height: space[24],
-              paddingHorizontal: 10,
-              gap: 6,
+              paddingHorizontal: space[12],
+              gap: space[4],
               backgroundColor: c().canvas,
             }}
           >
@@ -483,7 +479,12 @@ function TaskContextPanel(props: {
         <CloseButton onPress={props.onClose} />
       </View>
       <View style={{ padding: space[12], gap: space[12] }}>
-        <Label variant="caption" tone="muted" style={caption}>
+        <Label
+          variant="caption"
+          tone="muted"
+          tracking="caps"
+          style={{ textTransform: "uppercase" }}
+        >
           {uiText("members")}
         </Label>
         <View style={{ borderTopWidth: 1, borderColor: c().border }}>
@@ -493,7 +494,7 @@ function TaskContextPanel(props: {
                 style={{
                   ...row,
                   justifyContent: "space-between",
-                  paddingVertical: 10,
+                  paddingVertical: space[12],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                 }}
@@ -510,7 +511,8 @@ function TaskContextPanel(props: {
           <Label
             variant="caption"
             tone="muted"
-            style={{ ...caption, paddingTop: space[8] }}
+            tracking="caps"
+            style={{ textTransform: "uppercase", paddingTop: space[8] }}
           >
             {uiText("taskGroup")}
           </Label>
@@ -548,7 +550,7 @@ function EditTask(props: {
     });
   }
   return (
-    <View style={{ padding: space[16], gap: 10 }}>
+    <View style={{ padding: space[16], gap: space[8] }}>
       <Field
         label={uiText("taskTitle")}
         value={editTitle()}

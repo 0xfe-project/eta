@@ -3,7 +3,7 @@ import type { Layout } from "../../components";
 import type { taskDropZones } from "./drag";
 import { View } from "nsh";
 import { colors, Compact, Icon, Label, row } from "../../components";
-import { border, space } from "../../components/tokens";
+import { border, icon, opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ownerLine } from "./creator";
@@ -95,8 +95,8 @@ export function BoardCard(props: {
     <Compact>
       <View
         style={{
-          paddingRight: stacked() ? 3 : 0,
-          paddingBottom: stacked() ? 3 : 0,
+          paddingRight: stacked() ? space[4] : 0,
+          paddingBottom: stacked() ? space[4] : 0,
         }}
       >
         <If when={stacked()}>
@@ -123,9 +123,13 @@ export function BoardCard(props: {
           hoverStyle={{ borderColor: `${c().ink}4d` }}
           activeStyle={{ borderColor: `${c().ink}4d` }}
           style={{
-            paddingVertical: tablet() ? 8 : 7.2,
-            paddingHorizontal: tablet() ? 8 : 9,
-            gap: tablet() ? (isParent() || cancelled() ? 4 : 3) : 3.6,
+            paddingVertical: space[8],
+            paddingHorizontal: space[8],
+            gap: tablet()
+              ? isParent() || cancelled()
+                ? space[4]
+                : space[2]
+              : space[4],
             borderWidth: 1,
             borderLeftWidth: props.task.status === "blocked" ? border.thick : 1,
             borderColor: stacked() ? c().strong : c().border,
@@ -137,12 +141,12 @@ export function BoardCard(props: {
                   : c().border,
             backgroundColor: c().canvas,
             cursor: props.draggable ? "grab" : "pointer",
-            opacity: props.drag.active() === props.task.id ? 0.65 : 1,
+            opacity: props.drag.active() === props.task.id ? opacity.muted : 1,
           }}
         >
           <If when={parent()}>
             {(entry) => (
-              <View style={{ ...row, gap: 6 }}>
+              <View style={{ ...row, gap: space[4] }}>
                 <Label variant="small" tone="muted" lines={1}>
                   {entry().title}
                 </Label>
@@ -176,8 +180,8 @@ export function BoardCard(props: {
                   </Label>
                 }
               >
-                <View style={{ ...row, gap: 6 }}>
-                  <SubtreeGlyph size={10} />
+                <View style={{ ...row, gap: space[4] }}>
+                  <SubtreeGlyph size={icon.sm} />
                   <Label variant="small" tone="mutedInk">
                     {`#${props.task.number}`}
                   </Label>
@@ -193,7 +197,7 @@ export function BoardCard(props: {
               </If>
               <View style={{ ...row, gap: space[4] }}>
                 <If when={!tablet()}>
-                  <TaskGlyph status={props.task.status} size={10} />
+                  <TaskGlyph status={props.task.status} size={icon.sm} />
                 </If>
                 <Label variant="small" tone={tones[props.task.status]}>
                   {uiText("taskAuto")}
@@ -215,7 +219,7 @@ export function BoardCard(props: {
                     tone="warning"
                     style={{
                       backgroundColor: c().warningFill,
-                      paddingHorizontal: 5,
+                      paddingHorizontal: space[4],
                     }}
                   >
                     {uiText("forYouToCheck")}
@@ -244,7 +248,7 @@ export function BoardCard(props: {
               <If when={isWaiting(props.task)}>
                 <Icon
                   name="lock"
-                  size={tablet() ? 10 : 11}
+                  size={icon.sm}
                   tone={tablet() ? "ink" : "mutedInk"}
                 />
               </If>
@@ -255,7 +259,7 @@ export function BoardCard(props: {
                     props.task.status === "blocked")
                 }
               >
-                <TaskGlyph status={props.task.status} size={11} />
+                <TaskGlyph status={props.task.status} size={icon.sm} />
               </If>
             </If>
           </View>
@@ -275,13 +279,13 @@ export function BoardCard(props: {
               </Each>
             </View>
             <If when={nowThen()}>
-              <View style={{ ...row, gap: 5, alignItems: "flex-start" }}>
+              <View style={{ ...row, gap: space[4], alignItems: "flex-start" }}>
                 <If when={!tablet()}>
                   <View
                     style={{
                       width: 5,
                       height: 5,
-                      marginTop: 5,
+                      marginTop: space[4],
                       backgroundColor: c().blue,
                     }}
                   />
@@ -327,15 +331,15 @@ export function BoardCard(props: {
               <View
                 style={{
                   ...row,
-                  gap: tablet() ? 4 : 5,
+                  gap: space[4],
                   marginTop: tablet() ? 0 : space[2],
                   paddingVertical: tablet() ? 1 : space[2],
-                  paddingHorizontal: tablet() ? 4 : 6,
+                  paddingHorizontal: tablet() ? space[4] : space[8],
                   borderWidth: 1,
                   borderColor: c().strong,
                 }}
               >
-                <Icon name="lock" size={tablet() ? 9 : 10} />
+                <Icon name="lock" size={icon.sm} />
                 <Label
                   variant="small"
                   lines={1}
@@ -409,8 +413,8 @@ function BlockedAction(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         alignSelf: props.stretch ? "stretch" : "flex-start",
-        paddingVertical: props.stretch ? 2 : 3,
-        paddingHorizontal: props.stretch ? 5 : 6,
+        paddingVertical: props.stretch ? space[2] : space[4],
+        paddingHorizontal: props.stretch ? space[4] : space[8],
         borderWidth: 1,
         borderColor: c().strong,
         cursor: "pointer",

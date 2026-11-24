@@ -2,7 +2,7 @@ import type { BoardTaskView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { signal, View } from "nsh";
 import { colors, grow, Icon, Label, row, SmoothScroll } from "../../components";
-import { control, space, weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { ownerLine } from "./creator";
@@ -93,14 +93,15 @@ export function PhoneTaskList(props: {
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   backgroundColor: group().fold ? c().canvas : c().surface,
-                  gap: 6,
+                  gap: space[4],
                 }}
               >
                 <Label
+                  tracking="caps"
                   variant="caption"
                   weight={weight.strong}
                   tone={group().name === "Needs you" ? "warning" : "mutedInk"}
-                  style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
+                  style={{ textTransform: "uppercase" }}
                 >
                   {uiText(group().label)}
                 </Label>
@@ -114,7 +115,7 @@ export function PhoneTaskList(props: {
                   <View style={{ flex: 1 }} />
                   <Icon
                     name={open() ? "down" : "right"}
-                    size={14}
+                    size={icon.md}
                     tone="muted"
                   />
                 </If>
@@ -187,7 +188,7 @@ export function PhoneTaskList(props: {
                                 ? "in_progress"
                                 : entry().status
                             }
-                            size={14}
+                            size={icon.md}
                           />
                         </View>
                         <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
@@ -219,7 +220,7 @@ export function PhoneTaskList(props: {
                           task={entry()}
                           time={relativeTime(entry().updatedAt)}
                         />
-                        <Icon name="right" size={14} tone="muted" />
+                        <Icon name="right" size={icon.md} tone="muted" />
                       </View>
                     );
                   }}
@@ -373,8 +374,8 @@ export function TabletTaskList(props: {
             style={{
               ...row,
               height: 52,
-              paddingHorizontal: 14,
-              gap: 10,
+              paddingHorizontal: space[16],
+              gap: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
               backgroundColor:
@@ -382,7 +383,7 @@ export function TabletTaskList(props: {
               cursor: "pointer",
             }}
           >
-            <TaskGlyph status={task().status} size={14} />
+            <TaskGlyph status={task().status} size={icon.md} />
             <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
               <Label variant="small" lines={1}>
                 {task().title}
@@ -438,14 +439,20 @@ export function TaskTableRow(props: {
         height: space[32],
         borderBottomWidth: 1,
         borderColor: c().border,
-        paddingLeft: props.nested ? (desktop() ? 38 : 34) : 14,
-        paddingRight: 14,
+        // Nested under its parent's title: the row's inset, the glyph's column and its gap.
+        paddingLeft: props.nested
+          ? space[16] + (desktop() ? space[24] : space[12] + space[8])
+          : space[16],
+        paddingRight: space[16],
         gap: desktop() ? 0 : space[8],
         cursor: "pointer",
       }}
     >
       <View style={{ width: desktop() ? 24 : phone() ? 14 : 12 }}>
-        <TaskGlyph status={props.item.status} size={phone() ? 14 : 12} />
+        <TaskGlyph
+          status={props.item.status}
+          size={phone() ? icon.md : icon.sm}
+        />
       </View>
       <Label
         variant="caption"
@@ -488,7 +495,7 @@ export function TaskTableRow(props: {
           <View style={{ width: 6, height: 6, backgroundColor: c().blue }} />
         </If>
         <If when={isWaiting(props.item)}>
-          <Icon name="lock" size={10} tone="mutedInk" />
+          <Icon name="lock" size={icon.sm} tone="mutedInk" />
         </If>
         <Label
           variant="caption"

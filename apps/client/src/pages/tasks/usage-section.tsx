@@ -237,7 +237,11 @@ function WideUsage(props: {
           onPress={() => props.onOpen(!props.open)}
           style={{ ...row, gap: space[8], cursor: "pointer" }}
         >
-          <Icon name={props.open ? "down" : "right"} size={10} tone="muted" />
+          <Icon
+            name={props.open ? "down" : "right"}
+            size={icon.sm}
+            tone="muted"
+          />
           <Label
             variant={props.tablet ? "body" : "subtitle"}
             weight={weight.strong}
@@ -269,7 +273,7 @@ function WideUsage(props: {
         </If>
       </View>
       <If when={props.open}>
-        <View style={{ gap: space[16], paddingLeft: 18 }}>
+        <View style={{ gap: space[16], paddingLeft: space[20] }}>
           <If
             when={totals()}
             else={
@@ -290,7 +294,7 @@ function WideUsage(props: {
             }
           >
             {(sum) => (
-              <View style={{ ...row, gap: 28, alignItems: "flex-end" }}>
+              <View style={{ ...row, gap: space[24], alignItems: "flex-end" }}>
                 <Figure
                   label={uiText("usageTotal")}
                   value={tokens(sum().total)}
@@ -367,7 +371,7 @@ function WideUsage(props: {
                         flex: 1,
                         flexBasis: 0,
                         minWidth: 0,
-                        gap: 6,
+                        gap: space[4],
                       }}
                     >
                       <Label variant="small" lines={1}>
@@ -493,11 +497,11 @@ function RunsTable(props: {
                   style={{
                     ...row,
                     height: control.md,
-                    gap: 6,
+                    gap: space[4],
                     cursor: "pointer",
                   }}
                 >
-                  <Icon name="right" size={9} tone="muted" />
+                  <Icon name="right" size={icon.sm} tone="muted" />
                   <Label variant="small" tone="muted" lines={1}>
                     {[
                       `#${numberOf(line().run.taskId) ?? ""}`,
@@ -547,7 +551,7 @@ function RunLineRow(props: {
         style={{
           ...row,
           width: props.tablet ? 96 : 120,
-          gap: 6,
+          gap: space[4],
           flexShrink: 0,
           minWidth: 0,
         }}
@@ -775,7 +779,7 @@ function PhoneUsage(props: {
   const shownModels = () => (folds() ? models().slice(0, 2) : models());
   const rest = () => (folds() ? models().slice(2) : []);
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: space[4] }}>
       <View style={{ ...row, gap: space[8] }}>
         <Caption text={uiText("usageTitle")} style={{ flex: 1 }} />
         <If when={props.parent}>
