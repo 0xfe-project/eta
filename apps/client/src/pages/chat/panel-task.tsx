@@ -142,7 +142,7 @@ export function PanelTask(props: {
                 />
               </ActionMenu>
             </TaskTopBar>
-            <SmoothScroll style={grow} scrollbar={false}>
+            <SmoothScroll style={grow}>
               {/* The panel's section title: body 14 / 600 (compact), not the page's subtitle. */}
               <Label
                 variant="body"
