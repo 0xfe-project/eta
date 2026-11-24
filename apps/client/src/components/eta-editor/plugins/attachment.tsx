@@ -16,7 +16,10 @@ import {
   fileSize as pictureSize,
   useAttachmentPictures,
 } from "../../../services/pictures";
+import { hint } from "../../controls";
 import { Lightbox, picturePreview } from "../../picture-viewer";
+import { colors } from "../../theme";
+import { showToast } from "../../toast";
 import { isBmp, pastedFile } from "../bmp-to-png";
 import { Chip } from "../chip";
 import { oneStep } from "../step";
@@ -36,6 +39,13 @@ export interface Uploads {
 
 const isImage = (type: string) => type.startsWith("image/");
 
+/** Why a file over the size limit cannot go. */
+export const tooLarge = (name: string) =>
+  uiText("composerFileTooLarge", {
+    name,
+    limit: `${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB`,
+  });
+
 function FileView(input: {
   view: RichNodeViewProps;
   uploads: Uploads;
@@ -43,6 +53,7 @@ function FileView(input: {
 }) {
   const props = input.view;
   const uploads = input.uploads;
+  const c = colors();
   const pictureOf = useAttachmentPictures();
   const id = () => String(props.node.attrs.id);
   const name = () => String(props.node.attrs.name);
@@ -83,14 +94,20 @@ function FileView(input: {
       tone={state()?.state === "failed" || !state() ? "red" : "ink"}
       tooltip={(() => {
         const shown = picture();
-        return shown ? picturePreview(shown, 248) : failure()?.error;
+        // Why it failed, drawn (a bare string tooltip draws nothing on the web).
+        return shown ? picturePreview(shown, 248) : hint(failure()?.error, c);
       })()}
-      cursor={picture() ? "zoom-in" : undefined}
+      cursor={picture() ? "zoom-in" : failure() ? "pointer" : undefined}
       dim={state()?.state === "uploading"}
       selected={props.selected}
       accessibilityLabel={(() => {
         const current = state();
         if (failure()?.retry) return uiText("retryUpload", { name: name() });
+        if (failure())
+          return uiText("attachRefusedWhy", {
+            name: name(),
+            reason: failure()!.error,
+          });
         if (picture() && current?.state === "done")
           return uiText("openPicture", {
             name: name(),
@@ -101,7 +118,15 @@ function FileView(input: {
         });
       })()}
       onPress={() => {
-        if (failure()?.retry) uploads.retry(id());
+        const failed = failure();
+        if (failed?.retry) uploads.retry(id());
+        // Refused before uploading: a press says why (a touch screen has no hover).
+        else if (failed)
+          showToast({
+            title: uiText("attachRefused", { name: name() }),
+            body: failed.error,
+            tone: "red",
+          });
         else if (picture()) input.onOpen(id());
       }}
       removeLabel={uiText("removeAttachment", { name: name() })}
@@ -353,11 +378,7 @@ export function attachment(options: {
         chosen.map(
           (item) =>
             // Over the size limit the picker gives no bytes: the block says why.
-            item.file ??
-            refusedFile(
-              item.name,
-              uiText("composerFileTooLarge", { name: item.name }),
-            ),
+            item.file ?? refusedFile(item.name, tooLarge(item.name)),
         ),
         editor,
       );
@@ -413,7 +434,6 @@ function refusal(file: File, index: number, room: number): string | undefined {
   if (error) return error;
   if (index >= room)
     return uiText("attachmentCountLimit", { count: MAX_ATTACHMENTS });
-  if (file.size > MAX_ATTACHMENT_BYTES)
-    return uiText("composerFileTooLarge", { name: file.name });
+  if (file.size > MAX_ATTACHMENT_BYTES) return tooLarge(file.name);
   return undefined;
 }
