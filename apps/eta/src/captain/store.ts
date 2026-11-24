@@ -383,9 +383,15 @@ export class CaptainStore {
     return (row?.n ?? 0) + 1;
   }
 
+  /**
+   * The newest assignment target of this agent in this conversation that is still open. With a
+   * `replyId`, only a target dispatched with that very reply: the one turn the assignment started,
+   * not every turn the agent takes in the group while it stays open.
+   */
   openAssignmentFor(
     conversationId: string,
     agentId: string,
+    replyId?: string,
   ):
     | {
         assignmentId: string;
@@ -396,16 +402,17 @@ export class CaptainStore {
     const row = this.#db
       .query<
         { assignment_id: string; message_id: string; target_id: string },
-        [string, string]
+        [string, string, string | null, string | null]
       >(
         `SELECT a.id AS assignment_id, a.message_id, t.id AS target_id
            FROM captain_assignment_target t
            JOIN captain_assignment a ON a.id = t.assignment_id
           WHERE a.conversation_id = ? AND t.agent_id = ?
             AND t.status IN ('dispatched', 'working')
+            AND (? IS NULL OR t.reply_id = ?)
           ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1`,
       )
-      .get(conversationId, agentId);
+      .get(conversationId, agentId, replyId ?? null, replyId ?? null);
     return row === null
       ? undefined
       : {

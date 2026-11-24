@@ -517,11 +517,40 @@ export class CaptainService {
     return await this.assign(input);
   }
 
+  /**
+   * The assignment this agent still has open in the conversation, and whether the turn it is in now
+   * is the one that assignment started. Only that turn is bound by the assignment.
+   */
   assignmentForAgent(
     conversationId: string,
     agentId: string,
-  ): { assignmentId: string; messageId: string; targetId: string } | undefined {
-    return this.#deps.store.openAssignmentFor(conversationId, agentId);
+  ):
+    | {
+        assignmentId: string;
+        messageId: string;
+        targetId: string;
+        forThisTurn: boolean;
+      }
+    | undefined {
+    const { store, timeline } = this.#deps;
+    const open = store.openAssignmentFor(conversationId, agentId);
+    if (open === undefined) return undefined;
+    const reply = timeline
+      .active(conversationId)
+      .find(
+        (row) =>
+          row.agentId === agentId &&
+          (row.status === "working" ||
+            row.status === "waiting_for_input" ||
+            row.status === "stopping"),
+      );
+    return {
+      ...open,
+      forThisTurn:
+        reply !== undefined &&
+        store.openAssignmentFor(conversationId, agentId, reply.id) !==
+          undefined,
+    };
   }
 
   taskCreated(input: {
@@ -962,9 +991,11 @@ export class CaptainService {
   ): { assignmentId: string; messageId: string; targetId: string } | undefined {
     if (interaction.agentId === null || interaction.conversationId === null)
       return undefined;
+    // A question asked in a turn the assignment did not start is the user's, not Captain's to relay.
     return this.#deps.store.openAssignmentFor(
       interaction.conversationId,
       interaction.agentId,
+      interaction.replyId ?? undefined,
     );
   }
 
