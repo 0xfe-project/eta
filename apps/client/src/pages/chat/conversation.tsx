@@ -43,7 +43,7 @@ import { uiText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
 import { follow, useHost } from "../../services/host";
 import { isActiveRunStatus } from "../tasks/run-log";
-import { PendingStrip } from "./approvals";
+import { flashQuestion, PendingStrip, pendingStripHeight } from "./approvals";
 import { defaultFilters } from "./artifacts/filter";
 import { ArtifactPreview } from "./artifacts/preview";
 import { Composer } from "./composer";
@@ -53,8 +53,7 @@ import { ConversationTimeline } from "./conversation-timeline";
 import { indexInserts, InsertMessage } from "./insert-message";
 import { keptMessages } from "./kept-messages";
 import { InviteAgents, StewardMenu } from "./members";
-import { QuestionDialog } from "./pending";
-import { questionSource } from "./question-row";
+import { questionRowIndex, questionSource } from "./question-row";
 import { RemoveMember } from "./remove-member";
 import { MemberRun } from "./run/member-run";
 import { RunPanel } from "./run/run-panel";
@@ -140,10 +139,8 @@ export function Conversation(props: {
   let reveal: ((replyId: string | null) => void) | undefined;
   const asking = () =>
     host.pending().filter((entry) => entry.conversationId === props.id);
-  const questionId = signal("");
-  const question = () => asking().find((entry) => entry.id === questionId());
   // The board list does not carry a task's runs, so the tasks that could have asked (running, in
-  // this conversation) are followed while the dialog is open and matched by session.
+  // this conversation) are followed while the strip shows their question and matched by session.
   const askingTasks = (item: InteractionView) =>
     host
       .tasks()
@@ -196,6 +193,28 @@ export function Conversation(props: {
         return detail ? [{ id: task.id, runs: detail.runs }] : [];
       }),
     );
+  // The rows on screen, once the transcript says; until then a loaded reply counts as on screen,
+  // so the strip does not flash up while the transcript opens.
+  const visibleRows = signal<ReadonlySet<string> | undefined>(undefined);
+  const onScreen = (item: InteractionView) => {
+    if (item.replyId === null) return false;
+    const seen = visibleRows();
+    return seen
+      ? seen.has(item.replyId)
+      : questionRowIndex(indexed().rows, item.replyId) !== undefined;
+  };
+  // The strip shows one question: the oldest one waiting that is not on screen.
+  const offScreen = () =>
+    [...asking()]
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .find((item) => !onScreen(item));
+  // A question no loaded row carries may come from a task: its tasks are followed to find out.
+  const stripTasks = () => {
+    const item = offScreen();
+    return item && questionRowIndex(indexed().rows, item.replyId) === undefined
+      ? askingTasks(item)
+      : [];
+  };
   const inserting = signal<
     { message: MessageView; recipients: string[] } | undefined
   >(undefined);
@@ -247,12 +266,29 @@ export function Conversation(props: {
     if (props.layout === "desktop") setDesktopPanelOpen(true);
     else if (!phone()) drawer.set(true);
   }
-  function jumpToSource(item: InteractionView) {
+  /**
+   * Goes to a question: to its reply in the transcript (loading older messages until it is there),
+   * or, when this conversation has no such reply, to the task whose run asked it.
+   */
+  async function jumpTo(item: InteractionView) {
+    const loaded = () => questionRowIndex(indexed().rows, item.replyId);
+    if (item.replyId !== null)
+      while (
+        loaded() === undefined &&
+        (hasOlder() ?? timeline()?.hasMore) &&
+        !paging()
+      ) {
+        const before = messages().length;
+        await history();
+        if (messages().length === before) break;
+      }
+    if (loaded() !== undefined) {
+      reveal?.(item.replyId);
+      flashQuestion(item.id);
+      return;
+    }
     const source = questionSourceOf(item);
-    if (!source) return;
-    questionId.set("");
-    if (source.kind === "row") reveal?.(item.replyId);
-    else openTask(source.taskId);
+    if (source?.kind === "task") openTask(source.taskId);
   }
   function closeDrawer() {
     drawer.set(false);
@@ -474,14 +510,28 @@ export function Conversation(props: {
             alignSelf: "center",
           }}
         >
+          {/* The strip's room stays while questions wait, so the transcript
+              does not move when the strip comes and goes with scrolling. */}
           <If when={!phone() && asking().length}>
             <View
-              style={{ paddingHorizontal: space[16], paddingTop: space[8] }}
+              style={{
+                height: pendingStripHeight + space[8],
+                paddingHorizontal: space[16],
+                paddingTop: space[8],
+              }}
             >
-              <PendingStrip
-                items={asking()}
-                onOpen={(item) => questionId.set(item.id)}
-              />
+              <If when={offScreen()}>
+                {(item) => (
+                  <PendingStrip
+                    item={item()}
+                    more={asking().length - 1}
+                    onJump={(entry) => void jumpTo(entry)}
+                  />
+                )}
+              </If>
+              <Each of={stripTasks()} key={(task) => task.id}>
+                {(task) => <FollowTask id={task().id} />}
+              </Each>
             </View>
           </If>
           {/* The message area takes all the room between the header and the
@@ -492,6 +542,7 @@ export function Conversation(props: {
               revealer={(fn) => {
                 reveal = fn;
               }}
+              onVisibleRows={visibleRows.set}
               onAccessLost={props.onAccessLost}
               title={title()}
               projectName={
@@ -668,25 +719,6 @@ export function Conversation(props: {
             />
           </If>
         </Modal>
-      </If>
-      <If when={question()}>
-        {(item) => (
-          <>
-            <Each of={askingTasks(item())} key={(task) => task.id}>
-              {(task) => <FollowTask id={task().id} />}
-            </Each>
-            <QuestionDialog
-              item={item()}
-              phone={phone()}
-              onClose={() => questionId.set("")}
-              onSource={
-                questionSourceOf(item())
-                  ? () => jumpToSource(item())
-                  : undefined
-              }
-            />
-          </>
-        )}
       </If>
       <If when={projectInfo() && project()}>
         <Modal
