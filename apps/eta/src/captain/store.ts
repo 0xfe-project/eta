@@ -454,6 +454,32 @@ export class CaptainStore {
     })();
   }
 
+  /**
+   * The reply a target was dispatched with has ended. A target still `dispatched` then made no task
+   * in it (one made in the turn moved it to `working` at once), so nothing more is coming from it:
+   * it is `completed`, and `openAssignmentFor` stops returning it. A target with a task is left to
+   * `refreshAssignments`. True when a target was closed.
+   */
+  closeAnswered(replyId: string): boolean {
+    const now = Date.now();
+    const closed = this.#db
+      .query<{ assignment_id: string }, [number, string]>(
+        `UPDATE captain_assignment_target
+            SET status = 'completed', updated_at = ?
+          WHERE reply_id = ? AND status = 'dispatched'
+            AND NOT EXISTS (
+              SELECT 1 FROM task
+               WHERE captain_assignment_id = captain_assignment_target.assignment_id
+                 AND created_by_agent = captain_assignment_target.agent_id
+            )
+          RETURNING assignment_id`,
+      )
+      .all(now, replyId);
+    for (const { assignment_id } of closed)
+      this.refreshAssignment(assignment_id, now);
+    return closed.length > 0;
+  }
+
   setAssignmentTargetStatus(
     assignmentId: string,
     agentId: string,
@@ -518,7 +544,12 @@ export class CaptainStore {
       .run();
     for (const { id } of this.#db
       .query<{ id: string }, []>(
-        "SELECT id FROM captain_assignment WHERE status IN ('dispatched', 'working')",
+        `SELECT id FROM captain_assignment a
+          WHERE a.status IN ('dispatched', 'working')
+             OR (a.status = 'completed' AND EXISTS (
+               SELECT 1 FROM captain_assignment_target t
+                WHERE t.assignment_id = a.id AND t.status IN ('dispatched', 'working')
+             ))`,
       )
       .all())
       this.refreshAssignment(id);

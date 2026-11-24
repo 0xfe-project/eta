@@ -544,6 +544,16 @@ export class CaptainService {
   }
 
   /**
+   * A reply ended `done`. If a dispatch woke it and the agent made no task in it, the work is
+   * answered and the dispatch closes: nothing else would, and until it does the whole group reads
+   * as having open Captain work. A draft the user confirms later reopens it through
+   * `refreshAssignments`.
+   */
+  replyEnded(replyId: string): void {
+    if (this.#deps.store.closeAnswered(replyId)) this.#deps.changed();
+  }
+
+  /**
    * Whether long-term/project memory is on for this session: off when its task is paused, or the
    * conversation it is held in or its task came from.
    */
