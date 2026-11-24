@@ -16,7 +16,9 @@ const listed = new WeakMap<object, ComposioPluginView[]>();
 
 /**
  * The connected Composio toolkits as the host lists them as plugins of the agents
- * (`@composio/<slug>`). Read once when the page opens and again on `read()`; a host that does not
+ * (`@composio/<slug>`). Read when the page opens and again on `read()`, and then followed: a host
+ * that publishes the `composio` section of its `plugins` target sends it when a toolkit's session is
+ * made after the page opened. A host without the section is only read, as before; one that does not
  * answer (or does not know the call) lists none, and nothing says so.
  */
 export function useComposioPlugins() {
@@ -34,6 +36,12 @@ export function useComposioPlugins() {
   });
   effect(() => {
     untracked(() => void read());
+  });
+  // The host's own copy, kept current by its pushes. Reading it does not call the host, so it
+  // cannot cause a push that is read again.
+  effect(() => {
+    const pushed = host.section<ComposioPluginView[]>("plugins", "composio");
+    if (Array.isArray(pushed)) list.set(pushed);
   });
   return { list, read };
 }
