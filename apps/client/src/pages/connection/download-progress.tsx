@@ -3,9 +3,9 @@ import { View } from "nsh";
 import { colors, Header, Label } from "../../components";
 import { DownloadProgressBar } from "../../components/download-progress";
 import { space } from "../../components/tokens";
-import { cardWidth } from "./visuals";
 import { uiText } from "../../i18n";
 import { localProgress } from "./local-host";
+import { cardWidth } from "./visuals";
 
 export function DownloadStatus(props: { layout: Layout }) {
   const c = colors();
@@ -31,7 +31,7 @@ export function DownloadStatus(props: { layout: Layout }) {
       <Header
         title={uiText("downloadingTheHost")}
         layout={props.layout}
-        inset={16}
+        inset={space[16]}
         dialog
       />
       <View style={{ padding: space[16], gap: space[12] }}>

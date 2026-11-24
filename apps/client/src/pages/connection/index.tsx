@@ -282,7 +282,7 @@ export function Connection(props: {
               <Header
                 title={uiText("whereShouldEtaRun")}
                 layout={props.layout}
-                inset={16}
+                inset={space[16]}
                 dialog
               />
             </If>
@@ -294,7 +294,7 @@ export function Connection(props: {
                     : uiText("connectToOneHostReachEvery")
                 }
                 layout={props.layout}
-                inset={16}
+                inset={space[16]}
                 dialog
               />
             </If>

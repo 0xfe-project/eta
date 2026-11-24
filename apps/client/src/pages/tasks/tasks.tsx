@@ -127,8 +127,8 @@ export function Tasks(props: {
             title={uiText("tasks2")}
             count={shown().length}
             layout={props.layout}
-            inset={14}
-            end={10}
+            inset={space[16]}
+            end={space[12]}
             countVariant="body"
           >
             <View style={{ flex: 1 }} />
@@ -177,8 +177,8 @@ export function Tasks(props: {
                 : shown().length
           }
           layout={props.layout}
-          inset={tablet() ? 14 : undefined}
-          end={phone() ? 8 : undefined}
+          inset={tablet() ? space[16] : undefined}
+          end={phone() ? space[8] : undefined}
         >
           <If when={phone()}>
             <View style={{ flex: 1 }} />

@@ -90,8 +90,8 @@ export function ChatList(
           <Header
             title={text("chat")}
             layout={props.layout}
-            inset={phone() ? 16 : 12}
-            end={phone() ? 4 : undefined}
+            inset={phone() ? space[16] : space[12]}
+            end={phone() ? space[4] : undefined}
           >
             <View style={{ flex: 1 }} />
             <If when={phone()}>

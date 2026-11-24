@@ -43,8 +43,8 @@ export function PluginTablet(props: {
           count={props.items.length}
           layout="tablet"
           background="canvas"
-          inset={14}
-          end={10}
+          inset={space[16]}
+          end={space[12]}
         >
           <View style={{ flex: 1 }} />
           <Button

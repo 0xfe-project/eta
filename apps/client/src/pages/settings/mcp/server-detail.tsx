@@ -92,7 +92,7 @@ export function McpDetail(props: {
           <Header
             title={server().server}
             layout={props.layout}
-            inset={16}
+            inset={space[16]}
             onBack={props.onBack}
           />
         }

@@ -130,8 +130,8 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           title={uiText("setUpEta")}
           layout="desktop"
           dialog
-          inset={16}
-          end={12}
+          inset={space[16]}
+          end={space[12]}
         />
         <If when={step() > 0}>
           <View

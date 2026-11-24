@@ -1,0 +1,19 @@
+id: design-grid
+language: tsx
+severity: error
+message: "A length that is not a token is still on the grid: 1, 2 or a multiple of 4."
+note: |
+  A row's height, a column's width, a dialog's size are not tokens; they are a named constant in
+  the component (`const rowHeight = 52`), and on the grid. Or the line says why it is not:
+  `// design-value: <reason>`.
+ignores:
+  - src/components/tokens.ts
+rule:
+  kind: variable_declarator
+  all:
+    - has:
+        field: name
+        regex: ((^|[a-z])(Width|Height|Row|Inset|Gap|Indent|Offset|Column)|^(width|height|row|inset|gap|indent|offset|column)|_(WIDTH|HEIGHT|INSET|GAP))$
+    - has:
+        field: value
+        matches: off-grid

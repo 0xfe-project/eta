@@ -37,6 +37,7 @@ import {
 } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
 import { CloseButton } from "../../../components/navigation-buttons";
+import { dotSize } from "../../../components/status-dot";
 import {
   border,
   control,
@@ -44,7 +45,6 @@ import {
   space,
   weight,
 } from "../../../components/tokens";
-import { dotSize } from "../../../components/status-dot";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EntityRow, LetterBox, SectionHeader } from "../section";
@@ -266,7 +266,13 @@ export function AddSource(props: {
     >
       <If when={!props.phone}>
         {/* The design's dialog header: 16/400/24 title at 16, a bare 16px X ending 12 from the edge. */}
-        <Header title={title()} layout="desktop" dialog inset={16} end={12}>
+        <Header
+          title={title()}
+          layout="desktop"
+          dialog
+          inset={space[16]}
+          end={space[12]}
+        >
           <View style={grow} />
           <CloseButton
             size={control.sm}

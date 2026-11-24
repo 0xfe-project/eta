@@ -1,6 +1,6 @@
 # ast-grep (https://ast-grep.github.io): the design-value lint of the client.
 # `bun run lint` runs it through scripts/check-design-values.ts, which adds what ast-grep
-# cannot say: the `// design-value: <reason>` allowance and the baseline of what was there before.
+# cannot say: the `// design-value: <reason>` allowance. Every other match fails.
 ruleDirs:
   - lint/ast-grep/rules
 utilDirs:
