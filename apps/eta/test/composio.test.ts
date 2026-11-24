@@ -744,6 +744,30 @@ describe("the link", () => {
     );
     await expect(composio.link("../x")).rejects.toThrow("toolkit name");
   });
+
+  it("names the method and the path of the call Composio refused, and never the query or the key", async () => {
+    const { composio } = open();
+    composio.setKey(KEY);
+    const failure = () =>
+      composio.link("github").then(
+        () => "",
+        (caught: unknown) => String(caught),
+      );
+    handler = () => json({ message: `no ${KEY}` }, 404);
+    const listing = await failure();
+    expect(listing).toContain(
+      "Composio answered HTTP 404 (GET /api/v3/auth_configs)",
+    );
+    expect(listing).not.toContain("toolkit_slug");
+    expect(listing).not.toContain("SECRET_0123");
+    handler = (request, url) =>
+      request.method === "GET" && url.pathname === "/api/v3/auth_configs"
+        ? json({ items: [] })
+        : json({}, 404);
+    expect(await failure()).toContain(
+      "Composio answered HTTP 404 (POST /api/v3/auth_configs)",
+    );
+  });
 });
 
 describe("the logo", () => {
