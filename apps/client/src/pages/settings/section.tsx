@@ -1,12 +1,21 @@
 import type { JSX, ViewRef, ViewStyle } from "nsh";
 import { Image, View, windowSize } from "nsh";
-import { ActionMenu, Button, colors, Icon, Label, row } from "../../components";
+import {
+  ActionMenu,
+  Button,
+  colors,
+  focusRing,
+  Icon,
+  Label,
+  row,
+} from "../../components";
+import { canHover } from "../../components/menu";
 import { StatusDot } from "../../components/status-dot";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { tintedLogo } from "./models/logos";
 
-export { WarningLine } from "../../ui";
+export { SectionHeader, WarningLine } from "../../ui";
 
 /** A row's status column, wide enough for its dot and word. */
 const statusLaneWidth = 100;
@@ -22,74 +31,6 @@ export const emptyStyle: ViewStyle = {
   paddingVertical: space[24],
   paddingHorizontal: space[16],
 };
-
-/** The header that opens a settings pane or a group inside one: title, count, actions, description. */
-export function SectionHeader(props: {
-  title: string;
-  count?: string | number;
-  description?: string;
-  muted?: boolean;
-  /** The phone's header row is 28px, fitting its 28px buttons. */
-  phone?: boolean;
-  /** The header row's height when it differs, e.g. 20 for a bare title in a sheet. */
-  rowHeight?: number;
-  leading?: JSX.Element;
-  children?: JSX.Element;
-}) {
-  const c = colors();
-  return (
-    <View
-      style={{
-        flexShrink: 0,
-        gap: space[2],
-        paddingHorizontal: space[16],
-        paddingVertical: space[8],
-        borderBottomWidth: 1,
-        borderColor: c().border,
-      }}
-    >
-      <View
-        style={{
-          ...row,
-          height: props.rowHeight ?? (props.phone ? control.md : space[24]),
-          gap: space[8],
-        }}
-      >
-        {props.leading}
-        <View
-          style={{
-            ...row,
-            alignItems: "baseline",
-            flex: 1,
-            minWidth: 0,
-            gap: space[8],
-          }}
-        >
-          <Label
-            weight={weight.strong}
-            lines={1}
-            tone={props.muted ? "muted" : "ink"}
-          >
-            {props.title}
-          </Label>
-          <If when={props.count !== undefined}>
-            <Label variant="small" tone="muted">
-              {props.count}
-            </Label>
-          </If>
-        </View>
-        <If when={props.children}>
-          <View style={{ ...row, gap: space[8] }}>{props.children}</View>
-        </If>
-      </View>
-      <If when={props.description}>
-        <Label variant="small" tone="muted">
-          {props.description}
-        </Label>
-      </If>
-    </View>
-  );
-}
 
 export interface EntityStatus {
   label: string;
@@ -230,6 +171,12 @@ export function EntityRow(props: {
             : props.accessibilityLabel
         }
         onPress={props.onPress}
+        hoverStyle={
+          props.onPress && canHover
+            ? { backgroundColor: c().selected }
+            : undefined
+        }
+        focusVisibleStyle={props.onPress ? focusRing(c(), "inset") : undefined}
         style={{
           ...row,
           alignItems: "flex-start",

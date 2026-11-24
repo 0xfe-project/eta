@@ -5,6 +5,7 @@ export { Chip } from "./chip";
 export { CopyButton } from "./copy-button";
 export { Disclosure } from "./disclosure";
 export { Field, FormField } from "./input";
+export { ListRow, SectionHeader } from "./list-row";
 export { SearchField } from "./search-field";
 export { CheckControl, ToggleSwitch } from "./selection-controls";
 export { Card, Separator } from "./surface";
