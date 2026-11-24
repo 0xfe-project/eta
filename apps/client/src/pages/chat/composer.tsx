@@ -22,7 +22,15 @@ import {
   windowSize,
 } from "nsh";
 
-import { Button, colors, focusRing, Icon, Label, row } from "../../components";
+import {
+  Button,
+  colors,
+  focusRing,
+  Icon,
+  Label,
+  row,
+  textFaces,
+} from "../../components";
 import {
   attachment,
   chatText,
@@ -85,23 +93,38 @@ export function Composer(props: ComposerProps) {
   );
 }
 
-/** The box while the saved draft loads: its outline, so the layout does not jump. */
-/** About the composer's height with an empty draft. */
-const shellHeight = 84;
+/** The editor's padding: with one line of body text it is 38 tall, as in a task's comment box. */
+const editorPad = { top: space[8], bottom: space[8], left: space[12] };
+/** The foot under the editor off phones (attach, Send), as tall as the comment box's. */
+const footHeight = space[32];
+/** A phone's box is one row, the editor beside its 32px buttons. */
+const phoneRowHeight = space[40];
 
+/** The box while the saved draft loads: its outline at the empty box's height, so the layout
+ * does not jump. */
 function ComposerShell(props: { phone: boolean }) {
   const c = colors();
+  const type = textFaces();
+  // The editor's one line over the foot, or the phone's row; and the 1px border round it.
+  const height = () =>
+    (props.phone
+      ? phoneRowHeight
+      : type("body").prose + editorPad.top + editorPad.bottom + footHeight) + 2;
   return (
     <View
       style={{
-        paddingVertical: props.phone ? space[12] : space[16],
+        paddingVertical: space[12],
         paddingHorizontal: props.phone ? space[12] : space[16],
         paddingTop: space[8],
         flexShrink: 0,
       }}
     >
       <View
-        style={{ height: shellHeight, borderWidth: 1, borderColor: c().ink }}
+        style={{
+          height: height(),
+          borderWidth: 1,
+          borderColor: c().strong,
+        }}
       />
     </View>
   );
@@ -380,7 +403,7 @@ function ComposerBody(
         position: "relative",
         // design-value: order inside the conversation, so the composer's popovers draw over the transcript
         zIndex: 2,
-        paddingVertical: props.phone ? space[12] : space[16],
+        paddingVertical: space[12],
         paddingHorizontal: props.phone
           ? space[12]
           : props.alignWithContent
@@ -455,7 +478,7 @@ function ComposerBody(
         style={{
           position: "relative",
           borderWidth: 1,
-          borderColor: c().ink,
+          borderColor: editor.focused() ? c().ink : c().strong,
           opacity: offline() ? opacity.disabled : 1,
           pointerEvents: offline() ? "none" : undefined,
         }}
@@ -477,23 +500,18 @@ function ComposerBody(
               (windowSize().height - keyboardFrame().height) * 0.4
             }
             padding={{
-              top: props.phone ? 11 : 12,
-              bottom: props.phone ? 11 : 14,
-              left: 12,
-              right: props.phone ? 6 : 12,
+              ...editorPad,
+              right: props.phone ? space[4] : space[12],
             }}
             style={{ flex: props.phone ? 1 : undefined }}
           />
           <View
             style={{
               ...row,
-              height: space[40],
+              height: props.phone ? phoneRowHeight : footHeight,
               paddingLeft: props.phone ? 0 : space[12],
-              paddingRight: space[8],
+              paddingRight: space[4],
               gap: props.phone ? space[4] : space[12],
-              backgroundColor: props.phone ? c().canvas : c().surface,
-              borderTopWidth: props.phone ? 0 : 1,
-              borderColor: c().border,
             }}
           >
             <View
@@ -524,9 +542,8 @@ function ComposerBody(
               icon={props.phone ? "arrowUp" : undefined}
               iconOnly={props.phone}
               end={props.phone ? undefined : "return"}
-              size={props.phone ? control.lg : control.md}
+              size={props.phone ? control.lg : control.sm}
               iconSize={props.phone ? icon.md : undefined}
-              labelVariant="caption"
               labelWeight={weight.regular}
               style={
                 props.phone
