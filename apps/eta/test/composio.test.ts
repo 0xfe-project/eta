@@ -566,6 +566,9 @@ describe("the link", () => {
     const { composio } = open();
     composio.setKey(KEY);
     handler = link((url, body) => {
+      // The config it made is then switched on for the tool router.
+      if (url.pathname === "/api/v3/auth_configs/ac_new")
+        return json({ success: true });
       if (url.pathname === "/api/v3/auth_configs" && body === "")
         return json({ items: [] });
       if (url.pathname === "/api/v3/auth_configs")
@@ -623,7 +626,7 @@ describe("the link", () => {
         }
       ).auth_config_id;
 
-    it.fails("switches a config it just made on for the tool router, before the link is asked for", async () => {
+    it("switches a config it just made on for the tool router, before the link is asked for", async () => {
       const { composio } = open();
       composio.setKey(KEY);
       handler = listing([]);
@@ -643,7 +646,7 @@ describe("the link", () => {
       expect(linkedTo()).toBe("ac_new");
     });
 
-    it.fails("switches an existing managed config on when it is off, once, and not again for the same toolkit", async () => {
+    it("switches an existing managed config on when it is off, once, and not again for the same toolkit", async () => {
       const { composio } = open();
       composio.setKey(KEY);
       handler = listing([managed("ac_old", false)]);
@@ -670,7 +673,7 @@ describe("the link", () => {
       }
     });
 
-    it.fails("takes the one that is already on when there are two, and patches nothing", async () => {
+    it("takes the one that is already on when there are two, and patches nothing", async () => {
       const { composio } = open();
       composio.setKey(KEY);
       handler = listing([managed("ac_early", false), managed("ac_late", true)]);
@@ -679,7 +682,7 @@ describe("the link", () => {
       expect(linkedTo()).toBe("ac_late");
     });
 
-    it.fails("still returns the address when the PATCH of an existing config fails, says so in the log, and no key is in any output", async () => {
+    it("still returns the address when the PATCH of an existing config fails, says so in the log, and no key is in any output", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const { composio } = open();
       composio.setKey(KEY);
@@ -695,7 +698,7 @@ describe("the link", () => {
       expect(JSON.stringify(warn.mock.calls)).not.toContain("SECRET_0123");
     });
 
-    it.fails("fails with a clear message when the PATCH of a config it just made fails, and asks for no link", async () => {
+    it("fails with a clear message when the PATCH of a config it just made fails, and asks for no link", async () => {
       const { composio } = open();
       composio.setKey(KEY);
       handler = listing([], () => json({ message: `no ${KEY}` }, 403));

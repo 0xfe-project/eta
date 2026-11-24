@@ -247,6 +247,8 @@ export class Composio {
   #epoch = 0;
   /** The managed auth config found or made for a toolkit; asked once per run. */
   readonly #configs = new Map<string, string>();
+  /** The toolkits whose managed auth configs were looked at for the tool router's switch in this run. */
+  readonly #routed = new Set<string>();
   /** Logo addresses of the list last read, by slug: the client names a slug, never an address. */
   #logos: Map<string, string> | undefined;
 
@@ -301,6 +303,7 @@ export class Composio {
     );
     // Another key may be another project: what was found for the old one is not known for this.
     this.#configs.clear();
+    this.#routed.clear();
     this.#dropAll();
   }
 
@@ -311,6 +314,7 @@ export class Composio {
       CREDENTIAL.kind,
     );
     this.#configs.clear();
+    this.#routed.clear();
     this.#dropAll();
   }
 
@@ -621,6 +625,8 @@ export class Composio {
   async #make(slug: string, key: string, epoch: number): Promise<void> {
     let opened: { id: string; url: string } | undefined;
     try {
+      // A session uses the accounts under a config that is on for the tool router; see #authConfig.
+      await this.#enableRouter(slug, key);
       const kept = this.#keptId(slug);
       if (kept !== undefined) {
         try {
@@ -950,24 +956,24 @@ export class Composio {
     return made;
   }
 
+  /**
+   * The auth config a link is made under. The tool_router sessions use only the accounts of a
+   * config that is switched on for the tool router (`is_enabled_for_tool_router`), and one made
+   * through the API is not (observed on a real project's configs; that a session ignores the
+   * others is not verified). So one that is on is taken when there is one, and the first managed
+   * one is switched on when it is off. The create call lists no such field, so a config just made
+   * is switched on with a PATCH, and when that fails the link fails: an account under it would
+   * not be seen. Failing to switch on one that was already there only goes to the log.
+   */
   async #authConfig(slug: string, key: string): Promise<string> {
     const known = this.#configs.get(slug);
     if (known !== undefined) return known;
-    const query = new URLSearchParams({
-      toolkit_slug: slug,
-      is_composio_managed: "true",
-      limit: "10",
-    });
-    const found = await this.#call("GET", `/api/v3/auth_configs?${query}`, key);
-    let id: unknown;
-    if (isPlain(found) && Array.isArray(found.items))
-      id = found.items.find(
-        (item) =>
-          isPlain(item) &&
-          item.is_composio_managed === true &&
-          item.status !== "DISABLED",
-      )?.id;
-    if (id === undefined) {
+    const found = await this.#managedConfigs(slug, key);
+    const chosen =
+      found.find((item) => item.is_enabled_for_tool_router === true) ??
+      found[0];
+    let id: unknown = chosen?.id;
+    if (chosen === undefined) {
       const made = await this.#call("POST", "/api/v3/auth_configs", key, {
         toolkit: { slug },
         auth_config: { type: "use_composio_managed_auth" },
@@ -979,15 +985,101 @@ export class Composio {
     }
     if (typeof id !== "string" || !SLUG.test(id))
       throw new Error("Composio gave no auth config for this toolkit");
+    if (chosen === undefined) {
+      try {
+        await this.#routerOn(id, key);
+      } catch {
+        throw new Error(
+          "Composio made the auth config but would not switch it on for its tool router",
+        );
+      }
+    } else if (chosen.is_enabled_for_tool_router === false) {
+      await this.#routerOn(id, key).catch((error: unknown) =>
+        this.#warn(
+          `could not switch the auth config ${id} on for the tool router: ${this.#clean(error, key)}`,
+        ),
+      );
+    }
     this.#configs.set(slug, id);
     return id;
+  }
+
+  /** The managed, enabled auth configs of the project for one toolkit, as Composio lists them. */
+  async #managedConfigs(
+    slug: string,
+    key: string,
+  ): Promise<Record<string, unknown>[]> {
+    const query = new URLSearchParams({
+      toolkit_slug: slug,
+      is_composio_managed: "true",
+      limit: "10",
+    });
+    const found = await this.#call("GET", `/api/v3/auth_configs?${query}`, key);
+    return isPlain(found) && Array.isArray(found.items)
+      ? found.items.filter(
+          (item): item is Record<string, unknown> =>
+            isPlain(item) &&
+            item.is_composio_managed === true &&
+            item.status !== "DISABLED",
+        )
+      : [];
+  }
+
+  /** Switch one auth config on for the tool router. Nothing is deleted or otherwise changed. */
+  async #routerOn(id: string, key: string): Promise<void> {
+    const done = await this.#call(
+      "PATCH",
+      `/api/v3/auth_configs/${encodeURIComponent(id)}`,
+      key,
+      { type: "default", is_enabled_for_tool_router: true },
+    );
+    if (isPlain(done) && done.success === false)
+      throw new Error("Composio did not apply the change");
+  }
+
+  /**
+   * Before a toolkit's session is made, once per run: the managed configs that are off for the tool
+   * router are switched on, so that accounts connected under them before this was done are seen by
+   * the session and need no new connection. It never holds the session back; a failure is logged.
+   */
+  async #enableRouter(slug: string, key: string): Promise<void> {
+    if (this.#routed.has(slug)) return;
+    this.#routed.add(slug);
+    let found: Record<string, unknown>[];
+    try {
+      found = await this.#managedConfigs(slug, key);
+    } catch (error) {
+      this.#routed.delete(slug);
+      this.#warn(
+        `could not read the auth configs of ${slug}: ${this.#clean(error, key)}`,
+      );
+      return;
+    }
+    for (const item of found) {
+      const id = item.id;
+      if (
+        item.is_enabled_for_tool_router !== false ||
+        typeof id !== "string" ||
+        !SLUG.test(id)
+      )
+        continue;
+      await this.#routerOn(id, key).catch((error: unknown) =>
+        this.#warn(
+          `could not switch the auth config ${id} on for the tool router: ${this.#clean(error, key)}`,
+        ),
+      );
+    }
+  }
+
+  #warn(text: string): void {
+    console.warn(`composio: ${text}`);
   }
 
   /* ------------------------------------------------------------------- wire */
 
   /** One call to Composio, JSON both ways, with a time limit and a size limit. */
   async #call(
-    method: "GET" | "POST" | "DELETE",
+    method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
     key: string,
     body?: unknown,

@@ -754,7 +754,7 @@ describe("the tool router switch of a toolkit's managed auth config", () => {
     ...extra,
   });
 
-  it.fails("is switched on for every managed, enabled config that is off, before the session is made; others are left alone", async () => {
+  it("is switched on for every managed, enabled config that is off, before the session is made; others are left alone", async () => {
     const { composio } = open();
     configs = [
       managed("ac_late", true),
@@ -793,7 +793,7 @@ describe("the tool router switch of a toolkit's managed auth config", () => {
     expect(posts()).toHaveLength(1);
   });
 
-  it.fails("is checked once for a toolkit, not again when its session is already there", async () => {
+  it("is checked once for a toolkit, not again when its session is already there", async () => {
     const { composio } = open();
     configs = [managed("ac_off", false)];
     await composio.sync(["gmail"]);
@@ -804,7 +804,7 @@ describe("the tool router switch of a toolkit's managed auth config", () => {
     ).toHaveLength(1);
   });
 
-  it.fails("does not hold the session back when the list or the PATCH fails: it is made, the log says so, and no key is in it", async () => {
+  it("does not hold the session back when the list or the PATCH fails: it is made, the log says so, and no key is in it", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { composio } = open();
     configs = [managed("ac_off", false)];
