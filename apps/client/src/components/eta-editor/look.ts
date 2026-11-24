@@ -199,6 +199,25 @@ export function viewLook(
 ): TextViewStyles {
   const { codeBlock, ...parts } = partsOf(plugins, theme);
   const styles: Record<string, unknown> = { ...parts };
+  // A table is part of the text, not the renderer's own drawing: its cells say the ink, its header
+  // reads as a muted strong label over a faint band, and the hairlines nsh draws take the palette's
+  // border. Only the colours: nsh sets the line widths, so no line appears or goes.
+  styles.tableGrid = {
+    borderTopColor: theme.colors.border,
+    borderLeftColor: theme.colors.border,
+  };
+  styles.tableHead = { backgroundColor: theme.colors.overlay };
+  styles.tableCell = {
+    color: theme.colors.ink,
+    borderRightColor: theme.colors.border,
+    borderBottomColor: theme.colors.border,
+  };
+  styles.tableHeaderCell = {
+    color: theme.colors.mutedInk,
+    fontWeight: theme.tokens.weight.strong,
+    borderRightColor: theme.colors.border,
+    borderBottomColor: theme.colors.border,
+  };
   if (codeBlock) {
     const { box, text } = splitText(codeBlock);
     styles.codeBlock = box;

@@ -1,5 +1,7 @@
 import type { App } from "nsh/test";
 import { expect, open, test } from "nsh/test";
+import { light } from "../src/components/theme";
+import { weight } from "../src/components/tokens";
 
 // A table in Markdown is shown as a table wherever a text system shows text: its cells are cells,
 // and none of its pipes or its delimiter row are left as text. So are the other GFM blocks around
@@ -14,9 +16,26 @@ const start = () =>
 
 /** Texts on screen that show Markdown's own syntax: a table's pipes, its delimiter row. */
 const raw = (app: App) => app.texts().filter((text) => /\||---/.test(text));
+/** A palette token as a span reports it: `#rrggbbaa`. */
+const rgba = (hex: string) => (hex.length === 7 ? `${hex}ff` : hex);
 /** `label`'s text shows `text` as a text of its own (a cell, a paragraph). */
 const shows = (app: App, label: string, text: string) =>
   app.shows(`label:${label} >> text:${text}`);
+
+// A table's header used to be the only part of a chat body with no token of its own: the header
+// cell took nothing but `fit()` (sizing), so its colour and weight were the renderer's defaults
+// and clashed with the palette. It is a label now — the palette's muted ink, strong — and the
+// body's cells say the ink outright, so the two read apart in either palette.
+test("a table's header takes the theme's tokens, not the renderer's default", async () => {
+  const app = await start();
+  await app.waitFor("label:Spaced");
+  const head = app.spanStyle("label:Spaced >> text:Name");
+  const cell = app.spanStyle("label:Spaced >> text:alpha");
+  expect(head.color).toBe(rgba(light.mutedInk));
+  expect(cell.color).toBe(rgba(light.ink));
+  expect(head.fontWeight).toBe(weight.strong);
+  expect(cell.fontWeight).toBe(weight.regular);
+});
 
 /** `label`'s text shows its table as cells, and nothing on screen is a table left as text. */
 function showsTable(app: App, label: string, cells: string[]) {
