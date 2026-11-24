@@ -10,15 +10,7 @@ import type {
 import type { JSX } from "nsh";
 import type { SourcePreset } from "./add-source-model";
 import { modelSource } from "@eta/client-contracts";
-import {
-  cleanup,
-  Clipboard,
-  effect,
-  openUrl,
-  signal,
-  untracked,
-  View,
-} from "nsh";
+import { cleanup, effect, openUrl, signal, untracked, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -47,6 +39,7 @@ import {
 } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { CopyButton } from "../../../ui";
 import { EntityRow, LetterBox, SectionHeader } from "../section";
 import {
   abilityTags,
@@ -880,12 +873,7 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
                 {code()}
               </Label>
             </View>
-            <Button
-              label={uiText("addSourceCopyCode")}
-              onPress={() =>
-                void host.action(() => Clipboard.writeText(code()))
-              }
-            />
+            <CopyButton label={uiText("addSourceCopyCode")} value={code} />
           </View>
         )}
       </If>
