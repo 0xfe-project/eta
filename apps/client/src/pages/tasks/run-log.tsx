@@ -8,6 +8,9 @@ import { follow, useHost } from "../../services/host";
 import { MemberRun } from "../chat/run/member-run";
 import { RunPanel } from "../chat/run/run-panel";
 
+/** The bar under a running run's log, with its stop button. */
+const stopBarHeight = { phone: 56, regular: 44 } as const;
+
 export function isActiveRunStatus(status: TaskRunView["status"]): boolean {
   return status === "queued" || status === "starting" || status === "running";
 }
@@ -122,7 +125,7 @@ export function TaskRunLog(props: {
           style={{
             ...row,
             paddingHorizontal: space[16],
-            minHeight: phone() ? 56 : 42,
+            minHeight: phone() ? stopBarHeight.phone : stopBarHeight.regular,
             gap: space[8],
             borderTopWidth: 1,
             borderColor: c().border,

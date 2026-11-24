@@ -107,8 +107,8 @@ function ShapeImage(props: { shape: string; size?: number }) {
       src={src()}
       fadeDuration={0}
       style={{
-        width: props.size ?? 12.6,
-        height: props.size ?? 12.6,
+        width: props.size ?? icon.sm,
+        height: props.size ?? icon.sm,
         flexShrink: 0,
       }}
     />
@@ -190,8 +190,8 @@ export function SubtaskSegments(props: {
         {(task) => (
           <View
             style={{
-              width: props.width ?? 5,
-              height: 5,
+              width: props.width ?? space[4],
+              height: space[4],
               backgroundColor: c()[segmentTones[task().status]],
             }}
           />
@@ -287,6 +287,10 @@ export function progressColor(
  * task, and so is the body under the head while the card is open; pressing them is spent there and
  * does not also fold the card.
  */
+/** A summary row's link to its task, at its narrowest; the segments of a parent's progress. */
+const openMinWidth = 48;
+const segmentWidth = 44;
+
 export function TaskSummary(props: {
   task: BoardTaskView;
   subtasks?: BoardTaskView[];
@@ -349,7 +353,7 @@ export function TaskSummary(props: {
             ...row,
             gap: space[8],
             flex: 1,
-            minWidth: 50,
+            minWidth: openMinWidth,
             cursor: "pointer",
           }}
         >
@@ -416,7 +420,11 @@ export function TaskSummary(props: {
                   justifyContent: "space-between",
                 }}
               >
-                <SubtaskSegments subtasks={subtasks()} width={44} gap={4} />
+                <SubtaskSegments
+                  subtasks={subtasks()}
+                  width={segmentWidth}
+                  gap={space[4]}
+                />
                 <UsageLine task={props.task} tone="mutedInk" />
               </View>
               <If when={plan()}>

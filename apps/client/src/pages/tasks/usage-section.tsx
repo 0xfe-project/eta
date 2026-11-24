@@ -10,6 +10,7 @@ import type { TextStyle } from "nsh";
 import type { Layout } from "../../components";
 import { signal, View } from "nsh";
 import { Caption, colors, Icon, Label, row } from "../../components";
+import { dotSize } from "../../components/status-dot";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -28,6 +29,21 @@ import {
  * Always there for a task that has run, whatever the cards' setting; a task that never ran has no
  * section. A parent adds its subtasks in by default ("Include subtasks"), as its card does.
  */
+
+/** The usage tables' columns (…Tablet on a tablet), and their header row. */
+const columnWidth = {
+  number: 32,
+  runs: 60,
+  tokens: 92,
+  run: 120,
+  runTablet: 96,
+  started: 64,
+  took: 60,
+  total: 64,
+  output: 56,
+  rate: 56,
+} as const;
+const headerHeight = 24;
 
 const OPEN = new Set(["queued", "starting", "running"]);
 
@@ -355,11 +371,11 @@ function WideUsage(props: {
             <Table
               columns={[
                 { title: uiText("usageByModel"), flex: true },
-                { title: uiText("usageRunsColumn"), width: 60 },
-                { title: uiText("usageInput"), width: 90 },
-                { title: uiText("usageOutput"), width: 90 },
-                { title: uiText("usageCache"), width: 90 },
-                { title: uiText("usageTotal"), width: 90 },
+                { title: uiText("usageRunsColumn"), width: columnWidth.runs },
+                { title: uiText("usageInput"), width: columnWidth.tokens },
+                { title: uiText("usageOutput"), width: columnWidth.tokens },
+                { title: uiText("usageCache"), width: columnWidth.tokens },
+                { title: uiText("usageTotal"), width: columnWidth.tokens },
               ]}
             >
               <Each of={models()} key={(m) => `${m.provider}/${m.model}`}>
@@ -381,10 +397,14 @@ function WideUsage(props: {
                         {model().provider}
                       </Label>
                     </View>
-                    <Cell width={60}>{String(model().runs)}</Cell>
-                    <Cell width={90}>{tokens(model().tokens?.input)}</Cell>
-                    <Cell width={90}>{tokens(model().tokens?.output)}</Cell>
-                    <Cell width={90}>
+                    <Cell width={columnWidth.runs}>{String(model().runs)}</Cell>
+                    <Cell width={columnWidth.tokens}>
+                      {tokens(model().tokens?.input)}
+                    </Cell>
+                    <Cell width={columnWidth.tokens}>
+                      {tokens(model().tokens?.output)}
+                    </Cell>
+                    <Cell width={columnWidth.tokens}>
                       {tokens(
                         model().tokens
                           ? model().tokens!.cacheRead +
@@ -392,7 +412,7 @@ function WideUsage(props: {
                           : undefined,
                       )}
                     </Cell>
-                    <Cell width={90} strong>
+                    <Cell width={columnWidth.tokens} strong>
                       {tokens(model().tokens?.total)}
                     </Cell>
                   </TableRow>
@@ -450,20 +470,30 @@ function RunsTable(props: {
     host.tasks().find((task) => task.id === taskId)?.number ??
     props.item.children?.find((child) => child.taskId === taskId)?.number;
   const columns = () => [
-    ...(props.parent ? [{ title: "", width: space[32], left: true }] : []),
+    ...(props.parent
+      ? [{ title: "", width: columnWidth.number, left: true }]
+      : []),
     {
       title: props.tablet ? uiText("usageRunColumn") : uiText("usageByRun"),
       left: true,
-      width: props.tablet ? 96 : 120,
+      width: props.tablet ? columnWidth.runTablet : columnWidth.run,
     },
     { title: uiText("usageModel"), flex: true },
     ...(!props.tablet && !props.parent
-      ? [{ title: uiText("usageStarted"), width: space[64], left: true }]
+      ? [
+          {
+            title: uiText("usageStarted"),
+            width: columnWidth.started,
+            left: true,
+          },
+        ]
       : []),
-    { title: uiText("usageTook"), width: 60 },
-    { title: uiText("usageTokens"), width: space[64] },
-    ...(!props.tablet ? [{ title: uiText("usageOutput"), width: 56 }] : []),
-    { title: uiText("usageRateColumn"), width: 56 },
+    { title: uiText("usageTook"), width: columnWidth.took },
+    { title: uiText("usageTokens"), width: columnWidth.total },
+    ...(!props.tablet
+      ? [{ title: uiText("usageOutput"), width: columnWidth.output }]
+      : []),
+    { title: uiText("usageRateColumn"), width: columnWidth.rate },
   ];
   return (
     <Table columns={columns()}>
@@ -543,14 +573,19 @@ function RunLineRow(props: {
   return (
     <TableRow>
       <If when={props.parent}>
-        <Cell width={32} align="left" tone="muted" variant="caption">
+        <Cell
+          width={columnWidth.number}
+          align="left"
+          tone="muted"
+          variant="caption"
+        >
           {props.number === undefined ? "" : `#${props.number}`}
         </Cell>
       </If>
       <View
         style={{
           ...row,
-          width: props.tablet ? 96 : 120,
+          width: props.tablet ? columnWidth.runTablet : columnWidth.run,
           gap: space[4],
           flexShrink: 0,
           minWidth: 0,
@@ -584,11 +619,11 @@ function RunLineRow(props: {
         {props.run.tokens ? modelOf(props.run) : "—"}
       </Label>
       <If when={!props.tablet && !props.parent}>
-        <Cell width={64} align="left" tone="mutedInk">
+        <Cell width={columnWidth.started} align="left" tone="mutedInk">
           {props.run.startedAt ? clock(props.run.startedAt) : "—"}
         </Cell>
       </If>
-      <Cell width={60} tone="mutedInk">
+      <Cell width={columnWidth.took} tone="mutedInk">
         {duration(took(props.run))}
       </Cell>
       <If
@@ -598,7 +633,12 @@ function RunLineRow(props: {
             variant="small"
             tone="faint"
             style={{
-              width: props.tablet ? 64 + 56 + 8 : 64 + 56 + 56 + 16,
+              width: props.tablet
+                ? columnWidth.total + columnWidth.rate + space[8]
+                : columnWidth.total +
+                  columnWidth.output +
+                  columnWidth.rate +
+                  space[16],
               textAlign: "right",
               flexShrink: 0,
             }}
@@ -609,15 +649,18 @@ function RunLineRow(props: {
       >
         {(sum) => (
           <>
-            <Cell width={64} strong>
+            <Cell width={columnWidth.total} strong>
               {tokens(sum().total)}
             </Cell>
             <If when={!props.tablet}>
-              <Cell width={56} tone="mutedInk">
+              <Cell width={columnWidth.output} tone="mutedInk">
                 {tokens(sum().output)}
               </Cell>
             </If>
-            <Cell width={56} tone={going() && rate() ? "green" : "mutedInk"}>
+            <Cell
+              width={columnWidth.rate}
+              tone={going() && rate() ? "green" : "mutedInk"}
+            >
               {going()
                 ? rate()
                   ? rate()!.toFixed(1)
@@ -633,7 +676,11 @@ function RunLineRow(props: {
 
 function BlueSquare() {
   const c = colors();
-  return <View style={{ width: 6, height: 6, backgroundColor: c().blue }} />;
+  return (
+    <View
+      style={{ width: dotSize, height: dotSize, backgroundColor: c().blue }}
+    />
+  );
 }
 
 /** One figure of the totals: a muted caption over the number. */
@@ -685,7 +732,7 @@ function Table(props: { columns: Column[]; children?: unknown }) {
       <View
         style={{
           ...row,
-          height: 22,
+          height: headerHeight,
           gap: space[8],
           borderBottomWidth: 1,
           borderColor: c().border,
@@ -890,7 +937,10 @@ function PhoneUsage(props: {
                       </Label>
                       <Label
                         variant="small"
-                        style={{ width: 56, textAlign: "right" }}
+                        style={{
+                          width: columnWidth.output,
+                          textAlign: "right",
+                        }}
                       >
                         {tokens(model().tokens?.total)}
                       </Label>

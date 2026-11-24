@@ -25,6 +25,10 @@ const statusFill = {
  * its way the trigger is dimmed and takes no presses; a change that fails
  * says why under it.
  */
+/** The select at its narrowest, and its menu (an error under it runs as wide). */
+const selectWidth = 128;
+const menuWidth = 264;
+
 export function StatusSelect(props: {
   item: BoardTaskDetail;
   state: TaskDetailState;
@@ -61,8 +65,8 @@ export function StatusSelect(props: {
         onPress={pressable ? open : undefined}
         style={{
           ...row,
-          height: plain() ? 22 : dense() ? control.sm : control.md,
-          minWidth: plain() ? undefined : 128,
+          height: plain() || dense() ? control.sm : control.md,
+          minWidth: plain() ? undefined : selectWidth,
           maxWidth: "100%",
           paddingHorizontal: space[8],
           gap: space[4],
@@ -107,7 +111,7 @@ export function StatusSelect(props: {
     >
       <If when={!props.state.phone()} else={<Trigger pressable />}>
         <TaskMenu
-          width={264}
+          width={menuWidth}
           align={props.align}
           caption={uiText("changeStatus")}
           open={status()}
@@ -127,7 +131,7 @@ export function StatusSelect(props: {
             variant="caption"
             tone="red"
             lines={2}
-            style={{ maxWidth: 264 }}
+            style={{ maxWidth: menuWidth }}
           >
             {message()}
           </Label>

@@ -6,6 +6,7 @@ import { untracked, View } from "nsh";
 import {
   Button,
   colors,
+  dialogWidth,
   Field,
   grow,
   Icon,
@@ -23,6 +24,13 @@ import { createDescription, DescriptionBox } from "./description-box";
 import { TaskReviewDialog } from "./review-dialog";
 import { TaskRunLog } from "./run-log";
 import { statusHint, statusName, TaskGlyph } from "./status";
+
+/** The status sheet's check column; the task picker's height (off phones, and as a phone's
+ * sheet); a dialog's button bar. */
+const checkColumnWidth = 16;
+const pickerHeight = 440;
+const pickerSheetHeight = "66%";
+const footerHeight = 56;
 
 export function TaskDetailDialogs(props: {
   id: string;
@@ -142,7 +150,7 @@ export function TaskDetailDialogs(props: {
                       style={{
                         ...row,
                         justifyContent: "center",
-                        width: 14,
+                        width: checkColumnWidth,
                         height: space[16],
                       }}
                     >
@@ -173,7 +181,7 @@ export function TaskDetailDialogs(props: {
           title={uiText("waitForAnotherTask2")}
           phone={phone()}
           sheet={phone()}
-          height={phone() ? "66%" : 440}
+          height={phone() ? pickerSheetHeight : pickerHeight}
           onClose={() => replacing.set(false)}
         >
           <View style={{ ...grow, padding: space[16], gap: space[8] }}>
@@ -205,7 +213,7 @@ export function TaskDetailDialogs(props: {
                 {(item) => (
                   <Button
                     label={`#${item().number} ${item().title}`}
-                    size={38}
+                    size={phone() ? control.touch : control.lg}
                     end="right"
                     tone="ghost"
                     disabled={submitting()}
@@ -254,7 +262,7 @@ export function TaskDetailDialogs(props: {
         <Modal
           title={uiText("taskDetails")}
           side
-          width={360}
+          width={dialogWidth.sm}
           height="100%"
           hideHeader
           overPhoneNavigation
@@ -356,7 +364,7 @@ export function TaskDetailDialogs(props: {
               style={{
                 ...row,
                 justifyContent: "flex-end",
-                height: 56,
+                height: footerHeight,
                 gap: space[8],
                 paddingHorizontal: space[16],
                 borderTopWidth: 1,

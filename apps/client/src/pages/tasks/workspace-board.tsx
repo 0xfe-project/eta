@@ -21,6 +21,10 @@ export const visibleStatuses: BoardTaskStatus[] = [
   "cancelled",
 ];
 
+/** A status column on a tablet, at its widest; its heading. */
+const columnMaxWidth = 160;
+const headerHeight = 24;
+
 export function TaskWorkspaceBoard(props: {
   layout: Layout;
   items: BoardTaskView[];
@@ -61,7 +65,7 @@ export function TaskWorkspaceBoard(props: {
                     ? control.md
                     : space[32]
                   : undefined,
-                maxWidth: tablet() && !folded() ? 160 : undefined,
+                maxWidth: tablet() && !folded() ? columnMaxWidth : undefined,
                 minWidth: 0,
                 backgroundColor: folded()
                   ? tablet()
@@ -85,7 +89,7 @@ export function TaskWorkspaceBoard(props: {
                     : {
                         ...row,
                         gap: tablet() ? space[4] : space[8],
-                        height: tablet() ? 24 : 25,
+                        height: headerHeight,
                         paddingTop: space[8],
                         paddingLeft: tablet() ? 0 : space[2],
                         cursor: "pointer",

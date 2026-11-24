@@ -47,6 +47,10 @@ import { TabletOverview } from "./tablet-overview";
 import { TaskCommentBox, TaskFields, TaskRail } from "./task-fields";
 import { PhoneRunTokens, TaskUsageSection } from "./usage-section";
 
+/** How wide the overview's column runs: a parent's and a task's in the side layout, and the
+ * page's own. */
+const contentWidth = { parent: 724, task: 668, page: 728 } as const;
+
 function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
   const c = colors();
   const { executor, log, stop, submitting } = props.state;
@@ -74,7 +78,7 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
           }}
         >
           <If when={!review()}>
-            <StatusDot color={c().blue} size={8} />
+            <StatusDot color={c().blue} />
           </If>
           <View
             role="button"
@@ -164,7 +168,6 @@ function RunRow(props: {
                   ? c().red
                   : c().muted
           }
-          size={8}
         />
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
@@ -302,7 +305,7 @@ function DesktopOverview(props: {
             paddingBottom: space[20],
             paddingHorizontal: space[24],
             width: "100%",
-            maxWidth: parent() ? 724 : 667,
+            maxWidth: parent() ? contentWidth.parent : contentWidth.task,
             alignSelf: "center",
             gap: parent() ? space[24] : 0,
           }}
@@ -594,7 +597,7 @@ export function TaskOverview(props: {
                 paddingTop: phone() ? space[16] : space[12],
                 paddingBottom: phone() ? space[16] : space[20],
                 width: "100%",
-                maxWidth: 728,
+                maxWidth: contentWidth.page,
                 alignSelf: "center",
                 gap: phone() ? space[20] : space[12],
               }}
