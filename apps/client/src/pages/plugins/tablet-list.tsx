@@ -12,7 +12,7 @@ import {
   sizes,
   SmoothScroll,
 } from "../../components";
-import { avatar, space } from "../../components/tokens";
+import { avatar, opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { PluginName } from "./plugin-name";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
@@ -88,7 +88,7 @@ export function PluginTablet(props: {
                       ? c().selected
                       : c().canvas,
                   cursor: "pointer",
-                  opacity: item().enabled ? 1 : 0.55, // design-value: a switched-off item's own dimming, between opacity.disabled and opacity.muted
+                  opacity: item().enabled ? 1 : opacity.muted,
                 }}
               >
                 <PluginGlyph size={avatar.lg} />

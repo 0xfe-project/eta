@@ -7,6 +7,7 @@ import { effect, Image, signal, untracked, View } from "nsh";
 import { colors, Label } from "../../components";
 import { useHost } from "../../services/host";
 import { avatarFill, avatarInitial, avatarInk } from "./avatar-color";
+import { avatar, icon, weight } from "../../components/tokens";
 
 const found = new Map<string, Signal<string | null | undefined>>();
 
@@ -123,7 +124,7 @@ export function PluginLogo(props: {
 }) {
   const host = useHost();
   const c = colors();
-  const size = () => props.size ?? 28;
+  const size = () => props.size ?? avatar.lg;
   const key = () =>
     props.installed
       ? `installed:${props.name}`
@@ -178,7 +179,7 @@ export function PluginLogo(props: {
         else={
           <Label
             variant="small"
-            weight={600}
+            weight={weight.strong}
             style={{ color: avatarInk(avatarFill(props.name)) }}
           >
             {avatarInitial(props.name)}

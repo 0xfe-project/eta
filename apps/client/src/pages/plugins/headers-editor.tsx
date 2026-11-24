@@ -2,10 +2,9 @@ import type { PluginHeaderView, PluginView } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { Button, colors, Field, Label, row, textFaces } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
-
 import { useHost } from "../../services/host";
+
 import {
   customHeaderRow,
   defaultHeaderRow,
@@ -14,6 +13,7 @@ import {
   incomplete,
   looksSecret,
 } from "./headers-model";
+import { opacity, space, weight } from "../../components/tokens";
 
 interface Draft {
   id: number;
@@ -106,14 +106,9 @@ export function HeadersEditor(props: {
     });
   }
   return (
-    <View
-      style={{
-        gap: space[12],
-        opacity: off() ? 0.5 : 1, // design-value: a switched-off item's own dimming, between opacity.disabled and opacity.muted
-      }}
-    >
+    <View style={{ gap: space[12], opacity: off() ? opacity.disabled : 1 }}>
       <View style={{ gap: space[8] }}>
-        <Label variant="small" weight={600}>
+        <Label variant="small" weight={weight.strong}>
           {uiText("headersTitle")}
         </Label>
         <Label

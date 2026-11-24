@@ -1,10 +1,6 @@
 import type { PluginView } from "@eta/client-contracts";
 import { expect, test } from "nsh/test";
-import {
-  authStyle,
-  BADGE_EDGE_ALPHA,
-  cardLogin,
-} from "../src/pages/plugins/plugin-status";
+import { authStyle, cardLogin } from "../src/pages/plugins/plugin-status";
 
 const view = (logins: (string | undefined)[], headers = 0): PluginView =>
   ({
@@ -63,24 +59,21 @@ test("a server that is not Cursor's is not made to need login by the Cursor flag
   expect(cardLogin(cursor({ cursorSignedIn: false }))).toBeUndefined();
 });
 
-test("the badge is a quiet tint: a soft fill token and a low-alpha edge, never a solid colour", () => {
+test("the badge is a quiet tint: the state's fill token, never a solid colour", () => {
   expect(authStyle("signed_in")).toMatchObject({
     tone: "green",
     fill: "greenFill",
-    edge: "green",
   });
   expect(authStyle("expired")).toMatchObject({
     tone: "red",
     fill: "redFill",
-    edge: "red",
   });
   expect(authStyle("needs_login")).toMatchObject({
+    tone: "warningInk",
     fill: "warningFill",
-    edge: "warning",
   });
   expect(authStyle("needs_setup")).toMatchObject({
+    tone: "warningInk",
     fill: "warningFill",
-    edge: "warning",
   });
-  expect(BADGE_EDGE_ALPHA).toBe("55");
 });

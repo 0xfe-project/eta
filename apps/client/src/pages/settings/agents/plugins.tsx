@@ -3,7 +3,7 @@ import type { AgentForm } from "./form";
 import { View } from "nsh";
 import { colors, Empty, emptyWidth, Label, row } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
-import { icon, space, weight } from "../../../components/tokens";
+import { icon, opacity, space, weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
@@ -114,7 +114,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   cursor: ready() || checked() ? "pointer" : "default",
-                  opacity: item().enabled ? 1 : 0.55, // design-value: a switched-off item's own dimming, between opacity.disabled and opacity.muted
+                  opacity: item().enabled ? 1 : opacity.muted,
                 }}
               >
                 <If

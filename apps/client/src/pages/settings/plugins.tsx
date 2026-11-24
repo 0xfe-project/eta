@@ -5,6 +5,7 @@ import {
   Button,
   colors,
   Empty,
+  emptyWidth,
   Field,
   fontFamily,
   Fonts,
@@ -16,10 +17,14 @@ import {
   textStyle,
 } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { control, space } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { emptyStyle } from "./section";
+
+/** How wide the source and proxy fields grow, and the hint above the proxy. */
+const fieldWidth = 560;
+const hintWidth = 760;
 
 /** An address the market may read: http or https, and not in the list already. */
 function sourceProblem(
@@ -153,7 +158,7 @@ export function PluginSettings(props: { phone?: boolean }) {
         backgroundColor: c().canvas,
         fontFamily: fontFamily(fonts().interface),
         ...textStyle(type("small")),
-        height: props.phone ? space[40] : control.md,
+        height: props.phone ? control.touch : control.md,
         paddingHorizontal: props.phone ? space[12] : space[8],
         borderWidth: 1,
         borderColor: c().strong,
@@ -161,7 +166,7 @@ export function PluginSettings(props: { phone?: boolean }) {
       }}
     />
   );
-  const inset = props.phone ? 16 : 24;
+  const inset = props.phone ? space[16] : space[24];
   return (
     <SmoothScroll style={grow} scrollbar={false}>
       <View
@@ -169,10 +174,10 @@ export function PluginSettings(props: { phone?: boolean }) {
           paddingHorizontal: inset,
           paddingTop: space[12],
           paddingBottom: space[16],
-          gap: 14, // design-value: spacing between two steps of the scale, kept so the layout does not move
+          gap: space[12],
         }}
       >
-        <Label weight={500}>{uiText("pluginsSourcesTitle")}</Label>
+        <Label weight={weight.regular}>{uiText("pluginsSourcesTitle")}</Label>
         <If
           when={sources().length}
           else={
@@ -180,8 +185,8 @@ export function PluginSettings(props: { phone?: boolean }) {
               title={uiText("pluginsNoSources")}
               description={uiText("pluginsNoSourcesHint")}
               icon="plugins"
-              iconSize={24} // design-value: an empty state's icon, between icon.lg and icon.xl
-              descriptionWidth={320} // design-value: the empty state's text wrap width
+              iconSize={icon.lg}
+              descriptionWidth={emptyWidth.narrow}
               style={{
                 ...emptyStyle,
                 paddingVertical: space[24],
@@ -197,7 +202,7 @@ export function PluginSettings(props: { phone?: boolean }) {
                   style={{
                     ...row,
                     gap: space[12],
-                    padding: 10, // design-value: spacing between two steps of the scale, kept so the layout does not move
+                    padding: space[8],
                     borderBottomWidth: 1,
                     borderColor: c().border,
                   }}
@@ -241,7 +246,7 @@ export function PluginSettings(props: { phone?: boolean }) {
                       accessibilityLabel={uiText("pluginsRemoveSource", {
                         name: item().name || item().url,
                       })}
-                      size={props.phone ? space[40] : control.md}
+                      size={props.phone ? control.touch : control.md}
                       disabled={busy()}
                       onPress={() =>
                         void call("marketRemoveSource", { url: item().url })
@@ -253,8 +258,7 @@ export function PluginSettings(props: { phone?: boolean }) {
             </Each>
           </View>
         </If>
-        {/* design-value: a cap of its own, not a token */}
-        <View style={{ gap: space[8], maxWidth: 560 }}>
+        <View style={{ gap: space[8], maxWidth: fieldWidth }}>
           {field(uiText("pluginsSourceName"), name, name.set)}
           {field(
             uiText("pluginsSourceUrl"),
@@ -280,12 +284,12 @@ export function PluginSettings(props: { phone?: boolean }) {
         </View>
 
         <If when={hasComposio()}>
-          <Label weight={500} style={{ paddingTop: space[8] }}>
+          <Label weight={weight.regular} style={{ paddingTop: space[8] }}>
             {uiText("composioKeyTitle")}
           </Label>
           {/* design-value: a cap of its own, not a token */}
           <View style={{ gap: space[8], maxWidth: 560 }}>
-            <Label variant="small" weight={500}>
+            <Label variant="small" weight={weight.regular}>
               {hasKey() ? uiText("composioKeySet") : uiText("composioKeyNone")}
             </Label>
             <Field
@@ -326,15 +330,13 @@ export function PluginSettings(props: { phone?: boolean }) {
           </View>
         </If>
 
-        <Label weight={500} style={{ paddingTop: space[8] }}>
+        <Label weight={weight.regular} style={{ paddingTop: space[8] }}>
           {uiText("pluginsProxyTitle")}
         </Label>
-        {/* design-value: a cap of its own, not a token */}
-        <Label variant="small" tone="muted" style={{ maxWidth: 760 }}>
+        <Label variant="small" tone="muted" style={{ maxWidth: hintWidth }}>
           {uiText("pluginsProxyHint")}
         </Label>
-        {/* design-value: a cap of its own, not a token */}
-        <View style={{ gap: space[8], maxWidth: 560 }}>
+        <View style={{ gap: space[8], maxWidth: fieldWidth }}>
           {field(
             uiText("pluginsProxy"),
             proxy,

@@ -3,7 +3,7 @@ import { View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { hint } from "../../components/controls";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { space } from "../../components/tokens";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -12,7 +12,7 @@ export function PluginName(props: { name: string }) {
   const c = colors();
   return (
     <View tooltip={hint(props.name, c)} style={{ minWidth: 0 }}>
-      <Label variant="subtitle" weight={600} lines={1}>
+      <Label variant="subtitle" weight={weight.strong} lines={1}>
         {props.name}
       </Label>
     </View>

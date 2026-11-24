@@ -9,7 +9,7 @@ import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
 import { ComposioPluginSwitch, useComposioPlugins } from "./composio-plugins";
 import { PluginLogo } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
-import { authStyle, BADGE_EDGE_ALPHA } from "./plugin-status";
+import { authStyle } from "./plugin-status";
 
 interface Connected {
   slug: string;
@@ -168,8 +168,6 @@ export function ComposioConnected(props: {
           paddingHorizontal: 6,
           paddingVertical: 1,
           backgroundColor: c()[look().fill],
-          borderWidth: 1,
-          borderColor: c()[look().edge] + BADGE_EDGE_ALPHA,
         }}
       >
         <Label variant="caption" tone={look().tone} lines={1}>

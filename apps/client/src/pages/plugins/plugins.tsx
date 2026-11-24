@@ -33,7 +33,6 @@ import { PluginLogo } from "./plugin-logo";
 import { PluginEnabled, PluginName } from "./plugin-name";
 import {
   authStyle,
-  BADGE_EDGE_ALPHA,
   cardLogin,
   NoPlugins,
   PluginGlyph,
@@ -510,9 +509,6 @@ function PluginCard(props: {
                     paddingHorizontal: space[8],
                     paddingVertical: 1,
                     backgroundColor: c()[authStyle(state()).fill],
-                    borderWidth: 1,
-                    borderColor:
-                      c()[authStyle(state()).edge] + BADGE_EDGE_ALPHA,
                   }}
                 >
                   <Label variant="caption" tone={authStyle(state()).tone}>

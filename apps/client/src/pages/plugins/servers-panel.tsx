@@ -8,6 +8,7 @@ import { openUrl, signal, View } from "nsh";
 import {
   Button,
   colors,
+  dialogWidth,
   Label,
   Modal,
   row,
@@ -15,7 +16,6 @@ import {
   textFaces,
 } from "../../components";
 import { hint } from "../../components/controls";
-import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { EnvEditor } from "./env-editor";
@@ -23,6 +23,7 @@ import { HeadersEditor } from "./headers-editor";
 import { pluginText as text } from "./labels";
 import { MissingValues } from "./missing-values";
 import { authStyle } from "./plugin-status";
+import { control, space, weight } from "../../components/tokens";
 
 /** Whether the host sends the fields the servers panel reads (an older host does not). */
 const hostKnowsHeaders = (item: PluginView): boolean =>
@@ -293,6 +294,9 @@ const counted = (
       ? uiText(`${key}1` as never, { n: "1" })
       : uiText(`${key}s` as never, { n: String(n) });
 
+/** How tall a folded list of tools grows before it scrolls, and the servers dialog's body. */
+const listHeight = 420;
+const bodyHeight = 560;
 const MAX_CHIPS = 12;
 const LONG_TOOL_TEXT = 140;
 /** A long list shows this many cards, and a link for the rest; the region still scrolls past it. */
@@ -342,13 +346,13 @@ function ItemCard(props: {
     <View
       testID={`${props.kind}-card:${props.item.name}`}
       style={{
-        gap: 6, // design-value: spacing between two steps of the scale, kept so the layout does not move
+        gap: space[8],
         padding: space[12],
         borderWidth: 1,
         borderColor: c().border,
       }}
     >
-      <Label variant="body" weight={600} lines={1}>
+      <Label variant="body" weight={weight.strong} lines={1}>
         {props.item.name}
       </Label>
       <If when={props.item.description}>
@@ -369,8 +373,7 @@ function ItemCard(props: {
         </If>
       </If>
       <If when={params().length}>
-        {/* design-value: spacing between two steps of the scale, kept so the layout does not move */}
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[4] }}>
           <Each of={params().slice(0, MAX_CHIPS)} key={(name) => name}>
             {(name) => (
               <View
@@ -415,11 +418,10 @@ function ItemList(props: {
   return (
     <If when={props.items.length}>
       <View testID={`list:${props.kind}`} style={{ gap: space[8] }}>
-        <Label variant="small" weight={600}>
+        <Label variant="small" weight={weight.strong}>
           {props.heading}
         </Label>
-        {/* design-value: the list's height cap */}
-        <SmoothScroll style={{ maxHeight: 420 }} scrollbar={false}>
+        <SmoothScroll style={{ maxHeight: listHeight }} scrollbar={false}>
           <View style={{ gap: space[8] }}>
             <Each of={shown()} key={(item) => item.name}>
               {(item) => <ItemCard kind={props.kind} item={item()} />}
@@ -486,7 +488,7 @@ function ResultInfo(props: { result: PluginTestResult }) {
           tooltip={hint(label().full, c)}
           style={{ flexShrink: 1, minWidth: 0 }}
         >
-          <Label variant="small" weight={600} lines={1}>
+          <Label variant="small" weight={weight.strong} lines={1}>
             {label().text}
           </Label>
         </View>
@@ -496,7 +498,7 @@ function ResultInfo(props: { result: PluginTestResult }) {
           <View
             style={{
               paddingVertical: 1,
-              paddingHorizontal: 6, // design-value: spacing between two steps of the scale, kept so the layout does not move
+              paddingHorizontal: space[4],
               borderWidth: 1,
               borderColor: c().border,
             }}
@@ -599,7 +601,7 @@ function TestResultView(props: { test: Test; stdio: boolean }) {
       </If>
       <If when={result()}>
         <View style={{ gap: space[8] }}>
-          <Label variant="small" weight={600}>
+          <Label variant="small" weight={weight.strong}>
             {testLabel(result()!) +
               (REQUEST_MADE.has(result()!.status)
                 ? ` · ${result()!.ms} ms`
@@ -648,7 +650,7 @@ export function SkillRows(props: { item: PluginView }) {
   const c = colors();
   return (
     <View style={{ gap: space[8] }}>
-      <Label variant="subtitle" weight={600}>
+      <Label variant="subtitle" weight={weight.strong}>
         {uiText("pluginSkillsHeading")}
       </Label>
       <If when={!props.item.skills.length}>
@@ -672,7 +674,7 @@ export function SkillRows(props: { item: PluginView }) {
                 borderColor: c().border,
               }}
             >
-              <Label variant="subtitle" weight={600}>
+              <Label variant="subtitle" weight={weight.strong}>
                 {skill().name}
               </Label>
               <If when={skill().description}>
@@ -713,15 +715,22 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
             >
               <View
                 testID={`server-head:${server().name}`}
-                style={{ ...row, gap: 10, alignItems: "center" }} // design-value: spacing between two steps of the scale, kept so the layout does not move
+                style={{
+                  ...row,
+                  gap: space[8],
+                  alignItems: "center",
+                  flexWrap: props.phone ? "wrap" : "nowrap",
+                }}
               >
-                {/* What may give way is the left cluster; the buttons are never squeezed or wrapped. */}
+                {/* What may give way is the left cluster; the buttons are never squeezed. A phone has
+                    no room for both on one line: the cluster takes its own, the buttons go under it. */}
                 <View
                   style={{
                     ...row,
                     flexShrink: 1,
                     minWidth: 0,
-                    gap: props.phone ? space[8] : 10, // design-value: spacing between two steps of the scale, kept so the layout does not move
+                    ...(props.phone ? { width: "100%" } : {}),
+                    gap: space[8],
                     alignItems: "center",
                   }}
                 >
@@ -729,7 +738,7 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
                     style={{ flexShrink: 1, minWidth: 0 }}
                     tooltip={hint(server().name, c)}
                   >
-                    <Label variant="subtitle" weight={600} lines={1}>
+                    <Label variant="subtitle" weight={weight.strong} lines={1}>
                       {server().name}
                     </Label>
                   </View>
@@ -739,7 +748,7 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
                     lines={1}
                     style={{
                       flexShrink: 0,
-                      paddingHorizontal: 5, // design-value: spacing between two steps of the scale, kept so the layout does not move
+                      paddingHorizontal: space[4],
                       borderWidth: 1,
                       borderColor: c().strong,
                     }}
@@ -844,15 +853,14 @@ export function ServersDialog(props: {
       sheet={props.phone}
       plainSheetHeader={props.phone}
       compact={!props.phone}
-      titleWeight={500}
-      width={640} // design-value: the dialog's own width
+      titleWeight={weight.regular}
+      width={dialogWidth.xl}
       overPhoneNavigation={props.phone}
       onClose={props.onClose}
     >
-      {/* design-value: the dialog body's height cap */}
-      <SmoothScroll style={{ maxHeight: 560 }} scrollbar={false}>
+      <SmoothScroll style={{ maxHeight: bodyHeight }} scrollbar={false}>
         <View style={{ padding: space[20], gap: space[12] }}>
-          <Label variant="subtitle" weight={600}>
+          <Label variant="subtitle" weight={weight.strong}>
             {uiText("serversHeading")}
           </Label>
           <ServerRows item={props.item} phone={props.phone} />

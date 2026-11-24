@@ -45,35 +45,28 @@ export const authStyle = (
     | "serverExpired"
     | "serverNeedsSetup";
   tone: "green" | "warningInk" | "red";
-  /** The quiet badge: a ~15% tint of the state colour as its background, and a low-alpha edge of the same hue. */
+  /** The quiet badge: the state colour's fill token as its background (as the task status chips). */
   fill: "greenFill" | "warningFill" | "redFill";
-  edge: "green" | "warning" | "red";
 } =>
   state === "signed_in"
     ? {
         text: "serverSignedIn",
         tone: "green",
         fill: "greenFill",
-        edge: "green",
       }
     : state === "expired"
-      ? { text: "serverExpired", tone: "red", fill: "redFill", edge: "red" }
+      ? { text: "serverExpired", tone: "red", fill: "redFill" }
       : state === "needs_login"
         ? {
             text: "serverNeedsLogin",
             tone: "warningInk",
             fill: "warningFill",
-            edge: "warning",
           }
         : {
             text: "serverNeedsSetup",
             tone: "warningInk",
             fill: "warningFill",
-            edge: "warning",
           };
-
-/** Alpha of the badge's edge, as the hex suffix of a #rrggbb token (about 33%). */
-export const BADGE_EDGE_ALPHA = "55";
 
 /**
  * The login a card shows, from its servers' states: only with evidence, never for headers-only
