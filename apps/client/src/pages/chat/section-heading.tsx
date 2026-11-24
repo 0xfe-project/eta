@@ -1,11 +1,8 @@
 import type { JSX } from "nsh";
 import { View } from "nsh";
 import { Button, colors, Label, row } from "../../components";
-import { control, space } from "../../components/tokens";
+import { control, sizes, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
-
-/** The height of a section heading, matching the member list's header. */
-const headerHeight = 36;
 
 /** A Context-tab section's heading: its name, and whatever it offers at the right end. */
 export function SectionHeading(props: {
@@ -19,7 +16,7 @@ export function SectionHeading(props: {
       style={{
         ...row,
         justifyContent: "space-between",
-        height: headerHeight,
+        height: sizes.sectionHeader,
         paddingHorizontal: space[12],
         borderBottomWidth: 1,
         borderColor: c().border,

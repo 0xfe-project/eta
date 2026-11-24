@@ -12,7 +12,7 @@ import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { hint } from "../../components/controls";
 import { StatusDot } from "../../components/status-dot";
-import { avatar, icon, space } from "../../components/tokens";
+import { avatar, icon, sizes, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { followSession, useHost } from "../../services/host";
 import { tokens } from "../tasks/usage";
@@ -20,7 +20,6 @@ import { activeReply, memberStatus } from "./member-status";
 import { MemberStepsLedger, MemberStepsToggle } from "./member-steps";
 
 /** The bar atop the member list. */
-const headerHeight = 36;
 
 export function ConversationMembers(props: {
   members: MemberView[];
@@ -40,7 +39,7 @@ export function ConversationMembers(props: {
         style={{
           ...row,
           justifyContent: "space-between",
-          height: headerHeight,
+          height: sizes.sectionHeader,
           paddingHorizontal: space[12],
           borderBottomWidth: 1,
           borderColor: c().border,
