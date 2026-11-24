@@ -503,6 +503,44 @@ export interface ComposioToolkit {
   sourceName: string;
 }
 
+/**
+ * The text a link starts with when it failed because Composio has no managed sign-in for the
+ * toolkit and the project has no auth config of its own for it. The client shows its own sentence
+ * in place of the host's.
+ */
+export const COMPOSIO_NO_MANAGED_LOGIN = "composio_no_managed_login";
+
+/** Where a user makes an auth config of their own on Composio (its documentation names this address). */
+export const COMPOSIO_AUTH_CONFIGS_URL =
+  "https://dashboard.composio.dev/~/project/auth-configs";
+
+/**
+ * The scheme of an auth config that can be made for a toolkit Composio has no sign-in of its own
+ * for, with no credentials from eta: a key the user types on Composio's page, or dynamic client
+ * registration, which needs none. A key comes first. Undefined for a toolkit that has a managed
+ * sign-in, and for one whose schemes need an OAuth app of the user's own (or are not known): a
+ * config for those is not made here.
+ */
+export function composioOwnScheme(
+  toolkit: Pick<ComposioToolkit, "managed" | "authSchemes">,
+): "API_KEY" | "BEARER_TOKEN" | "DCR_OAUTH" | undefined {
+  if (toolkit.managed) return undefined;
+  return (["API_KEY", "BEARER_TOKEN", "DCR_OAUTH"] as const).find((scheme) =>
+    toolkit.authSchemes.includes(scheme),
+  );
+}
+
+/** Whether connecting a toolkit needs an auth config the user made on Composio: nothing here can make one. */
+export function composioNeedsOwnConfig(
+  toolkit: Pick<ComposioToolkit, "managed" | "auth" | "authSchemes">,
+): boolean {
+  return (
+    !toolkit.managed &&
+    toolkit.auth !== "none" &&
+    composioOwnScheme(toolkit) === undefined
+  );
+}
+
 /** Every source's catalog. Installed plugins are never touched by any of them. */
 export interface MarketCatalog {
   sources: MarketSourceCatalog[];

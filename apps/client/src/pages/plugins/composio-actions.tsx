@@ -1,4 +1,5 @@
 import type { PluginResults } from "@eta/client-contracts";
+import { COMPOSIO_NO_MANAGED_LOGIN } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { Button, Label, Modal } from "../../components";
 import { space } from "../../components/tokens";
@@ -16,11 +17,15 @@ export async function linkAndOpen(
   open: (url: string) => Promise<unknown>,
   slug: string,
 ): Promise<void> {
-  const link = await host.call<PluginResults["composioLink"]>(
-    "plugins",
-    "composioLink",
-    { slug },
-  );
+  const link = await host
+    .call<PluginResults["composioLink"]>("plugins", "composioLink", { slug })
+    .catch((error: unknown) => {
+      // The host's text names a marker; the user reads the sentence in their language.
+      throw error instanceof Error &&
+        error.message.startsWith(COMPOSIO_NO_MANAGED_LOGIN)
+        ? new Error(uiText("composioNoManagedLogin"))
+        : error;
+    });
   await open(link.redirectUrl);
 }
 

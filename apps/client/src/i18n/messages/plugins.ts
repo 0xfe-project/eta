@@ -362,6 +362,11 @@ export const pluginsMessages = {
     "Composio has no ready-made sign-in for this toolkit; you may need your own OAuth app.",
     "Composio 没有为这个 toolkit 提供现成的登录,可能需要你自己的 OAuth 应用。",
   ],
+  composioNoManagedLogin: [
+    "Composio has no managed sign-in for this service. Create your own auth config for it in the Composio dashboard (you bring your own OAuth app's client ID and secret), then come back and press Connect.",
+    "Composio 没有为这个服务提供托管登录。请先在 Composio 控制台为它建一个自己的 auth config(需要自带 OAuth 应用的 client ID 和 secret),建好后回来再点「连接」。",
+  ],
+  composioOpenDashboard: ["Open Composio dashboard", "打开 Composio 控制台"],
   composioConnectNote: [
     "Connect opens Composio's page in your browser. Connected only means the account is linked on Composio; eta's agents cannot use it yet.",
     "「连接」会在浏览器里打开 Composio 的页面。「已连接」只表示账户已在 Composio 上连上,eta 的智能体暂时还用不上。",

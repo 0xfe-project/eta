@@ -10,6 +10,10 @@ import type { JSX, ScrollProps } from "nsh";
 import type { Layout } from "../../components";
 import type { LogoAsk } from "./plugin-logo";
 import {
+  COMPOSIO_AUTH_CONFIGS_URL,
+  composioNeedsOwnConfig,
+} from "@eta/client-contracts";
+import {
   cleanup,
   effect,
   lifecycle,
@@ -1041,11 +1045,18 @@ export function Market(props: {
               <If
                 when={
                   !currentToolkit()!.managed &&
-                  currentToolkit()!.auth !== "none"
+                  currentToolkit()!.auth !== "none" &&
+                  !composioNeedsOwnConfig(currentToolkit()!)
                 }
               >
                 <Label variant="small" tone="muted">
                   {uiText("composioNotManaged")}
+                </Label>
+              </If>
+              {/* Connect cannot make a config for this one: say so before the click, not after an error. */}
+              <If when={composioNeedsOwnConfig(currentToolkit()!)}>
+                <Label variant="small" style={{ userSelect: "text" }}>
+                  {uiText("composioNoManagedLogin")}
                 </Label>
               </If>
               <If when={isConnected(currentToolkit()!.slug)}>
@@ -1108,6 +1119,16 @@ export function Market(props: {
             </If>
             <If when={currentToolkit()!.auth !== "none"}>
               <View style={{ ...row, gap: space[8] }}>
+                <If when={composioNeedsOwnConfig(currentToolkit()!)}>
+                  <Button
+                    label={uiText("composioOpenDashboard")}
+                    tone="plain"
+                    size={phone() ? control.touch : control.md}
+                    onPress={() =>
+                      void (props.open ?? openUrl)(COMPOSIO_AUTH_CONFIGS_URL)
+                    }
+                  />
+                </If>
                 <If when={isConnected(currentToolkit()!.slug)}>
                   <Button
                     label={uiText("composioDisconnect")}
