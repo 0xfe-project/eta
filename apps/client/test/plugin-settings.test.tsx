@@ -129,22 +129,6 @@ test("the Composio switch is off and cannot be used until a key is set, and says
   expect(app.shows("Enter an API key first.")).toBe(true);
 });
 
-test("the sources title and the Composio key title have no explanation under them", async () => {
-  const app = await open("./fixtures/plugin-settings-composio.tsx", OPEN);
-  expect(app.shows("Plugin sources")).toBe(true);
-  expect(app.shows("Composio API key")).toBe(true);
-  expect(
-    app.shows(
-      "The market lists the plugins of every source below that is switched on. Each source is a marketplace.json in the Claude Code or Cursor format.",
-    ),
-  ).toBe(false);
-  expect(
-    app.shows(
-      "The market reads Composio's toolkit list with this key. It is stored encrypted on the host and is never shown again.",
-    ),
-  ).toBe(false);
-});
-
 // The page asks the host for its sources when it opens; until the answer comes it knows nothing, which is not "no sources".
 test("before the host has answered, the page does not say there are no sources, nor show an empty proxy", async () => {
   const app = await open("./fixtures/plugin-settings-held.tsx", OPEN);

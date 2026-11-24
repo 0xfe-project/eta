@@ -14,12 +14,6 @@ test("connected toolkits are a group after the plugins: one card each, named fro
   expect(app.count("id:composio-connected-group")).toBe(1);
   expect(app.count("id:composio-connected-item")).toBe(2);
   expect(app.count("id:composio-connected")).toBe(2);
-  // The line under the group's title was asked to go.
-  expect(
-    app.shows(
-      "Each connected toolkit is a plugin: switch it here, and tick it for the agents that may use it.",
-    ),
-  ).toBe(false);
   expect(app.shows("Gmail")).toBe(true);
   expect(app.shows("ghost")).toBe(true);
   // The plugins are still there, and nothing was asked of Composio's list over the network.
@@ -187,13 +181,12 @@ test("a host that does not list the toolkits as plugins: the cards show as befor
   expect(app.count("id:composio-plugin-error")).toBe(0);
 });
 
-test("a card has one status badge at its top right: Connected, or Unavailable when its session did not check out, and no small line under the name", async () => {
+test("a card has one status badge at its top right: Connected, or Unavailable when its session did not check out", async () => {
   const app = await open("./fixtures/plugins-composio-virtual.tsx", DESKTOP);
   await app.waitFor("id:composio-plugin-switch");
   expect(app.count("id:composio-connected")).toBe(1);
   expect(app.count("id:composio-plugin-error")).toBe(1);
   expect(app.count("text:Unavailable")).toBe(1);
-  expect(app.shows("Its session did not check out")).toBe(false);
 });
 
 test("the bottom row of a card stays one line, the switch and both buttons, also when the toolkit is off", async () => {

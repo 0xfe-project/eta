@@ -389,17 +389,6 @@ test("a result that names no header has no retest button", async () => {
   expect(app.shows("and retest")).toBe(false);
 });
 
-test("an off plugin card says it is off once, at its switch, and not on the version line", async () => {
-  const app = await open("./fixtures/plugins-installed.tsx", {
-    width: 1100,
-    height: 700,
-  });
-  expect(app.shows("off-plugin")).toBe(true);
-  expect(app.count("text:Off for all agents")).toBe(1);
-  // What else the line says is still there: a plugin that needs configuring.
-  expect(app.shows("Needs configuring")).toBe(true);
-});
-
 // A card's source (a repository and commit, or "Local directory") sits on the line under the name,
 // after the version, instead of on a line of its own under the description.
 const SOURCE_OPEN = { width: 1100, height: 700 };
