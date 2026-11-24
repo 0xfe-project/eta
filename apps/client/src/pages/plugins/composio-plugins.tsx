@@ -6,6 +6,9 @@ import { ToggleSwitch } from "../../components/toggle-switch";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
+/** The last list of each host, kept for as long as the host lives. */
+const listed = new WeakMap<object, ComposioPluginView[]>();
+
 /**
  * The connected Composio toolkits as the host lists them as plugins of the agents
  * (`@composio/<slug>`). Read once when the page opens and again on `read()`; a host that does not
@@ -13,13 +16,17 @@ import { useHost } from "../../services/host";
  */
 export function useComposioPlugins() {
   const host = useHost();
-  const list = signal<ComposioPluginView[]>([]);
+  // What this host last listed: a page that is shown again starts from it, not from an empty list.
+  const list = signal<ComposioPluginView[]>(listed.get(host) ?? []);
   async function read() {
     const answer = await host
       .call<PluginResults["composioPlugins"]>("plugins", "composioPlugins", {})
       .catch(() => undefined);
     list.set(Array.isArray(answer?.plugins) ? answer.plugins : []);
   }
+  effect(() => {
+    listed.set(host, list());
+  });
   effect(() => {
     untracked(() => void read());
   });

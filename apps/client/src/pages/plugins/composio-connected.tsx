@@ -20,6 +20,12 @@ interface Connected {
   added?: boolean;
 }
 
+/** The last cards and the manage flag of each host, kept for as long as the host lives. */
+const remembered = new WeakMap<
+  object,
+  { shown: Connected[]; manage: boolean }
+>();
+
 /**
  * The Composio toolkits the user connected on Composio, under the installed plugins. Each is a plugin
  * of the agents too (`@composio/<slug>`): its card has the user's switch for every agent, and a
@@ -38,9 +44,14 @@ export function ComposioConnected(props: {
 }) {
   const host = useHost();
   const c = colors();
-  const shown = signal<Connected[]>([]);
+  // What this host last showed: a group that is shown again starts from it, not from nothing.
+  const before = remembered.get(host);
+  const shown = signal<Connected[]>(before?.shown ?? []);
   /** Whether Re-authenticate and Disconnect show: a key is set and the source is not switched off. */
-  const manage = signal(false);
+  const manage = signal(before?.manage ?? false);
+  effect(() => {
+    remembered.set(host, { shown: shown(), manage: manage() });
+  });
   const disconnecting = signal<Connected | undefined>(undefined);
   const error = signal("");
   const plugins = useComposioPlugins();
@@ -83,17 +94,25 @@ export function ComposioConnected(props: {
         {},
       )
       .catch(() => undefined);
+    // A host that cannot be asked leaves the toolkits as they were; one that answers "no" empties them.
     const connected =
-      answer?.status === "ready" && Array.isArray(answer.slugs)
-        ? answer.slugs
-        : [];
+      answer === undefined
+        ? shown()
+            .filter((one) => one.added !== true)
+            .map((one) => one.slug)
+        : answer.status === "ready" && Array.isArray(answer.slugs)
+          ? answer.slugs
+          : [];
     const addedAnswer = await host
       .call<PluginResults["composioAdded"]>("plugins", "composioAdded", {})
       .catch(() => undefined);
     const added = (
       Array.isArray(addedAnswer?.slugs) ? addedAnswer.slugs : []
     ).filter((slug) => !connected.includes(slug));
-    if (connected.length + added.length === 0) return;
+    if (connected.length + added.length === 0) {
+      shown.set([]);
+      return;
+    }
     const status = await host
       .call<PluginResults["composioStatus"]>("plugins", "composioStatus", {})
       .catch(() => undefined);
