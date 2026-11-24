@@ -6,3 +6,4 @@ export { Field, FormField } from "./input";
 export { SearchField } from "./search-field";
 export { Card, Separator } from "./surface";
 export { Caption, Icon, Label, RowChevron } from "./text";
+export { TimeField } from "./time-field";
