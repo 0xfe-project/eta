@@ -4,6 +4,7 @@ import type {
   TaskRunView,
 } from "@eta/client-contracts";
 import type { Layout, TextVariant } from "../../components";
+import type { RunDoing } from "./run-log";
 import type { TaskDetailState } from "./task-detail-state";
 import { untracked, View } from "nsh";
 import { paneWidth } from "../../app/pane-width";
@@ -41,7 +42,14 @@ import {
 } from "./dependencies";
 import { createDescription, DescriptionBox } from "./description-box";
 import { runningFor, taskMoment, taskWhen } from "./facts";
-import { activeTaskRun, runCaption, runElapsed } from "./run-log";
+import {
+  activeTaskRun,
+  liveRuns,
+  runClock,
+  runDoingText,
+  runElapsed,
+  runTitle,
+} from "./run-log";
 import { statusName, TaskGlyph } from "./status";
 import { TabletOverview } from "./tablet-overview";
 import { TaskCommentBox, TaskFields, TaskRail } from "./task-fields";
@@ -51,68 +59,85 @@ import { PhoneRunTokens, TaskUsageSection } from "./usage-section";
  * page's own. */
 const contentWidth = { parent: 724, task: 668, page: 728 } as const;
 
+/** Who works in a run, by name: the agent mentioned into it, or the executor. */
+function useRunName(state: TaskDetailState) {
+  const host = useHost();
+  return (run: TaskRunView) =>
+    (run.agentId === null
+      ? state.executor()?.name
+      : host.agent(run.agentId)?.name) ?? uiText("executor");
+}
+
+/**
+ * What is going on the task, on the phone's page: one box per run (the executor working, an agent
+ * mentioned on the task answering), each opening that run's own log.
+ */
 function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
   const c = colors();
-  const { executor, log, stop, submitting } = props.state;
-  const run = () => props.item.runs.at(-1);
-  const review = () => props.item.status === "in_review";
-  const caption = (entry: TaskRunView) =>
-    review()
-      ? `Run ${props.item.runs.length} · ${uiText("taskRunCompletedIn", {
-          time: runElapsed(entry),
-        })}`
-      : runCaption(entry, props.item.runs.length - 1);
+  const { log, stop, submitting } = props.state;
+  const name = useRunName(props.state);
+  const lines = () => liveRuns(props.item);
+  const now = runClock(() => lines().some((line) => activeTaskRun(line.run)));
+  const caption = (entry: TaskRunView, doing: RunDoing) => {
+    const title = runTitle(props.item.runs, entry, name(entry));
+    return doing === "delivered"
+      ? `${title} · ${uiText("taskRunCompletedIn", { time: runElapsed(entry) })}`
+      : `${title} · ${runElapsed(entry, now())}`;
+  };
   return (
-    <If
-      when={review() || props.item.status === "in_progress" ? run() : undefined}
-    >
-      {(entry) => (
-        <View
-          style={{
-            ...row,
-            paddingVertical: space[12],
-            paddingHorizontal: space[12],
-            gap: space[8],
-            borderWidth: 1,
-            borderColor: review() ? c().warning : c().strong,
-          }}
-        >
-          <If when={!review()}>
-            <StatusDot color={c().blue} />
-          </If>
-          <View
-            role="button"
-            accessibilityLabel={uiText("executionLog")}
-            style={{
-              ...row,
-              flex: 1,
-              minWidth: 0,
-              gap: space[8],
-              cursor: "pointer",
-            }}
-            onPress={() => log.set(entry())}
-          >
-            <View style={{ flex: 1, gap: space[2] }}>
-              <Label variant="small" weight={weight.strong}>
-                {uiText(review() ? "taskDeliveredTurn" : "taskIsWorking", {
-                  name: executor()?.name ?? uiText("executor"),
-                })}
-              </Label>
-              <Label variant="caption" tone="muted">
-                {uiText("executionLogWithCount", {
-                  runCaption: caption(entry()),
-                })}
-              </Label>
-            </View>
-            <Icon name="right" size={icon.md} tone="muted" />
-          </View>
-          <If when={activeTaskRun(entry())}>
-            <Button
-              label={uiText("stop")}
-              disabled={submitting()}
-              onPress={() => stop(entry())}
-            />
-          </If>
+    <If when={lines().length ? lines() : undefined}>
+      {(list) => (
+        <View style={{ gap: space[8] }}>
+          <Each of={list()} key={(line) => line.run.id}>
+            {(line) => (
+              <View
+                style={{
+                  ...row,
+                  paddingVertical: space[12],
+                  paddingHorizontal: space[12],
+                  gap: space[8],
+                  borderWidth: 1,
+                  borderColor:
+                    line().doing === "delivered" ? c().warning : c().strong,
+                }}
+              >
+                <If when={line().doing !== "delivered"}>
+                  <StatusDot color={c().blue} />
+                </If>
+                <View
+                  role="button"
+                  accessibilityLabel={`${uiText("executionLog")} · ${name(line().run)}`}
+                  style={{
+                    ...row,
+                    flex: 1,
+                    minWidth: 0,
+                    gap: space[8],
+                    cursor: "pointer",
+                  }}
+                  onPress={() => log.set(line().run)}
+                >
+                  <View style={{ flex: 1, gap: space[2] }}>
+                    <Label variant="small" weight={weight.strong}>
+                      {runDoingText(line().doing, name(line().run))}
+                    </Label>
+                    <Label variant="caption" tone="muted">
+                      {uiText("executionLogWithCount", {
+                        runCaption: caption(line().run, line().doing),
+                      })}
+                    </Label>
+                  </View>
+                  <Icon name="right" size={icon.md} tone="muted" />
+                </View>
+                <If when={activeTaskRun(line().run)}>
+                  <Button
+                    label={uiText("stop")}
+                    disabled={submitting()}
+                    onPress={() => stop(line().run)}
+                  />
+                </If>
+              </View>
+            )}
+          </Each>
         </View>
       )}
     </If>
@@ -122,8 +147,8 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
 /** One run on the phone's task page: its state and how long, the whole row opening its log. */
 function RunRow(props: {
   run: TaskRunView;
+  runs: TaskRunView[];
   taskId: string;
-  index: number;
   last: boolean;
   executor: string;
   onPress: () => void;
@@ -172,12 +197,12 @@ function RunRow(props: {
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
         <Label variant="small" lines={1}>
-          {uiText("taskRunExecutor", {
-            number: props.index + 1,
-            name:
-              (props.run.agentId && host.agent(props.run.agentId)?.name) ||
+          {runTitle(
+            props.runs,
+            props.run,
+            (props.run.agentId && host.agent(props.run.agentId)?.name) ||
               props.executor,
-          })}
+          )}
         </Label>
         <Label variant="caption" lines={1} tone={active() ? "blue" : "muted"}>
           {`${state()} · ${runElapsed(props.run)}`}
@@ -193,76 +218,96 @@ function RunRow(props: {
   );
 }
 
-/** The run's state in one line above the reply box, on desktop and tablet. */
+/**
+ * What is going on the task, above the reply box on desktop and tablet: one line per run, as on the
+ * web (the executor working, an agent mentioned on the task answering), each with its own clock,
+ * log and stop.
+ */
 export function RunLine(props: {
   item: BoardTaskDetail;
   state: TaskDetailState;
   tablet?: boolean;
 }) {
   const c = colors();
-  const { executor, log, stop, submitting } = props.state;
-  const run = () => props.item.runs.at(-1);
-  const review = () => props.item.status === "in_review";
+  const { log, stop, submitting } = props.state;
+  const name = useRunName(props.state);
+  const lines = () => liveRuns(props.item);
+  const now = runClock(() => lines().some((line) => activeTaskRun(line.run)));
   return (
-    <If
-      when={review() || props.item.status === "in_progress" ? run() : undefined}
-    >
-      {(entry) => (
+    <If when={lines().length ? lines() : undefined}>
+      {(list) => (
         <View
-          style={{
-            ...row,
-            justifyContent: "space-between",
-            gap: space[8],
-            paddingBottom: props.tablet ? 0 : space[8],
-          }}
+          style={{ gap: space[4], paddingBottom: props.tablet ? 0 : space[8] }}
         >
-          <View
-            style={{ ...row, gap: props.tablet ? space[8] : space[4], flex: 1 }}
-          >
-            <If when={!review()}>
-              <Icon
-                name="spinner"
-                size={props.tablet ? icon.md : icon.sm}
-                tone="muted"
-              />
-            </If>
-            <If when={!props.tablet && review()}>
-              <StatusDot color={c().warning} />
-            </If>
-            <Label variant="caption" weight={weight.strong}>
-              {uiText(review() ? "taskDeliveredTurn" : "taskIsWorking", {
-                name: executor()?.name ?? uiText("executor"),
-              })}
-            </Label>
-          </View>
-          <View style={{ ...row, gap: props.tablet ? space[8] : space[12] }}>
-            <View
-              role="button"
-              accessibilityLabel={uiText("executionLog")}
-              onPress={() => log.set(entry())}
-              style={{ cursor: "pointer" }}
-            >
-              <Label variant="caption" tone="muted">
-                {uiText("executionLog")}
-              </Label>
-            </View>
-            <If when={activeTaskRun(entry())}>
+          <Each of={list()} key={(line) => line.run.id}>
+            {(line) => (
               <View
-                role="button"
-                accessibilityLabel={uiText("stop")}
-                accessibilityState={{ disabled: submitting() }}
-                onPress={() => {
-                  if (!submitting()) stop(entry());
+                style={{
+                  ...row,
+                  justifyContent: "space-between",
+                  gap: space[8],
                 }}
-                style={{ ...row, gap: space[4], cursor: "pointer" }}
               >
-                <Icon name="stop" size={icon.sm} />
-                <Label variant="caption" weight={weight.strong}>
-                  {uiText("stop")}
-                </Label>
+                <View
+                  style={{
+                    ...row,
+                    gap: props.tablet ? space[8] : space[4],
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  <If when={line().doing !== "delivered"}>
+                    <Icon
+                      name="spinner"
+                      size={props.tablet ? icon.md : icon.sm}
+                      tone="muted"
+                    />
+                  </If>
+                  <If when={!props.tablet && line().doing === "delivered"}>
+                    <StatusDot color={c().warning} />
+                  </If>
+                  <Label variant="caption" weight={weight.strong} lines={1}>
+                    {runDoingText(line().doing, name(line().run))}
+                  </Label>
+                  <If when={activeTaskRun(line().run)}>
+                    <Label variant="caption" tone="muted">
+                      {runElapsed(line().run, now())}
+                    </Label>
+                  </If>
+                </View>
+                <View
+                  style={{ ...row, gap: props.tablet ? space[8] : space[12] }}
+                >
+                  <View
+                    role="button"
+                    accessibilityLabel={`${uiText("executionLog")} · ${name(line().run)}`}
+                    onPress={() => log.set(line().run)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <Label variant="caption" tone="muted">
+                      {uiText("executionLog")}
+                    </Label>
+                  </View>
+                  <If when={activeTaskRun(line().run)}>
+                    <View
+                      role="button"
+                      accessibilityLabel={`${uiText("stop")} · ${name(line().run)}`}
+                      accessibilityState={{ disabled: submitting() }}
+                      onPress={() => {
+                        if (!submitting()) stop(line().run);
+                      }}
+                      style={{ ...row, gap: space[4], cursor: "pointer" }}
+                    >
+                      <Icon name="stop" size={icon.sm} />
+                      <Label variant="caption" weight={weight.strong}>
+                        {uiText("stop")}
+                      </Label>
+                    </View>
+                  </If>
+                </View>
               </View>
-            </If>
-          </View>
+            )}
+          </Each>
         </View>
       )}
     </If>
@@ -523,6 +568,7 @@ export function TaskOverview(props: {
     stop,
     submitting,
   } = props.state;
+  const runName = useRunName(props.state);
   const item = () => props.item;
   const parent = () => !!item().subtasks?.total;
   const opensWithHeading = () => /^\s*#/.test(item().description);
@@ -805,11 +851,16 @@ export function TaskOverview(props: {
                               borderColor: c().border,
                             }}
                           >
-                            <Label variant="small" style={{ flex: 1 }}>
-                              {run().status}
+                            <Label
+                              variant="small"
+                              lines={1}
+                              style={{ flex: 1 }}
+                            >
+                              {`${runTitle(item().runs, run(), runName(run()))} · ${run().status}`}
                             </Label>
                             <Button
                               label={uiText("runLog")}
+                              accessibilityLabel={`${uiText("runLog")} · ${runName(run())}`}
                               end="right"
                               onPress={() => log.set(run())}
                             />
@@ -825,8 +876,8 @@ export function TaskOverview(props: {
                       >
                         <RunRow
                           run={run()}
+                          runs={item().runs}
                           taskId={item().id}
-                          index={index()}
                           last={index() === item().runs.length - 1}
                           executor={executor()?.name ?? uiText("executor")}
                           onPress={() => log.set(run())}

@@ -16,7 +16,7 @@ import { useHost } from "../../services/host";
 import { ArtifactPreview } from "../chat/artifacts/preview";
 import { TaskMenu, TaskMenuItem } from "./menu";
 import { TaskPlan } from "./plan";
-import { activeTaskRun } from "./run-log";
+import { activeTaskRun, latestExecutorRun } from "./run-log";
 import { Segmented } from "./segmented";
 import { TaskDetailSkeleton } from "./skeleton";
 import { TaskDetailDialogs } from "./task-detail-dialogs";
@@ -57,7 +57,10 @@ export function TaskDetail(props: {
   /** The phone's … sheet, titled with the task. */
   const more = signal(false);
   const parent = () => !!task()?.children?.length;
-  const run = () => task()?.runs.at(-1);
+  const run = () => {
+    const item = task();
+    return item ? latestExecutorRun(item) : undefined;
+  };
   /** The task's … actions. The desktop and tablet pages and the phone edit the
    * title and description in place, change status from the status itself and
    * start over from the run row, so their menu is mostly Archive. */

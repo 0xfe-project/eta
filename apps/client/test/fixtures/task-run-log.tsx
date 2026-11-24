@@ -101,7 +101,7 @@ function Fixture() {
         <If when={open()}>
           <TaskRunLog
             run={run}
-            index={0}
+            runs={[run]}
             executor="Bo"
             agentId="bo"
             layout={layout()}
