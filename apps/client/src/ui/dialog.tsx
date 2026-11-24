@@ -5,6 +5,7 @@ import { Regular } from "../components/density";
 import { fade, fadeIn, fadeOut, motion, passing } from "../components/motion";
 import { screenInsets } from "../components/safe-area";
 import { colors, fill, row } from "../components/theme";
+import { ProgressNotificationLayer } from "../components/progress-notification";
 import { ToastLayer } from "../components/toast";
 import {
   control,
@@ -234,6 +235,7 @@ export function Modal(props: {
         {props.children}
       </View>
       <ToastLayer phone={props.phone} />
+      <ProgressNotificationLayer phone={props.phone} />
     </Regular>
   );
   if (focused)
