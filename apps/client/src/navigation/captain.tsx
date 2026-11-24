@@ -2,7 +2,7 @@ import type { CaptainIdentityView } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, focusRing, Label, row } from "../components";
 import { AgentFace } from "../components/agent-face";
-import { weight } from "../components/tokens";
+import { avatar, space, weight } from "../components/tokens";
 import { uiText, useText } from "../i18n";
 import { messageTime } from "../pages/chat/message-time";
 import { useHost } from "../services/host";
@@ -37,9 +37,9 @@ export function CaptainCard(props: { onPress: () => void }) {
         style={{
           ...row,
           alignItems: "flex-start",
-          gap: 12,
+          gap: space[12],
           minHeight: 54,
-          paddingVertical: 8,
+          paddingVertical: space[8],
           paddingHorizontal: 14,
           borderWidth: 1,
           borderColor: c().border,
@@ -47,9 +47,9 @@ export function CaptainCard(props: { onPress: () => void }) {
           cursor: "pointer",
         }}
       >
-        <CaptainFace size={24} />
+        <CaptainFace size={avatar.md} />
         <View style={{ flex: 1, gap: 1 }}>
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <Label weight={weight.regular}>{text("captain")}</Label>
             <Label variant="caption" tone="muted">
               {text(host.captain()?.status === "working" ? "working" : "idle")}
@@ -90,8 +90,8 @@ export function RailCaptain(props: { selected: boolean; onPress: () => void }) {
         hoverStyle={{ backgroundColor: c().selected }}
         focusVisibleStyle={focusRing(c())}
         style={{
-          width: 48,
-          height: 64,
+          width: space[48],
+          height: space[64],
           alignItems: "center",
           gap: 3,
           backgroundColor: props.selected ? c().selected : "transparent",

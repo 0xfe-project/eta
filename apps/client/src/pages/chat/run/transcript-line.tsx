@@ -11,6 +11,7 @@ import { computed, signal, View } from "nsh";
 import { Caption, colors, Label, Markdown, row } from "../../../components";
 import { PictureCards, PictureChip } from "../../../components/picture-cards";
 import { Lightbox } from "../../../components/picture-viewer";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { PictureModes } from "../../../services/picture-mode";
@@ -126,7 +127,7 @@ export function TranscriptLine(props: {
               ...row,
               height: 31,
               paddingHorizontal: 10,
-              gap: 4,
+              gap: space[4],
               cursor: "pointer",
               backgroundColor: props.selected ? c().selected : c().canvas,
             }}
@@ -270,7 +271,7 @@ function TranscriptImages(props: {
       <If
         when={modes.mode() === "expanded"}
         else={
-          <View style={{ ...row, flexWrap: "wrap", gap: 4 }}>
+          <View style={{ ...row, flexWrap: "wrap", gap: space[4] }}>
             <Each of={pictures()} key={(picture) => picture.key}>
               {(picture) => (
                 <PictureChip

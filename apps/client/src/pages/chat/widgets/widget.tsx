@@ -12,6 +12,7 @@ import {
   Label,
   monoFontFamily,
 } from "../../../components";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { widgetDocument } from "./widget-document";
 
@@ -195,7 +196,7 @@ export function Widget(props: {
   }
 
   return (
-    <View style={{ alignSelf: "stretch", minWidth: 0, gap: 4 }}>
+    <View style={{ alignSelf: "stretch", minWidth: 0, gap: space[4] }}>
       <If when={problem() || !height()}>
         <Label variant="caption" tone="muted">
           {problem()

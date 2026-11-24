@@ -18,6 +18,7 @@ import {
   textFaces,
   textStyle,
 } from "../../../components";
+import { control, icon, opacity, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { SectionHeading, ViewAll } from "../section-heading";
@@ -100,7 +101,11 @@ export function ConversationArtifacts(props: {
                 iconSize={24}
                 iconTone={host.state().missing.artifacts ? "red" : "muted"}
                 descriptionVariant="caption"
-                style={{ flex: 0, marginTop: 16, paddingVertical: 48 }}
+                style={{
+                  flex: 0,
+                  marginTop: space[16],
+                  paddingVertical: space[48],
+                }}
                 title={
                   host.state().missing.artifacts
                     ? uiText("artifactLoadError")
@@ -116,8 +121,8 @@ export function ConversationArtifacts(props: {
                   <Button
                     label={uiText("retry")}
                     icon="refresh"
-                    size={28}
-                    style={{ marginTop: 4 }}
+                    size={control.md}
+                    style={{ marginTop: space[4] }}
                     onPress={props.reload}
                   />
                 </If>
@@ -161,8 +166,8 @@ export function ConversationArtifacts(props: {
             variant="small"
             tone="muted"
             style={{
-              paddingHorizontal: 12,
-              paddingBottom: 8,
+              paddingHorizontal: space[12],
+              paddingBottom: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -229,21 +234,21 @@ export function ArtifactBrowser(props: {
           borderColor: c().border,
         }}
       >
-        <View style={{ ...row, gap: 8 }}>
+        <View style={{ ...row, gap: space[8] }}>
           <View
             style={{
               ...row,
               flex: 1,
               minWidth: 0,
               height: props.phone ? 32 : 26,
-              gap: 8,
-              paddingHorizontal: 8,
+              gap: space[8],
+              paddingHorizontal: space[8],
               borderWidth: 1,
               borderColor: c().border,
               backgroundColor: c().canvas,
             }}
           >
-            <Icon name="search" size={12} tone="muted" />
+            <Icon name="search" size={icon.sm} tone="muted" />
             <Field
               label={uiText("searchArtifacts")}
               placeholder={uiText("searchTitles")}
@@ -254,7 +259,7 @@ export function ArtifactBrowser(props: {
                 flex: 1,
                 height: props.phone ? 30 : 24,
                 paddingHorizontal: 0,
-                paddingVertical: 4,
+                paddingVertical: space[4],
                 borderWidth: 0,
                 ...textStyle(type("small")),
               }}
@@ -267,7 +272,7 @@ export function ArtifactBrowser(props: {
                 <If when={!props.phone}>
                   <View
                     style={{
-                      paddingHorizontal: 4,
+                      paddingHorizontal: space[4],
                       borderWidth: 1,
                       borderColor: c().border,
                     }}
@@ -289,7 +294,7 @@ export function ArtifactBrowser(props: {
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 style={{ cursor: "pointer" }}
               >
-                <Icon name="close" size={12} tone="muted" />
+                <Icon name="close" size={icon.sm} tone="muted" />
               </View>
             </If>
           </View>
@@ -308,7 +313,7 @@ export function ArtifactBrowser(props: {
               accessibilityLabel={uiText("artifactsClearFilters")}
               onPress={clear}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              hoverStyle={{ opacity: 0.7 }}
+              hoverStyle={{ opacity: opacity.muted }}
               style={{ cursor: "pointer" }}
             >
               <Label variant="caption" tone="mutedInk">
@@ -331,9 +336,9 @@ export function ArtifactBrowser(props: {
             <View
               style={{
                 alignItems: "center",
-                gap: 12,
-                paddingHorizontal: 20,
-                paddingVertical: 40,
+                gap: space[12],
+                paddingHorizontal: space[20],
+                paddingVertical: space[40],
               }}
             >
               <Label
@@ -349,7 +354,7 @@ export function ArtifactBrowser(props: {
               </Label>
               <Button
                 label={uiText("artifactsClearFilters")}
-                size={props.phone ? 32 : 24}
+                size={props.phone ? control.lg : control.sm}
                 labelVariant="caption"
                 onPress={clear}
               />
@@ -395,7 +400,7 @@ export function ArtifactBrowser(props: {
           style={{
             ...row,
             flexShrink: 0,
-            height: 40,
+            height: space[40],
             borderTopWidth: 1,
             borderColor: c().border,
             backgroundColor: c().surface,
@@ -465,7 +470,7 @@ export function ArtifactBrowser(props: {
         lifted
         leading={
           <View style={{ ...row, gap: 6 }}>
-            <Icon name="funnel" size={12} />
+            <Icon name="funnel" size={icon.sm} />
             <Label variant="small">{uiText("artifactsFilter")}</Label>
           </View>
         }
@@ -526,7 +531,7 @@ export function ArtifactBrowser(props: {
       <View
         style={{
           ...row,
-          minHeight: props.phone ? 28 : 24,
+          minHeight: props.phone ? control.md : space[24],
           paddingHorizontal: props.phone ? 16 : 9,
           borderTopWidth: section.divided ? 1 : 0,
           borderColor: c().border,
@@ -564,7 +569,7 @@ function PageButton(props: {
         ...row,
         justifyContent: "center",
         height: props.phone ? 32 : 22,
-        minWidth: props.phone ? 28 : 20,
+        minWidth: props.phone ? control.md : space[20],
         borderWidth: props.selected ? 1 : 0,
         borderColor: c().ink,
         opacity: props.disabled ? 0.45 : 1,

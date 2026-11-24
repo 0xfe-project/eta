@@ -13,6 +13,7 @@ import {
   sizes,
   SmoothScroll,
 } from "../components";
+import { icon, space } from "../components/tokens";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 import { GroupRow } from "./chat-list-rows";
@@ -60,7 +61,7 @@ export function ChatList(
   const listHeader = {
     ...row,
     justifyContent: "space-between",
-    height: 32,
+    height: space[32],
     paddingHorizontal: 14,
     borderBottomWidth: 1,
     flexShrink: 0,
@@ -95,8 +96,8 @@ export function ChatList(
               iconOnly
               tone="ghost"
               size={40}
-              iconSize={16}
-              style={{ marginRight: -8 }}
+              iconSize={icon.md}
+              style={{ marginRight: -space[8] }}
               onPress={() => searching.set(!searching())}
             />
           </If>
@@ -106,7 +107,7 @@ export function ChatList(
             iconOnly
             tone={phone() ? "ghost" : "plain"}
             size={phone() ? 40 : undefined}
-            iconSize={phone() ? 16 : undefined}
+            iconSize={phone() ? icon.md : undefined}
             onPress={() => props.onCreate()}
           />
         </Header>
@@ -160,7 +161,7 @@ export function ChatList(
               height: 36,
               borderBottomWidth: 1,
               borderColor: c().border,
-              paddingHorizontal: 16,
+              paddingHorizontal: space[16],
               justifyContent: "center",
             }}
           >

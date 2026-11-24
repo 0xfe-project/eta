@@ -3,6 +3,7 @@ import type { IconName } from "../components/icons";
 import type { Page } from "../navigation/routes";
 import { View } from "nsh";
 import { colors, grow, Header, Icon, Label, row } from "../components";
+import { space } from "../components/tokens";
 import { useText } from "../i18n";
 
 export function More(props: {
@@ -43,9 +44,9 @@ function MoreRow(props: {
       style={{
         ...row,
         height: 56,
-        paddingLeft: 16,
-        paddingRight: 12,
-        gap: 12,
+        paddingLeft: space[16],
+        paddingRight: space[12],
+        gap: space[12],
         borderBottomWidth: 1,
         borderColor: c().border,
         cursor: "pointer",
@@ -53,8 +54,8 @@ function MoreRow(props: {
     >
       <View
         style={{
-          width: 20,
-          height: 20,
+          width: space[20],
+          height: space[20],
           alignItems: "center",
           justifyContent: "center",
           flexShrink: 0,

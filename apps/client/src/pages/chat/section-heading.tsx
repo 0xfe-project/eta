@@ -1,6 +1,7 @@
 import type { JSX } from "nsh";
 import { View } from "nsh";
 import { Button, Caption, Label, row } from "../../components";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 /** A Context-tab section's heading: its name, and whatever it offers at the right end. */
@@ -14,10 +15,10 @@ export function SectionHeading(props: {
       style={{
         ...row,
         gap: 6,
-        minHeight: 32,
+        minHeight: space[32],
         paddingTop: 6,
-        paddingBottom: 2,
-        paddingHorizontal: 12,
+        paddingBottom: space[2],
+        paddingHorizontal: space[12],
       }}
     >
       <Caption text={props.label} />
@@ -48,8 +49,8 @@ export function ViewAll(props: {
       tone="ghost"
       labelTone="muted"
       labelVariant="caption"
-      size={props.phone ? 32 : 24}
-      style={{ marginRight: -8 }}
+      size={props.phone ? control.lg : control.sm}
+      style={{ marginRight: -space[8] }}
       onPress={props.onPress}
     />
   );

@@ -7,7 +7,7 @@ import { screenInsets } from "./safe-area";
 import { Label } from "./text";
 import { colors, fill, row } from "./theme";
 import { ToastLayer } from "./toast";
-import { shadow, weight } from "./tokens";
+import { control, shadow, space, weight } from "./tokens";
 
 const modalStack: (() => void)[] = [];
 
@@ -107,20 +107,24 @@ export function Modal(props: {
         <If when={props.sheet}>
           <View
             style={{
-              height: props.plainSheetHeader ? 16 : 20,
-              paddingTop: props.plainSheetHeader ? 8 : 0,
+              height: props.plainSheetHeader ? space[16] : space[20],
+              paddingTop: props.plainSheetHeader ? space[8] : 0,
               alignItems: "center",
               justifyContent: props.plainSheetHeader ? "flex-start" : "center",
               flexShrink: 0,
             }}
           >
             <View
-              style={{ width: 36, height: 4, backgroundColor: color().strong }}
+              style={{
+                width: 36,
+                height: space[4],
+                backgroundColor: color().strong,
+              }}
             />
           </View>
         </If>
         <If when={!props.hideHeader && props.compact}>
-          <View style={{ ...row, gap: 12, flexShrink: 0 }}>
+          <View style={{ ...row, gap: space[12], flexShrink: 0 }}>
             <Label
               weight={props.titleWeight ?? weight.strong}
               style={{ flex: 1 }}
@@ -180,7 +184,7 @@ export function Modal(props: {
             <If when={props.dismissible !== false && !props.phonePage}>
               <CloseButton
                 onPress={close}
-                size={sheetChrome() ? 32 : undefined}
+                size={sheetChrome() ? control.lg : undefined}
                 iconSize={sheetChrome() || stepHeader() ? 16 : 14}
               />
             </If>

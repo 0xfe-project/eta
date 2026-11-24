@@ -9,6 +9,7 @@ import {
   serialize,
   submitKeys,
 } from "../../components/eta-editor";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -160,7 +161,7 @@ function InsertBody(props: {
     host.state().status === "open";
   return (
     <View style={{ width: 288 }}>
-      <View style={{ padding: 8, gap: 6 }}>
+      <View style={{ padding: space[8], gap: 6 }}>
         <If when={limits.tooLong()}>
           <Label variant="caption" tone="warning">
             {uiText("composerTooLong")}
@@ -182,7 +183,7 @@ function InsertBody(props: {
         <Label
           variant="caption"
           tone="red"
-          style={{ paddingHorizontal: 8, paddingBottom: 8 }}
+          style={{ paddingHorizontal: space[8], paddingBottom: space[8] }}
         >
           {error()}
         </Label>
@@ -191,9 +192,9 @@ function InsertBody(props: {
         style={{
           ...row,
           justifyContent: "space-between",
-          gap: 8,
-          paddingHorizontal: 8,
-          paddingBottom: 8,
+          gap: space[8],
+          paddingHorizontal: space[8],
+          paddingBottom: space[8],
         }}
       >
         <Label variant="caption" tone="faint" lines={1} style={{ flex: 1 }}>

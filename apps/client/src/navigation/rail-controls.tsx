@@ -2,6 +2,7 @@ import type { JSX, Point, ViewRef } from "nsh";
 import type { IconName } from "../components/icons";
 import { View } from "nsh";
 import { colors, focusRing, Icon, Label } from "../components";
+import { control, space } from "../components/tokens";
 
 export function RailButton(props: {
   label: string;
@@ -30,8 +31,8 @@ export function RailButton(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       focusVisibleStyle={focusRing(c())}
       style={{
-        width: props.width ?? props.size ?? 28,
-        height: props.size ?? 28,
+        width: props.width ?? props.size ?? control.md,
+        height: props.size ?? control.md,
         alignItems: "center",
         justifyContent: "center",
         flexShrink: 0,
@@ -55,7 +56,7 @@ export function RailButton(props: {
               top: -2,
               height: 13,
               minWidth: 10,
-              paddingHorizontal: 2,
+              paddingHorizontal: space[2],
               alignItems: "center",
               justifyContent: "center",
               borderWidth: 1,
@@ -98,7 +99,7 @@ export function RailEntry(props: {
         flexShrink: 0,
         alignItems: "center",
         paddingTop: 5,
-        paddingHorizontal: 4,
+        paddingHorizontal: space[4],
         gap: 3,
         borderBottomWidth: 1,
         borderColor: c().border,

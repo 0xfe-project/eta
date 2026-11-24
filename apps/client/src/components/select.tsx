@@ -13,6 +13,7 @@ import {
 } from "./menu";
 import { Icon, Label } from "./text";
 import { colors, row, Screen } from "./theme";
+import { icon, space } from "./tokens";
 
 /**
  * NSH's `Select`, shown as the layout says (`menuPresentation`): a sheet at
@@ -71,15 +72,15 @@ export function LayoutSelect(
                   disabled={item().disabled}
                   style={{
                     ...row,
-                    gap: 8,
+                    gap: space[8],
                     minHeight: inSheet()
                       ? 52
                       : touchScreen
                         ? touchRow
                         : (itemStyle().minHeight ?? 28),
                     paddingHorizontal: inSheet()
-                      ? 16
-                      : (itemStyle().paddingHorizontal ?? 8),
+                      ? space[16]
+                      : (itemStyle().paddingHorizontal ?? space[8]),
                     backgroundColor: chosen() ? c().selected : undefined,
                   }}
                   onSelect={() => choose(item().value)}
@@ -96,9 +97,9 @@ export function LayoutSelect(
                         >
                           {item().title}
                         </Label>
-                        <View style={{ width: 12, flexShrink: 0 }}>
+                        <View style={{ width: space[12], flexShrink: 0 }}>
                           <If when={chosen()}>
-                            <Icon name="check" size={12} />
+                            <Icon name="check" size={icon.sm} />
                           </If>
                         </View>
                       </>

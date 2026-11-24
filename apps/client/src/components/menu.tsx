@@ -4,6 +4,7 @@ import { context, platform, signal, View } from "nsh";
 import { Menu, MenuItem, MenuSeparator, Popover, Sheet } from "nsh/base";
 import { SmoothScroll } from "./smooth-scroll";
 import { colors, Screen } from "./theme";
+import { space } from "./tokens";
 
 /** How a menu shows: a sheet at the bottom of the screen, or a popup at its trigger. */
 export type MenuPresentation = "sheet" | "popup";
@@ -85,9 +86,15 @@ function Grabber() {
   return (
     <View
       testID="menu-grabber"
-      style={{ alignItems: "center", paddingTop: 8, paddingBottom: 4 }}
+      style={{
+        alignItems: "center",
+        paddingTop: space[8],
+        paddingBottom: space[4],
+      }}
     >
-      <View style={{ width: 36, height: 4, backgroundColor: c().strong }} />
+      <View
+        style={{ width: 36, height: space[4], backgroundColor: c().strong }}
+      />
     </View>
   );
 }
@@ -129,7 +136,7 @@ export function MenuFrame(props: {
   const close = () => change(false);
   const sheetStyle = (): ViewStyle => ({
     width: "100%",
-    paddingBottom: 8,
+    paddingBottom: space[8],
     borderTopWidth: 1,
     borderColor: c().strong,
     backgroundColor: c().canvas,

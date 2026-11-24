@@ -28,7 +28,15 @@ import {
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
-import { shadow, weight } from "../../components/tokens";
+import {
+  avatar,
+  control,
+  icon,
+  opacity,
+  shadow,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
 import { follow, useHost } from "../../services/host";
@@ -289,7 +297,9 @@ export function Conversation(props: {
           end={phone() && !props.captain ? 4 : undefined}
           compact={phone() && !props.captain}
           leading={
-            phone() && props.captain ? <CaptainFace size={24} /> : undefined
+            phone() && props.captain ? (
+              <CaptainFace size={avatar.md} />
+            ) : undefined
           }
         >
           <If when={phone() && props.captain}>
@@ -311,8 +321,8 @@ export function Conversation(props: {
               hoverStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                gap: 4,
-                paddingVertical: 2,
+                gap: space[4],
+                paddingVertical: space[2],
                 paddingHorizontal: 6,
                 borderWidth: 1,
                 borderColor: c().border,
@@ -320,7 +330,7 @@ export function Conversation(props: {
                 cursor: "pointer",
               }}
             >
-              <Icon name="folder" size={12} tone="muted" />
+              <Icon name="folder" size={icon.sm} tone="muted" />
               <Label variant="small" tone="muted" lines={1}>
                 {project()?.name ?? ""}
               </Label>
@@ -334,7 +344,7 @@ export function Conversation(props: {
             />
           </If>
           <If when={!phone() && members().length > 1}>
-            <View style={{ ...row, gap: 8, marginLeft: 4 }}>
+            <View style={{ ...row, gap: space[8], marginLeft: space[4] }}>
               <Each of={members()} key={(entry) => entry.agentId}>
                 {(entry) => <AgentFace id={entry().agentId} size={12} />}
               </Each>
@@ -356,7 +366,7 @@ export function Conversation(props: {
                     iconOnly={phone()}
                     tone={phone() ? "ghost" : "plain"}
                     size={phone() ? 40 : undefined}
-                    iconSize={phone() ? 16 : undefined}
+                    iconSize={phone() ? icon.md : undefined}
                     labelVariant="caption"
                     style={{ gap: 6 }}
                     onPress={() => drawer.set(true)}
@@ -374,7 +384,7 @@ export function Conversation(props: {
                   tone="ghost"
                   labelTone="muted"
                   hoverTone="ink"
-                  size={28}
+                  size={control.md}
                   iconSize={14}
                   onPress={() => setDesktopPanelOpen(!desktopPanelOpen())}
                 />
@@ -406,11 +416,11 @@ export function Conversation(props: {
             onPress={() => props.onPending?.()}
             style={{
               ...row,
-              height: 44,
+              height: control.touch,
               flexShrink: 0,
-              gap: 8,
-              paddingLeft: 16,
-              paddingRight: 12,
+              gap: space[8],
+              paddingLeft: space[16],
+              paddingRight: space[12],
               backgroundColor: c().selected,
               borderBottomWidth: 1,
               borderColor: c().border,
@@ -428,7 +438,7 @@ export function Conversation(props: {
             <Label variant="small" weight={weight.strong}>
               {uiText("reviewProposals")}
             </Label>
-            <View style={{ opacity: 0.45 }}>
+            <View style={{ opacity: opacity.disabled }}>
               <Icon name="right" size={14} />
             </View>
           </View>
@@ -438,9 +448,9 @@ export function Conversation(props: {
             role="alert"
             style={{
               ...row,
-              paddingVertical: 8,
-              paddingHorizontal: 16,
-              gap: 8,
+              paddingVertical: space[8],
+              paddingHorizontal: space[16],
+              gap: space[8],
               // The design's state-warning at 12%.
               backgroundColor: `${c().warning}1f`,
               borderBottomWidth: 1,
@@ -462,7 +472,9 @@ export function Conversation(props: {
           }}
         >
           <If when={!phone() && asking().length}>
-            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+            <View
+              style={{ paddingHorizontal: space[16], paddingTop: space[8] }}
+            >
               <PendingStrip
                 items={asking()}
                 onOpen={(item) => questionId.set(item.id)}
@@ -553,8 +565,8 @@ export function Conversation(props: {
                   right: 16,
                   left: phone() ? 16 : undefined,
                   width: phone() ? undefined : 356,
-                  gap: 8,
-                  paddingVertical: 12,
+                  gap: space[8],
+                  paddingVertical: space[12],
                   paddingHorizontal: 14,
                   borderWidth: 1,
                   borderColor: c().border,
@@ -679,7 +691,7 @@ export function Conversation(props: {
           width={400}
           onClose={() => projectInfo.set(false)}
         >
-          <Label style={{ padding: 16 }}>
+          <Label style={{ padding: space[16] }}>
             {project()?.display ?? project()?.path}
           </Label>
         </Modal>

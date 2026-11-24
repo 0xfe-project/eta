@@ -25,7 +25,7 @@ import {
   touchScreen,
 } from "../../components/menu";
 import { CloseButton } from "../../components/navigation-buttons";
-import { shadow, weight } from "../../components/tokens";
+import { control, shadow, space, weight } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -47,7 +47,7 @@ export function StewardMenu(props: {
   }
   const itemStyle = () => ({
     ...row,
-    gap: 8,
+    gap: space[8],
     paddingHorizontal: inSheet() ? 16 : 10,
     height: inSheet() ? 52 : touchScreen ? touchRow : 30,
   });
@@ -183,15 +183,15 @@ export function InviteAgents(props: {
             iconSize={14}
             disabled={saving()}
             onPress={props.onClose}
-            style={{ marginRight: -2 }}
+            style={{ marginRight: -space[2] }}
           />
         </View>
       </If>
       <View
         style={{
           paddingHorizontal: phone() ? 16 : 14,
-          paddingTop: phone() ? 16 : 2,
-          gap: 12,
+          paddingTop: phone() ? space[16] : space[2],
+          gap: space[12],
           ...(phone() ? grow : {}),
         }}
       >
@@ -226,8 +226,8 @@ export function InviteAgents(props: {
                 }
                 style={{
                   ...row,
-                  gap: phone() ? 12 : 8,
-                  paddingHorizontal: phone() ? 4 : 0,
+                  gap: phone() ? space[12] : space[8],
+                  paddingHorizontal: phone() ? space[4] : 0,
                   minHeight: phone() ? 52 : 32,
                   borderTopWidth: phone() && index() === 0 ? 1 : 0,
                   borderBottomWidth: phone() ? 1 : 0,
@@ -257,10 +257,10 @@ export function InviteAgents(props: {
           ...row,
           justifyContent: "flex-end",
           ...(phone()
-            ? { height: 56, paddingHorizontal: 16 }
+            ? { height: 56, paddingHorizontal: space[16] }
             : { padding: 14 }),
-          gap: 8,
-          marginTop: phone() ? 0 : 4,
+          gap: space[8],
+          marginTop: phone() ? 0 : space[4],
           borderTopWidth: phone() ? 1 : 0,
           borderColor: c().border,
         }}
@@ -274,7 +274,7 @@ export function InviteAgents(props: {
         </If>
         <Button
           label={uiText("cancel")}
-          size={phone() ? 24 : 28}
+          size={phone() ? control.sm : control.md}
           tone={phone() ? "ghost" : "plain"}
           disabled={saving()}
           onPress={props.onClose}
@@ -282,7 +282,7 @@ export function InviteAgents(props: {
         <Button
           label={uiText("invite", { length: inviteIds().length })}
           tone="primary"
-          size={phone() ? 24 : 28}
+          size={phone() ? control.sm : control.md}
           disabled={saving() || !inviteIds().length}
           onPress={() => void invite()}
         />

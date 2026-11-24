@@ -35,6 +35,7 @@ import {
   ElementPicking,
 } from "./src/components/element-picker";
 import { ToastLayer } from "./src/components/toast";
+import { control, icon, space } from "./src/components/tokens";
 import { createLanguagePreference, LanguageSettings, uiText } from "./src/i18n";
 import { resumeComposerOutbox } from "./src/pages/chat/composer-draft";
 import { Connection, WorkspaceSkeleton } from "./src/pages/connection";
@@ -288,13 +289,13 @@ function App() {
                           style={{
                             ...row,
                             flexShrink: 0,
-                            minHeight: 40,
-                            paddingLeft: 16,
-                            paddingRight: 4,
+                            minHeight: space[40],
+                            paddingLeft: space[16],
+                            paddingRight: space[4],
                             borderTopWidth: 1,
                             borderColor: c().border,
                             backgroundColor: c().canvas,
-                            gap: 8,
+                            gap: space[8],
                           }}
                         >
                           <Label style={{ flex: 1 }}>
@@ -307,8 +308,8 @@ function App() {
                             label={uiText("dismissCompatibilityWarning")}
                             icon="close"
                             iconOnly
-                            size={32}
-                            iconSize={16}
+                            size={control.lg}
+                            iconSize={icon.md}
                             tone="ghost"
                             onPress={() => dismissCompatibility.set(true)}
                           />
@@ -324,8 +325,8 @@ function App() {
                             bottom: 16,
                             right: 16,
                             left: 16,
-                            padding: 8,
-                            gap: 8,
+                            padding: space[8],
+                            gap: space[8],
                             backgroundColor: c().redFill,
                             borderWidth: 1,
                             borderColor: c().red,
