@@ -8,7 +8,7 @@ import { screenInsets } from "./safe-area";
 import { Label } from "./text";
 import { colors, fill, row } from "./theme";
 import { ToastLayer } from "./toast";
-import { control, shadow, space, weight } from "./tokens";
+import { control, icon, shadow, space, weight } from "./tokens";
 
 const modalStack: (() => void)[] = [];
 
@@ -75,7 +75,7 @@ export function Modal(props: {
     borderColor: color().strong,
     overflow: "hidden",
     boxShadow: centred() ? [shadow.popover] : undefined,
-    ...(props.compact ? { padding: 14 } : {}),
+    ...(props.compact ? { padding: space[16] } : {}),
     ...props.panelStyle,
   });
   const backdropStyle = (): ViewStyle => {
@@ -137,8 +137,8 @@ export function Modal(props: {
             <If when={props.dismissible !== false}>
               <CloseButton
                 onPress={close}
-                iconSize={14}
-                style={{ marginVertical: -5, marginRight: -5 }}
+                iconSize={icon.md}
+                style={{ marginVertical: -space[4], marginRight: -space[4] }}
               />
             </If>
           </View>
@@ -187,7 +187,7 @@ export function Modal(props: {
               <CloseButton
                 onPress={close}
                 size={sheetChrome() ? control.lg : undefined}
-                iconSize={sheetChrome() || stepHeader() ? 16 : 14}
+                iconSize={icon.md}
               />
             </If>
           </Header>

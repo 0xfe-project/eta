@@ -3,7 +3,7 @@ import type { IconName } from "../components/icons";
 import type { Page } from "../navigation/routes";
 import { View } from "nsh";
 import { colors, grow, Header, Icon, Label, row } from "../components";
-import { space } from "../components/tokens";
+import { icon, space } from "../components/tokens";
 import { useText } from "../i18n";
 
 export function More(props: {
@@ -61,10 +61,10 @@ function MoreRow(props: {
           flexShrink: 0,
         }}
       >
-        <Icon name={props.icon} size={18} />
+        <Icon name={props.icon} size={icon.md} />
       </View>
       <Label style={{ flex: 1 }}>{props.title}</Label>
-      <Icon name="right" size={14} />
+      <Icon name="right" size={icon.md} />
     </View>
   );
 }

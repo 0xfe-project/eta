@@ -2,7 +2,7 @@ import type { JSX, Point, ViewRef } from "nsh";
 import type { IconName } from "../components/icons";
 import { View } from "nsh";
 import { colors, focusRing, Icon, Label } from "../components";
-import { control, space } from "../components/tokens";
+import { control, icon, space } from "../components/tokens";
 
 export function RailButton(props: {
   label: string;
@@ -42,12 +42,12 @@ export function RailButton(props: {
     >
       <View
         style={{
-          width: props.iconSize ?? 14,
-          height: props.iconSize ?? 14,
+          width: props.iconSize ?? icon.md,
+          height: props.iconSize ?? icon.md,
           position: "relative",
         }}
       >
-        <Icon name={props.icon} size={props.iconSize} />
+        <Icon name={props.icon} size={props.iconSize ?? icon.md} />
         <If when={(props.count ?? 0) > 0}>
           <View
             style={{
@@ -98,9 +98,9 @@ export function RailEntry(props: {
         height: 41,
         flexShrink: 0,
         alignItems: "center",
-        paddingTop: 5,
+        paddingTop: space[4],
         paddingHorizontal: space[4],
-        gap: 3,
+        gap: space[2],
         borderBottomWidth: 1,
         borderColor: c().border,
         backgroundColor: props.selected ? c().selected : "transparent",

@@ -50,10 +50,10 @@ export function GroupRow(props: {
       style={{
         minHeight: phone() ? 64 : 53,
         flexShrink: 0,
-        paddingLeft: phone() ? 16 : 14,
-        paddingRight: phone() ? 12 : 14,
+        paddingLeft: space[16],
+        paddingRight: phone() ? space[12] : space[16],
         paddingTop: phone() ? 0 : space[8],
-        paddingBottom: phone() ? 0 : 6,
+        paddingBottom: phone() ? 0 : space[8],
         gap: phone() ? space[12] : space[2],
         borderBottomWidth: 1,
         borderColor: c().border,
@@ -93,7 +93,7 @@ export function GroupRow(props: {
         <RowChevron />
       </If>
       <If when={!phone()}>
-        <View style={{ ...row, gap: 6 }}>
+        <View style={{ ...row, gap: space[4] }}>
           <View style={row}>
             <Each of={people()}>
               {(person) => <AgentFace id={person().agentId} size={avatar.sm} />}
@@ -127,8 +127,8 @@ export function GroupRow(props: {
           <View style={{ ...row, height: 14 }}>
             <Each of={people()} key={(person) => person.agentId}>
               {(person, index) => (
-                <View style={{ marginLeft: index() ? -3 : 0 }}>
-                  <AgentFace id={person().agentId} size={14} />
+                <View style={{ marginLeft: index() ? -space[4] : 0 }}>
+                  <AgentFace id={person().agentId} size={avatar.sm} />
                 </View>
               )}
             </Each>

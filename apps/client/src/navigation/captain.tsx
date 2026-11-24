@@ -27,7 +27,7 @@ export function CaptainCard(props: { onPress: () => void }) {
       : undefined;
   };
   return (
-    <View style={{ flexShrink: 0, padding: 14 }}>
+    <View style={{ flexShrink: 0, padding: space[16] }}>
       <View
         role="button"
         accessibilityLabel={text("captain")}
@@ -40,7 +40,7 @@ export function CaptainCard(props: { onPress: () => void }) {
           gap: space[12],
           minHeight: 54,
           paddingVertical: space[8],
-          paddingHorizontal: 14,
+          paddingHorizontal: space[16],
           borderWidth: 1,
           borderColor: c().border,
           backgroundColor: c().canvas,
@@ -77,7 +77,7 @@ export function RailCaptain(props: { selected: boolean; onPress: () => void }) {
         height: 80,
         flexShrink: 0,
         alignItems: "center",
-        paddingTop: 7,
+        paddingTop: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -93,12 +93,13 @@ export function RailCaptain(props: { selected: boolean; onPress: () => void }) {
           width: space[48],
           height: space[64],
           alignItems: "center",
-          gap: 3,
+          gap: space[2],
           backgroundColor: props.selected ? c().selected : "transparent",
           cursor: "pointer",
         }}
       >
         <CaptainContextRing>
+          {/* design-value: sized to sit inside its 44px context ring */}
           <CaptainFace size={36} />
         </CaptainContextRing>
         <Label variant="caption">{text("captain")}</Label>

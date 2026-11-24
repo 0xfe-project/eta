@@ -259,7 +259,6 @@ function SheetProposal(props: {
         >
           <View style={{ gap: space[4] }}>
             <Caption
-              phone
               text={[
                 kindName(op().kind),
                 conversation()?.name,
@@ -273,7 +272,7 @@ function SheetProposal(props: {
           <Each of={proposalFields(op(), host).filter(([, value]) => value)}>
             {(field) => (
               <View style={{ gap: space[4] }}>
-                <Caption phone text={uiText(field()[0])} />
+                <Caption text={uiText(field()[0])} />
                 <Label variant="small">{field()[1]}</Label>
               </View>
             )}

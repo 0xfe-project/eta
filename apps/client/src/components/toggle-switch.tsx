@@ -1,6 +1,6 @@
 import { Switch } from "nsh/base";
 import { colors, row } from "./theme";
-import { space } from "./tokens";
+import { opacity, space } from "./tokens";
 
 export function ToggleSwitch(props: {
   label: string;
@@ -18,7 +18,7 @@ export function ToggleSwitch(props: {
       disabled={props.disabled}
       onChange={({ checked }) => props.onChange(checked)}
       style={{ flexShrink: 0, cursor: props.disabled ? "default" : "pointer" }}
-      disabledStyle={{ opacity: 0.5 }}
+      disabledStyle={{ opacity: opacity.disabled }}
       focusVisibleStyle={{
         outlineWidth: 1,
         outlineColor: c().blue,

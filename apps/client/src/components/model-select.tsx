@@ -85,14 +85,14 @@ export function ModelSelect(props: {
         color: c().ink,
         placeholderColor: c().muted,
         ...textStyle(type("small")),
-        paddingHorizontal: 10,
+        paddingHorizontal: space[12],
         height: 34,
         backgroundColor: "transparent",
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
       groupStyle={{
-        paddingHorizontal: 10,
+        paddingHorizontal: space[12],
         paddingTop: space[8],
         paddingBottom: space[4],
       }}
@@ -107,7 +107,7 @@ export function ModelSelect(props: {
           style={{
             alignItems: "center",
             paddingVertical: space[24],
-            paddingHorizontal: 10,
+            paddingHorizontal: space[12],
           }}
         >
           <Label variant="small" tone="muted">
@@ -122,7 +122,7 @@ export function ModelSelect(props: {
             flex: 1,
             height: control.md,
             gap: space[8],
-            paddingHorizontal: 10,
+            paddingHorizontal: space[12],
             backgroundColor:
               item.value === props.value ? c().selected : "transparent",
           }}
@@ -160,7 +160,7 @@ export function ModelSelect(props: {
               props.placeholder ??
               uiText("selectModel")}
           </Label>
-          <Icon name="down" size={10} tone="muted" />
+          <Icon name="down" size={icon.sm} tone="muted" />
         </View>
       }
       onChange={({ value }) => props.onChange(value ?? "")}

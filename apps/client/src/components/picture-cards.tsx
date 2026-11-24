@@ -118,7 +118,7 @@ export function PictureCards(props: {
                   borderTopWidth: 1,
                   borderColor: c().border,
                   paddingVertical: space[4],
-                  paddingHorizontal: 6,
+                  paddingHorizontal: space[8],
                 }}
               >
                 <Label variant="caption" tone="muted" lines={1}>

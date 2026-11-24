@@ -777,7 +777,7 @@ function PhoneUsage(props: {
   return (
     <View style={{ gap: 6 }}>
       <View style={{ ...row, gap: space[8] }}>
-        <Caption text={uiText("usageTitle")} phone style={{ flex: 1 }} />
+        <Caption text={uiText("usageTitle")} style={{ flex: 1 }} />
         <If when={props.parent}>
           <Label variant="small">{uiText("usageIncludeSubtasks")}</Label>
           <ToggleSwitch

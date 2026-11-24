@@ -46,7 +46,7 @@ export function FieldDialog(props: {
       style={{
         height: props.phone ? 36 : 30,
         ...textStyle(type("small")),
-        paddingHorizontal: 10,
+        paddingHorizontal: space[12],
         borderColor: props.error ? c().red : c().strong,
       }}
     />

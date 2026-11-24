@@ -80,9 +80,9 @@ export function ToastLayer(props: { phone?: boolean }) {
               style={{
                 ...row,
                 alignItems: "flex-start",
-                gap: 10,
+                gap: space[8],
                 paddingVertical: space[12],
-                paddingHorizontal: 14,
+                paddingHorizontal: space[16],
                 borderWidth: 1,
                 borderColor: c().border,
                 backgroundColor: c().canvas,
@@ -90,7 +90,7 @@ export function ToastLayer(props: { phone?: boolean }) {
                 cursor: "pointer",
               }}
             >
-              <View style={{ paddingTop: 6 }}>
+              <View style={{ paddingTop: space[8] }}>
                 <StatusDot color={c()[toast().tone ?? "green"]} />
               </View>
               <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
