@@ -1,8 +1,12 @@
 import { View } from "nsh";
 import { Button, colors, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
-import { control, space } from "../../components/tokens";
+import { control, layer, shadow, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
+/**
+ * The strip that says the connection is down, over the top of the workspace (#380): it covers
+ * what is under it for as long as it is there, and moves nothing in or out of place.
+ */
 export function ReconnectingBanner(props: {
   phone: boolean;
   onConnect: () => void;
@@ -10,7 +14,14 @@ export function ReconnectingBanner(props: {
   const c = colors();
   return (
     <View
+      accessibilityLiveRegion="polite"
       style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: layer.sticky,
+        boxShadow: [shadow.float],
         ...row,
         paddingVertical: props.phone ? space[12] : space[8],
         paddingHorizontal: space[16],
