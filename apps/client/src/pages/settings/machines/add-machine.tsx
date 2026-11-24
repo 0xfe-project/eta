@@ -17,13 +17,13 @@ import {
 } from "../../../components";
 import { ToggleSwitch } from "../../../components/toggle-switch";
 import {
-  border,
   control as controlHeight,
   space,
   weight,
 } from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { Tabs } from "../../../ui";
 import { PaneBack } from "../section";
 
 /** A field beside its label, the title row with its back link, and the method menu. */
@@ -421,53 +421,20 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
         height="100%"
         onClose={props.onClose}
       >
-        <View
-          role="tablist"
-          style={{
-            ...row,
-            alignItems: "stretch",
-            height: space[40],
-            flexShrink: 0,
-            borderBottomWidth: 1,
-            borderColor: c().border,
-          }}
-        >
-          <Each
-            of={
-              host.can("machines.install")
-                ? (["command", "ssh"] as const)
-                : (["command"] as const)
-            }
-          >
-            {(item) => (
-              <View
-                role="tab"
-                accessibilityLabel={uiText(
-                  item() === "command" ? "runACommand" : "installOverSsh",
-                )}
-                accessibilityState={{ selected: mode() === item() }}
-                onPress={() => mode.set(item())}
-                style={{
-                  flex: 1,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderBottomWidth: border.thick,
-                  borderColor: mode() === item() ? c().ink : "transparent",
-                }}
-              >
-                <Label
-                  variant="small"
-                  weight={mode() === item() ? weight.strong : weight.regular}
-                  tone={mode() === item() ? "ink" : "mutedInk"}
-                >
-                  {uiText(
-                    item() === "command" ? "runACommand" : "installOverSsh",
-                  )}
-                </Label>
-              </View>
-            )}
-          </Each>
-        </View>
+        <Tabs
+          value={mode()}
+          stretch
+          options={(host.can("machines.install")
+            ? (["command", "ssh"] as const)
+            : (["command"] as const)
+          ).map((item) => ({
+            value: item,
+            label: uiText(
+              item === "command" ? "runACommand" : "installOverSsh",
+            ),
+          }))}
+          onChange={mode.set}
+        />
         {content()}
         {footer()}
       </Modal>
