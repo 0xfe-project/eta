@@ -24,7 +24,8 @@ for (const width of [1440, 834, 390]) {
       for (const field of ["Dependencies", "Base", "Parent task"])
         expect(app.texts()).not.toContain(field);
       await app.press(leave);
-      expect(app.shows("label:Confirm and start")).toBe(false);
+      // The form goes out before it is gone.
+      await app.waitUntil(() => !app.shows("label:Confirm and start"));
       expect(app.texts()).toContain("Calls: 0");
     }
     await app.press("label:Edit and confirm");

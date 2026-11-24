@@ -1,5 +1,6 @@
 import type { CaptainResults, ProvidersView } from "@eta/client-contracts";
 import type { Layout } from "../components";
+import type { MotionFrom } from "../components/motion";
 import type { Flavor, PaletteId } from "../components/palettes";
 import type { Page } from "../navigation/routes";
 import type { ChatWidth, Theme } from "../pages/settings/appearance";
@@ -16,6 +17,7 @@ import {
 } from "nsh";
 import { fill, grow, keyboardShown, row, sizes } from "../components";
 import { useModels } from "../components/model-select";
+import { fadeIn, motion, passing } from "../components/motion";
 import { ChatList } from "../navigation/chat-list";
 import { link, workspaceLocation } from "../navigation/location";
 import { PhoneNavigation } from "../navigation/phone-tabs";
@@ -87,25 +89,50 @@ export function Workspace(props: {
           : undefined;
   const routineId = signal("");
   const task = signal("");
+  const phone = () => props.layout === "phone";
+  // On a phone a page pushed in (a conversation, a task, a page of More or Settings) fades in
+  // from the trailing edge, and the page under it, coming back, from the leading edge: the
+  // pane holding the pages moves, or the layer a task or Settings opens in. Tab changes and the
+  // larger layouts change at once, as before.
+  const pane = passing();
+  function step(from: MotionFrom) {
+    if (phone()) void pane.play(fadeIn(from, motion.pageIn));
+  }
+  let taskLayer: ReturnType<typeof passing> | undefined;
+  /** A layer a task or Settings opens in: it comes in from the trailing edge on a phone. */
+  function layer() {
+    const moving = passing();
+    if (phone()) void moving.play(fadeIn("end", motion.pageIn));
+    return moving;
+  }
+  /** A task changed: the task layer, or the pane on the Tasks page, moves `from`. */
+  function stepTask(from: MotionFrom, closing: boolean) {
+    if (page() === "tasks" || (closing && !task())) step(from);
+    else if (phone()) void taskLayer?.play(fadeIn(from, motion.pageIn));
+  }
   const taskBackStack: string[] = [];
   function openTask(id: string) {
     taskBackStack.length = 0;
+    const opening = !task() && Boolean(id);
     task.set(id);
+    // The task layer's first task comes in as the layer mounts.
+    if (id && (page() === "tasks" || !opening)) stepTask("end", false);
   }
   function openRelatedTask(id: string) {
     if (id === task()) return;
     if (task()) taskBackStack.push(task());
     task.set(id);
+    stepTask("end", false);
   }
   function closeTask() {
     task.set(taskBackStack.pop() ?? "");
+    stepTask("start", true);
   }
   const newGroup = signal(false);
   const newTask = signal(false);
   const setup = signal(start.page === "onboard");
   let checkedSetup = false;
   const models = useModels();
-  const phone = () => props.layout === "phone";
   const phoneTabs = () => phone() && !keyboardShown();
   const waitingForHost = () =>
     phone() &&
@@ -136,6 +163,8 @@ export function Workspace(props: {
         setup.set(next.page === "onboard");
         settings.set(next.page === "settings" ? "Agents" : undefined);
         conversation.set(next.conversation);
+        if (Boolean(next.conversation) !== mobileOpen())
+          step(next.conversation ? "end" : "start");
         mobileOpen.set(Boolean(next.conversation));
       }),
     );
@@ -148,10 +177,12 @@ export function Workspace(props: {
     conversation.set(id);
     mobileOpen.set(true);
     link("chat", id);
+    step("end");
   }
   function back() {
     mobileOpen.set(false);
     link("chat");
+    step("start");
   }
   function showSettings(section: SettingsSection = "Agents") {
     settings.set(section);
@@ -181,6 +212,7 @@ export function Workspace(props: {
   function showRoutine(id?: string) {
     routineId.set(id ?? "");
     navigate("routines");
+    step("end");
   }
   const activeId = () => (page() === "captain" ? captain() : conversation());
   function leaveUnavailableChat() {
@@ -306,6 +338,7 @@ export function Workspace(props: {
             ...row,
             ...grow,
             alignItems: "stretch",
+            ...pane.style(),
             display: props.layout === "tablet" && settings() ? "none" : "flex",
             visibility:
               props.layout === "tablet" && settings() ? "hidden" : "visible",
@@ -403,13 +436,27 @@ export function Workspace(props: {
               onCaptain={() => navigate("captain")}
               initialId={routineId()}
               layout={props.layout}
-              onBack={phone() ? () => navigate("pending") : undefined}
+              onBack={
+                phone()
+                  ? () => {
+                      navigate("pending");
+                      step("start");
+                    }
+                  : undefined
+              }
             />
           </If>
           <If when={page() === "plugins"}>
             <Plugins
               layout={props.layout}
-              onBack={phone() ? () => navigate("more") : undefined}
+              onBack={
+                phone()
+                  ? () => {
+                      navigate("more");
+                      step("start");
+                    }
+                  : undefined
+              }
             />
           </If>
           <If when={page() === "pending"}>
@@ -423,7 +470,10 @@ export function Workspace(props: {
           <If when={page() === "more"}>
             <More
               layout={props.layout}
-              onNavigate={navigate}
+              onNavigate={(next) => {
+                navigate(next);
+                step("end");
+              }}
               onSettings={() => showSettings()}
             />
           </If>
@@ -447,45 +497,53 @@ export function Workspace(props: {
         />
       </If>
       <If when={settings()}>
-        {(section) => (
-          <View
-            style={{
-              ...fill,
-              zIndex: paneOrder.settings,
-              left: props.layout === "tablet" ? sizes.rail : 0,
-              bottom: phoneTabs() ? sizes.phoneNav : 0,
-            }}
-          >
-            <Settings
-              initial={section()}
-              layout={props.layout}
-              theme={props.theme}
-              onTheme={props.onTheme}
-              paletteId={props.paletteId}
-              onPalette={props.onPalette}
-              flavor={props.flavor}
-              onFlavor={props.onFlavor}
-              chatWidth={props.chatWidth}
-              onChatWidth={props.onChatWidth}
-              chatRail={props.chatRail}
-              onChatRail={props.onChatRail}
-              onFonts={props.onFonts}
-              onTask={(id) => {
-                navigate("tasks");
-                openTask(id);
+        {(section) => {
+          const moving = layer();
+          return (
+            <View
+              style={{
+                ...fill,
+                ...moving.style(),
+                zIndex: paneOrder.settings,
+                left: props.layout === "tablet" ? sizes.rail : 0,
+                bottom: phoneTabs() ? sizes.phoneNav : 0,
               }}
-              onConnect={props.onConnect}
-              onClose={() => {
-                settings.set(undefined);
-                if (phone() && page() === "chat" && !conversation()) {
-                  navigate("more");
-                } else {
-                  link(page(), page() === "chat" ? conversation() : undefined);
-                }
-              }}
-            />
-          </View>
-        )}
+            >
+              <Settings
+                initial={section()}
+                layout={props.layout}
+                theme={props.theme}
+                onTheme={props.onTheme}
+                paletteId={props.paletteId}
+                onPalette={props.onPalette}
+                flavor={props.flavor}
+                onFlavor={props.onFlavor}
+                chatWidth={props.chatWidth}
+                onChatWidth={props.onChatWidth}
+                chatRail={props.chatRail}
+                onChatRail={props.onChatRail}
+                onFonts={props.onFonts}
+                onTask={(id) => {
+                  navigate("tasks");
+                  openTask(id);
+                }}
+                onConnect={props.onConnect}
+                onClose={() => {
+                  settings.set(undefined);
+                  if (phone() && page() === "chat" && !conversation()) {
+                    navigate("more");
+                  } else {
+                    link(
+                      page(),
+                      page() === "chat" ? conversation() : undefined,
+                    );
+                  }
+                  step("start");
+                }}
+              />
+            </View>
+          );
+        }}
       </If>
       <If when={newGroup()}>
         <NewConversation
@@ -505,18 +563,26 @@ export function Workspace(props: {
       <If
         when={task() && page() !== "tasks" && (phone() || page() === "pending")}
       >
-        <View style={{ ...fill, zIndex: paneOrder.task }}>
-          <Each of={[task()]}>
-            {(id) => (
-              <TaskDetail
-                id={id()}
-                layout={props.layout}
-                onClose={closeTask}
-                onTask={openRelatedTask}
-              />
-            )}
-          </Each>
-        </View>
+        {() => {
+          const moving = layer();
+          taskLayer = moving;
+          return (
+            <View
+              style={{ ...fill, zIndex: paneOrder.task, ...moving.style() }}
+            >
+              <Each of={[task()]}>
+                {(id) => (
+                  <TaskDetail
+                    id={id()}
+                    layout={props.layout}
+                    onClose={closeTask}
+                    onTask={openRelatedTask}
+                  />
+                )}
+              </Each>
+            </View>
+          );
+        }}
       </If>
     </View>
   );
