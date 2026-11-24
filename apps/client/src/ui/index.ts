@@ -8,6 +8,7 @@ export { ConfirmDialog, FieldDialog } from "./dialogs";
 export { Disclosure } from "./disclosure";
 export { Field, FormField } from "./input";
 export { ListRow, SectionHeader } from "./list-row";
+export { ActionItem, ActionMenu } from "./menu";
 export { Popover } from "./popover";
 export { SearchField } from "./search-field";
 export { CheckControl, ToggleSwitch } from "./selection-controls";
