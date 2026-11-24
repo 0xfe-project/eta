@@ -34,6 +34,7 @@ import { taskMoment } from "./facts";
 import { activeTaskRun, latestExecutorRun } from "./run-log";
 import { statusName, TaskGlyph } from "./status";
 import { StatusSelect } from "./status-select";
+import { TaskQuestions } from "./task-questions";
 
 /** The width of a rail row's label; what goes under its value starts there. */
 const railLabelWidth = 76;
@@ -127,6 +128,7 @@ export function TaskCommentBox(props: {
                 }
           }
         >
+          <TaskQuestions state={props.state} />
           <CommentBox
             state={props.state}
             origin={origin}

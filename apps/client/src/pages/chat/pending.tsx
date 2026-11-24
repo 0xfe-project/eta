@@ -41,7 +41,7 @@ const phoneSectionHeight = 32;
 const rowHeight = 52;
 const actionWidth = 56;
 
-function QuestionDialog(props: {
+export function QuestionDialog(props: {
   item: InteractionView;
   phone: boolean;
   onClose: () => void;
