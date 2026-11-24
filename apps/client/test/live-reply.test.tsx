@@ -126,7 +126,8 @@ for (const [width, height] of [
     expect(app.shows("Checking the key next.")).toBe(false);
 
     await app.press(width < 600 ? "label:Back" : "label:Close");
-    expect(app.shows(panel)).toBe(false);
+    // The panel goes out before it is gone.
+    await app.waitUntil(() => !app.shows(panel));
     await app.press("Reload");
     await app.press("label:Thinking process");
     expect(app.shows(panel)).toBe(true);

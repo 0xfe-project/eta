@@ -18,5 +18,6 @@ for (const [width, height] of [
       true,
     );
     await app.press(width < 600 ? "label:Back" : "label:Close");
-    expect(app.shows("role:dialog")).toBe(false);
+    // The panel goes out before it is gone.
+    await app.waitUntil(() => !app.shows("role:dialog"));
   });

@@ -1,8 +1,17 @@
 import type { JSX, ViewStyle } from "nsh";
-import { cleanup, keymap, Overlay, platform, View, windowSize } from "nsh";
+import {
+  cleanup,
+  keymap,
+  Overlay,
+  platform,
+  signal,
+  View,
+  windowSize,
+} from "nsh";
 import { Dialog } from "nsh/base";
 import { Regular } from "./density";
 import { Header } from "./header";
+import { fade, fadeIn, fadeOut, motion, passing } from "./motion";
 import { CloseButton } from "./navigation-buttons";
 import { screenInsets } from "./safe-area";
 import { Label } from "./text";
@@ -56,8 +65,31 @@ export function Modal(props: {
   onClose: () => void;
 }) {
   const color = colors();
+  // It comes in and, when it closes itself (Escape, the backdrop, its close or back button),
+  // goes out before telling its owner: a fade and a short move, from below for a dialog or a
+  // sheet, from the trailing edge for a drawer or a phone's page. Its owner closing it removes
+  // it at once. With less motion asked for, NSH lands both at once.
+  const from =
+    props.phonePage || (props.side && !props.phone) ? "end" : "below";
+  const pace = props.phone ? "phone" : "window";
+  const shade = passing();
+  const lift = passing();
+  void shade.play(fade(1, motion.dialogIn[pace]));
+  void lift.play(fadeIn(from, motion.dialogIn[pace]));
+  const leaving = signal(false);
+  let gone = false;
+  cleanup(() => {
+    gone = true;
+  });
   const close = () => {
-    if (props.dismissible !== false) props.onClose();
+    if (props.dismissible === false || leaving()) return;
+    leaving.set(true);
+    void Promise.all([
+      shade.play(fade(0, motion.dialogOut[pace])),
+      lift.play(fadeOut(from, motion.dialogOut[pace])),
+    ]).then(() => {
+      if (!gone) props.onClose();
+    });
   };
   modalStack.push(close);
   cleanup(() => {
@@ -87,6 +119,9 @@ export function Modal(props: {
     boxShadow: centred() ? [shadow.popover] : undefined,
     ...(props.compact ? { padding: space[16] } : {}),
     ...props.panelStyle,
+    ...lift.style(),
+    // Going out, it takes no presses: what is under it does once it is gone.
+    pointerEvents: leaving() ? "none" : "auto",
   });
   const backdropStyle = (): ViewStyle => {
     const blur =
@@ -112,7 +147,12 @@ export function Modal(props: {
   const panel = () => (
     <Regular>
       <View
-        style={{ ...fill, ...backdropStyle() }}
+        style={{
+          ...fill,
+          ...backdropStyle(),
+          ...shade.style(),
+          pointerEvents: leaving() ? "none" : "auto",
+        }}
         onPress={props.dismissible === false ? undefined : close}
       />
       <View role="dialog" accessibilityLabel={props.title} style={popupStyle()}>
