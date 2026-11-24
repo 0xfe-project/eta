@@ -69,10 +69,10 @@ const replyBlockGap = 8;
 /** A reply at work keeps this height, however much it writes. */
 const processWindowHeight = 176;
 
-/** How wide your message's bubble runs; a task draft's card and, on phones, the least room its
- * title keeps. */
+/** How wide your message's bubble runs, and on phones the least room a task draft's title keeps. A
+ * draft's card has no width of its own: like a task's card it fills the column, whose width is
+ * the appearance setting's. */
 const bubbleWidth = { phone: "84%", desktop: "72%" } as const;
-const draftCardWidth = 560;
 const draftTitleWidth = 200;
 
 /** How each code the host fails a reply with is said. */
@@ -424,7 +424,6 @@ export function Message(props: {
           <View
             style={{
               alignSelf: "stretch",
-              maxWidth: props.phone ? undefined : draftCardWidth,
               borderWidth: 1,
               borderColor: c().border,
             }}
