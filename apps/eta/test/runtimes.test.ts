@@ -132,7 +132,8 @@ describe("an agent's runtime", () => {
     const { runtimes } = (await w.client.call("agents", "runtimes", {})) as {
       runtimes: AgentRuntimeInfo[];
     };
-    expect(runtimes.map((runtime) => runtime.id)).toEqual([
+    const registered = runtimes.filter((runtime) => !runtime.discovered);
+    expect(registered.map((runtime) => runtime.id)).toEqual([
       "claude",
       "codex",
       "opencode",
@@ -141,12 +142,12 @@ describe("an agent's runtime", () => {
       "qwen",
     ]);
     // The scripted one is there; the others are not in this registry at all.
-    expect(runtimes[0]).toMatchObject({
+    expect(registered[0]).toMatchObject({
       label: "Claude Code",
       status: "available",
     });
     expect(
-      runtimes.slice(1).every((runtime) => runtime.status === "error"),
+      registered.slice(1).every((runtime) => runtime.status === "error"),
     ).toBe(true);
   });
 });

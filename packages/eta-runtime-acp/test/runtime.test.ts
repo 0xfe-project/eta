@@ -647,7 +647,9 @@ describe("the catalog", () => {
       ["acp.locked", "available"],
       ["acp.gone", "missing"],
     ]);
-    const list = await runtimes.catalog.list();
+    const list = (await runtimes.catalog.list()).filter(
+      (entry) => !entry.discovered,
+    );
     expect(list.map((info) => [info.id, info.label, info.status])).toEqual([
       ["acp.good", "Fake Agent", "available"],
       ["acp.locked", "Fake Agent", "unauthenticated"],

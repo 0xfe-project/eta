@@ -273,7 +273,7 @@ function RuntimeDetail(props: {
           </Part>
         )}
       </If>
-      <If when={custom(props.runtime)}>
+      <If when={custom(props.runtime) && !props.runtime.discovered}>
         <View style={{ ...row }}>
           <Button
             label={uiText("runtimeOpenExternalAgent")}

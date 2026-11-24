@@ -10,6 +10,7 @@ import type {
 import {
   acpDraftOf,
   acpSlug,
+  ANTIGRAVITY_ACP_AGENT,
   checkAcpDraft,
   emptyAcpDraft,
 } from "@eta/client-contracts";
@@ -159,13 +160,7 @@ export function ExternalAgentForm(props: {
   }
 
   function useAntigravityPreset() {
-    draft.set({
-      ...emptyAcpDraft,
-      label: "Antigravity",
-      id: "antigravity",
-      command: "agy",
-      args: "acp",
-    });
+    draft.set(acpDraftOf(ANTIGRAVITY_ACP_AGENT));
     idTouched = false;
     problems.set({});
     outcome.set(undefined);
