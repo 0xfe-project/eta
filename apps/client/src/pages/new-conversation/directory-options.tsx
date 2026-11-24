@@ -9,7 +9,7 @@ import {
   setQuery,
   setShowHidden,
 } from "@eta/client-contracts";
-import { keymap, View } from "nsh";
+import { cleanup, effect, keymap, signal, View } from "nsh";
 import { Input } from "nsh/base";
 import {
   Button,
@@ -25,7 +25,7 @@ import {
 import { shownWhile } from "../../components/pending";
 import { Spinner } from "../../components/spinner";
 import { control, icon, opacity, space } from "../../components/tokens";
-import { localizedText } from "../../i18n";
+import { localizedText, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
 /** A place to choose: a finger's row on phones, a list row elsewhere. */
@@ -63,6 +63,18 @@ export function DirectoryOptions(props: {
   const refreshingShown = shownWhile(
     () => (loading() || busy()) && rows().length > 0,
   );
+  const cloneSlow = signal(false);
+  effect(() => {
+    const active = cloneProgress();
+    // Reset the 10s slow timer whenever a clone starts, ends, or advances stage/percent.
+    const stageKey = active
+      ? `${active.id}:${active.progress?.phase ?? ""}:${active.progress?.percent ?? ""}`
+      : "";
+    cloneSlow.set(false);
+    if (!stageKey) return;
+    const timer = setTimeout(() => cloneSlow.set(true), 10_000);
+    cleanup(() => clearTimeout(timer));
+  });
   const placeholder = () => {
     switch (kind()) {
       case "machine":
@@ -371,6 +383,11 @@ export function DirectoryOptions(props: {
                 ? `${active().progress?.phase}${active().progress?.percent == null ? "" : ` ${active().progress?.percent}%`}`
                 : active().target.display}
             </Label>
+            <If when={cloneSlow()}>
+              <Label variant="small" tone="warningInk">
+                {uiText("takingLongerThanUsual")}
+              </Label>
+            </If>
             <Button
               label={localizedText("Cancel clone", "取消克隆")}
               disabled={cancelling() || !host.can("places.cancelClone")}

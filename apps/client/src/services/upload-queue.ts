@@ -58,13 +58,22 @@ export function createUploadQueue(
   } = {},
 ) {
   const states = signal<Record<string, UploadState>>({});
+  const progresses = signal<Record<string, number>>({});
   const uploading = signal(false);
   const bytes = new Map<string, File>();
   const thumbnails = new Map<string, string>();
   let jobs = Promise.resolve();
   let count = 0;
+  function clearProgress(id: string) {
+    progresses.update((all) => {
+      if (!(id in all)) return all;
+      const { [id]: _, ...rest } = all;
+      return rest;
+    });
+  }
   function setState(id: string, state: UploadState) {
     states.update((all) => ({ ...all, [id]: state }));
+    if (state.state !== "uploading") clearProgress(id);
     if (state.state === "done") options.onDone?.(id, state.attachment);
   }
   /** Uploads one file in chunks as the attachment `id`, after the uploads before it. */
@@ -72,6 +81,7 @@ export function createUploadQueue(
     const origin = host.address()?.origin;
     count++;
     uploading.set(true);
+    progresses.update((all) => ({ ...all, [id]: 0 }));
     setState(id, { state: "uploading" });
     const job = async () => {
       try {
@@ -83,16 +93,22 @@ export function createUploadQueue(
         ) {
           if (host.address()?.origin !== origin)
             throw new Error(uiText("connectionLostReconnecting"));
+          const chunk = data.subarray(offset, offset + ATTACH_CHUNK_BYTES);
           const result = await target.attach({
             uploadId: id,
             name: file.name,
             contentType: file.type || undefined,
             index,
             last: offset + ATTACH_CHUNK_BYTES >= data.length,
-            data: Buffer.from(
-              data.subarray(offset, offset + ATTACH_CHUNK_BYTES),
-            ).toString("base64"),
+            data: Buffer.from(chunk).toString("base64"),
           });
+          progresses.update((all) => ({
+            ...all,
+            [id]:
+              data.length > 0
+                ? Math.min(1, (offset + chunk.length) / data.length)
+                : 1,
+          }));
           if (result.attachment) {
             // The draft shows the picture from the bytes it sent, not the host's copy (#735).
             if (origin)
@@ -133,6 +149,7 @@ export function createUploadQueue(
     uploads(host: Host, target: UploadTarget): Uploads {
       return {
         state: (id) => states()[id],
+        progress: (id) => progresses()[id],
         thumbnail: (id) => {
           // Read with the states: a thumbnail made later shows on the block.
           states();
@@ -180,6 +197,7 @@ export function createUploadQueue(
         if (origin) forgetPicture(origin, id);
       }
       states.set({});
+      progresses.set({});
       bytes.clear();
       thumbnails.clear();
     },

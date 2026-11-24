@@ -1,6 +1,6 @@
 import type { MachineInstallView, MachineResults } from "@eta/client-contracts";
 import type { JSX } from "nsh";
-import { Clipboard, signal, View } from "nsh";
+import { cleanup, Clipboard, effect, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -63,6 +63,16 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
   >;
   const installing = () =>
     Boolean(installId()) && !["done", "failed"].includes(install()?.step ?? "");
+  const installSlow = signal(false);
+  effect(() => {
+    const active = installing();
+    const step = install()?.step ?? "connect";
+    installSlow.set(false);
+    if (!active) return;
+    void step;
+    const timer = setTimeout(() => installSlow.set(true), 10_000);
+    cleanup(() => clearTimeout(timer));
+  });
   async function create() {
     if (busy() || installing()) return;
     busy.set(true);
@@ -238,6 +248,11 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
           <Label tone={install()?.step === "failed" ? "red" : "muted"}>
             {uiText(stages[install()?.step ?? "connect"])}
           </Label>
+          <If when={installSlow() && installing()}>
+            <Label variant="small" tone="warningInk">
+              {uiText("takingLongerThanUsual")}
+            </Label>
+          </If>
           <If when={install()?.error}>
             <Label variant="small" tone="red">
               {install()?.error}

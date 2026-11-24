@@ -123,7 +123,7 @@ function updateEntry(
 }
 
 /** Formats remaining milliseconds into a concise localized ETA string. */
-function formatRemaining(remainingMs: number): string {
+export function formatRemaining(remainingMs: number): string {
   const seconds = Math.round(remainingMs / 1000);
   if (seconds < 1) return uiText("progressLessThanSecond");
   if (seconds < 60) return uiText("progressSecondsLeft", { seconds });

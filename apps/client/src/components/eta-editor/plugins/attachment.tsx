@@ -28,6 +28,8 @@ import { standIn } from "../view-source";
 /** Where a place's attachments go: the upload queue and each file's state, by block id. */
 export interface Uploads {
   state: (id: string) => UploadState | undefined;
+  /** Fraction `0..1` while uploading, when known. */
+  progress?: (id: string) => number | undefined;
   /** Uploads `file` as the attachment `id` (queued after the uploads before it); with `error`, it
    * is refused before uploading and shows why. */
   start: (id: string, file: File, error?: string) => void;
@@ -99,6 +101,11 @@ function FileView(input: {
       })()}
       cursor={picture() ? "zoom-in" : failure() ? "pointer" : undefined}
       dim={state()?.state === "uploading"}
+      progress={
+        state()?.state === "uploading"
+          ? (uploads.progress?.(id()) ?? 0)
+          : undefined
+      }
       selected={props.selected}
       accessibilityLabel={(() => {
         const current = state();

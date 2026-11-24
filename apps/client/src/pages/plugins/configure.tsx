@@ -22,6 +22,7 @@ import {
   textStyle,
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
+import { startProgress } from "../../components/progress-notification";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import {
   control,
@@ -54,17 +55,36 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
   const path = signal("");
   const busy = signal(false);
   const submit = async () => {
-    if (busy() || !repo().trim()) return;
+    const repoValue = repo().trim();
+    if (busy() || !repoValue) return;
     busy.set(true);
-    const result = await host.action(() =>
-      host.call("plugins", "add", {
-        repo: repo().trim(),
+    const progress = startProgress({
+      id: `plugin-add-${repoValue}`,
+      icon: "plugins",
+      title: uiText("addPluginTitle"),
+      detail: repoValue,
+    });
+    try {
+      await host.call("plugins", "add", {
+        repo: repoValue,
         rev: rev().trim() || undefined,
         path: path().trim() || undefined,
-      }),
-    );
-    busy.set(false);
-    if (result) props.onClose();
+      });
+      progress.complete({
+        title: uiText("addPluginTitle"),
+        detail: repoValue,
+      });
+      props.onClose();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      host.error.set(message);
+      progress.fail({
+        title: uiText("addPluginTitle"),
+        detail: message,
+      });
+    } finally {
+      busy.set(false);
+    }
   };
   // Placeholder-only fields, the first one focused, as the design draws them.
   const field = (
