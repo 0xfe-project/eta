@@ -507,7 +507,8 @@ describe("the link", () => {
     handler = link();
     await expect(composio.link("hackernews")).rejects.toThrow();
     expect(requests).toHaveLength(0);
-    for (const slug of ["exa", "gmail", "odd", "not-in-the-list"]) {
+    // A toolkit that signs in with the user's own key has its tests below.
+    for (const slug of ["gmail", "odd", "not-in-the-list"]) {
       requests.length = 0;
       expect(await composio.link(slug)).toBe(
         "https://connect.composio.dev/link/abc",
@@ -709,6 +710,152 @@ describe("the link", () => {
       expect(error).toContain("tool router");
       expect(error).not.toContain("SECRET_0123");
       expect(requests.some((r) => r.path.includes("/link"))).toBe(false);
+    });
+  });
+
+  describe("a toolkit that signs in with a key the user owns", () => {
+    const toolkitOf = (...schemes: string[]) =>
+      item("exa", {
+        auth_schemes: schemes,
+        composio_managed_auth_schemes: [],
+      });
+    const mine = (id: string, extra: object = {}) => ({
+      id,
+      is_composio_managed: false,
+      status: "ENABLED",
+      auth_scheme: "API_KEY",
+      toolkit: { slug: "exa" },
+      ...extra,
+    });
+    const managedOne = {
+      id: "ac_managed",
+      is_composio_managed: true,
+      status: "ENABLED",
+      auth_scheme: "OAUTH2",
+      is_enabled_for_tool_router: true,
+    };
+    async function listed(
+      items: unknown[],
+      schemes: string[] = ["API_KEY", "BEARER_TOKEN"],
+      patch?: () => Response,
+    ) {
+      const { composio, market } = open();
+      composio.setKey(KEY);
+      handler = () =>
+        json({ items: [toolkitOf(...schemes)], next_cursor: null });
+      await composioOf(market);
+      requests.length = 0;
+      handler = link((url, body) => {
+        if (url.pathname === "/api/v3/auth_configs" && body === "")
+          return json({ items });
+        if (url.pathname === "/api/v3/auth_configs")
+          return json({
+            toolkit: { slug: "exa" },
+            auth_config: {
+              id: "ac_custom",
+              auth_scheme: "API_KEY",
+              is_composio_managed: false,
+            },
+          });
+        if (url.pathname.startsWith("/api/v3/auth_configs/"))
+          return patch?.() ?? json({ success: true });
+        return undefined;
+      });
+      return composio;
+    }
+    const steps = () =>
+      requests.map((r) => `${r.method} ${r.path.split("?")[0]}`);
+    const linkedTo = () =>
+      (
+        JSON.parse(requests.find((r) => r.path.includes("/link"))!.body) as {
+          auth_config_id: string;
+        }
+      ).auth_config_id;
+
+    it("makes no managed config: with none of its own it makes a custom one with no credentials, switches it on, then links", async () => {
+      const composio = await listed([managedOne]);
+      expect(await composio.link("exa")).toBe(
+        "https://connect.composio.dev/link/abc",
+      );
+      expect(steps()).toEqual([
+        "GET /api/v3/auth_configs",
+        "POST /api/v3/auth_configs",
+        "PATCH /api/v3/auth_configs/ac_custom",
+        "POST /api/v3/connected_accounts/link",
+      ]);
+      expect(JSON.parse(requests[1]!.body)).toEqual({
+        toolkit: { slug: "exa" },
+        auth_config: {
+          type: "use_custom_auth",
+          authScheme: "API_KEY",
+          name: expect.any(String),
+          credentials: {},
+        },
+      });
+      expect(JSON.stringify(requests)).not.toContain("use_composio_managed");
+      expect(JSON.parse(requests[2]!.body)).toEqual({
+        type: "default",
+        is_enabled_for_tool_router: true,
+      });
+      expect(linkedTo()).toBe("ac_custom");
+    });
+
+    it("makes a bearer-token config for a toolkit that lists no API_KEY", async () => {
+      const composio = await listed([], ["BEARER_TOKEN"]);
+      await composio.link("exa");
+      expect(
+        (
+          JSON.parse(requests[1]!.body) as {
+            auth_config: { authScheme: string };
+          }
+        ).auth_config.authScheme,
+      ).toBe("BEARER_TOKEN");
+    });
+
+    it("takes a config of its own that is on for the tool router, and creates and patches nothing", async () => {
+      const composio = await listed([
+        managedOne,
+        mine("ac_oauth_of_mine", { auth_scheme: "OAUTH2" }),
+        mine("ac_off", { is_enabled_for_tool_router: false }),
+        mine("ac_disabled", { status: "DISABLED" }),
+        mine("ac_mine", { is_enabled_for_tool_router: true }),
+      ]);
+      await composio.link("exa");
+      expect(steps()).toEqual([
+        "GET /api/v3/auth_configs",
+        "POST /api/v3/connected_accounts/link",
+      ]);
+      expect(linkedTo()).toBe("ac_mine");
+    });
+
+    it("switches a config of its own on when it is off, and still links when that fails, saying so in the log", async () => {
+      const composio = await listed([
+        mine("ac_off", { is_enabled_for_tool_router: false }),
+      ]);
+      await composio.link("exa");
+      expect(steps()).toEqual([
+        "GET /api/v3/auth_configs",
+        "PATCH /api/v3/auth_configs/ac_off",
+        "POST /api/v3/connected_accounts/link",
+      ]);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const failing = await listed(
+        [mine("ac_off", { is_enabled_for_tool_router: false })],
+        undefined,
+        () => json({ message: `no ${KEY}` }, 500),
+      );
+      expect(await failing.link("exa")).toBe(
+        "https://connect.composio.dev/link/abc",
+      );
+      expect(linkedTo()).toBe("ac_off");
+      expect(warn).toHaveBeenCalled();
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("SECRET_0123");
+    });
+
+    it("never deletes anything on Composio", async () => {
+      const composio = await listed([mine("ac_mine", {})]);
+      await composio.link("exa");
+      expect(requests.some((r) => r.method === "DELETE")).toBe(false);
     });
   });
 
