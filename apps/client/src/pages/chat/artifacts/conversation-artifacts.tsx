@@ -358,17 +358,7 @@ export function ArtifactBrowser(props: {
               <>
                 <If when={entry().heading ? entry().group : null}>
                   {(group) => (
-                    <Label
-                      variant="small"
-                      tone="muted"
-                      style={{
-                        paddingHorizontal: space[12],
-                        paddingTop: space[16],
-                        paddingBottom: space[8],
-                      }}
-                    >
-                      {uiText(groupLabels[group()])}
-                    </Label>
+                    <SectionHeading label={uiText(groupLabels[group()])} />
                   )}
                 </If>
                 <ArtifactRow
