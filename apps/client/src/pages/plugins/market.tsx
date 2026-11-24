@@ -23,6 +23,7 @@ import {
 } from "../../components";
 import { hint } from "../../components/controls";
 import { CloseButton } from "../../components/navigation-buttons";
+import { avatar, control, icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { sheetEdge } from "./configure";
@@ -253,8 +254,8 @@ export function Market(props: {
         backgroundColor: c().canvas,
         fontFamily: fontFamily(fonts().interface),
         ...textStyle(type("small")),
-        height: phone() ? 40 : 28,
-        paddingHorizontal: phone() ? 12 : 8,
+        height: phone() ? space[40] : control.md,
+        paddingHorizontal: phone() ? space[12] : space[8],
         borderWidth: 1,
         borderColor: c().strong,
         borderRadius: 0,
@@ -272,7 +273,7 @@ export function Market(props: {
   /** A labelled value; a value that is empty or only blanks is not shown at all, nor its label. */
   const line = (name: string, value: string | null | undefined) =>
     value === null || value === undefined || value.trim() === "" ? null : (
-      <View style={{ gap: 2 }}>
+      <View style={{ gap: space[2] }}>
         <Label variant="caption" tone="muted">
           {name}
         </Label>
@@ -283,7 +284,12 @@ export function Market(props: {
     );
   /** What the plugin would run, read from its pinned commit. Plain text; nothing here installs anything. */
   const previewBlock = (shown: MarketPreview) => (
-    <View testID="market-info" style={{ gap: 10 }}>
+    <View
+      testID="market-info"
+      style={{
+        gap: 10, // design-value: spacing between two steps of the scale, kept so the layout does not move
+      }}
+    >
       <If when={shown.proxy}>
         {line(uiText("marketProxy"), shown.proxy ?? "")}
       </If>
@@ -310,8 +316,8 @@ export function Market(props: {
         {(server) => (
           <View
             style={{
-              gap: 4,
-              padding: 8,
+              gap: space[4],
+              padding: space[8],
               borderWidth: 1,
               borderColor: c().border,
             }}
@@ -386,24 +392,24 @@ export function Market(props: {
     compact: !phone(),
     titleWeight: 500 as const,
   });
-  const inset = () => (phone() ? { paddingHorizontal: 16 } : {});
+  const inset = () => (phone() ? { paddingHorizontal: space[16] } : {});
 
   return (
     <View style={grow}>
       <Header
         title={uiText("plugins")}
         layout={props.layout}
-        inset={phone() ? undefined : 10}
+        inset={phone() ? undefined : 10} // design-value: the desktop header's own inset, between space[8] and space[12]
         onBack={phone() ? props.onBack : undefined}
       >
         <View style={{ flex: 1 }} />
-        <View style={{ ...row, gap: 12 }}>
+        <View style={{ ...row, gap: space[12] }}>
           <Button
             label={uiText("refreshPlugins")}
             icon="refresh"
             iconOnly
-            iconSize={16}
-            size={16}
+            iconSize={icon.md}
+            size={icon.md}
             style={{ paddingHorizontal: 0 }}
             tone="ghost"
             onPress={() => void load()}
@@ -414,14 +420,14 @@ export function Market(props: {
       <SmoothScroll style={grow} scrollbar={false}>
         <View
           style={{
-            paddingHorizontal: phone() ? 16 : 24,
-            paddingTop: 8,
-            paddingBottom: 16,
-            gap: 12,
+            paddingHorizontal: phone() ? space[16] : space[24],
+            paddingTop: space[8],
+            paddingBottom: space[16],
+            gap: space[12],
           }}
         >
           <If when={catalog() && !catalog()!.sources.length}>
-            <View style={{ gap: 8 }}>
+            <View style={{ gap: space[8] }}>
               <Label weight={500}>{uiText("marketNoSources")}</Label>
               <Label variant="small" tone="muted">
                 {uiText("marketNoSourcesHint")}
@@ -430,7 +436,7 @@ export function Market(props: {
           </If>
           <Each of={failed()} key={(item) => item.source.url}>
             {(item) => (
-              <View style={{ gap: 4 }}>
+              <View style={{ gap: space[4] }}>
                 <Label weight={500}>
                   {item().source.name || item().source.url}
                 </Label>
@@ -464,7 +470,12 @@ export function Market(props: {
           </Each>
           <If when={updated() !== undefined}>
             <View
-              style={{ ...row, gap: 8, alignItems: "center", flexWrap: "wrap" }}
+              style={{
+                ...row,
+                gap: space[8],
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
             >
               <Label variant="small" tone="muted">
                 {uiText("marketUpdatedAt", { time: updated() ?? "" })}
@@ -477,6 +488,7 @@ export function Market(props: {
             </View>
           </If>
           <If when={all().length}>
+            {/* design-value: the search field's width cap */}
             <View style={{ maxWidth: 480 }}>
               {field(uiText("marketSearch"), query, query.set)}
             </View>
@@ -490,7 +502,7 @@ export function Market(props: {
                 ...row,
                 flexWrap: "wrap",
                 alignItems: "flex-start",
-                gap: 12,
+                gap: space[12],
               }}
             >
               <Each of={entries()} key={key}>
@@ -500,16 +512,16 @@ export function Market(props: {
                     accessibilityLabel={item().name}
                     onPress={() => detail.set(key(item()))}
                     style={{
-                      width: phone() ? undefined : 267,
+                      width: phone() ? undefined : 267, // design-value: a card's own width, so three fit a row
                       flex: phone() ? 1 : undefined,
-                      padding: 12,
-                      gap: 6,
+                      padding: space[12],
+                      gap: 6, // design-value: spacing between two steps of the scale, kept so the layout does not move
                       backgroundColor: c().canvas,
                       borderWidth: 1,
                       borderColor: c().border,
                     }}
                   >
-                    <View style={{ ...row, gap: 8 }}>
+                    <View style={{ ...row, gap: space[8] }}>
                       <PluginLogo
                         name={item().name}
                         homepage={item().homepage}
@@ -537,7 +549,11 @@ export function Market(props: {
                     </Label>
                     {/* The marker sits at the card's bottom right, on the source's line, so it adds no row; the row is as tall as the marker either way. */}
                     <View
-                      style={{ ...row, gap: 8, minHeight: type("small").line }}
+                      style={{
+                        ...row,
+                        gap: space[8],
+                        minHeight: type("small").line,
+                      }}
                     >
                       <View style={grow}>
                         <Label variant="caption" tone="muted" lines={1}>
@@ -580,11 +596,13 @@ export function Market(props: {
           {...sheet(current()!.name, 512, () => detail.set(""))}
           hideHeader
         >
+          {/* design-value: the preview's height cap */}
           <SmoothScroll style={{ maxHeight: 440 }} scrollbar={false}>
+            {/* design-value: spacing between two steps of the scale, kept so the layout does not move */}
             <View style={{ gap: 10, paddingTop: 6, ...inset() }}>
               <View
                 testID="market-detail-header"
-                style={{ ...row, gap: 12, alignItems: "center" }}
+                style={{ ...row, gap: space[12], alignItems: "center" }}
               >
                 <PluginLogo
                   name={current()!.name}
@@ -598,7 +616,7 @@ export function Market(props: {
                         }
                       : null
                   }
-                  size={40}
+                  size={avatar.xl}
                 />
                 <View
                   tooltip={hint(current()!.name, c)}
@@ -608,6 +626,7 @@ export function Market(props: {
                     {current()!.name}
                   </Label>
                 </View>
+                {/* design-value: the close button's own icon size, between icon.sm and icon.md */}
                 <CloseButton onPress={() => detail.set("")} iconSize={14} />
               </View>
               <Label
@@ -667,8 +686,8 @@ export function Market(props: {
             style={{
               ...row,
               justifyContent: "flex-end",
-              paddingTop: 10,
-              paddingBottom: phone() ? 24 : 0,
+              paddingTop: 10, // design-value: spacing between two steps of the scale, kept so the layout does not move
+              paddingBottom: phone() ? space[24] : 0,
               ...inset(),
             }}
           >
@@ -681,7 +700,7 @@ export function Market(props: {
               <Button
                 label={busy() ? uiText("adding") : uiText("marketInstall")}
                 tone="primary"
-                size={phone() ? 44 : 28}
+                size={phone() ? control.touch : control.md}
                 disabled={busy()}
                 onPress={() => void install(current()!)}
               />

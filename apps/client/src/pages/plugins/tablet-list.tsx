@@ -86,7 +86,7 @@ export function PluginTablet(props: {
                       ? c().selected
                       : c().canvas,
                   cursor: "pointer",
-                  opacity: item().enabled ? 1 : 0.55,
+                  opacity: item().enabled ? 1 : 0.55, // design-value: a switched-off item's own dimming, between opacity.disabled and opacity.muted
                 }}
               >
                 <PluginGlyph size={avatar.lg} />

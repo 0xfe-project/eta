@@ -15,6 +15,7 @@ import {
   textStyle,
 } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { emptyStyle } from "./section";
@@ -112,8 +113,8 @@ export function PluginSettings(props: { phone?: boolean }) {
         backgroundColor: c().canvas,
         fontFamily: fontFamily(fonts().interface),
         ...textStyle(type("small")),
-        height: props.phone ? 40 : 28,
-        paddingHorizontal: props.phone ? 12 : 8,
+        height: props.phone ? space[40] : control.md,
+        paddingHorizontal: props.phone ? space[12] : space[8],
         borderWidth: 1,
         borderColor: c().strong,
         borderRadius: 0,
@@ -126,9 +127,9 @@ export function PluginSettings(props: { phone?: boolean }) {
       <View
         style={{
           paddingHorizontal: inset,
-          paddingTop: 12,
-          paddingBottom: 16,
-          gap: 14,
+          paddingTop: space[12],
+          paddingBottom: space[16],
+          gap: 14, // design-value: spacing between two steps of the scale, kept so the layout does not move
         }}
       >
         <Label weight={500}>{uiText("pluginsSourcesTitle")}</Label>
@@ -142,9 +143,13 @@ export function PluginSettings(props: { phone?: boolean }) {
               title={uiText("pluginsNoSources")}
               description={uiText("pluginsNoSourcesHint")}
               icon="plugins"
-              iconSize={24}
-              descriptionWidth={320}
-              style={{ ...emptyStyle, paddingVertical: 24, flexBasis: "auto" }}
+              iconSize={24} // design-value: an empty state's icon, between icon.lg and icon.xl
+              descriptionWidth={320} // design-value: the empty state's text wrap width
+              style={{
+                ...emptyStyle,
+                paddingVertical: space[24],
+                flexBasis: "auto",
+              }}
             />
           }
         >
@@ -154,13 +159,13 @@ export function PluginSettings(props: { phone?: boolean }) {
                 <View
                   style={{
                     ...row,
-                    gap: 12,
-                    padding: 10,
+                    gap: space[12],
+                    padding: 10, // design-value: spacing between two steps of the scale, kept so the layout does not move
                     borderBottomWidth: 1,
                     borderColor: c().border,
                   }}
                 >
-                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                     <Label lines={1}>{item().name || item().url}</Label>
                     <If when={item().name}>
                       <Label
@@ -191,7 +196,7 @@ export function PluginSettings(props: { phone?: boolean }) {
                     accessibilityLabel={uiText("pluginsRemoveSource", {
                       name: item().name || item().url,
                     })}
-                    size={props.phone ? 40 : 28}
+                    size={props.phone ? space[40] : control.md}
                     disabled={busy()}
                     onPress={() =>
                       void call("marketRemoveSource", { url: item().url })
@@ -202,7 +207,8 @@ export function PluginSettings(props: { phone?: boolean }) {
             </Each>
           </View>
         </If>
-        <View style={{ gap: 8, maxWidth: 560 }}>
+        {/* design-value: a cap of its own, not a token */}
+        <View style={{ gap: space[8], maxWidth: 560 }}>
           {field(uiText("pluginsSourceName"), name, name.set)}
           {field(
             uiText("pluginsSourceUrl"),
@@ -220,20 +226,22 @@ export function PluginSettings(props: { phone?: boolean }) {
               label={uiText("pluginsAddSource")}
               tone="primary"
               icon="plus"
-              size={props.phone ? 44 : 28}
+              size={props.phone ? control.touch : control.md}
               disabled={busy()}
               onPress={() => void add()}
             />
           </View>
         </View>
 
-        <Label weight={500} style={{ paddingTop: 8 }}>
+        <Label weight={500} style={{ paddingTop: space[8] }}>
           {uiText("pluginsProxyTitle")}
         </Label>
+        {/* design-value: a cap of its own, not a token */}
         <Label variant="small" tone="muted" style={{ maxWidth: 760 }}>
           {uiText("pluginsProxyHint")}
         </Label>
-        <View style={{ gap: 8, maxWidth: 560 }}>
+        {/* design-value: a cap of its own, not a token */}
+        <View style={{ gap: space[8], maxWidth: 560 }}>
           {field(
             uiText("pluginsProxy"),
             proxy,
@@ -248,7 +256,7 @@ export function PluginSettings(props: { phone?: boolean }) {
           <View style={{ ...row, justifyContent: "flex-end" }}>
             <Button
               label={uiText("pluginsProxySave")}
-              size={props.phone ? 44 : 28}
+              size={props.phone ? control.touch : control.md}
               disabled={busy()}
               onPress={() => void saveProxy()}
             />

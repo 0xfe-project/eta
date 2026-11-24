@@ -218,7 +218,7 @@ export function PluginDetail(props: DetailProps) {
               tone="muted"
               style={
                 props.phone
-                  ? { paddingHorizontal: 16, paddingTop: 8 }
+                  ? { paddingHorizontal: space[16], paddingTop: space[8] }
                   : undefined
               }
             >
