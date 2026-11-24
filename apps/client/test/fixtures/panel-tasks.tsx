@@ -62,11 +62,7 @@ function Fixture() {
   return (
     <Host.Provider value={host}>
       <View style={{ width: width(), alignSelf: "flex-end" }}>
-        <TasksTab
-          conversationId="group"
-          conversationName="Website redesign"
-          onTask={() => {}}
-        />
+        <TasksTab conversationId="group" onTask={() => {}} />
       </View>
     </Host.Provider>
   );

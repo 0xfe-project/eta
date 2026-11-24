@@ -79,11 +79,7 @@ function Fixture(props: { surface: string }) {
           />
         </If>
         <If when={props.surface === "tasks"}>
-          <TasksTab
-            conversationId="group"
-            conversationName="Website"
-            onTask={() => {}}
-          />
+          <TasksTab conversationId="group" onTask={() => {}} />
         </If>
         <If when={props.surface === "phone"}>
           <PhoneConversationInfo
