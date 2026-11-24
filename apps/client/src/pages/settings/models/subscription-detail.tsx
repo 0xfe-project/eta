@@ -5,13 +5,7 @@ import type {
   LlmQuota,
 } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import {
-  colors,
-  grow,
-  Label,
-  row,
-  SmoothScroll,
-} from "../../../components";
+import { colors, grow, Label, row, SmoothScroll } from "../../../components";
 import { border, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
@@ -137,9 +131,9 @@ export function SubscriptionDetail(props: {
           else={
             <Each of={connections()} key={(item) => item.id}>
               {(item) => (
-                <Label
-                  style={{ padding: space[16] }}
-                >{accountName(item())}</Label>
+                <Label style={{ padding: space[16] }}>
+                  {accountName(item())}
+                </Label>
               )}
             </Each>
           }
