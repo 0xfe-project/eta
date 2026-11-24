@@ -144,3 +144,26 @@ test("the sources title and the Composio key title have no explanation under the
     ),
   ).toBe(false);
 });
+
+// The page asks the host for its sources when it opens; until the answer comes it knows nothing, which is not "no sources".
+test("before the host has answered, the page does not say there are no sources, nor show an empty proxy", async () => {
+  const app = await open("./fixtures/plugin-settings-held.tsx", OPEN);
+  expect(app.shows("Plugin sources")).toBe(true);
+  expect(app.shows("No plugin sources")).toBe(false);
+  expect(app.count(PROXY_FIELD)).toBe(0);
+});
+
+test("once the host has answered with sources, they are listed and the proxy field is there", async () => {
+  const app = await open("./fixtures/plugin-settings-held.tsx", OPEN);
+  await app.press("label:answer with sources");
+  await app.waitFor("text:Cursor");
+  expect(app.shows("No plugin sources")).toBe(false);
+  expect(app.count(PROXY_FIELD)).toBe(1);
+});
+
+test("once the host has answered with no sources, the page says so", async () => {
+  const app = await open("./fixtures/plugin-settings-held.tsx", OPEN);
+  await app.press("label:answer with none");
+  await app.waitFor("text:No plugin sources");
+  expect(app.count(PROXY_FIELD)).toBe(1);
+});
