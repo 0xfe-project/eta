@@ -22,7 +22,7 @@ import {
   textStyle,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
-import { weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
@@ -141,8 +141,8 @@ export function Tasks(props: {
                   style={{
                     ...row,
                     justifyContent: "center",
-                    width: 24,
-                    height: 24,
+                    width: space[24],
+                    height: space[24],
                     cursor: "pointer",
                     backgroundColor:
                       filterOpen() || executor() ? c().selected : undefined,
@@ -183,12 +183,18 @@ export function Tasks(props: {
               <View
                 style={
                   tablet()
-                    ? { ...row, flex: 1, minWidth: 0, gap: 6, marginLeft: 4 }
+                    ? {
+                        ...row,
+                        flex: 1,
+                        minWidth: 0,
+                        gap: 6,
+                        marginLeft: space[4],
+                      }
                     : {
                         ...row,
                         width: 150,
                         height: 25,
-                        paddingHorizontal: 8,
+                        paddingHorizontal: space[8],
                         gap: 7,
                         marginRight: 7,
                         flexShrink: 0,
@@ -219,8 +225,8 @@ export function Tasks(props: {
                     onPress={() => query.set("")}
                     hoverStyle={{ backgroundColor: c().selected }}
                     style={{
-                      width: 20,
-                      height: 20,
+                      width: space[20],
+                      height: space[20],
                       alignItems: "center",
                       justifyContent: "center",
                       cursor: "pointer",
@@ -231,7 +237,7 @@ export function Tasks(props: {
                 </If>
               </View>
             </If>
-            <View style={{ ...row, gap: tablet() ? 12 : 8 }}>
+            <View style={{ ...row, gap: tablet() ? space[12] : space[8] }}>
               <If when={!archive()}>
                 <ExecutorMenu
                   tablet={tablet()}
@@ -277,7 +283,7 @@ export function Tasks(props: {
                         label={entry().title}
                         suffix={`#${entry().number}`}
                         leading={
-                          <TaskGlyph status={entry().status} size={12} />
+                          <TaskGlyph status={entry().status} size={icon.sm} />
                         }
                         checked={part() === entry().id}
                         onSelect={() => part.set(entry().id)}
@@ -367,11 +373,11 @@ export function Tasks(props: {
                       host.state().missing.tasks || !host.state().targets.tasks
                         ? undefined
                         : phone()
-                          ? { gap: 10, paddingHorizontal: 40 }
+                          ? { gap: 10, paddingHorizontal: space[40] }
                           : {
                               flex: 1,
                               justifyContent: "flex-start",
-                              paddingTop: 64,
+                              paddingTop: space[64],
                               gap: tablet() ? 8 : 10,
                             }
                     }
@@ -413,8 +419,8 @@ export function Tasks(props: {
                       <Button
                         label={uiText("retry")}
                         icon="refresh"
-                        size={28}
-                        style={{ marginTop: 4 }}
+                        size={control.md}
+                        style={{ marginTop: space[4] }}
                         onPress={host.retry}
                       />
                     </If>
@@ -551,8 +557,8 @@ function ArchiveToggle(props: {
       style={{
         ...row,
         height: 25,
-        paddingHorizontal: props.tablet && !props.selected ? 0 : 8,
-        gap: 4,
+        paddingHorizontal: props.tablet && !props.selected ? 0 : space[8],
+        gap: space[4],
         flexShrink: 0,
         cursor: "pointer",
         backgroundColor: props.selected ? c().selected : undefined,
@@ -597,12 +603,12 @@ function ArchivedTasks(props: {
         alignSelf: props.tablet ? "stretch" : "center",
         width: props.tablet ? undefined : "100%",
         maxWidth: props.tablet ? undefined : 916,
-        paddingTop: 20,
-        paddingHorizontal: props.tablet ? 20 : 0,
-        gap: 12,
+        paddingTop: space[20],
+        paddingHorizontal: props.tablet ? space[20] : 0,
+        gap: space[12],
       }}
     >
-      <View style={{ ...row, gap: 8 }}>
+      <View style={{ ...row, gap: space[8] }}>
         <View style={{ ...row, flex: 1, gap: 6, alignItems: "baseline" }}>
           <Label weight={weight.strong}>{uiText("archivedTitle")}</Label>
           <Label variant="small" tone="muted">
@@ -616,13 +622,13 @@ function ArchivedTasks(props: {
           hoverStyle={{ backgroundColor: c().selected }}
           style={{
             ...row,
-            height: 24,
+            height: space[24],
             paddingHorizontal: 6,
-            gap: 4,
+            gap: space[4],
             cursor: "pointer",
           }}
         >
-          <Icon name="arrowLeft" size={12} />
+          <Icon name="arrowLeft" size={icon.sm} />
           <Label variant="small">{uiText("backToBoard")}</Label>
         </View>
       </View>
@@ -631,13 +637,13 @@ function ArchivedTasks(props: {
           ...row,
           height: 30,
           paddingHorizontal: 10,
-          gap: 8,
+          gap: space[8],
           borderWidth: 1,
           borderColor: c().border,
           flexShrink: 0,
         }}
       >
-        <Icon name="search" size={12} tone="muted" />
+        <Icon name="search" size={icon.sm} tone="muted" />
         <Field
           label={uiText("searchTitleOrNumber")}
           placeholder={uiText("searchTitleOrNumber")}
@@ -646,7 +652,7 @@ function ArchivedTasks(props: {
           style={{
             flex: 1,
             minWidth: 0,
-            height: 28,
+            height: control.md,
             paddingHorizontal: 0,
             paddingVertical: 0,
             borderWidth: 0,
@@ -658,7 +664,7 @@ function ArchivedTasks(props: {
       <View
         style={{
           ...grow,
-          marginBottom: 12,
+          marginBottom: space[12],
           borderWidth: 1,
           borderColor: c().border,
         }}
@@ -683,7 +689,7 @@ function ArchivedTasks(props: {
               style={{
                 flex: 1,
                 justifyContent: "flex-start",
-                paddingTop: 64,
+                paddingTop: space[64],
                 gap: 10,
               }}
             />

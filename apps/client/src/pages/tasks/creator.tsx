@@ -2,7 +2,7 @@ import type { TaskActor } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { AgentFace, UserFace } from "../../components/agent-face";
-import { weight } from "../../components/tokens";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -64,8 +64,8 @@ export function CreatorChip(props: { creator: TaskActor }) {
         ...row,
         gap: 6,
         alignSelf: "flex-start",
-        paddingVertical: 2,
-        paddingHorizontal: 8,
+        paddingVertical: space[2],
+        paddingHorizontal: space[8],
         borderWidth: 1,
         borderColor: c().border,
       }}

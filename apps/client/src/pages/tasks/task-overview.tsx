@@ -27,7 +27,7 @@ import {
   shownMentions,
 } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
-import { weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { relativeTime, useHost } from "../../services/host";
@@ -67,7 +67,7 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
           style={{
             ...row,
             paddingVertical: 10,
-            paddingHorizontal: 12,
+            paddingHorizontal: space[12],
             gap: 10,
             borderWidth: 1,
             borderColor: review() ? c().warning : c().strong,
@@ -88,7 +88,7 @@ function RunSummary(props: { item: BoardTaskDetail; state: TaskDetailState }) {
             }}
             onPress={() => log.set(entry())}
           >
-            <View style={{ flex: 1, gap: 2 }}>
+            <View style={{ flex: 1, gap: space[2] }}>
               <Label variant="small" weight={weight.strong}>
                 {uiText(review() ? "taskDeliveredTurn" : "taskIsWorking", {
                   name: executor()?.name ?? uiText("executor"),
@@ -145,7 +145,7 @@ function RunRow(props: {
       activeStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        height: 44,
+        height: control.touch,
         gap: 10,
         borderTopWidth: 1,
         borderBottomWidth: props.last ? 1 : 0,
@@ -209,8 +209,8 @@ export function RunLine(props: {
           style={{
             ...row,
             justifyContent: "space-between",
-            gap: 8,
-            paddingBottom: props.tablet ? 0 : 8,
+            gap: space[8],
+            paddingBottom: props.tablet ? 0 : space[8],
           }}
         >
           <View style={{ ...row, gap: props.tablet ? 8 : 6, flex: 1 }}>
@@ -245,7 +245,7 @@ export function RunLine(props: {
                 onPress={() => {
                   if (!submitting()) stop(entry());
                 }}
-                style={{ ...row, gap: 4, cursor: "pointer" }}
+                style={{ ...row, gap: space[4], cursor: "pointer" }}
               >
                 <Icon name="stop" size={props.tablet ? 12 : 10} />
                 <Label variant="caption" weight={weight.strong}>
@@ -293,15 +293,15 @@ function DesktopOverview(props: {
         <View
           style={{
             paddingTop: parent() ? 16 : 14,
-            paddingBottom: 20,
+            paddingBottom: space[20],
             paddingHorizontal: 22,
             width: "100%",
             maxWidth: parent() ? 724 : 667,
             alignSelf: "center",
-            gap: parent() ? 24 : 0,
+            gap: parent() ? space[24] : 0,
           }}
         >
-          <View style={{ gap: 12, paddingBottom: parent() ? 0 : 0 }}>
+          <View style={{ gap: space[12], paddingBottom: parent() ? 0 : 0 }}>
             <Label variant={parent() ? "small" : "caption"} tone="muted">
               {parent()
                 ? uiText("parentCreatedBy", {
@@ -319,7 +319,10 @@ function DesktopOverview(props: {
                   })}
             </Label>
             <View style={{ ...row, gap: 10, paddingBottom: parent() ? 0 : 22 }}>
-              <TaskGlyph status={item().status} size={parent() ? 20 : 16} />
+              <TaskGlyph
+                status={item().status}
+                size={parent() ? icon.lg : icon.md}
+              />
               <If
                 when={renaming()}
                 else={
@@ -351,8 +354,8 @@ function DesktopOverview(props: {
                   style={{
                     flex: 1,
                     minWidth: 0,
-                    height: 32,
-                    paddingHorizontal: 8,
+                    height: space[32],
+                    paddingHorizontal: space[8],
                     borderColor: c().ink,
                     ...textStyle(type("subtitle")),
                     fontWeight: weight.strong,
@@ -384,7 +387,7 @@ function DesktopOverview(props: {
             <If
               when={parent()}
               else={
-                <View style={{ gap: 12, paddingBottom: 20 }}>
+                <View style={{ gap: space[12], paddingBottom: space[20] }}>
                   <If
                     when={!describing()}
                     else={
@@ -464,8 +467,8 @@ function DesktopOverview(props: {
       <View
         style={{
           width: paneWidth("task"),
-          paddingVertical: 20,
-          paddingHorizontal: 16,
+          paddingVertical: space[20],
+          paddingHorizontal: space[16],
           borderLeftWidth: 1,
           borderColor: c().border,
           flexShrink: 0,
@@ -575,16 +578,16 @@ export function TaskOverview(props: {
           <SmoothScroll style={grow} scrollbar={false}>
             <View
               style={{
-                paddingHorizontal: phone() ? 16 : 20,
-                paddingTop: phone() ? 16 : 12,
-                paddingBottom: phone() ? 16 : 20,
+                paddingHorizontal: phone() ? space[16] : space[20],
+                paddingTop: phone() ? space[16] : space[12],
+                paddingBottom: phone() ? space[16] : space[20],
                 width: "100%",
                 maxWidth: 728,
                 alignSelf: "center",
-                gap: phone() ? 20 : 12,
+                gap: phone() ? space[20] : space[12],
               }}
             >
-              <View style={{ gap: phone() ? 8 : 12 }}>
+              <View style={{ gap: phone() ? space[8] : space[12] }}>
                 <Label variant="caption" tone="muted">
                   {uiText("createdBy", {
                     number: item().number,
@@ -768,7 +771,7 @@ export function TaskOverview(props: {
                   (!phone() || item().status !== "blocked")
                 }
               >
-                <View style={{ gap: phone() ? 0 : 12 }}>
+                <View style={{ gap: phone() ? 0 : space[12] }}>
                   <Caption
                     text={uiText("runs", { length: item().runs.length })}
                     style={phone() ? { paddingBottom: 6 } : undefined}
@@ -782,7 +785,7 @@ export function TaskOverview(props: {
                             style={{
                               ...row,
                               gap: 7,
-                              padding: 8,
+                              padding: space[8],
                               borderWidth: 1,
                               borderColor: c().border,
                             }}
@@ -875,14 +878,14 @@ export function DescriptionEditor(props: {
         ? { size: 24, padding: 10 }
         : { size: undefined, padding: 10 };
   return (
-    <View style={{ gap: props.phone ? 16 : 8 }}>
+    <View style={{ gap: props.phone ? space[16] : space[8] }}>
       <DescriptionBox
         description={description}
         label={uiText("editDescription")}
         phone={!!props.phone}
         autoFocus
       />
-      <View style={{ ...row, justifyContent: "flex-end", gap: 8 }}>
+      <View style={{ ...row, justifyContent: "flex-end", gap: space[8] }}>
         <Button
           label={uiText("cancel")}
           tone="ghost"
@@ -964,7 +967,7 @@ export function TitleInPlace(props: {
           flex: 1,
           minWidth: 0,
           height: type(props.variant).line + 8,
-          paddingHorizontal: 8,
+          paddingHorizontal: space[8],
           borderColor: c().ink,
           ...textStyle(type(props.variant)),
           fontWeight: weight.strong,

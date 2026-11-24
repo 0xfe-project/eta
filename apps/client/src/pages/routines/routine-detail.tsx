@@ -12,7 +12,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { weight } from "../../components/tokens";
+import { control, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { EarlierReportCard, LatestReportCard } from "./history";
 import {
@@ -57,14 +57,15 @@ export function RoutineDetail(props: {
       <If when={props.layout !== "phone"}>
         <View
           style={{
-            paddingVertical: 12,
-            paddingHorizontal: props.layout === "desktop" ? 32 : 24,
-            gap: 4,
+            paddingVertical: space[12],
+            paddingHorizontal:
+              props.layout === "desktop" ? space[32] : space[24],
+            gap: space[4],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <View style={{ ...row, height: 24, gap: 16 }}>
+          <View style={{ ...row, height: space[24], gap: space[16] }}>
             <Label
               variant="subtitle"
               weight={weight.strong}
@@ -72,7 +73,7 @@ export function RoutineDetail(props: {
             >
               {props.routine.name}
             </Label>
-            <View style={{ ...row, gap: 8 }}>
+            <View style={{ ...row, gap: space[8] }}>
               <ToggleSwitch
                 label={
                   props.routine.enabled ? uiText("pause") : uiText("resume")
@@ -94,9 +95,9 @@ export function RoutineDetail(props: {
                 label={uiText("routineActions")}
                 iconSize={14}
                 triggerStyle={{
-                  minWidth: 24,
-                  width: 24,
-                  height: 24,
+                  minWidth: space[24],
+                  width: space[24],
+                  height: space[24],
                   paddingHorizontal: 0,
                 }}
               >
@@ -110,7 +111,7 @@ export function RoutineDetail(props: {
               </ActionMenu>
             </View>
           </View>
-          <View style={{ ...row, gap: 12 }}>
+          <View style={{ ...row, gap: space[12] }}>
             <Label variant="small" tone="muted" style={{ width: 72 }}>
               {uiText("schedule")}
             </Label>
@@ -118,7 +119,7 @@ export function RoutineDetail(props: {
               {scheduleFor(props.routine.schedule, props.routine.timezone)}
             </Label>
           </View>
-          <View style={{ ...row, gap: 12 }}>
+          <View style={{ ...row, gap: space[12] }}>
             <Label variant="small" tone="muted" style={{ width: 72 }}>
               {uiText("briefV", {
                 value1: props.brief?.version ?? 1,
@@ -156,23 +157,23 @@ export function RoutineDetail(props: {
         <If when={phone()}>
           <View
             style={{
-              paddingVertical: 12,
-              paddingHorizontal: 16,
-              gap: 4,
+              paddingVertical: space[12],
+              paddingHorizontal: space[16],
+              gap: space[4],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
           >
-            <View style={{ ...row, alignItems: "baseline", gap: 12 }}>
-              <Label variant="small" tone="muted" style={{ width: 64 }}>
+            <View style={{ ...row, alignItems: "baseline", gap: space[12] }}>
+              <Label variant="small" tone="muted" style={{ width: space[64] }}>
                 {uiText("schedule")}
               </Label>
               <Label variant="small" tone="mutedInk" style={{ flex: 1 }}>
                 {scheduleFor(props.routine.schedule, props.routine.timezone)}
               </Label>
             </View>
-            <View style={{ ...row, alignItems: "baseline", gap: 12 }}>
-              <Label variant="small" tone="muted" style={{ width: 64 }}>
+            <View style={{ ...row, alignItems: "baseline", gap: space[12] }}>
+              <Label variant="small" tone="muted" style={{ width: space[64] }}>
                 {uiText("briefV", { value1: props.brief?.version ?? 1 })}
               </Label>
               <Label lines={3} style={{ flex: 1 }}>
@@ -184,9 +185,9 @@ export function RoutineDetail(props: {
         <View
           style={{
             ...row,
-            ...(phone() ? { height: 44 } : { minHeight: 32 }),
+            ...(phone() ? { height: control.touch } : { minHeight: space[32] }),
             paddingHorizontal: inset(),
-            gap: 12,
+            gap: space[12],
           }}
         >
           <If when={phone() ? null : props.routine.nextRunAt}>
@@ -226,7 +227,7 @@ export function RoutineDetail(props: {
           {(run) => (
             <View
               style={{
-                paddingVertical: 16,
+                paddingVertical: space[16],
                 paddingHorizontal: inset(),
                 borderTopWidth: 1,
                 borderColor: c().border,
@@ -244,8 +245,12 @@ export function RoutineDetail(props: {
           <View
             style={{
               ...(phone()
-                ? { padding: 16, gap: 12 }
-                : { paddingTop: 8, paddingBottom: 16, gap: 8 }),
+                ? { padding: space[16], gap: space[12] }
+                : {
+                    paddingTop: space[8],
+                    paddingBottom: space[16],
+                    gap: space[8],
+                  }),
               paddingHorizontal: inset(),
               borderTopWidth: 1,
               borderColor: c().border,
@@ -254,10 +259,14 @@ export function RoutineDetail(props: {
             <Label variant="small" tone="muted">
               {uiText("earlierReports")}
             </Label>
-            <View style={{ gap: props.layout === "desktop" ? 12 : 8 }}>
+            <View
+              style={{ gap: props.layout === "desktop" ? space[12] : space[8] }}
+            >
               <Each of={earlierRows()} key={(cards) => cards[0]!.id}>
                 {(cards) => (
-                  <View style={{ ...row, alignItems: "stretch", gap: 12 }}>
+                  <View
+                    style={{ ...row, alignItems: "stretch", gap: space[12] }}
+                  >
                     <Each of={cards()} key={(run) => run.id}>
                       {(run) => (
                         <EarlierReportCard
@@ -284,10 +293,10 @@ export function RoutineDetail(props: {
           style={{
             ...row,
             ...(phone()
-              ? { height: 44, borderBottomWidth: 1 }
-              : { minHeight: 32 }),
+              ? { height: control.touch, borderBottomWidth: 1 }
+              : { minHeight: space[32] }),
             paddingHorizontal: inset(),
-            gap: 12,
+            gap: space[12],
             borderTopWidth: 1,
             borderColor: c().border,
           }}

@@ -12,6 +12,7 @@ import {
   mention,
   submitKeys,
 } from "../../components/eta-editor";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -145,7 +146,7 @@ export function DescriptionBox(props: {
           ...row,
           height: foot,
           flexShrink: 0,
-          gap: 8,
+          gap: space[8],
           paddingHorizontal: 10,
           borderTopWidth: 1,
           borderColor: c().border,

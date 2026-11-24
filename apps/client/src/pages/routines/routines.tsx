@@ -23,7 +23,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { chatText, shownMentions } from "../../components/eta-editor";
-import { weight } from "../../components/tokens";
+import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { follow, useHost } from "../../services/host";
@@ -166,10 +166,10 @@ export function Routines(props: {
         <Button
           label={uiText("newRoutine")}
           icon="plus"
-          iconSize={20}
+          iconSize={icon.lg}
           iconOnly
           tone="ghost"
-          style={{ width: 40, height: 40 }}
+          style={{ width: space[40], height: space[40] }}
           onPress={() => editing.set("new")}
         />
       </If>
@@ -177,7 +177,7 @@ export function Routines(props: {
         <ActionMenu
           label={uiText("routineActions")}
           iconSize={18}
-          triggerStyle={{ width: 40, height: 40 }}
+          triggerStyle={{ width: space[40], height: space[40] }}
         >
           <ActionItem
             label={info()?.enabled ? uiText("pause") : uiText("resume")}
@@ -208,15 +208,15 @@ export function Routines(props: {
             ...row,
             flexShrink: 0,
             maxWidth: 160,
-            gap: 4,
-            paddingVertical: 2,
+            gap: space[4],
+            paddingVertical: space[2],
             paddingHorizontal: 6,
             borderWidth: 1,
             borderColor: c().border,
             cursor: "pointer",
           }}
         >
-          <Icon name="folder" size={12} tone="muted" />
+          <Icon name="folder" size={icon.sm} tone="muted" />
           <Label variant="small" tone="muted" lines={1}>
             Captain
           </Label>
@@ -255,7 +255,7 @@ export function Routines(props: {
         style={{
           // The desktop notice puts its button on the right; the others below the text.
           ...(props.layout === "desktop"
-            ? { ...row, gap: 12 }
+            ? { ...row, gap: space[12] }
             : { gap: tablet() ? 10 : 6 }),
           paddingHorizontal: phone() ? 12 : props.layout === "tablet" ? 14 : 11,
           paddingTop: props.layout === "desktop" ? 7 : 12,
@@ -264,7 +264,11 @@ export function Routines(props: {
             props.layout === "desktop" ? 7 : phone() && !turnOn() ? 18 : 12,
           marginHorizontal: phone() ? 16 : props.layout === "tablet" ? 12 : 21,
           marginTop: props.layout === "desktop" ? 11 : 12,
-          marginBottom: phone() ? 4 : props.layout === "tablet" ? 12 : 0,
+          marginBottom: phone()
+            ? space[4]
+            : props.layout === "tablet"
+              ? space[12]
+              : 0,
           borderWidth: 1,
           borderColor: c().warningLine,
           // state-warning at 12%.
@@ -384,12 +388,12 @@ export function Routines(props: {
                     flex: 0,
                     justifyContent: "flex-start",
                     paddingTop: phone() ? 56 : tablet() ? 48 : 59,
-                    paddingBottom: phone() ? 24 : 0,
+                    paddingBottom: phone() ? space[24] : 0,
                     paddingHorizontal: phone() ? 32 : tablet() ? 20 : 30,
                   }}
                 >
                   <If when={host.can("routines.create") && !editing()}>
-                    <View style={{ ...row, paddingTop: 8 }}>
+                    <View style={{ ...row, paddingTop: space[8] }}>
                       <Button
                         label={uiText("newRoutine")}
                         icon="plus"
@@ -482,7 +486,9 @@ export function Routines(props: {
                               : {
                                   justifyContent: "flex-start",
                                   paddingTop: tablet() ? 110 : 60,
-                                  paddingHorizontal: tablet() ? 40 : undefined,
+                                  paddingHorizontal: tablet()
+                                    ? space[40]
+                                    : undefined,
                                 }
                           }
                         />
@@ -500,10 +506,10 @@ export function Routines(props: {
                       style={{
                         justifyContent: "flex-start",
                         paddingTop: phone() ? 56 : tablet() ? 110 : 60,
-                        paddingHorizontal: tablet() ? 40 : undefined,
+                        paddingHorizontal: tablet() ? space[40] : undefined,
                       }}
                     >
-                      <View style={{ ...row, paddingTop: 8 }}>
+                      <View style={{ ...row, paddingTop: space[8] }}>
                         <Button
                           label={uiText("backToRoutines")}
                           size={phone() ? 36 : 28}
@@ -585,7 +591,7 @@ export function Routines(props: {
           onClose={() => readingBrief.set(false)}
         >
           <SmoothScroll style={grow}>
-            <View style={{ padding: 16 }}>
+            <View style={{ padding: space[16] }}>
               <chatText.View
                 plugins={[shownMentions()]}
                 text={{

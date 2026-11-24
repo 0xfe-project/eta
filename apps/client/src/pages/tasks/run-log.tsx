@@ -2,6 +2,7 @@ import type { MachineView, TaskRunView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { View } from "nsh";
 import { Button, colors, grow, Label, row } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { MemberRun } from "../chat/run/member-run";
@@ -93,7 +94,7 @@ export function TaskRunLog(props: {
       <If
         when={props.run.sessionId}
         else={
-          <View style={{ ...grow, padding: 16, gap: 8 }}>
+          <View style={{ ...grow, padding: space[16], gap: space[8] }}>
             <Label variant="small" tone={props.run.error ? "red" : "muted"}>
               {props.run.error ??
                 (props.run.status === "queued"
@@ -120,9 +121,9 @@ export function TaskRunLog(props: {
         <View
           style={{
             ...row,
-            paddingHorizontal: 16,
+            paddingHorizontal: space[16],
             minHeight: phone() ? 56 : 42,
-            gap: 8,
+            gap: space[8],
             borderTopWidth: 1,
             borderColor: c().border,
           }}

@@ -12,7 +12,7 @@ import {
   touchRow,
   touchScreen,
 } from "../../components/menu";
-import { weight } from "../../components/tokens";
+import { icon, space, weight } from "../../components/tokens";
 import { statusHint, statusName, TaskGlyph } from "./status";
 
 /**
@@ -39,7 +39,7 @@ export function TaskMenu(props: {
       onOpenChange={(open) => props.onOpenChange?.(open)}
       popupStyle={{
         width: props.width,
-        paddingVertical: 4,
+        paddingVertical: space[4],
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
@@ -51,7 +51,7 @@ export function TaskMenu(props: {
           <View
             style={{
               paddingTop: 6,
-              paddingBottom: 4,
+              paddingBottom: space[4],
               paddingHorizontal: inSheet() ? 16 : 10,
             }}
           >
@@ -115,7 +115,7 @@ export function TaskMenuItem(props: {
               : (props.height ?? 28),
         paddingVertical: props.hint ? 6 : 0,
         paddingHorizontal: inSheet() ? 16 : 10,
-        gap: 8,
+        gap: space[8],
         backgroundColor: props.checked ? c().selected : undefined,
         ...props.style,
       }}
@@ -125,7 +125,7 @@ export function TaskMenuItem(props: {
         <View
           style={{
             ...row,
-            height: props.hint ? 16 : undefined,
+            height: props.hint ? space[16] : undefined,
             flexShrink: 0,
           }}
         >
@@ -155,13 +155,13 @@ export function TaskMenuItem(props: {
         <View
           style={{
             ...row,
-            width: 12,
-            height: props.hint ? 16 : 12,
+            width: space[12],
+            height: props.hint ? space[16] : space[12],
             flexShrink: 0,
           }}
         >
           <If when={props.checked}>
-            <Icon name="check" size={12} />
+            <Icon name="check" size={icon.sm} />
           </If>
         </View>
       </If>
@@ -188,7 +188,7 @@ export function FilterTrigger(props: {
         ...row,
         height: 25,
         paddingHorizontal: props.tablet ? 6 : 8,
-        gap: 4,
+        gap: space[4],
         flexShrink: 0,
         cursor: "pointer",
         backgroundColor: props.active ? c().selected : undefined,
@@ -226,7 +226,7 @@ export function StatusOptions(props: {
           <TaskMenuItem
             label={statusName(entry())}
             hint={statusHint(entry(), props.waiting)}
-            leading={<TaskGlyph status={entry()} size={12} />}
+            leading={<TaskGlyph status={entry()} size={icon.sm} />}
             checked={props.current === entry()}
             onSelect={() => props.onChange(entry())}
           />

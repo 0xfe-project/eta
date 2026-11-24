@@ -10,6 +10,7 @@ import {
   Modal,
   row,
 } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ArtifactPreview } from "../chat/artifacts/preview";
@@ -106,7 +107,7 @@ export function TaskDetail(props: {
       style={{
         ...row,
         justifyContent: "center",
-        minWidth: 32,
+        minWidth: space[32],
         height: 30,
         cursor: "pointer",
       }}
@@ -127,7 +128,7 @@ export function TaskDetail(props: {
             overPhoneNavigation
             onClose={() => more.set(false)}
           >
-            <View style={{ paddingTop: 4, paddingBottom: 24 }}>
+            <View style={{ paddingTop: space[4], paddingBottom: space[24] }}>
               <Each of={actions()} key={(action) => action.label}>
                 {(action, index) => (
                   <View
@@ -140,8 +141,8 @@ export function TaskDetail(props: {
                     activeStyle={{ backgroundColor: c().selectedSoft }}
                     style={{
                       ...row,
-                      height: 48,
-                      paddingHorizontal: 16,
+                      height: space[48],
+                      paddingHorizontal: space[16],
                       borderBottomWidth: index() < actions().length - 1 ? 1 : 0,
                       borderColor: c().border,
                     }}
@@ -197,7 +198,7 @@ export function TaskDetail(props: {
                   strong={paned()}
                   onChange={(value) => plan.set(value === "plan")}
                 />
-                <View style={{ width: paned() ? 0 : 8 }} />
+                <View style={{ width: paned() ? 0 : space[8] }} />
               </If>
               <If when={paned()}>
                 <Button
@@ -275,7 +276,7 @@ export function TaskDetail(props: {
                   ...row,
                   justifyContent: "space-between",
                   padding: 14,
-                  gap: 12,
+                  gap: space[12],
                   borderTopWidth: 1,
                   borderColor: c().border,
                 }}
@@ -296,9 +297,9 @@ export function TaskDetail(props: {
               >
                 <View
                   style={{
-                    paddingVertical: 12,
-                    paddingHorizontal: 16,
-                    gap: 8,
+                    paddingVertical: space[12],
+                    paddingHorizontal: space[16],
+                    gap: space[8],
                     borderTopWidth: 1,
                     borderColor: c().border,
                   }}

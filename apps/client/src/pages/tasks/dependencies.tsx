@@ -8,7 +8,7 @@ import type {
 import { View } from "nsh";
 import { Button, Caption, colors, Icon, Label, row } from "../../components";
 import { canHover } from "../../components/menu";
-import { weight } from "../../components/tokens";
+import { border, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { isWaiting, runningFor, stepOf, taskDay, taskHint } from "./facts";
@@ -41,7 +41,7 @@ export function TaskLink(link: {
       activeStyle={{ backgroundColor: `${c().selected}99` }}
       style={{
         ...row,
-        height: link.height ?? 44,
+        height: link.height ?? control.touch,
         gap: 10,
         borderTopWidth: 1,
         borderBottomWidth: link.last ? 1 : 0,
@@ -49,7 +49,7 @@ export function TaskLink(link: {
         cursor: "pointer",
       }}
     >
-      <View style={{ width: 20, alignItems: "center" }}>
+      <View style={{ width: space[20], alignItems: "center" }}>
         <TaskGlyph status={link.item.status} size={14} />
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
@@ -152,11 +152,11 @@ export function Prerequisites(props: {
               ...(cancelled() ? {} : row),
               alignItems: "flex-start",
               paddingVertical: cancelled() ? 14 : 10,
-              paddingHorizontal: cancelled() ? 16 : 12,
+              paddingHorizontal: cancelled() ? space[16] : space[12],
               gap: cancelled() ? 8 : 10,
               borderWidth: 1,
               borderColor: cancelled() ? c().border : c().strong,
-              borderLeftWidth: cancelled() ? 2 : 1,
+              borderLeftWidth: cancelled() ? border.thick : 1,
               borderLeftColor: cancelled() ? c().red : c().strong,
             }}
           >
@@ -165,7 +165,7 @@ export function Prerequisites(props: {
             </If>
             <View
               style={{
-                gap: cancelled() ? 8 : 4,
+                gap: cancelled() ? space[8] : space[4],
                 flex: cancelled() ? undefined : 1,
                 alignSelf: "stretch",
               }}
@@ -179,7 +179,7 @@ export function Prerequisites(props: {
                 {cancelled() ? stuckBody() : waitingBody()}
               </Label>
               <If when={decidable()}>
-                <View style={{ gap: 8 }}>
+                <View style={{ gap: space[8] }}>
                   <Button
                     label={uiText("dontWaitStartNow")}
                     size={40}
@@ -225,11 +225,11 @@ export function Prerequisites(props: {
           <View
             style={{
               paddingVertical: 14,
-              paddingHorizontal: 16,
-              gap: 8,
+              paddingHorizontal: space[16],
+              gap: space[8],
               marginBottom: props.tablet ? 0 : 22,
               borderWidth: 1,
-              borderLeftWidth: 2,
+              borderLeftWidth: border.thick,
               borderColor: c().border,
               borderLeftColor: c().red,
             }}
@@ -299,7 +299,7 @@ function StuckAction(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         paddingVertical: props.tablet ? 3 : 4,
-        paddingHorizontal: props.bare && props.tablet ? 0 : 8,
+        paddingHorizontal: props.bare && props.tablet ? 0 : space[8],
         borderWidth: props.bare ? 0 : 1,
         borderColor: c().strong,
         backgroundColor: props.bare ? undefined : c().canvas,
@@ -341,7 +341,7 @@ function StripCard(props: {
             justifyContent: "space-between",
             gap: 6,
             paddingVertical: 7,
-            paddingHorizontal: 8,
+            paddingHorizontal: space[8],
             borderWidth: 1,
             borderColor: c().strong,
             cursor: "pointer",
@@ -365,15 +365,15 @@ function StripCard(props: {
           ...row,
           alignItems: "flex-start",
           justifyContent: "space-between",
-          gap: 8,
-          padding: 8,
+          gap: space[8],
+          padding: space[8],
           borderWidth: 1,
           borderColor: c().strong,
           cursor: "pointer",
         }}
       >
         <View style={{ ...row, alignItems: "flex-start", gap: 5, flex: 1 }}>
-          <TaskGlyph status={props.task.status} size={12} />
+          <TaskGlyph status={props.task.status} size={icon.sm} />
           <Label variant="caption" weight={weight.strong} style={{ flex: 1 }}>
             {props.task.title}
           </Label>
@@ -414,9 +414,9 @@ export function NeighbourStrip(props: {
   return (
     <>
       <If when={props.tablet && (before().length || after().length)}>
-        <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
+        <View style={{ ...row, alignItems: "flex-start", gap: space[8] }}>
           <If when={before().length}>
-            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+            <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
               <Label variant="caption" tone="muted">
                 {uiText("taskBefore", { count: before().length })}
               </Label>
@@ -432,10 +432,10 @@ export function NeighbourStrip(props: {
               </Each>
             </View>
             <View style={{ marginTop: 22 }}>
-              <Icon name="arrowRight" size={12} />
+              <Icon name="arrowRight" size={icon.sm} />
             </View>
           </If>
-          <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
             <Label variant="caption" tone="muted">
               {" "}
             </Label>
@@ -446,7 +446,7 @@ export function NeighbourStrip(props: {
                 gap: 6,
                 paddingVertical: 6,
                 paddingHorizontal: 7,
-                borderWidth: 2,
+                borderWidth: border.thick,
                 borderColor: c().ink,
               }}
             >
@@ -463,9 +463,9 @@ export function NeighbourStrip(props: {
           </View>
           <If when={after().length}>
             <View style={{ marginTop: 22 }}>
-              <Icon name="arrowRight" size={12} />
+              <Icon name="arrowRight" size={icon.sm} />
             </View>
-            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+            <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
               <Label variant="caption" tone="muted">
                 {uiText("taskAfter", { count: after().length })}
               </Label>
@@ -488,7 +488,7 @@ export function NeighbourStrip(props: {
           style={{
             ...row,
             alignItems: "flex-start",
-            gap: 8,
+            gap: space[8],
             paddingBottom: 22,
           }}
         >
@@ -507,7 +507,7 @@ export function NeighbourStrip(props: {
                 )}
               </Each>
             </View>
-            <View style={{ marginTop: 32 }}>
+            <View style={{ marginTop: space[32] }}>
               <Icon name="arrowRight" size={14} tone="muted" />
             </View>
           </If>
@@ -519,15 +519,15 @@ export function NeighbourStrip(props: {
               style={{
                 ...row,
                 justifyContent: "space-between",
-                gap: 8,
-                padding: 8,
-                borderWidth: 2,
+                gap: space[8],
+                padding: space[8],
+                borderWidth: border.thick,
                 borderColor: c().ink,
                 backgroundColor: c().canvas,
               }}
             >
               <View style={{ ...row, gap: 5 }}>
-                <TaskGlyph status={props.item.status} size={12} />
+                <TaskGlyph status={props.item.status} size={icon.sm} />
                 <Label variant="caption" weight={weight.strong}>
                   {uiText("thisTask")}
                 </Label>
@@ -538,7 +538,7 @@ export function NeighbourStrip(props: {
             </View>
           </View>
           <If when={after().length}>
-            <View style={{ marginTop: 32 }}>
+            <View style={{ marginTop: space[32] }}>
               <Icon name="arrowRight" size={14} tone="muted" />
             </View>
             <View style={{ width: 180, gap: 6, flexShrink: 0 }}>
@@ -637,7 +637,9 @@ export function Subtasks(props: {
             >
               {uiText("progress")}
             </Label>
-            <View style={{ ...row, gap: 2, height: props.tablet ? 5 : 6 }}>
+            <View
+              style={{ ...row, gap: space[2], height: props.tablet ? 5 : 6 }}
+            >
               <Each of={children()} key={(child) => child.taskId}>
                 {(child) => (
                   <View
@@ -687,7 +689,7 @@ export function Subtasks(props: {
           <View>
             <Label
               weight={weight.strong}
-              style={{ paddingBottom: props.tablet ? 4 : 8 }}
+              style={{ paddingBottom: props.tablet ? space[4] : space[8] }}
             >
               {`${uiText("subtasks")} ${props.item.subtasks?.done ?? 0}/${props.item.subtasks?.total ?? 0}`}
             </Label>
@@ -700,8 +702,8 @@ export function Subtasks(props: {
                   hoverStyle={{ backgroundColor: c().selected }}
                   style={{
                     ...row,
-                    height: props.tablet ? 28 : 32,
-                    gap: 8,
+                    height: props.tablet ? control.md : space[32],
+                    gap: space[8],
                     borderTopWidth: 1,
                     borderBottomWidth:
                       index() === children().length - 1 ? 1 : 0,
@@ -709,8 +711,12 @@ export function Subtasks(props: {
                     cursor: "pointer",
                   }}
                 >
-                  <TaskGlyph status={child().status} size={12} />
-                  <Label variant="caption" tone="muted" style={{ width: 24 }}>
+                  <TaskGlyph status={child().status} size={icon.sm} />
+                  <Label
+                    variant="caption"
+                    tone="muted"
+                    style={{ width: space[24] }}
+                  >
                     {`#${child().number}`}
                   </Label>
                   <Label variant="small" lines={1} style={{ flex: 1 }}>
@@ -740,7 +746,7 @@ export function Subtasks(props: {
         </>
       }
     >
-      <View style={{ gap: 8 }}>
+      <View style={{ gap: space[8] }}>
         <Label
           variant="caption"
           weight={weight.strong}
@@ -749,12 +755,12 @@ export function Subtasks(props: {
         >
           {uiText("progress")}
         </Label>
-        <View style={{ ...row, gap: 2, height: 4 }}>
+        <View style={{ ...row, gap: space[2], height: space[4] }}>
           <Each of={children()} key={(child) => child.taskId}>
             {(child) => (
               <View
                 style={{
-                  height: 4,
+                  height: space[4],
                   flex: 1,
                   backgroundColor: progressColor(child().status, c()),
                 }}
@@ -772,7 +778,7 @@ export function Subtasks(props: {
             </Label>
           )}
         </If>
-        <View style={{ gap: 4 }}>
+        <View style={{ gap: space[4] }}>
           <Each
             of={highlights().filter(
               ([key, , value]) => key !== "Done" && !!value,
@@ -780,8 +786,14 @@ export function Subtasks(props: {
             key={(entry) => entry[0]}
           >
             {(entry) => (
-              <View style={{ ...row, gap: 12, alignItems: "flex-start" }}>
-                <Label variant="small" tone="muted" style={{ width: 64 }}>
+              <View
+                style={{ ...row, gap: space[12], alignItems: "flex-start" }}
+              >
+                <Label
+                  variant="small"
+                  tone="muted"
+                  style={{ width: space[64] }}
+                >
                   {entry()[1]}
                 </Label>
                 <Label

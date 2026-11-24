@@ -3,6 +3,7 @@ import type { Layout } from "../../components";
 import type { taskDropZones } from "./drag";
 import { View } from "nsh";
 import { colors, grow, Label, row, SmoothScroll } from "../../components";
+import { control, space } from "../../components/tokens";
 import { BoardCard } from "./board-card";
 import { statusName, TaskGlyph } from "./status";
 
@@ -39,8 +40,8 @@ export function TaskWorkspaceBoard(props: {
         ...row,
         ...grow,
         paddingHorizontal: tablet() ? 14 : 22,
-        paddingTop: 12,
-        paddingBottom: tablet() ? 12 : 0,
+        paddingTop: space[12],
+        paddingBottom: tablet() ? space[12] : 0,
         gap: tablet() ? 8 : 9,
         alignItems: "stretch",
       }}
@@ -55,7 +56,11 @@ export function TaskWorkspaceBoard(props: {
               ref={(view) => boardDrag.register(status(), view)}
               style={{
                 flex: folded() ? undefined : 1,
-                width: folded() ? (tablet() ? 28 : 32) : undefined,
+                width: folded()
+                  ? tablet()
+                    ? control.md
+                    : space[32]
+                  : undefined,
                 maxWidth: tablet() && !folded() ? 160 : undefined,
                 minWidth: 0,
                 backgroundColor: folded()
@@ -82,7 +87,7 @@ export function TaskWorkspaceBoard(props: {
                         gap: tablet() ? 6 : 7,
                         height: tablet() ? 24 : 25,
                         paddingTop: tablet() ? 6 : 7,
-                        paddingLeft: tablet() ? 0 : 2,
+                        paddingLeft: tablet() ? 0 : space[2],
                         cursor: "pointer",
                       }
                 }
@@ -148,7 +153,7 @@ export function TaskWorkspaceBoard(props: {
 function SideLabel(props: { text: string; tone: "muted" | "mutedInk" }) {
   const length = () => railLength(props.text);
   return (
-    <View style={{ width: 16, height: length() }}>
+    <View style={{ width: space[16], height: length() }}>
       <Label
         variant="small"
         tone={props.tone}
