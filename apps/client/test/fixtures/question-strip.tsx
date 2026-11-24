@@ -14,7 +14,9 @@ import { createHost, Host } from "../../src/services/host";
  * eta://fixture/end   the question is on the last reply, on screen when the conversation opens;
  * eta://fixture/early the question is on an early reply, far above what is on screen;
  * eta://fixture/older the question is on a reply older than the loaded window, one page back;
- * eta://fixture/task  the question comes from a task's run (no reply here); the task opens;
+ * eta://fixture/task  the question comes from a task's run (no reply here); the task opens in the
+ *                     panel, where its card answers it;
+ * eta://fixture/lost  a task's question whose task cannot be told (its detail is not here);
  * eta://fixture/many  three questions: one on the last reply, two on early ones.
  */
 const summary: ConversationSummary = {
@@ -95,73 +97,107 @@ function Fixture() {
         ? [question("q-early", "m4", "Bring the IME fix along?", 1)]
         : scenario === "older"
           ? [question("q-older", "m4", "Keep the old installer?", 1)]
-          : scenario === "task"
+          : scenario === "task" || scenario === "lost"
             ? [question("q-task", null, "Which branch should I cut?", 1)]
             : [
                 question("q-end", "m40", "Ship rc.9 today?", 3),
                 question("q-early", "m4", "Bring the IME fix along?", 1),
                 question("q-six", "m6", "Tag it as a prerelease?", 2),
               ];
-  host.state.update((s) => ({
-    ...s,
-    status: "open",
-    targets: {
-      ...s.targets,
-      agents: {
-        version: 1,
-        revisions: {},
-        sections: { list: [{ id: "Ada", name: "Ada" }] },
-      },
-      inbox: { version: 1, revisions: {}, sections: { list: questions } },
-      conversations: {
-        version: 1,
-        revisions: {},
-        sections: { list: [summary] },
-      },
-      "conversations.group": {
-        version: 1,
-        revisions: {},
-        sections: {
-          timeline: { messages, hasMore: first > 1, held: [] },
+  const seed = (asked: InteractionView[]) =>
+    host.state.update((s) => ({
+      ...s,
+      status: "open",
+      targets: {
+        ...s.targets,
+        agents: {
+          version: 1,
+          revisions: {},
+          sections: { list: [{ id: "Ada", name: "Ada" }] },
         },
-      },
-      tasks: {
-        version: 1,
-        revisions: {},
-        sections: {
-          list:
-            scenario === "task"
-              ? [
-                  {
+        inbox: { version: 1, revisions: {}, sections: { list: asked } },
+        conversations: {
+          version: 1,
+          revisions: {},
+          sections: { list: [summary] },
+        },
+        "conversations.group": {
+          version: 1,
+          revisions: {},
+          sections: {
+            timeline: { messages, hasMore: first > 1, held: [] },
+          },
+        },
+        tasks: {
+          version: 1,
+          revisions: {},
+          sections: {
+            list:
+              scenario === "task" || scenario === "lost"
+                ? [
+                    {
+                      id: "t-cut",
+                      number: 7,
+                      title: "Cut the release branch",
+                      conversationId: "group",
+                      status: "in_progress",
+                      runStatus: "running",
+                    },
+                  ]
+                : [],
+          },
+        },
+        ...(scenario === "task"
+          ? {
+              "tasks.t-cut": {
+                version: 1,
+                revisions: {},
+                sections: {
+                  task: {
                     id: "t-cut",
                     number: 7,
                     title: "Cut the release branch",
-                    conversationId: "group",
+                    description: "Cut the branch the release builds from.",
                     status: "in_progress",
                     runStatus: "running",
+                    conversationId: "group",
+                    createdBy: { kind: "user" },
+                    assigneeAgentId: "Ada",
+                    createdAt: 0,
+                    updatedAt: 0,
+                    artifacts: [],
+                    runs: [
+                      {
+                        id: "r1",
+                        agentId: null,
+                        sessionId: "s-task",
+                        status: "running",
+                        createdAt: 0,
+                        startedAt: 0,
+                        finishedAt: null,
+                      },
+                    ],
                   },
-                ]
-              : [],
-        },
-      },
-      ...(scenario === "task"
-        ? {
-            "tasks.t-cut": {
-              version: 1,
-              revisions: {},
-              sections: {
-                task: {
-                  id: "t-cut",
-                  runs: [{ id: "r1", sessionId: "s-task", status: "running" }],
+                  activity: [],
                 },
               },
-            },
-          }
-        : {}),
-    },
-  }));
+            }
+          : {}),
+      },
+    }));
+  seed(questions);
   host.address.set({ origin: "http://example.invalid" });
-  host.call = async <T,>(target: string, op: string): Promise<T> => {
+  const answered = signal("");
+  host.call = async <T,>(
+    target: string,
+    op: string,
+    input?: unknown,
+  ): Promise<T> => {
+    if (target === "inbox" && op === "answer") {
+      const { id } = input as { id: string };
+      answered.set(id);
+      seed(questions.filter((item) => item.id !== id));
+    }
     if (target === "conversations" && op === "history")
       return {
         conversationId: "group",
@@ -176,9 +212,13 @@ function Fixture() {
     <Host.Provider value={host}>
       <View style={{ flex: 1 }}>
         <Text>{opened() ? `Opened task ${opened()}` : "No task opened"}</Text>
+        <Text>
+          {answered() ? `Answered ${answered()}` : "Nothing answered"}
+        </Text>
         <Conversation
           id="group"
           layout="desktop"
+          taskId={opened() || undefined}
           onTask={opened.set}
           onRelatedTask={noop}
           onAccessLost={noop}

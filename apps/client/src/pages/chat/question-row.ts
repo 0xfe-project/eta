@@ -33,3 +33,13 @@ export function questionSource(
   );
   return task && { kind: "task", taskId: task.id };
 }
+
+/** The questions among `pending` that one of `runs` asked (a run's session is its question's), oldest first. */
+export function questionsOfRuns<
+  T extends { sessionId: string; createdAt: number },
+>(pending: readonly T[], runs: readonly { sessionId: string | null }[]): T[] {
+  const sessions = new Set(runs.map((run) => run.sessionId));
+  return pending
+    .filter((item) => sessions.has(item.sessionId))
+    .sort((a, b) => a.createdAt - b.createdAt);
+}
