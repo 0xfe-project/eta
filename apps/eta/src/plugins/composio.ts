@@ -1178,7 +1178,8 @@ export class Composio {
     }
     if (!response.ok)
       throw new Refused(
-        `Composio answered HTTP ${response.status}`,
+        // Which call, so a failure can be told from the next one; the query is left out.
+        `Composio answered HTTP ${response.status} (${method} ${path.split("?")[0]})`,
         response.status,
       );
     if (Number(response.headers.get("content-length") ?? 0) > this.#maxBytes)
