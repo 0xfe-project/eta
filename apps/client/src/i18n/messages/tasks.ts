@@ -374,6 +374,7 @@ export const tasksMessages = {
     "Read-only. Reply on the task to steer {{executor}}.",
     "日志只读。请在任务中回复，给 {{executor}} 补充指令。",
   ],
+  commentKeysHint: ["⏎ send · ⇧⏎ new line", "⏎ 发送 · ⇧⏎ 换行"],
   commentPlaceholder: [
     "Comment, @ an agent in this task…",
     "评论，@ 任务里的 agent…",

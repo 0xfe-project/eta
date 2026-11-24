@@ -4,5 +4,5 @@ import { platform } from "nsh";
 export const modKey =
   platform.os === "macos" || platform.os === "ios" ? "⌘" : "Ctrl+";
 
-/** ⌘⏎ as a hint beside what it does (sending a comment, a form's button). */
+/** ⌘⏎ as a hint beside what it does (a form's button). */
 export const sendShortcut = `${modKey}⏎`;

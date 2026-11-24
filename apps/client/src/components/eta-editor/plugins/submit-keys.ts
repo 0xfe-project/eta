@@ -98,8 +98,8 @@ export function submitKeys(options: {
   /** What sends: ⏎ (`enter: "send"`), else ⌘⏎. None: no key sends (a form's own button does). */
   onSubmit?: () => void;
   /**
-   * `send` (the chat): ⏎ sends, ⇧⏎ is a new line. `newline` (a comment, a description): ⏎ and ⇧⏎
-   * are a new line, ⌘⏎ sends.
+   * `send` (the chat, a task's comment): ⏎ sends, ⇧⏎ is a new line. `newline` (a form's field,
+   * as a task's description): ⏎ and ⇧⏎ are a new line, ⌘⏎ sends.
    */
   enter?: "send" | "newline";
   /** Whether Escape is this plugin's now, and what it does. */
