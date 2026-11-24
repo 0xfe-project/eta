@@ -427,22 +427,68 @@ export function useHost() {
   return host;
 }
 
+/** How many conversations read lately stay followed after their page leaves them (#380). */
+const keptConversations = 4;
+/** Per connection, the conversations left lately: the release of each, oldest first. */
+const keptReleases = new WeakMap<Wire, Map<string, () => void>>();
+const conversationTarget = /^conversations\.[^.]+$/;
+
+/**
+ * Lets go of a target. A conversation's messages are kept a while instead (still followed, so
+ * still current): going back to one shows them at once rather than its skeleton, and only the
+ * `keptConversations` left last are kept.
+ */
+function release(
+  wire: Wire | undefined,
+  name: string | undefined,
+  unsubscribe: () => void,
+) {
+  if (!wire || !name || !conversationTarget.test(name)) {
+    unsubscribe();
+    return;
+  }
+  let kept = keptReleases.get(wire);
+  if (!kept) keptReleases.set(wire, (kept = new Map()));
+  kept.get(name)?.();
+  kept.delete(name);
+  kept.set(name, unsubscribe);
+  for (const [oldest, drop] of kept) {
+    if (kept.size <= keptConversations) break;
+    kept.delete(oldest);
+    drop();
+  }
+}
+
+/** Follows `name` again, taking back a kept hold on it (`release`) once the new one is in place. */
+function resubscribe(wire: Wire, name: string) {
+  const unsubscribe = wire.subscribe(name);
+  const kept = keptReleases.get(wire);
+  const held = kept?.get(name);
+  if (held) {
+    kept!.delete(name);
+    held();
+  }
+  return unsubscribe;
+}
+
 export function follow(target: () => string | undefined) {
   const host = useHost();
   let currentName: string | undefined;
   let currentWire: Wire | undefined;
   let unsubscribe: (() => void) | undefined;
-  cleanup(() => unsubscribe?.());
+  cleanup(() => {
+    if (unsubscribe) release(currentWire, currentName, unsubscribe);
+  });
   effect(() => {
     const name = target();
     const wire = host.subscriptionWire();
     // A selector can read the whole host snapshot. Patches for the same target
     // must keep its subscription and its in-flight data intact.
     if (name === currentName && wire === currentWire) return;
+    if (unsubscribe) release(currentWire, currentName, unsubscribe);
     currentName = name;
     currentWire = wire;
-    unsubscribe?.();
-    unsubscribe = name ? wire?.subscribe(name) : undefined;
+    unsubscribe = name && wire ? resubscribe(wire, name) : undefined;
   });
   return () => {
     unsubscribe?.();
