@@ -715,14 +715,21 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
             >
               <View
                 testID={`server-head:${server().name}`}
-                style={{ ...row, gap: space[8], alignItems: "center" }}
+                style={{
+                  ...row,
+                  gap: space[8],
+                  alignItems: "center",
+                  flexWrap: props.phone ? "wrap" : "nowrap",
+                }}
               >
-                {/* What may give way is the left cluster; the buttons are never squeezed or wrapped. */}
+                {/* What may give way is the left cluster; the buttons are never squeezed. A phone has
+                    no room for both on one line: the cluster takes its own, the buttons go under it. */}
                 <View
                   style={{
                     ...row,
                     flexShrink: 1,
                     minWidth: 0,
+                    ...(props.phone ? { width: "100%" } : {}),
                     gap: space[8],
                     alignItems: "center",
                   }}
