@@ -22,6 +22,11 @@ import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
+/** A free answer's field; a proposal card's header and its fields' label column. */
+const answerWidth = 400;
+const cardHeaderHeight = 32;
+const fieldLabelWidth = 72;
+
 function SheetQuestion(props: {
   item: InteractionView;
   onDone?: () => void;
@@ -209,7 +214,7 @@ function SheetQuestion(props: {
         <Button
           label={props.sheet ? uiText("sendAnswer") : uiText("answer")}
           tone="primary"
-          size={props.sheet ? 36 : undefined}
+          size={props.sheet ? control.touch : undefined}
           labelWeight={props.sheet ? weight.strong : undefined}
           style={props.sheet ? { paddingHorizontal: space[16] } : undefined}
           disabled={busy() || (!selected().length && !reply().trim())}
@@ -314,7 +319,7 @@ function SheetProposal(props: {
         >
           <Button
             label={uiText("reject")}
-            size={36}
+            size={control.touch}
             style={{ paddingHorizontal: space[16] }}
             disabled={working()}
             onPress={() => void decide("reject")}
@@ -323,7 +328,7 @@ function SheetProposal(props: {
           <Button
             label={uiText("proposalCreate")}
             tone="primary"
-            size={36}
+            size={control.touch}
             labelWeight={weight.strong}
             style={{ paddingHorizontal: space[20] }}
             disabled={working()}
@@ -552,7 +557,7 @@ function QuestionCard(props: { item: InteractionView }) {
                 void answer({ kind: "freeform", text: reply().trim() });
             }}
             style={{
-              width: 400,
+              width: answerWidth,
               maxWidth: "100%",
               height: control.md,
               ...textStyle(type("small")),
@@ -718,7 +723,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
         onPress={() => open.set(!expanded())}
         style={{
           ...row,
-          height: 30,
+          height: cardHeaderHeight,
           gap: space[4],
           paddingHorizontal: space[8],
           cursor: "pointer",
@@ -775,7 +780,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
                   variant="caption"
                   tone="muted"
                   style={{
-                    width: 72,
+                    width: fieldLabelWidth,
                     flexShrink: 0,
                     textTransform: "uppercase",
                   }}
@@ -792,7 +797,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
             <Button
               label={uiText("proposalCreate")}
               tone="primary"
-              size={22}
+              size={control.sm}
               labelVariant="caption"
               style={{ paddingHorizontal: space[12] }}
               disabled={working()}
@@ -807,7 +812,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
               hoverStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: 22,
+                height: control.sm,
                 paddingHorizontal: space[12],
                 cursor: "pointer",
               }}

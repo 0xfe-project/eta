@@ -2,12 +2,13 @@ import type { AgentMessage, ViewMessageRow } from "@eta/client-contracts";
 import { runFromOf, streamDrawn } from "@eta/client-contracts";
 import { summarizeArgs } from "@eta/client-contracts/tool-shape";
 
+// The run timing chart's series colours: a chart's, not the palette's, the same in both themes.
 export const runKinds = {
-  model: { label: "runGeneration", color: "#2874c8" },
-  read: { label: "readOrSearch", color: "#16a978" },
-  edit: { label: "editOrWrite", color: "#e5a018" },
-  shell: { label: "runCommands", color: "#e96832" },
-  tool: { label: "runTools", color: "#8874af" },
+  model: { label: "runGeneration", color: "#2874c8" }, // design-value: chart colour
+  read: { label: "readOrSearch", color: "#16a978" }, // design-value: chart colour
+  edit: { label: "editOrWrite", color: "#e5a018" }, // design-value: chart colour
+  shell: { label: "runCommands", color: "#e96832" }, // design-value: chart colour
+  tool: { label: "runTools", color: "#8874af" }, // design-value: chart colour
 } as const;
 type RunKind = keyof typeof runKinds;
 

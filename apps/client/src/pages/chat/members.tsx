@@ -9,6 +9,7 @@ import {
   grow,
   Icon,
   Label,
+  dialogWidth,
   Modal,
   row,
   SmoothScroll,
@@ -36,6 +37,17 @@ import {
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
+/** The steward menu's rows: a sheet's on phones, a list row elsewhere (a touch screen's are
+ * `touchRow`). */
+const menuRowHeight = { sheet: 52, desktop: 32 } as const;
+const menuWidth = 172;
+
+/** Invite agents: its title bar off phones, an agent's row, the phone sheet and its footer. */
+const inviteHeaderHeight = 40;
+const agentRowHeight = { phone: 52, desktop: 32 } as const;
+const phoneSheetHeight = 380;
+const phoneFooterHeight = 56;
+
 export function StewardMenu(props: {
   conversationId: string;
   members: MemberView[];
@@ -56,13 +68,17 @@ export function StewardMenu(props: {
     ...row,
     gap: space[8],
     paddingHorizontal: inSheet() ? space[16] : space[12],
-    height: inSheet() ? 52 : touchScreen ? touchRow : 30,
+    height: inSheet()
+      ? menuRowHeight.sheet
+      : touchScreen
+        ? touchRow
+        : menuRowHeight.desktop,
   });
   const hover = canHover ? { backgroundColor: c().selected } : undefined;
   return (
     <MenuFrame
       popupStyle={{
-        width: 172,
+        width: menuWidth,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
@@ -70,11 +86,11 @@ export function StewardMenu(props: {
       trigger={
         <View
           accessibilityLabel={uiText("steward2")}
-          hitSlop={touchScreen ? 11 : undefined}
+          hitSlop={touchScreen ? (control.touch - control.sm) / 2 : undefined}
           hoverStyle={hover}
           style={{
             ...row,
-            height: 22,
+            height: control.sm,
             gap: space[4],
             paddingHorizontal: space[8],
             borderWidth: 1,
@@ -180,13 +196,13 @@ export function InviteAgents(props: {
           style={{
             ...row,
             justifyContent: "space-between",
-            minHeight: 38,
+            minHeight: inviteHeaderHeight,
             paddingHorizontal: space[16],
           }}
         >
           <Label weight={weight.regular}>{title()}</Label>
           <CloseButton
-            size={18}
+            size={control.sm}
             iconSize={icon.sm}
             disabled={saving()}
             onPress={props.onClose}
@@ -235,7 +251,9 @@ export function InviteAgents(props: {
                   ...row,
                   gap: phone() ? space[12] : space[8],
                   paddingHorizontal: phone() ? space[4] : 0,
-                  minHeight: phone() ? 52 : 32,
+                  minHeight: phone()
+                    ? agentRowHeight.phone
+                    : agentRowHeight.desktop,
                   borderTopWidth: phone() && index() === 0 ? 1 : 0,
                   borderBottomWidth: phone() ? 1 : 0,
                   borderColor: c().border,
@@ -267,7 +285,7 @@ export function InviteAgents(props: {
           ...row,
           justifyContent: "flex-end",
           ...(phone()
-            ? { height: 56, paddingHorizontal: space[16] }
+            ? { height: phoneFooterHeight, paddingHorizontal: space[16] }
             : { padding: space[16] }),
           gap: space[8],
           marginTop: phone() ? 0 : space[4],
@@ -305,8 +323,8 @@ export function InviteAgents(props: {
       else={
         <Modal
           title={title()}
-          width={385}
-          height={phone() ? 380 : undefined}
+          width={dialogWidth.md}
+          height={phone() ? phoneSheetHeight : undefined}
           phone={phone()}
           sheet={phone()}
           hideHeader={!phone()}
@@ -335,7 +353,7 @@ export function InviteAgents(props: {
           style={{
             position: "absolute",
             ...placement(),
-            width: 385,
+            width: dialogWidth.md,
             maxWidth: "100%",
             borderWidth: 1,
             borderColor: c().strong,

@@ -7,6 +7,9 @@ import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
 /** A row drawn as a notice: a system row, except Captain's proposals, which stay cards. */
+/** How wide a notice's text runs between its rules. */
+const noticeWidth = 560;
+
 export function isSystemNotice(message: MessageView): boolean {
   return message.kind === "system" && captainProposalOf(message) === undefined;
 }
@@ -72,7 +75,7 @@ export function SystemNotice(props: { item: MessageView; phone: boolean }) {
       }}
     >
       {rule()}
-      <View selectable style={{ flexShrink: 1, maxWidth: 560 }}>
+      <View selectable style={{ flexShrink: 1, maxWidth: noticeWidth }}>
         <Label variant="caption" tone="muted" style={{ textAlign: "center" }}>
           {text()}
         </Label>

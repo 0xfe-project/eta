@@ -15,6 +15,9 @@ import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { ToolOutput } from "./run/tool-code";
 
+/** A step's row in a reply's process. */
+const stepRowHeight = 32;
+
 export function ProcessStep(props: { value: RunBlock }) {
   const c = colors();
   const tool = () => (props.value.type === "tool" ? props.value : undefined);
@@ -79,7 +82,7 @@ export function ProcessStep(props: { value: RunBlock }) {
             onPress={step().output ? toggle : undefined}
             style={{
               ...row,
-              minHeight: 33,
+              minHeight: stepRowHeight,
               paddingHorizontal: space[12],
               gap: space[8],
               borderBottomWidth: 1,

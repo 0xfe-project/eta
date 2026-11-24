@@ -21,9 +21,12 @@ import {
   row,
   textFaces,
 } from "../../components";
-import { icon, opacity, space } from "../../components/tokens";
+import { control, icon, opacity, space } from "../../components/tokens";
 import { localizedText } from "../../i18n";
 import { useHost } from "../../services/host";
+
+/** A place to choose: a finger's row on phones, a list row elsewhere. */
+const optionRowHeight = { phone: 56, desktop: 28 } as const;
 
 export function DirectoryOptions(props: {
   picker: ReturnType<typeof usePlaceFlow>;
@@ -123,7 +126,7 @@ export function DirectoryOptions(props: {
                 }}
                 style={{
                   ...grow,
-                  height: 38,
+                  height: phone() ? control.touch : control.lg,
                   paddingHorizontal: space[8],
                   color: c().ink,
                   placeholderColor: c().muted,
@@ -260,7 +263,9 @@ export function DirectoryOptions(props: {
             hoverStyle={{ backgroundColor: c().selected }}
             style={{
               ...row,
-              minHeight: phone() ? 56 : 29,
+              minHeight: phone()
+                ? optionRowHeight.phone
+                : optionRowHeight.desktop,
               marginHorizontal: phone() ? space[16] : 0,
               paddingHorizontal: phone() ? space[4] : space[16],
               gap: phone() ? space[12] : space[8],

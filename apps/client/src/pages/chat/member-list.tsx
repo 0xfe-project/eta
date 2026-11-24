@@ -12,12 +12,15 @@ import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { hint } from "../../components/controls";
 import { StatusDot } from "../../components/status-dot";
-import { avatar, space } from "../../components/tokens";
+import { avatar, icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { followSession, useHost } from "../../services/host";
 import { tokens } from "../tasks/usage";
 import { activeReply, memberStatus } from "./member-status";
 import { MemberStepsLedger, MemberStepsToggle } from "./member-steps";
+
+/** The bar atop the member list. */
+const headerHeight = 36;
 
 export function ConversationMembers(props: {
   members: MemberView[];
@@ -37,7 +40,7 @@ export function ConversationMembers(props: {
         style={{
           ...row,
           justifyContent: "space-between",
-          height: 37,
+          height: headerHeight,
           paddingHorizontal: space[12],
           borderBottomWidth: 1,
           borderColor: c().border,
@@ -132,8 +135,8 @@ export function ConversationMembers(props: {
                     name: host.agent(entry().agentId)?.name ?? uiText("agent"),
                   })}
                   triggerStyle={{
-                    minWidth: 14,
-                    width: 14,
+                    minWidth: icon.md,
+                    width: icon.md,
                     height: space[24],
                     paddingHorizontal: 0,
                   }}
@@ -193,7 +196,7 @@ export function ConversationMembers(props: {
 }
 
 /**
- * A member's face in a fixed 36px slot, ringed by how full its context is. A member with no
+ * A member's face in a fixed slot, the ring's size, ringed by how full its context is. A member with no
  * session yet has nothing to measure, so it is the face alone, in the same slot.
  */
 function MemberFace(props: { agentId: string; session: string | null }) {
@@ -204,8 +207,8 @@ function MemberFace(props: { agentId: string; session: string | null }) {
       else={
         <View
           style={{
-            width: 36,
-            height: 36,
+            width: avatar.xl,
+            height: avatar.xl,
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,

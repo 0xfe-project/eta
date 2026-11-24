@@ -31,6 +31,16 @@ import { TaskGlyph, taskNeedsAttention } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
 
 /** The dialog a question is answered in, wherever the question was opened from. */
+/** The question dialog, and Captain's proposal as a phone sheet. */
+const questionDialogHeight = 476;
+const proposalSheetHeight = 620;
+
+/** What waits for you: a phone's row and section heading, a row elsewhere, its action's column. */
+const phoneRowHeight = 56;
+const phoneSectionHeight = 32;
+const rowHeight = 52;
+const actionWidth = 56;
+
 export function QuestionDialog(props: {
   item: InteractionView;
   phone: boolean;
@@ -43,7 +53,7 @@ export function QuestionDialog(props: {
   return (
     <Modal
       title={uiText("questionFromWithCount", { value1: name() })}
-      height={474}
+      height={questionDialogHeight}
       phone={props.phone}
       sheet={props.phone}
       hideHeader
@@ -146,7 +156,7 @@ export function Pending(props: {
         hoverStyle={{ backgroundColor: c().selected }}
         style={{
           ...row,
-          minHeight: 56,
+          minHeight: phoneRowHeight,
           paddingLeft: space[16],
           paddingRight: space[12],
           gap: space[12],
@@ -206,7 +216,7 @@ export function Pending(props: {
       <View
         style={{
           ...row,
-          height: 30,
+          height: phoneSectionHeight,
           gap: space[4],
           paddingHorizontal: space[16],
           marginTop: props.gap ? space[8] : 0,
@@ -259,7 +269,7 @@ export function Pending(props: {
         hoverStyle={{ backgroundColor: c().selected }}
         style={{
           ...row,
-          height: 52,
+          height: rowHeight,
           gap: space[8],
           paddingHorizontal: space[12],
           flexShrink: 0,
@@ -295,7 +305,7 @@ export function Pending(props: {
           variant="caption"
           tone={props.actionTone ?? "ink"}
           style={{
-            width: 56,
+            width: actionWidth,
             flexShrink: 0,
             textAlign: "right",
             textDecorationLine: props.actionLink ? "underline" : "none",
@@ -663,7 +673,7 @@ export function Pending(props: {
         {(entry) => (
           <Modal
             title={uiText("proposalFromCaptain")}
-            height={phone() ? 618 : undefined}
+            height={phone() ? proposalSheetHeight : undefined}
             phone={phone()}
             sheet={phone()}
             hideHeader

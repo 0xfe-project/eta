@@ -18,7 +18,13 @@ import {
   textFaces,
   textStyle,
 } from "../../../components";
-import { control, icon, opacity, space } from "../../../components/tokens";
+import {
+  border,
+  control,
+  icon,
+  opacity,
+  space,
+} from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { SectionHeading, ViewAll } from "../section-heading";
@@ -38,6 +44,9 @@ import {
   withTaskCount,
 } from "./filter";
 import { ArtifactRow } from "./row";
+
+/** The filter menu's width. */
+const filterMenuWidth = 208;
 
 const sortLabels = {
   updated: "artifactsSortUpdated",
@@ -206,6 +215,8 @@ export function ArtifactBrowser(props: {
   const update = (patch: Partial<ArtifactFilters>) =>
     filters.set(withFilter(filters(), patch));
   const clear = () => filters.set(cleared(filters()));
+  /** The search box: a control's height, a finger's on phones. */
+  const searchHeight = () => (props.phone ? control.lg : control.md);
   const shown = () => applyFilters(props.artifacts, filters());
   const view = () => pageRows(shown(), filters());
   const counts = () => publisherCounts(props.artifacts, filters());
@@ -240,7 +251,7 @@ export function ArtifactBrowser(props: {
               ...row,
               flex: 1,
               minWidth: 0,
-              height: props.phone ? 32 : 26,
+              height: searchHeight(),
               gap: space[8],
               paddingHorizontal: space[8],
               borderWidth: 1,
@@ -257,7 +268,7 @@ export function ArtifactBrowser(props: {
               }}
               style={{
                 flex: 1,
-                height: props.phone ? 30 : 24,
+                height: searchHeight() - 2 * border.hair,
                 paddingHorizontal: 0,
                 paddingVertical: space[4],
                 borderWidth: 0,
@@ -466,7 +477,7 @@ export function ArtifactBrowser(props: {
         label={uiText("artifactsFilter")}
         sheetTitle={uiText("artifactsFilter")}
         noCaret
-        popupWidth={208}
+        popupWidth={filterMenuWidth}
         lifted
         leading={
           <View style={{ ...row, gap: space[4] }}>
@@ -475,7 +486,7 @@ export function ArtifactBrowser(props: {
           </View>
         }
         triggerStyle={{
-          height: props.phone ? 32 : 26,
+          height: props.phone ? control.lg : control.md,
           paddingHorizontal: space[12],
           borderWidth: 1,
           borderColor: filterOn() ? c().ink : c().border,
@@ -568,7 +579,7 @@ function PageButton(props: {
       style={{
         ...row,
         justifyContent: "center",
-        height: props.phone ? 32 : 22,
+        height: props.phone ? control.lg : control.sm,
         minWidth: props.phone ? control.md : space[20],
         borderWidth: props.selected ? 1 : 0,
         borderColor: c().ink,

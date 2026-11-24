@@ -254,6 +254,7 @@ export function ConversationTimeline(props: {
           each={props.rows}
           keyExtractor={(message) => message.id}
           initialScrollAtEnd
+          // design-value: a virtual list's first guess at a row's height, not a drawn size
           estimatedItemSize={134}
           scrollbar={false}
           scrollEventThrottle={onWindows ? 16 : undefined}
@@ -403,7 +404,7 @@ export function ConversationTimeline(props: {
                       {(entry, index) => (
                         <Button
                           label={`${author() === "user" ? "Prompt" : "Reply"} ${index() + 1}`}
-                          size={20}
+                          size={control.sm}
                           iconOnly
                           selected={firstVisibleId() === entry().message.id}
                           icon={author() === "user" ? "chat" : "info"}

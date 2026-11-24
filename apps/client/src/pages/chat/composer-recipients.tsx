@@ -38,8 +38,8 @@ function StopMemberReply(props: {
       style={{
         ...row,
         justifyContent: "center",
-        width: 18,
-        height: 18,
+        width: control.sm,
+        height: control.sm,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
@@ -135,8 +135,8 @@ export function ComposerRecipients(props: {
                 style={{
                   ...row,
                   justifyContent: "center",
-                  width: 14,
-                  height: 14,
+                  width: icon.md,
+                  height: icon.md,
                   borderWidth: 1,
                   borderColor: c().strong,
                   backgroundColor: c().canvas,

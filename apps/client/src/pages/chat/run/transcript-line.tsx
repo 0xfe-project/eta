@@ -25,6 +25,9 @@ import { PictureModes } from "../../../services/picture-mode";
 import { toolDescription } from "./run-timing";
 import { ToolInput, ToolOutput } from "./tool-code";
 
+/** A step's row in a run's transcript. */
+const lineRowHeight = 32;
+
 export function TranscriptLine(props: {
   session: string;
   block: LogBlock;
@@ -136,7 +139,7 @@ export function TranscriptLine(props: {
             focusVisibleStyle={focusRing(c(), "inset")}
             style={{
               ...row,
-              height: 31,
+              height: lineRowHeight,
               paddingHorizontal: space[12],
               gap: space[4],
               cursor: "pointer",

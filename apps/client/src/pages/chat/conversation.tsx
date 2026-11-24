@@ -22,16 +22,18 @@ import {
   Header,
   Icon,
   Label,
+  dialogWidth,
   Modal,
   PaneHandle,
   row,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
-import { StatusDot } from "../../components/status-dot";
+import { dotSize, StatusDot } from "../../components/status-dot";
 import {
   avatar,
   control,
   icon,
+  layer,
   opacity,
   shadow,
   space,
@@ -56,6 +58,9 @@ import { questionSource } from "./question-row";
 import { RemoveMember } from "./remove-member";
 import { MemberRun } from "./run/member-run";
 import { RunPanel } from "./run/run-panel";
+
+/** The toast that says a late insert went in, as wide as the app's toasts. */
+const lateInsertWidth = 356;
 
 function FollowTask(props: { id: string }) {
   follow(() => `tasks.${props.id}`);
@@ -365,7 +370,7 @@ export function Conversation(props: {
                     icon={phone() ? "info" : "sidebar"}
                     iconOnly={phone()}
                     tone={phone() ? "ghost" : "plain"}
-                    size={phone() ? 40 : undefined}
+                    size={phone() ? control.touch : undefined}
                     iconSize={phone() ? icon.md : undefined}
                     labelVariant="caption"
                     style={{ gap: space[4] }}
@@ -400,8 +405,8 @@ export function Conversation(props: {
                     position: "absolute",
                     top: -3,
                     right: -3,
-                    width: 6,
-                    height: 6,
+                    width: dotSize,
+                    height: dotSize,
                     backgroundColor: c().blue,
                   }}
                 />
@@ -451,8 +456,7 @@ export function Conversation(props: {
               paddingVertical: space[8],
               paddingHorizontal: space[16],
               gap: space[8],
-              // The design's state-warning at 12%.
-              backgroundColor: `${c().warning}1f`,
+              backgroundColor: c().warningFill,
               borderBottomWidth: 1,
               borderColor: c().warning,
             }}
@@ -553,7 +557,7 @@ export function Conversation(props: {
           </View>
           <If when={lateInsert()}>
             {/* A toast over the end of the transcript, just above the composer. */}
-            <View style={{ height: 0, zIndex: 10 }}>
+            <View style={{ height: 0, zIndex: layer.sticky }}>
               <View
                 role="button"
                 accessibilityLabel={uiText("dismiss")}
@@ -564,7 +568,7 @@ export function Conversation(props: {
                   bottom: 12,
                   right: 16,
                   left: phone() ? 16 : undefined,
-                  width: phone() ? undefined : 356,
+                  width: phone() ? undefined : lateInsertWidth,
                   gap: space[8],
                   paddingVertical: space[12],
                   paddingHorizontal: space[16],
@@ -638,7 +642,7 @@ export function Conversation(props: {
       >
         <Modal
           title={phone() ? uiText("conversationInfo") : uiText("panel")}
-          width={360}
+          width={dialogWidth.sm}
           side={!phone()}
           hideHeader
           sheet={phone()}
@@ -688,7 +692,7 @@ export function Conversation(props: {
       <If when={projectInfo() && project()}>
         <Modal
           title={project()?.name ?? uiText("directory")}
-          width={400}
+          width={dialogWidth.md}
           onClose={() => projectInfo.set(false)}
         >
           <Label style={{ padding: space[16] }}>

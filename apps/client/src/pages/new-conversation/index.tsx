@@ -10,6 +10,7 @@ import {
   colors,
   grow,
   Label,
+  dialogWidth,
   Modal,
   row,
   SmoothScroll,
@@ -21,6 +22,17 @@ import { ConversationMembers } from "./conversation-members";
 import { DirectoryOptions } from "./directory-options";
 import { failureText, placeFailure } from "./place-errors";
 import { usePlaceFlow } from "./use-place-flow";
+
+/** The dialog's height off phones; on a phone the sheet takes part of the screen for each step. */
+const dialogHeight = 560;
+const phoneSheetHeight = {
+  directory: "66%",
+  method: "61.5%",
+  members: "82.8%",
+} as const;
+
+/** The footer bar with the step's buttons. */
+const footerHeight = { phone: 56, desktop: 52 } as const;
 
 export function NewConversation(props: {
   layout: Layout;
@@ -157,15 +169,15 @@ export function NewConversation(props: {
       stepHeader
       blurBackdrop={props.layout === "desktop"}
       onClose={previous}
-      width={560}
+      width={dialogWidth.lg}
       height={
         phone()
           ? directory()
-            ? "66%"
+            ? phoneSheetHeight.directory
             : methodStage()
-              ? "61.5%"
-              : "82.8%"
-          : 560
+              ? phoneSheetHeight.method
+              : phoneSheetHeight.members
+          : dialogHeight
       }
       panelStyle={
         props.layout === "tablet" && windowSize().width >= 960
@@ -276,7 +288,7 @@ export function NewConversation(props: {
       <View
         style={{
           ...row,
-          height: phone() ? 56 : 50,
+          height: phone() ? footerHeight.phone : footerHeight.desktop,
           justifyContent: "flex-end",
           gap: space[8],
           paddingHorizontal: phone() ? space[16] : space[20],

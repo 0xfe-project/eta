@@ -91,6 +91,10 @@ function runLength(ms: number, clockFace: boolean) {
  * by the run's times, `reply` by where the reply's run sits in the session, and a finished reply
  * the session no longer holds is read from what its row kept.
  */
+/** The bar of a run's timing, and a row of its legend under it. */
+const timingBarHeight = 8;
+const legendRowHeight = { phone: 16, desktop: 20 } as const;
+
 export function MemberRun(props: {
   /** The member's session; a finished reply can be read without one. */
   session?: string | null;
@@ -395,7 +399,12 @@ export function MemberRun(props: {
         <If when={timing()}>
           {(trail) => (
             <>
-              <View style={{ height: 10, backgroundColor: c().selected }}>
+              <View
+                style={{
+                  height: timingBarHeight,
+                  backgroundColor: c().selected,
+                }}
+              >
                 <Each of={trail().segments} key={(segment) => segment.id}>
                   {(segment) => (
                     <View
@@ -452,18 +461,15 @@ export function MemberRun(props: {
                           style={{
                             ...row,
                             gap: space[4],
-                            minHeight: props.phone ? 14 : 18,
+                            minHeight: props.phone
+                              ? legendRowHeight.phone
+                              : legendRowHeight.desktop,
                             cursor: "pointer",
                           }}
                         >
                           <If
                             when={props.phone}
-                            else={
-                              <StatusDot
-                                color={runKinds[kind()].color}
-                                size={8}
-                              />
-                            }
+                            else={<StatusDot color={runKinds[kind()].color} />}
                           >
                             <Label
                               variant="caption"
