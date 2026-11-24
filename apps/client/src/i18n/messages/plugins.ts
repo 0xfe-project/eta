@@ -418,10 +418,6 @@ export const pluginsMessages = {
     "Its session did not check out, so no agent gets it.",
     "它的会话没有通过检查,智能体暂时用不了。",
   ],
-  composioPluginExternal: [
-    "Not available to agents on an external runtime.",
-    "外部运行时的智能体用不了。",
-  ],
   composioReconnect: ["Re-authenticate", "重新认证"],
   composioDisconnect: ["Disconnect", "取消连接"],
   composioDisconnectTitle: ["Disconnect {{name}}?", "取消连接 {{name}}?"],

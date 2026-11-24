@@ -16,7 +16,7 @@ import { SectionHeader, StatusLane, StatusLine, WarningLine } from "../section";
 const pluginLaneWidth = 108;
 
 export function AgentPlugins(props: { form: AgentForm }) {
-  const { plugins, phoneEditor, runtime } = props.form;
+  const { plugins, phoneEditor } = props.form;
   const host = useHost();
   const c = colors();
   const activePlugins = () => host.list<PluginView>("plugins");
@@ -182,9 +182,8 @@ export function AgentPlugins(props: { form: AgentForm }) {
         <Each of={composio.list()} key={(item) => item.name}>
           {(item) => {
             const checked = () => plugins().includes(item().name);
-            /** Only a toolkit that checked out, and only for an agent of eta's own loop. */
-            const usable = () =>
-              item().state === "ready" && runtime() === "eta";
+            /** Only a toolkit that checked out. */
+            const usable = () => item().state === "ready";
             return (
               <CheckControl
                 label={item().name}
@@ -228,11 +227,6 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   <If when={item().state !== "ready"}>
                     <View testID="composio-plugin-error">
                       <WarningLine text={uiText("composioPluginError")} />
-                    </View>
-                  </If>
-                  <If when={runtime() !== "eta"}>
-                    <View testID="composio-plugin-external">
-                      <WarningLine text={uiText("composioPluginExternal")} />
                     </View>
                   </If>
                 </View>
