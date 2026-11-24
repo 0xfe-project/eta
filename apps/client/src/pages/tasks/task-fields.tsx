@@ -19,7 +19,6 @@ import {
   limit,
   mention,
   openDocDraft,
-  sendShortcut,
   serialize,
   submitKeys,
 } from "../../components/eta-editor";
@@ -34,6 +33,7 @@ import { taskMoment } from "./facts";
 import { activeTaskRun, latestExecutorRun } from "./run-log";
 import { statusName, TaskGlyph } from "./status";
 import { StatusSelect } from "./status-select";
+import { TaskQuestions } from "./task-questions";
 
 /** The width of a rail row's label; what goes under its value starts there. */
 const railLabelWidth = 76;
@@ -46,8 +46,9 @@ const footHeight = { compact: 32, regular: 36 } as const;
 
 /**
  * The comment box: the chat's text (`chatText`: Markdown as you type, code blocks, long pastes
- * folded) with `@` for the task's agents and a draft kept per task. ⏎ is a new line; ⌘⏎ or the
- * Comment button posts. No files: a task's comment carries text only.
+ * folded) with `@` for the task's agents and a draft kept per task. Its keys are the chat's: ⏎ or
+ * the Comment button posts, ⇧⏎ is a new line (in a list or a code block ⏎ is theirs, as in the
+ * chat). No files: a task's comment carries text only.
  */
 function useCommentEditor(state: TaskDetailState, origin: string | undefined) {
   const host = useHost();
@@ -78,7 +79,7 @@ function useCommentEditor(state: TaskDetailState, origin: string | undefined) {
   const editor = chatText.createEditor({
     doc: store.doc(),
     plugins: [
-      submitKeys({ enter: "newline", onSubmit: () => void submit() }),
+      submitKeys({ onSubmit: () => void submit() }),
       mention({ members, describe: () => uiText("askForAReply") }),
       draft({ save: store.save }),
       limits,
@@ -127,6 +128,7 @@ export function TaskCommentBox(props: {
                 }
           }
         >
+          <TaskQuestions state={props.state} />
           <CommentBox
             state={props.state}
             origin={origin}
@@ -141,7 +143,7 @@ export function TaskCommentBox(props: {
 
 /**
  * The box itself, per Paper's "Task comment": the editor, 1 to 6 lines then it scrolls inside;
- * under it ⌘⏎ (with a keyboard) and a plain Comment button.
+ * under it what ⏎ and ⇧⏎ do (with a keyboard) and a plain Comment button.
  */
 function CommentBox(props: {
   state: TaskDetailState;
@@ -205,7 +207,7 @@ function CommentBox(props: {
         >
           <If when={!props.phone && !touchScreen}>
             <Label variant="caption" tone="faint">
-              {sendShortcut}
+              {uiText("commentKeysHint")}
             </Label>
           </If>
           <Button

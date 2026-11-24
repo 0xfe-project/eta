@@ -19,10 +19,10 @@ import {
   textStyle,
 } from "../../../components";
 import {
-  border,
   control,
   icon,
   opacity,
+  sizes,
   space,
 } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
@@ -215,8 +215,6 @@ export function ArtifactBrowser(props: {
   const update = (patch: Partial<ArtifactFilters>) =>
     filters.set(withFilter(filters(), patch));
   const clear = () => filters.set(cleared(filters()));
-  /** The search box: a control's height, a finger's on phones. */
-  const searchHeight = () => (props.phone ? control.lg : control.md);
   const shown = () => applyFilters(props.artifacts, filters());
   const view = () => pageRows(shown(), filters());
   const counts = () => publisherCounts(props.artifacts, filters());
@@ -239,101 +237,84 @@ export function ArtifactBrowser(props: {
     <View style={grow}>
       <View
         style={{
-          gap: space[4],
-          padding: space[12],
+          ...row,
+          justifyContent: "space-between",
+          alignItems: "center",
+          height: sizes.sectionHeader,
+          gap: space[8],
+          paddingHorizontal: space[12],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
-        <View style={{ ...row, gap: space[8] }}>
-          <View
-            style={{
-              ...row,
-              flex: 1,
-              minWidth: 0,
-              height: searchHeight(),
-              gap: space[8],
-              paddingHorizontal: space[8],
-              borderWidth: 1,
-              borderColor: c().border,
-              backgroundColor: c().canvas,
+        <View style={{ ...row, flex: 1, minWidth: 0, gap: space[8] }}>
+          <Icon name="search" size={icon.sm} tone="muted" />
+          <Field
+            label={uiText("searchArtifacts")}
+            placeholder={uiText("searchTitles")}
+            inputRef={(node) => {
+              searchInput = node;
             }}
-          >
-            <Icon name="search" size={icon.sm} tone="muted" />
-            <Field
-              label={uiText("searchArtifacts")}
-              placeholder={uiText("searchTitles")}
-              inputRef={(node) => {
-                searchInput = node;
-              }}
-              style={{
-                flex: 1,
-                height: searchHeight() - 2 * border.hair,
-                paddingHorizontal: 0,
-                paddingVertical: space[4],
-                borderWidth: 0,
-                ...textStyle(type("small")),
-              }}
-              value={filters().query}
-              onChange={(value) => update({ query: value })}
-            />
-            <If
-              when={filters().query}
-              else={
-                <If when={!props.phone}>
-                  <View
-                    style={{
-                      paddingHorizontal: space[4],
-                      borderWidth: 1,
-                      borderColor: c().border,
-                    }}
-                  >
-                    <Label variant="caption" tone="muted">
-                      /
-                    </Label>
-                  </View>
-                </If>
-              }
-            >
-              <View
-                role="button"
-                accessibilityLabel={uiText("artifactsClearSearch")}
-                onPress={() => {
-                  update({ query: "" });
-                  searchInput?.focus();
-                }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                style={{ cursor: "pointer" }}
-              >
-                <Icon name="close" size={icon.sm} tone="muted" />
-              </View>
-            </If>
-          </View>
-          <FilterMenu />
-        </View>
-        <If when={narrowed()}>
-          <View style={{ ...row, justifyContent: "space-between" }}>
-            <Label variant="caption" tone="faint">
-              {uiText("artifactsFound", {
-                count: shown().length,
-                total: props.artifacts.length,
-              })}
-            </Label>
+            style={{
+              flex: 1,
+              height: sizes.sectionHeader - 2,
+              paddingHorizontal: 0,
+              paddingVertical: 0,
+              borderWidth: 0,
+              backgroundColor: "transparent",
+              ...textStyle(type("small")),
+            }}
+            value={filters().query}
+            onChange={(value) => update({ query: value })}
+          />
+          <If when={filters().query}>
             <View
               role="button"
-              accessibilityLabel={uiText("artifactsClearFilters")}
-              onPress={clear}
+              accessibilityLabel={uiText("artifactsClearSearch")}
+              onPress={() => {
+                update({ query: "" });
+                searchInput?.focus();
+              }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              hoverStyle={{ opacity: opacity.muted }}
               style={{ cursor: "pointer" }}
             >
-              <Label variant="caption" tone="mutedInk">
-                {uiText("artifactsClearFilters")}
-              </Label>
+              <Icon name="close" size={icon.sm} tone="muted" />
             </View>
-          </View>
-        </If>
+          </If>
+        </View>
+        <FilterMenu />
       </View>
+      <If when={narrowed()}>
+        <View
+          style={{
+            ...row,
+            justifyContent: "space-between",
+            paddingHorizontal: space[12],
+            paddingVertical: space[8],
+            borderBottomWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <Label variant="caption" tone="faint">
+            {uiText("artifactsFound", {
+              count: shown().length,
+              total: props.artifacts.length,
+            })}
+          </Label>
+          <View
+            role="button"
+            accessibilityLabel={uiText("artifactsClearFilters")}
+            onPress={clear}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hoverStyle={{ opacity: opacity.muted }}
+            style={{ cursor: "pointer" }}
+          >
+            <Label variant="caption" tone="mutedInk">
+              {uiText("artifactsClearFilters")}
+            </Label>
+          </View>
+        </View>
+      </If>
       <SmoothScroll
         ref={(node) => {
           list = node;
@@ -377,17 +358,7 @@ export function ArtifactBrowser(props: {
               <>
                 <If when={entry().heading ? entry().group : null}>
                   {(group) => (
-                    <Label
-                      variant="small"
-                      tone="muted"
-                      style={{
-                        paddingHorizontal: space[12],
-                        paddingTop: space[16],
-                        paddingBottom: space[8],
-                      }}
-                    >
-                      {uiText(groupLabels[group()])}
-                    </Label>
+                    <SectionHeading label={uiText(groupLabels[group()])} />
                   )}
                 </If>
                 <ArtifactRow
@@ -476,20 +447,25 @@ export function ArtifactBrowser(props: {
       <ActionMenu
         label={uiText("artifactsFilter")}
         sheetTitle={uiText("artifactsFilter")}
-        noCaret
         popupWidth={filterMenuWidth}
         lifted
         leading={
-          <View style={{ ...row, gap: space[4] }}>
-            <Icon name="funnel" size={icon.sm} />
-            <Label variant="small">{uiText("artifactsFilter")}</Label>
-          </View>
+          <Icon
+            name="funnel"
+            size={icon.sm}
+            tone={filterOn() ? "ink" : "muted"}
+          />
         }
+        value={uiText("artifactsFilter")}
+        valueTone={filterOn() ? "ink" : "muted"}
         triggerStyle={{
-          height: props.phone ? control.lg : control.md,
-          paddingHorizontal: space[12],
-          borderWidth: 1,
-          borderColor: filterOn() ? c().ink : c().border,
+          borderWidth: 0,
+          height: control.sm,
+          marginVertical: -space[4],
+          marginRight: -space[8],
+          paddingHorizontal: space[8],
+          gap: space[4],
+          flexShrink: 0,
         }}
       >
         <MenuSection label={uiText("artifactsSort")} />

@@ -55,6 +55,7 @@ import { indexInserts, InsertMessage } from "./insert-message";
 import { keptMessages } from "./kept-messages";
 import { InviteAgents, StewardMenu } from "./members";
 import { deliveries, outgoingRow, waitsForOf } from "./outbox";
+import { QuestionDialog } from "./pending";
 import { questionRowIndex, questionSource } from "./question-row";
 import { RemoveMember } from "./remove-member";
 import { MemberInspect } from "./run/member-inspect";
@@ -92,7 +93,6 @@ export function Conversation(props: {
   const drawer = signal(false);
   const invite = signal(false);
   const removing = signal<string | undefined>(undefined);
-  const projectInfo = signal(false);
   const member = signal<{ id: string; session: string }>();
   const memberSteps = signal("");
   // The Artifacts tab's search, filters and page: kept across tabs, dropped for another group.
@@ -141,6 +141,9 @@ export function Conversation(props: {
   let reveal: ((replyId: string | null) => void) | undefined;
   const asking = () =>
     host.pending().filter((entry) => entry.conversationId === props.id);
+  /** The question whose dialog is open, when the strip had nowhere else to go. */
+  const questionId = signal("");
+  const question = () => asking().find((entry) => entry.id === questionId());
   // The board list does not carry a task's runs, so the tasks that could have asked (running, in
   // this conversation) are followed while the strip shows their question and matched by session.
   const askingTasks = (item: InteractionView) =>
@@ -389,7 +392,14 @@ export function Conversation(props: {
       return;
     }
     const source = questionSourceOf(item);
-    if (source?.kind === "task") openTask(source.taskId);
+    if (source?.kind === "task") {
+      // The task's detail carries the question's card, over its comment box.
+      openTask(source.taskId);
+      flashQuestion(item.id);
+      return;
+    }
+    // Nowhere to take the user (no loaded reply, no task matched yet): it is answered right here.
+    questionId.set(item.id);
   }
   function closeDrawer() {
     drawer.set(false);
@@ -449,33 +459,6 @@ export function Conversation(props: {
                 host.captain()?.status === "working" ? "working" : "idle",
               )}
             </Label>
-          </If>
-          <If when={!phone() && project() && group()}>
-            <View
-              role="button"
-              accessibilityLabel={project()?.name ?? ""}
-              onPress={() => {
-                panel.set("Context");
-                if (props.layout === "desktop") projectInfo.set(true);
-                else drawer.set(true);
-              }}
-              hoverStyle={{ backgroundColor: c().selected }}
-              style={{
-                ...row,
-                gap: space[4],
-                paddingVertical: space[2],
-                paddingHorizontal: space[8],
-                borderWidth: 1,
-                borderColor: c().border,
-                flexShrink: 0,
-                cursor: "pointer",
-              }}
-            >
-              <Icon name="folder" size={icon.sm} tone="muted" />
-              <Label variant="small" tone="muted" lines={1}>
-                {project()?.name ?? ""}
-              </Label>
-            </View>
           </If>
           <If when={!phone() && group()}>
             <StewardMenu
@@ -828,16 +811,28 @@ export function Conversation(props: {
           </If>
         </Modal>
       </If>
-      <If when={projectInfo() && project()}>
-        <Modal
-          title={project()?.name ?? uiText("directory")}
-          width={dialogWidth.md}
-          onClose={() => projectInfo.set(false)}
-        >
-          <Label style={{ padding: space[16] }}>
-            {project()?.display ?? project()?.path}
-          </Label>
-        </Modal>
+      <If when={question()}>
+        {(item) => (
+          <>
+            {/* Its task may still be found while the dialog is open: it then offers to go there. */}
+            <Each of={askingTasks(item())} key={(task) => task.id}>
+              {(task) => <FollowTask id={task().id} />}
+            </Each>
+            <QuestionDialog
+              item={item()}
+              phone={phone()}
+              onClose={() => questionId.set("")}
+              onSource={
+                questionSourceOf(item())
+                  ? () => {
+                      questionId.set("");
+                      void jumpTo(item());
+                    }
+                  : undefined
+              }
+            />
+          </>
+        )}
       </If>
       <If when={removing() && info() ? removing() : undefined}>
         {(agentId) => (

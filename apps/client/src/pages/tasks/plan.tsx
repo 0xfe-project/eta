@@ -774,10 +774,9 @@ export function TaskPlanBoard(props: {
   const c = colors();
   const host = useHost();
   const editing = createPlanEditing(() => host.people()[0]?.id);
-  /** The parents among the tasks, each with its children among them, and the tasks under none of them; in one pass. */
+  /** The parents among the tasks, each with its children among them; in one pass. */
   const groups = computed(() => {
     const items = props.items;
-    const ids = new Set(items.map((task) => task.id));
     const children = new Map<string, BoardTaskView[]>();
     for (const task of items) {
       if (!task.parentId) continue;
@@ -788,17 +787,10 @@ export function TaskPlanBoard(props: {
     const parents = items.filter(
       (task) => task.subtasks?.total || children.has(task.id),
     );
-    const parentIds = new Set(parents.map((task) => task.id));
-    const orphans = items.filter(
-      (task) =>
-        !(task.parentId && ids.has(task.parentId)) && !parentIds.has(task.id),
-    );
-    return { children, parents, orphans };
+    return { children, parents };
   });
   const childrenOf = (parent: BoardTaskView) =>
     groups().children.get(parent.id) ?? [];
-  const orphans = () => groups().orphans;
-  const orphanPlan = createPlan(orphans);
   return (
     <View
       style={
@@ -882,32 +874,6 @@ export function TaskPlanBoard(props: {
           );
         }}
       </Each>
-      <If when={orphans().length}>
-        <PlanFrame>
-          <View
-            style={{
-              ...row,
-              height: frameHeaderHeight,
-              paddingHorizontal: space[12],
-              borderBottomWidth: 1,
-              borderColor: c().border,
-            }}
-          >
-            <Label variant="caption" tone="mutedInk">
-              {uiText("notPartOfAnything")}
-            </Label>
-          </View>
-          <PlanGraph
-            tasks={orphans()}
-            plan={orphanPlan()}
-            variant={props.tablet ? "tabletPage" : "page"}
-            desktop
-            onOpen={props.onOpen}
-            onConnect={(from, to) => void editing.connect(from, to)}
-            onConnectFrom={(id) => editing.startConnecting(orphans(), id)}
-          />
-        </PlanFrame>
-      </If>
       <If when={props.tablet}>
         <Label variant="caption" tone="muted">
           {uiText("dragToMakeWait")}
