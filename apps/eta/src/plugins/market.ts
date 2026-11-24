@@ -8,6 +8,7 @@ import type {
   MarketSourceCatalog,
 } from "@eta/client-contracts";
 import type { SettingStore } from "../settings/store";
+import type { Composio } from "./composio";
 import type { CachedCatalog, CatalogCache } from "./market-cache";
 import type { Plugins } from "./service";
 /**
@@ -28,6 +29,7 @@ import { Buffer } from "node:buffer";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { loadPlugin, PluginError } from "@eta/daemon";
+import { COMPOSIO_URL } from "./composio";
 import {
   cleanPath,
   fetchInto,
@@ -72,6 +74,8 @@ export interface MarketOptions {
   catalogRepo?: string;
   /** Where catalogs are kept between runs; without it every read goes to the network. */
   cache?: CatalogCache;
+  /** The Composio source; without it the market has git catalogs only. */
+  composio?: Composio;
 }
 
 const messageOf = (error: unknown): string =>
@@ -143,6 +147,7 @@ export class Market {
   readonly #schemes: readonly string[];
   readonly #catalogRepo: string | undefined;
   readonly #cache: CatalogCache | undefined;
+  readonly #composio: Composio | undefined;
 
   constructor(options: MarketOptions) {
     this.#settings = options.settings;
@@ -153,6 +158,7 @@ export class Market {
     this.#schemes = options.schemes ?? ["https:", "ssh:", "git:"];
     this.#catalogRepo = options.catalogRepo;
     this.#cache = options.cache;
+    this.#composio = options.composio;
     this.#proxy();
   }
 
@@ -163,8 +169,16 @@ export class Market {
     return githubProxy.prefix;
   }
 
-  /** The sources, read when asked: the stored list, else the defaults (or the old single address). */
+  /** The git catalogs, then Composio when there is one: it is always listed, on unless switched off. */
   sources(): MarketSource[] {
+    const git = this.#gitSources();
+    return this.#composio === undefined
+      ? git
+      : [...git, this.#composio.source()];
+  }
+
+  /** The git catalogs, read when asked: the stored list, else the defaults (or the old single address). */
+  #gitSources(): MarketSource[] {
     const saved = this.#settings.get(SOURCES_KEY);
     if (Array.isArray(saved))
       return saved.flatMap((item: unknown) =>
@@ -206,7 +220,7 @@ export class Market {
     } catch (error) {
       throw new PluginError(messageOf(error));
     }
-    const list = this.sources();
+    const list = this.#gitSources();
     if (list.some((item) => item.url === clean))
       throw new PluginError("that address is in the list already");
     const label = name.trim().slice(0, 60);
@@ -218,7 +232,9 @@ export class Market {
   }
 
   removeSource(url: string): MarketSettings {
-    const list = this.sources();
+    if (url === COMPOSIO_URL)
+      throw new PluginError("Composio is built in: switch it off instead");
+    const list = this.#gitSources();
     if (!list.some((item) => item.url === url))
       throw new PluginError("that address is not in the list");
     this.#settings.set(
@@ -230,7 +246,11 @@ export class Market {
 
   /** Switch a source on or off; it stays in the list either way. */
   setSourceEnabled(url: string, enabled: boolean): MarketSettings {
-    const list = this.sources();
+    if (url === COMPOSIO_URL && this.#composio !== undefined) {
+      this.#composio.setEnabled(enabled);
+      return this.settings();
+    }
+    const list = this.#gitSources();
     if (!list.some((item) => item.url === url))
       throw new PluginError("that address is not in the list");
     this.#settings.set(
@@ -261,8 +281,10 @@ export class Market {
           (source) =>
             source.enabled && (only === undefined || source.url === only),
         )
-        .map(
-          async (source) => await this.#read(source, proxy, new Map(), mode),
+        .map(async (source) =>
+          source.kind === "composio" && this.#composio !== undefined
+            ? await this.#composio.read(source, mode)
+            : await this.#read(source, proxy, new Map(), mode),
         ),
     );
     return { sources, proxy };
@@ -615,7 +637,7 @@ export class Market {
     url: string,
   ): Promise<{ entry: MarketEntry; ref: string }> {
     const proxy = this.#proxy();
-    const source = this.sources().find(
+    const source = this.#gitSources().find(
       (item) => item.url === url && item.enabled,
     );
     if (source === undefined)

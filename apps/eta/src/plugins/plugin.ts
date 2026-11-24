@@ -8,6 +8,7 @@ import type { PluginAuditView, PluginValue } from "@eta/client-contracts";
 import type { AgentStore } from "../agents/store";
 import type { McpService } from "../mcp/service";
 import type { SettingStore } from "../settings/store";
+import type { Composio } from "./composio";
 import type { IconCache } from "./icon-cache";
 import type { Market } from "./market";
 import type { Plugins } from "./service";
@@ -40,6 +41,7 @@ export function pluginsPlugin(
     plugins: Plugins;
     agents: AgentStore;
     market: Market;
+    composio?: Composio;
     mcp?: McpService;
     icons?: IconCache;
     /** Where a server's needs-login finding is kept between runs; nothing is kept without it. */
@@ -49,7 +51,11 @@ export function pluginsPlugin(
   },
   applied: () => void,
 ) {
-  const { plugins, agents, market, mcp } = deps;
+  const { plugins, agents, market, composio, mcp } = deps;
+  const needComposio = (): Composio => {
+    if (composio === undefined) throw new Error("Composio is not available");
+    return composio;
+  };
   /**
    * Servers a test found to refuse their stored sign-in, by URL, with the stamp of the sign-in it
    * refused: a login made later (from any entry) has another stamp, so it is not shown as expired.
@@ -354,9 +360,13 @@ export function pluginsPlugin(
             );
           return { result: { name } };
         }),
-        wire.handle("plugins", "marketSettings", async () => ({
-          result: market.settings(),
-        })),
+        // Reads only what the host keeps; it must not wait behind a slow call of the connection.
+        wire.handle(
+          "plugins",
+          "marketSettings",
+          async () => ({ result: market.settings() }),
+          { unordered: true },
+        ),
         wire.handle("plugins", "marketAddSource", async (call) => {
           const args = new Args(call);
           return {
@@ -422,6 +432,79 @@ export function pluginsPlugin(
           checkLogins(wire, name);
           return { result: { name } };
         }),
+        // The key goes in and is never read back: only whether one is set.
+        wire.handle("plugins", "composioSetKey", async (call) => {
+          needComposio().setKey(new Args(call).string("key"));
+          // The sessions of the old key are gone: make them again, for what is connected.
+          void needComposio()
+            .follow()
+            .catch(() => undefined);
+          return { result: { hasKey: true } };
+        }),
+        wire.handle("plugins", "composioClearKey", async () => {
+          needComposio().clearKey();
+          return { result: { hasKey: false } };
+        }),
+        // Reads only what the host keeps; it must not wait behind a slow call of the connection.
+        wire.handle(
+          "plugins",
+          "composioStatus",
+          async () => ({
+            result: {
+              hasKey: needComposio().hasKey(),
+              enabled: needComposio().source().enabled,
+            },
+          }),
+          { unordered: true },
+        ),
+        wire.handle("plugins", "composioConnected", async () => ({
+          result: await needComposio().follow(),
+        })),
+        wire.handle("plugins", "composioDisconnect", async (call) => ({
+          result: await needComposio().disconnect(
+            new Args(call).string("slug"),
+          ),
+        })),
+        wire.handle("plugins", "composioAdd", async (call) => ({
+          result: await needComposio().add(new Args(call).string("slug")),
+        })),
+        wire.handle("plugins", "composioRemove", async (call) => ({
+          result: needComposio().remove(new Args(call).string("slug")),
+        })),
+        wire.handle("plugins", "composioAdded", async () => ({
+          result: { slugs: needComposio().added() },
+        })),
+        wire.handle("plugins", "composioPlugins", async () => {
+          const off = plugins.rows.disabled();
+          return {
+            result: {
+              plugins: needComposio()
+                .virtuals()
+                .map((one) => ({ ...one, enabled: !off.has(one.name) })),
+            },
+          };
+        }),
+        wire.handle("plugins", "composioToolkits", (call) => {
+          const { slugs } = (call.args ?? {}) as { slugs?: unknown };
+          if (!Array.isArray(slugs))
+            throw new Error("plugins.composioToolkits needs slugs");
+          return {
+            result: {
+              toolkits: needComposio().toolkitsOf(
+                slugs
+                  .filter((one): one is string => typeof one === "string")
+                  .slice(0, 500),
+              ),
+            },
+          };
+        }),
+        wire.handle("plugins", "composioLink", async (call) => ({
+          result: {
+            redirectUrl: await needComposio().link(
+              new Args(call).string("slug"),
+            ),
+          },
+        })),
         wire.handle("plugins", "testServer", async (call) => {
           const args = new Args(call);
           return {
@@ -524,6 +607,14 @@ export function pluginsPlugin(
                 ),
               };
             }
+            // A Composio toolkit: the address comes from the host's own list, over https only.
+            const toolkit = args.optionalString("composio");
+            if (toolkit !== undefined) {
+              const address = composio?.logoOf(toolkit) ?? null;
+              return {
+                result: address === null ? null : await logos.fromUrl(address),
+              };
+            }
             // A market entry that is a path in a GitHub repository: the plugin's own logo from its manifest.
             const repo = args.optionalString("repo");
             if (repo !== undefined) {
@@ -556,6 +647,9 @@ export function pluginsPlugin(
               typeof value === "string" ? value : "";
             const asked = entries.map((raw) => {
               const one = (raw ?? {}) as Record<string, unknown>;
+              // A Composio toolkit: the address comes from the host's own list, as for `logo`.
+              if (typeof one.composio === "string")
+                return { url: composio?.logoOf(one.composio) ?? "" };
               return {
                 repo: text(one.repo),
                 ref: text(one.ref) || "HEAD",

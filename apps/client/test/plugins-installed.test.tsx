@@ -388,3 +388,94 @@ test("a result that names no header has no retest button", async () => {
   expect(app.shows("Connected · 12 ms")).toBe(true);
   expect(app.shows("and retest")).toBe(false);
 });
+
+// A card's source (a repository and commit, or "Local directory") sits on the line under the name,
+// after the version, instead of on a line of its own under the description.
+const SOURCE_OPEN = { width: 1100, height: 700 };
+const SHA = "acme/tools @ 0123456789ab";
+
+test("a git card shows its source and its button on the version line, not on a line of its own", async () => {
+  const app = await open(
+    "./fixtures/plugins-installed-source.tsx",
+    SOURCE_OPEN,
+  );
+  const version = app.layout("label:git-plugin >> text:2.0.0")!;
+  const source = app.layout(`label:git-plugin >> text:${SHA}`)!;
+  const button = app.layout("label:Source for git-plugin")!;
+  const description = app.layout("label:git-plugin >> text:desc-git-plugin")!;
+  expect(version).toBeDefined();
+  expect(source).toBeDefined();
+  expect(button).toBeDefined();
+  const middle = (box: { y: number; height: number }) => box.y + box.height / 2;
+  expect(Math.abs(middle(source) - middle(version))).toBeLessThanOrEqual(2);
+  expect(Math.abs(middle(button) - middle(version))).toBeLessThanOrEqual(2);
+  expect(source.x).toBeGreaterThan(version.x + version.width - 1);
+  expect(source.y + source.height).toBeLessThanOrEqual(description.y);
+});
+
+test("the source button of a card still opens the source", async () => {
+  const app = await open(
+    "./fixtures/plugins-installed-source.tsx",
+    SOURCE_OPEN,
+  );
+  await app.press("label:Source for git-plugin");
+  expect(
+    app.shows("acme/tools @ 0123456789abcdef0123456789abcdef01234567"),
+  ).toBe(true);
+});
+
+test("a local card says Local directory on the version line, with no source button", async () => {
+  const app = await open(
+    "./fixtures/plugins-installed-source.tsx",
+    SOURCE_OPEN,
+  );
+  const version = app.layout("label:local-plugin >> text:1.0.0")!;
+  const source = app.layout("label:local-plugin >> text:Local directory")!;
+  const description = app.layout(
+    "label:local-plugin >> text:desc-local-plugin",
+  )!;
+  expect(source).toBeDefined();
+  expect(Math.abs(source.y - version.y)).toBeLessThanOrEqual(2);
+  expect(source.y + source.height).toBeLessThanOrEqual(description.y);
+  expect(app.count("label:Source for local-plugin")).toBe(0);
+});
+
+test("a card with no version has its source at the left end of the line, with no gap before it", async () => {
+  const app = await open(
+    "./fixtures/plugins-installed-source.tsx",
+    SOURCE_OPEN,
+  );
+  const description = app.layout(
+    "label:bare-git-plugin >> text:desc-bare-git-plugin",
+  )!;
+  const git = app.layout(
+    "label:bare-git-plugin >> text:acme/bare @ 0123456789ab",
+  )!;
+  expect(git).toBeDefined();
+  expect(git.x).toBe(description.x);
+  expect(git.y + git.height).toBeLessThanOrEqual(description.y);
+  const local = app.layout("label:bare-local-plugin >> text:Local directory")!;
+  const own = app.layout(
+    "label:bare-local-plugin >> text:desc-bare-local-plugin",
+  )!;
+  expect(local).toBeDefined();
+  expect(local.x).toBe(own.x);
+  expect(local.y + local.height).toBeLessThanOrEqual(own.y);
+});
+
+test("a card that needs configuring keeps both its badge and its source on the line", async () => {
+  const app = await open(
+    "./fixtures/plugins-installed-source.tsx",
+    SOURCE_OPEN,
+  );
+  const badge = app.layout(
+    "label:config-git-plugin >> text:Needs configuring",
+  )!;
+  const source = app.layout(
+    "label:config-git-plugin >> text:acme/needs-a-long-repository-name @ 0123456789ab",
+  )!;
+  expect(badge).toBeDefined();
+  expect(source).toBeDefined();
+  expect(source.width).toBeGreaterThan(40);
+  expect(Math.abs(source.y - badge.y)).toBeLessThanOrEqual(4);
+});

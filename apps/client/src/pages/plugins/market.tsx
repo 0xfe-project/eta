@@ -1,11 +1,23 @@
 import type {
+  ComposioAuth,
+  ComposioToolkit,
   MarketCatalog,
   MarketEntry,
   MarketPreview,
+  PluginResults,
 } from "@eta/client-contracts";
-import type { JSX } from "nsh";
+import type { JSX, ScrollProps } from "nsh";
 import type { Layout } from "../../components";
-import { effect, signal, untracked, View } from "nsh";
+import type { LogoAsk } from "./plugin-logo";
+import {
+  cleanup,
+  effect,
+  lifecycle,
+  openUrl,
+  signal,
+  untracked,
+  View,
+} from "nsh";
 import { Input } from "nsh/base";
 import {
   Button,
@@ -26,8 +38,9 @@ import { CloseButton } from "../../components/navigation-buttons";
 import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
 import { sheetEdge } from "./configure";
-import { PluginLogo, primeLogos } from "./plugin-logo";
+import { pendingLogos, PluginLogo, primeLogos } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
 
 /**
@@ -46,10 +59,38 @@ const detailHeight = 440;
 /** The last list shown, kept for the session: the market opened again draws it on its first frame. */
 let lastCatalog: MarketCatalog | undefined;
 
+/** How often, and how many times, the market asks Composio whether a toolkit got connected (about three minutes). */
+const POLL_MS = 3000;
+const POLL_LIMIT = 60;
+
+/** How many rows of cards the market draws at first, and each time Show more is pressed or the end comes near. A batch is whole rows, so how many cards it holds follows from the columns. */
+const ROWS = 10;
+/** On a phone a row is one short card, so a batch holds more rows: ten of them would not fill the screen, and nothing would scroll to draw the next. */
+const PHONE_ROWS = 20;
+/** The widest card (a Composio one), for how many fit in a row; the gap between cards is `space[12]`. */
+const CARD_SPACE = 267; // design-value: the Composio card's width, the widest card
+/** How near the end of the list, in points, the next batch is drawn without Show more being pressed: about a screen, so the next batch is drawn before the end is seen. */
+const NEAR_END = 800; // design-value: a distance of scrolling, not a style
+/** How long a search waits for the next key before the list follows it. */
+const SEARCH_MS = 175;
+
+/** What a search looks through, lower-cased once per item, not on every key. */
+const haystacks = new WeakMap<object, string>();
+const haystack = (item: object, parts: () => string[]): string => {
+  let text = haystacks.get(item);
+  if (text === undefined) {
+    text = parts().join(" ").toLowerCase();
+    haystacks.set(item, text);
+  }
+  return text;
+};
+
 export function Market(props: {
   layout: Layout;
   tabs: () => JSX.Element;
   onBack?: () => void;
+  /** Opens an address in the browser; the system's by default. */
+  open?: (url: string) => Promise<void>;
 }) {
   const host = useHost();
   const c = colors();
@@ -62,6 +103,17 @@ export function Market(props: {
   };
   const loading = signal(false);
   const query = signal("");
+  /** The words the list is filtered by: the field's, after the typing paused. */
+  const needle = signal("");
+  let typing: ReturnType<typeof setTimeout> | undefined;
+  effect(() => {
+    const next = query().trim().toLowerCase();
+    untracked(() => {
+      clearTimeout(typing);
+      typing = setTimeout(() => needle.set(next), SEARCH_MS);
+    });
+  });
+  cleanup(() => clearTimeout(typing));
   const detail = signal("");
   /** What the open entry would run, read from its pinned commit: shown in the detail before installing. */
   const info = signal<MarketPreview>();
@@ -73,18 +125,117 @@ export function Market(props: {
   const key = (item: MarketEntry) => `${item.source}\n${item.name}`;
   const all = () =>
     (catalog()?.sources ?? []).flatMap((item) => item.entries ?? []);
-  const entries = () => {
-    const needle = query().trim().toLowerCase();
-    return all().filter(
+  const entries = () =>
+    all().filter(
       (item) =>
-        needle === "" ||
-        [item.name, item.description, item.author, item.sourceName]
-          .join(" ")
-          .toLowerCase()
-          .includes(needle),
+        needle() === "" ||
+        haystack(item, () => [
+          item.name,
+          item.description,
+          item.author,
+          item.sourceName,
+        ]).includes(needle()),
     );
-  };
   const current = () => all().find((item) => key(item) === detail());
+  const toolkitKey = (item: ComposioToolkit) => `composio\n${item.slug}`;
+  const allToolkits = () =>
+    (catalog()?.sources ?? []).flatMap((item) => item.toolkits ?? []);
+  const toolkits = () =>
+    allToolkits().filter(
+      (item) =>
+        needle() === "" ||
+        haystack(item, () => [
+          item.name,
+          item.description,
+          item.sourceName,
+          ...item.categories,
+        ]).includes(needle()),
+    );
+  /** The width of the list of cards, once laid out: what the columns follow from. */
+  const room = signal(0);
+  /** Whether the columns are known: at once on a phone (one), after the first layout elsewhere. Until then nothing is drawn, which would only be redrawn, with its pictures asked for, once the width says how many fit. */
+  const known = () => phone() || room() > 0;
+  const columns = () =>
+    phone()
+      ? 1
+      : Math.max(
+          1,
+          Math.floor((room() + space[12]) / (CARD_SPACE + space[12])),
+        );
+  const batchRows = () => (phone() ? PHONE_ROWS : ROWS);
+  /** How many rows of the matching cards (toolkits first, then the other sources' plugins) are drawn: none until the first batch's pictures were asked for. A new search starts again from the first batch. */
+  const rows = signal(0);
+  const drawn = () => (known() ? rows() * columns() : 0);
+  /** Everything the search matches, whatever is drawn: a search looks through all of it. */
+  const total = () => toolkits().length + entries().length;
+  /** The pictures to ask the host for before the first `count` matching cards are drawn. */
+  const asksFor = (count: number): LogoAsk[] => [
+    ...toolkits()
+      .slice(0, count)
+      .map((item) => ({ composio: item.slug })),
+    ...entries()
+      .slice(0, Math.max(0, count - toolkits().length))
+      .filter((item) => item.repo !== "" && item.unsupported === null)
+      .map((item) => ({
+        repo: item.repo,
+        ref: item.rev ?? "HEAD",
+        path: item.path,
+        homepage: item.homepage,
+      })),
+  ];
+  let reaching = 0;
+  /**
+   * Draw up to `to` rows. First the host is asked, once, for the pictures it kept for the cards that
+   * come with them, and waited for (a little): so they are drawn with their pictures, and not one by
+   * one afterwards. Nothing to ask for, or no answer in time, draws at once.
+   */
+  const reach = (to: number) => {
+    const token = ++reaching;
+    const need = pendingLogos(asksFor(to * columns()));
+    if (need.length === 0) rows.set(to);
+    else
+      void primeLogos(host, need).then(() => {
+        if (token === reaching) rows.set(to);
+      });
+  };
+  /** The height of the content when scrolling last drew a batch: another is drawn only once the content has grown. */
+  let drawnAt = 0;
+  // The first batch, once there is something to draw and the columns are known.
+  effect(() => {
+    if (known() && total() > 0 && rows() === 0)
+      untracked(() => reach(batchRows()));
+  });
+  // A new search draws its first batch at once: what it shows is mostly drawn (and asked for) before.
+  effect(() => {
+    needle();
+    untracked(() => {
+      if (rows() > 0) rows.set(batchRows());
+      drawnAt = 0;
+    });
+  });
+  /** Scrolled near the end of the list: draw the next batch. Show more stays for a list that does not fill the view. */
+  const nearEnd: NonNullable<ScrollProps["onScroll"]> = (event) => {
+    const end = event.contentSize.height;
+    if (
+      total() <= drawn() ||
+      end === drawnAt ||
+      event.offset.y + event.size.height < end - NEAR_END
+    )
+      return;
+    drawnAt = end;
+    reach(rows() + batchRows());
+  };
+  const shownToolkits = () => toolkits().slice(0, drawn());
+  /** The other sources' plugins come after the toolkits, so they fill what the toolkits leave of the batch. */
+  const shownEntries = () =>
+    entries().slice(0, Math.max(0, drawn() - toolkits().length));
+  const currentToolkit = () =>
+    allToolkits().find((item) => toolkitKey(item) === detail());
+  /** A Composio source with no key, or whose key was refused: an answer of its own, not a failure of the market. */
+  const composioNotes = () =>
+    (catalog()?.sources ?? []).filter(
+      (item) => item.status === "needs_key" || item.status === "key_rejected",
+    );
   const failed = () =>
     (catalog()?.sources ?? []).filter((item) => item.error !== null);
   const skipped = () =>
@@ -105,26 +256,164 @@ export function Market(props: {
       ? undefined
       : new Date(Math.min(...times)).toLocaleString();
   };
+  /** The toolkits Composio says are connected. A mark only: when it cannot be read, no mark shows. */
+  const connected = signal<string[]>([]);
+  const isConnected = (slug: string) => connected().includes(slug);
+  async function refreshConnected(): Promise<void> {
+    const answer = await host
+      .call<PluginResults["composioConnected"]>(
+        "plugins",
+        "composioConnected",
+        {},
+      )
+      .catch(() => undefined);
+    if (!answer || !Array.isArray(answer.slugs)) return;
+    // A failed read keeps what was known; a key that is gone or refused knows nothing.
+    if (answer.status === "ready") connected.set(answer.slugs);
+    else if (answer.status !== "error") connected.set([]);
+  }
+  /** The toolkits that need no sign-in and were added. A mark only, like the connected ones. */
+  const added = signal<string[]>([]);
+  const isAdded = (slug: string) => added().includes(slug);
+  async function refreshAdded(): Promise<void> {
+    const answer = await host
+      .call<PluginResults["composioAdded"]>("plugins", "composioAdded", {})
+      .catch(() => undefined);
+    if (answer && Array.isArray(answer.slugs)) added.set(answer.slugs);
+  }
+  /** The toolkit being waited for after Connect opened the browser; empty when nothing is. */
+  const waiting = signal("");
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let asking = false;
+  function stopWaiting() {
+    clearInterval(timer);
+    timer = undefined;
+    waiting.set("");
+  }
+  async function checkWaiting() {
+    const slug = waiting();
+    if (slug === "" || asking) return;
+    asking = true;
+    try {
+      await refreshConnected();
+    } finally {
+      asking = false;
+    }
+    if (waiting() === slug && isConnected(slug)) stopWaiting();
+  }
+  function startWaiting(slug: string) {
+    stopWaiting();
+    waiting.set(slug);
+    let asked = 0;
+    timer = setInterval(() => {
+      if (++asked > POLL_LIMIT) stopWaiting();
+      else void checkWaiting();
+    }, POLL_MS);
+  }
+  cleanup(() => clearInterval(timer));
+  // The window got the focus back (the user is coming back from the browser): ask at once.
+  effect(() => {
+    if (lifecycle() !== "active" || waiting() === "") return;
+    untracked(() => void checkWaiting());
+  });
+  // The first time toolkits are on the screen, and each time one is opened.
+  let asked = false;
+  effect(() => {
+    if (allToolkits().length === 0) return;
+    untracked(() => {
+      if (asked) return;
+      asked = true;
+      void refreshConnected();
+      void refreshAdded();
+    });
+  });
+  effect(() => {
+    if (!detail().startsWith("composio\n")) return;
+    untracked(() => {
+      void refreshConnected();
+      void refreshAdded();
+    });
+  });
+  const messageOf = (error: unknown) =>
+    error instanceof Error && error.message !== ""
+      ? error.message
+      : String(error);
+
+  /** Connecting a toolkit: the host starts it with Composio, and the user finishes in the browser. */
+  async function connect(toolkit: ComposioToolkit) {
+    if (busy()) return;
+    busy.set(true);
+    installError.set("");
+    try {
+      await linkAndOpen(host, props.open ?? openUrl, toolkit.slug);
+      // Already connected: nothing to wait for, the mark is there.
+      if (!isConnected(toolkit.slug)) startWaiting(toolkit.slug);
+    } catch (error) {
+      installError.set(messageOf(error));
+    } finally {
+      busy.set(false);
+    }
+  }
+  /** The toolkit whose Disconnect is being asked about. */
+  const disconnecting = signal<ComposioToolkit | undefined>(undefined);
+  function disconnected(slug: string) {
+    // Gone at once; the host is asked again behind it.
+    connected.update((all) => all.filter((one) => one !== slug));
+    disconnecting.set(undefined);
+    void refreshConnected();
+  }
+  /** Adding a toolkit that needs no sign-in: no link and no browser, the host makes it a plugin. */
+  async function add(toolkit: ComposioToolkit) {
+    if (busy()) return;
+    busy.set(true);
+    installError.set("");
+    try {
+      const done = await host.call<PluginResults["composioAdd"]>(
+        "plugins",
+        "composioAdd",
+        { slug: toolkit.slug },
+      );
+      if (done.status === "ready")
+        added.update((all) =>
+          all.includes(toolkit.slug) ? all : [...all, toolkit.slug],
+        );
+      else
+        installError.set(
+          done.status === "needs_key"
+            ? uiText("composioNeedsKey")
+            : done.status === "key_rejected"
+              ? uiText("composioKeyRejected")
+              : uiText("composioAddFailed"),
+        );
+    } catch (error) {
+      installError.set(messageOf(error));
+    } finally {
+      busy.set(false);
+    }
+  }
+  /** Taking an added toolkit away asks nothing of Composio, so there is nothing to confirm. */
+  async function removeAdded(toolkit: ComposioToolkit) {
+    if (busy()) return;
+    busy.set(true);
+    installError.set("");
+    try {
+      await host.call<PluginResults["composioRemove"]>(
+        "plugins",
+        "composioRemove",
+        { slug: toolkit.slug },
+      );
+      added.update((all) => all.filter((one) => one !== toolkit.slug));
+    } catch (error) {
+      installError.set(messageOf(error));
+    } finally {
+      busy.set(false);
+    }
+  }
   async function clearCache() {
     await host.action(() => host.call("plugins", "marketClearCache", {}));
     await load();
   }
   follow(() => "plugins");
-
-  /** The pictures the host already has for these entries, asked once, so the first frame shows them. */
-  const prime = (shown: MarketCatalog) =>
-    primeLogos(
-      host,
-      shown.sources
-        .flatMap((item) => item.entries ?? [])
-        .filter((item) => item.repo !== "" && item.unsupported === null)
-        .map((item) => ({
-          repo: item.repo,
-          ref: item.rev ?? "HEAD",
-          path: item.path,
-          homepage: item.homepage,
-        })),
-    );
 
   async function load() {
     if (loading()) return;
@@ -147,7 +436,6 @@ export function Market(props: {
         }),
       };
       if (merged.sources.some((item) => item.entries !== null)) {
-        if (before === undefined) await prime(merged);
         show(merged);
       } else catalog.set(merged);
     }
@@ -184,11 +472,6 @@ export function Market(props: {
     host.subscriptionWire();
     untracked(() => void load());
   });
-
-  const messageOf = (error: unknown) =>
-    error instanceof Error && error.message !== ""
-      ? error.message
-      : String(error);
 
   /** Read what the entry would run. The same read an install pins its commit from; nothing is installed. */
   async function readInfo(entry: MarketEntry): Promise<MarketPreview> {
@@ -269,6 +552,22 @@ export function Market(props: {
       }}
     />
   );
+  const authLabel = (auth: ComposioAuth) =>
+    auth === "api_key"
+      ? uiText("composioAuthApiKey")
+      : auth === "oauth"
+        ? uiText("composioAuthOauth")
+        : auth === "none"
+          ? uiText("composioAuthNone")
+          : uiText("composioAuthUnknown");
+  const authHelp = (auth: ComposioAuth) =>
+    auth === "api_key"
+      ? uiText("composioAuthApiKeyHelp")
+      : auth === "oauth"
+        ? uiText("composioAuthOauthHelp")
+        : auth === "none"
+          ? uiText("composioAuthNoneHelp")
+          : uiText("composioAuthUnknownHelp");
   const marker = (item: MarketEntry) =>
     item.unsupported !== null
       ? uiText("marketUnsupported")
@@ -419,7 +718,12 @@ export function Market(props: {
         </View>
       </Header>
       {props.tabs()}
-      <SmoothScroll style={grow} scrollbar={false}>
+      <SmoothScroll
+        style={grow}
+        scrollbar={false}
+        onScroll={nearEnd}
+        scrollEventThrottle={16}
+      >
         <View
           style={{
             paddingHorizontal: phone() ? space[16] : space[24],
@@ -489,16 +793,33 @@ export function Market(props: {
               />
             </View>
           </If>
-          <If when={all().length}>
+          <Each of={composioNotes()} key={(item) => item.source.url}>
+            {(item) => (
+              <View testID="composio-note" style={{ gap: space[4] }}>
+                <Label weight={500}>
+                  {item().status === "needs_key"
+                    ? uiText("composioNeedsKey")
+                    : uiText("composioKeyRejected")}
+                </Label>
+                <Label variant="small" tone="muted">
+                  {item().status === "needs_key"
+                    ? uiText("composioNeedsKeyHint")
+                    : uiText("composioKeyRejectedHint")}
+                </Label>
+              </View>
+            )}
+          </Each>
+          <If when={all().length || allToolkits().length}>
             <View style={{ maxWidth: searchWidth }}>
               {field(uiText("marketSearch"), query, query.set)}
             </View>
-            <If when={!entries().length}>
+            <If when={!entries().length && !toolkits().length}>
               <Label variant="small" tone="muted">
                 {uiText("marketNothingFound")}
               </Label>
             </If>
             <View
+              onLayout={({ bounds }) => room.set(bounds.size.width)}
               style={{
                 ...row,
                 flexWrap: "wrap",
@@ -506,7 +827,72 @@ export function Market(props: {
                 gap: space[12],
               }}
             >
-              <Each of={entries()} key={key}>
+              <Each of={shownToolkits()} key={toolkitKey}>
+                {(item) => (
+                  <View
+                    role="button"
+                    accessibilityLabel={item().name}
+                    onPress={() => detail.set(toolkitKey(item()))}
+                    style={{
+                      width: phone() ? undefined : 267, // design-value: card width, as on the installed page's Composio cards
+                      flex: phone() ? 1 : undefined,
+                      padding: space[12],
+                      gap: 6, // design-value: 6px between a card's lines, not on the space scale
+                      backgroundColor: c().canvas,
+                      borderWidth: 1,
+                      borderColor: c().border,
+                    }}
+                  >
+                    <View style={{ ...row, gap: space[8] }}>
+                      <PluginLogo name={item().name} composio={item().slug} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <PluginName name={item().name} />
+                      </View>
+                    </View>
+                    <Label variant="small" tone="muted" lines={1}>
+                      {authLabel(item().auth)}
+                    </Label>
+                    <Label variant="small" tone="muted" lines={2}>
+                      {item().description}
+                    </Label>
+                    {/* The mark sits where the other sources' markers do: the card's bottom right, on the source's line. */}
+                    <View
+                      style={{
+                        ...row,
+                        gap: space[8],
+                        minHeight: type("small").line,
+                      }}
+                    >
+                      <View style={grow}>
+                        <Label variant="caption" tone="muted" lines={1}>
+                          {uiText("marketFrom", { name: item().sourceName })}
+                        </Label>
+                      </View>
+                      <If when={isConnected(item().slug)}>
+                        <View
+                          testID="composio-connected"
+                          style={{ flexShrink: 1, minWidth: 0 }}
+                        >
+                          <Label variant="small" lines={1}>
+                            {uiText("composioConnected")}
+                          </Label>
+                        </View>
+                      </If>
+                      <If when={isAdded(item().slug)}>
+                        <View
+                          testID="composio-added"
+                          style={{ flexShrink: 1, minWidth: 0 }}
+                        >
+                          <Label variant="small" lines={1}>
+                            {uiText("composioAdded")}
+                          </Label>
+                        </View>
+                      </If>
+                    </View>
+                  </View>
+                )}
+              </Each>
+              <Each of={shownEntries()} key={key}>
                 {(item) => (
                   <View
                     role="button"
@@ -573,6 +959,16 @@ export function Market(props: {
                 )}
               </Each>
             </View>
+            {/* At the end of the list, after both kinds of card; the list also draws the next batch by itself near its end. */}
+            <If when={known() && rows() > 0 && total() > drawn()}>
+              <View style={{ alignItems: "center" }}>
+                <Button
+                  label={uiText("marketShowMore")}
+                  tone="ghost"
+                  onPress={() => reach(rows() + batchRows())}
+                />
+              </View>
+            </If>
             <If when={skipped().length}>
               <Label variant="small" tone="muted">
                 {uiText("marketSkipped", { count: skipped().length })}
@@ -592,6 +988,162 @@ export function Market(props: {
           </If>
         </View>
       </SmoothScroll>
+      <If when={currentToolkit()}>
+        <Modal
+          {...sheet(currentToolkit()!.name, 512, () => detail.set(""))}
+          hideHeader
+        >
+          {/* design-value: the detail's scroll height, as the other detail sheets */}
+          <SmoothScroll style={{ maxHeight: 440 }} scrollbar={false}>
+            {/* design-value: 10px and 6px in the detail's body, not on the space scale */}
+            <View style={{ gap: 10, paddingTop: 6, ...inset() }}>
+              <View
+                testID="market-detail-header"
+                style={{ ...row, gap: space[12], alignItems: "center" }}
+              >
+                <PluginLogo
+                  name={currentToolkit()!.name}
+                  composio={currentToolkit()!.slug}
+                  size={avatar.xl}
+                />
+                <View
+                  tooltip={hint(currentToolkit()!.name, c)}
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  <Label variant="title" weight={600} lines={1}>
+                    {currentToolkit()!.name}
+                  </Label>
+                </View>
+                {/* design-value: the close button's icon, between icon sizes */}
+                <CloseButton onPress={() => detail.set("")} iconSize={14} />
+              </View>
+              <Label
+                variant="small"
+                tone="muted"
+                style={{ userSelect: "text" }}
+              >
+                {currentToolkit()!.description}
+              </Label>
+              {line(uiText("marketSource"), currentToolkit()!.sourceName)}
+              {line(
+                uiText("composioCategories"),
+                currentToolkit()!.categories.join(", "),
+              )}
+              {line(
+                uiText("composioTools"),
+                currentToolkit()!.toolsCount === null
+                  ? null
+                  : String(currentToolkit()!.toolsCount),
+              )}
+              {line(uiText("composioHomepage"), currentToolkit()!.appUrl)}
+              {line(uiText("composioAuth"), authLabel(currentToolkit()!.auth))}
+              <Label variant="small">{authHelp(currentToolkit()!.auth)}</Label>
+              <If
+                when={
+                  !currentToolkit()!.managed &&
+                  currentToolkit()!.auth !== "none"
+                }
+              >
+                <Label variant="small" tone="muted">
+                  {uiText("composioNotManaged")}
+                </Label>
+              </If>
+              <If when={isConnected(currentToolkit()!.slug)}>
+                <View testID="composio-connected">
+                  <Label variant="small">{uiText("composioConnected")}</Label>
+                </View>
+              </If>
+              <If when={isAdded(currentToolkit()!.slug)}>
+                <View testID="composio-added">
+                  <Label variant="small">{uiText("composioAdded")}</Label>
+                </View>
+              </If>
+              <If when={currentToolkit()!.auth !== "none"}>
+                <Label variant="small" tone="muted">
+                  {uiText("composioConnectNote")}
+                </Label>
+              </If>
+              <If when={installError()}>
+                <Label
+                  variant="small"
+                  tone="red"
+                  style={{ userSelect: "text" }}
+                >
+                  {installError()}
+                </Label>
+              </If>
+            </View>
+          </SmoothScroll>
+          <View
+            style={{
+              ...row,
+              justifyContent: "flex-end",
+              gap: space[8],
+              paddingTop: 10, // design-value: 10px above the buttons, not on the space scale
+              paddingBottom: phone() ? space[24] : 0,
+              ...inset(),
+            }}
+          >
+            <If when={currentToolkit()!.auth === "none"}>
+              <If
+                when={isAdded(currentToolkit()!.slug)}
+                else={
+                  <Button
+                    label={uiText("composioAdd")}
+                    tone="primary"
+                    size={phone() ? control.touch : control.md}
+                    disabled={busy()}
+                    onPress={() => void add(currentToolkit()!)}
+                  />
+                }
+              >
+                <Button
+                  label={uiText("composioRemove")}
+                  tone="plain"
+                  size={phone() ? control.touch : control.md}
+                  disabled={busy()}
+                  onPress={() => void removeAdded(currentToolkit()!)}
+                />
+              </If>
+            </If>
+            <If when={currentToolkit()!.auth !== "none"}>
+              <View style={{ ...row, gap: space[8] }}>
+                <If when={isConnected(currentToolkit()!.slug)}>
+                  <Button
+                    label={uiText("composioDisconnect")}
+                    tone="plain"
+                    size={phone() ? control.touch : control.md}
+                    disabled={busy()}
+                    onPress={() => disconnecting.set(currentToolkit())}
+                  />
+                </If>
+                <Button
+                  label={
+                    busy()
+                      ? uiText("composioConnecting")
+                      : isConnected(currentToolkit()!.slug)
+                        ? uiText("composioReconnect")
+                        : uiText("composioConnect")
+                  }
+                  tone="primary"
+                  size={phone() ? control.touch : control.md}
+                  disabled={busy()}
+                  onPress={() => void connect(currentToolkit()!)}
+                />
+              </View>
+            </If>
+          </View>
+        </Modal>
+      </If>
+      <If when={disconnecting()}>
+        <ComposioDisconnect
+          slug={disconnecting()!.slug}
+          name={disconnecting()!.name}
+          phone={phone()}
+          onDone={() => disconnected(disconnecting()!.slug)}
+          onClose={() => disconnecting.set(undefined)}
+        />
+      </If>
       <If when={current()}>
         <Modal
           {...sheet(current()!.name, 512, () => detail.set(""))}

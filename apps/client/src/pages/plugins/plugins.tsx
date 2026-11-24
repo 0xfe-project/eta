@@ -24,6 +24,7 @@ import {
 } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { ComposioConnected } from "./composio-connected";
 import { AddPlugin, ConfigurePlugin, sheetEdge } from "./configure";
 import { pluginText } from "./labels";
 import { Market } from "./market";
@@ -50,7 +51,12 @@ const footerHeight = 36;
 /** A phone row: taller when it has a line asking for configuration. */
 const phoneRowHeight = { needsConfig: 64, other: 60 } as const;
 
-export function Plugins(props: { layout: Layout; onBack?: () => void }) {
+export function Plugins(props: {
+  layout: Layout;
+  onBack?: () => void;
+  /** Opens an address in the browser; the system's by default. */
+  open?: (url: string) => Promise<void>;
+}) {
   const host = useHost();
   const c = colors();
   const tab = signal("Plugins");
@@ -222,6 +228,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
             )}
           </Each>
         </View>
+        <ComposioConnected layout={props.layout} open={props.open} />
       </View>
     </SmoothScroll>
   );
@@ -346,6 +353,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                           onSelect={selected.set}
                         />
                       </If>
+                      <ComposioConnected layout="phone" open={props.open} />
                     </SmoothScroll>
                   </If>
                 </If>
@@ -364,6 +372,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           onRefresh={refreshPlugins}
           onAdd={() => add.set(true)}
           detail={detailView()}
+          extra={<ComposioConnected layout="tablet" />}
         />
       </If>
       <If when={warningPlugin()}>
@@ -524,13 +533,48 @@ function PluginCard(props: {
               )}
             </If>
           </View>
-          <View style={{ ...row, height: space[20], gap: space[8] }}>
+          {/* Version, then where the plugin comes from, which takes what is left and is cut to one line. */}
+          <View style={{ ...row, height: control.sm, gap: space[8] }}>
             <If when={props.item.version}>
-              <Label variant="small" tone="muted">
+              <Label variant="small" tone="muted" style={{ flexShrink: 0 }}>
                 {props.item.version ?? ""}
               </Label>
             </If>
-            <Status item={props.item} />
+            <If
+              when={git()}
+              else={
+                <Label
+                  variant="small"
+                  tone="muted"
+                  lines={1}
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  {uiText("localDirectory")}
+                </Label>
+              }
+            >
+              {(source) => (
+                <Label
+                  variant="small"
+                  tone="muted"
+                  lines={1}
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  {`${source().repo} @ ${source().sha.slice(0, 12)}`}
+                </Label>
+              )}
+            </If>
+            <Status item={props.item} hideOff />
+            <If when={git()}>
+              <Button
+                label={uiText("sourceFor", { name: props.item.name })}
+                icon="more"
+                iconOnly
+                tone="ghost"
+                size={control.sm}
+                onPress={props.onSource}
+              />
+            </If>
           </View>
         </View>
       </View>
@@ -543,36 +587,6 @@ function PluginCard(props: {
         {props.item.description}
       </Label>
       <View style={{ gap: space[4] }}>
-        <View style={{ ...row, height: control.md, gap: space[4] }}>
-          <If
-            when={git()}
-            else={
-              <Label variant="small" tone="muted">
-                {uiText("localDirectory")}
-              </Label>
-            }
-          >
-            {(source) => (
-              <>
-                <Label
-                  variant="small"
-                  tone="muted"
-                  lines={1}
-                  style={{ flex: 1, minWidth: 0 }}
-                >
-                  {`${source().repo} @ ${source().sha.slice(0, 12)}`}
-                </Label>
-                <Button
-                  label={uiText("sourceFor", { name: props.item.name })}
-                  icon="more"
-                  iconOnly
-                  tone="ghost"
-                  onPress={props.onSource}
-                />
-              </>
-            )}
-          </If>
-        </View>
         <View style={{ ...row, height: control.md, gap: space[4] }}>
           <Label
             variant="small"

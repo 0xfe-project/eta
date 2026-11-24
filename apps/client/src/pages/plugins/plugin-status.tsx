@@ -98,12 +98,21 @@ export function cardLogin(
     : "signed_in";
 }
 
-/** Off for all agents, or needs configuring. A ready plugin shows nothing: "can be enabled" says no more than the absence of the other two. */
-export function Status(props: { item: PluginView; phone?: boolean }) {
+/**
+ * Off for all agents, or needs configuring. A ready plugin shows nothing: "can be enabled" says no
+ * more than the absence of the other two. `hideOff` leaves out "off for all agents", for a card
+ * whose own switch says it right below.
+ */
+export function Status(props: {
+  item: PluginView;
+  phone?: boolean;
+  hideOff?: boolean;
+}) {
   const c = colors();
   const missing = () => props.item.state === "needs_config";
+  const off = () => !props.item.enabled && props.hideOff !== true;
   return (
-    <If when={!props.item.enabled || missing()}>
+    <If when={off() || missing()}>
       <Label
         variant="caption"
         lines={1}
@@ -116,9 +125,7 @@ export function Status(props: { item: PluginView; phone?: boolean }) {
           borderColor: c().warning,
         }}
       >
-        {!props.item.enabled
-          ? uiText("pluginOffForAll")
-          : uiText("needsConfiguring")}
+        {off() ? uiText("pluginOffForAll") : uiText("needsConfiguring")}
       </Label>
     </If>
   );

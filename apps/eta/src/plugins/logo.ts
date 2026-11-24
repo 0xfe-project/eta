@@ -39,6 +39,8 @@ const PINNED_MS = 30 * 24 * 60 * 60 * 1000;
 const COMMIT = /^[0-9a-f]{40}$/;
 /** The `repo` under which `find` keeps its answers in the database (no repository is named like this). */
 const FOUND = "#find";
+/** The same for `fromUrl`: the picture's address is its `ref` and `path`. */
+const FROM_URL = "#composio";
 const SKIPPED = new Set([
   "github.com",
   "www.github.com",
@@ -160,6 +162,8 @@ export interface LogoOptions {
   allowPrivate?: boolean;
   /** Tests only: the name resolver. */
   resolve?: (host: string) => Promise<string[]>;
+  /** Tests only: a certificate (PEM) trusted for https, so a local fake server with its own can answer. */
+  ca?: string;
   /** Tests only: the sites asked for a server's icon, in order (a local fake has no parent host). */
   sites?: (server: string) => string[];
   timeoutMs?: number;
@@ -350,6 +354,49 @@ export class Logos {
   }
 
   /**
+   * A picture at one https address (a Composio toolkit's logo), every redirect https too. Same checks
+   * as any other fetch here; no header of the host or the user goes with it. Unlike every other way
+   * to a picture here it also takes an SVG (Composio's logos are SVG), kept as it is: it must pass
+   * the same test as a plugin's own SVG (`readOwnLogo`), or it is no picture. An answer is kept a
+   * day, in memory and in the database (checked again when read back); a confirmed miss (a refusal,
+   * a 4xx, not a picture) for an hour. A failure to ask (network, timeout, 5xx) is kept nowhere; null
+   * when there is no picture.
+   */
+  async fromUrl(address: string): Promise<Logo | null> {
+    const key = `https\n${address}`;
+    const now = (this.#options.now ?? Date.now)();
+    const hit = this.#kept.get(key);
+    if (hit && now - hit.at < KEEP_MS) return hit.logo;
+    const stored = [FROM_URL, address, address] as const;
+    const row = this.#options.store?.get(...stored, now);
+    if (row !== undefined) {
+      const kept =
+        row.status === "miss" ? null : this.#checked(row.mime, row.bytes);
+      if (kept === undefined) this.#options.store?.delete(...stored);
+      else if (now < row.expiresAt) {
+        this.#kept.set(key, { at: now, logo: kept });
+        return kept;
+      }
+    }
+    let failed = false;
+    const logo = await this.#picture(address, true, true).catch((error) => {
+      if (failure(error)) failed = true;
+      return null;
+    });
+    if (failed) return null;
+    this.#kept.set(key, { at: now, logo });
+    this.#options.store?.put(
+      ...stored,
+      logo
+        ? { mime: logo.type, bytes: Buffer.from(logo.data, "base64") }
+        : null,
+      now + (logo ? KEEP_MS : MISS_MS),
+      now,
+    );
+    return logo;
+  }
+
+  /**
    * The own logo of a catalog entry that is a path in a GitHub repository, read from the plugin's
    * manifest (`.cursor-plugin/plugin.json`, else `.claude-plugin/plugin.json`) on
    * raw.githubusercontent.com: nothing is cloned. `logo` is a path inside the plugin; the picture
@@ -469,27 +516,39 @@ export class Logos {
 
   /**
    * What is kept for entries, and nothing else: memory and the database only, no network, and not
-   * in the queue of lookups. `hit` is a picture (checked again as if it had just come, a stale one
-   * too: better than a letter), `miss` a recent answer that there is none, `unknown` anything not
-   * known (including entries past MAX_CACHED_LOGOS and hits past MAX_CACHED_BYTES).
+   * in the queue of lookups. An entry is a plugin in a repository, or `{ url }`: the logo address of
+   * a Composio toolkit (what `fromUrl` keeps; an empty one is not known). `hit` is a picture
+   * (checked again as if it had just come, a stale one too: better than a letter), `miss` a recent
+   * answer that there is none, `unknown` anything not known (including entries past
+   * MAX_CACHED_LOGOS and hits past MAX_CACHED_BYTES).
    */
   cached(
-    entries: {
-      repo: string;
-      ref: string;
-      path: string;
-      homepage: string | null;
-    }[],
+    entries: (
+      | {
+          repo: string;
+          ref: string;
+          path: string;
+          homepage: string | null;
+        }
+      | { url: string }
+    )[],
   ): CachedLogo[] {
     const now = (this.#options.now ?? Date.now)();
     let total = 0;
     return entries.map((one, index): CachedLogo => {
       if (index >= MAX_CACHED_LOGOS) return { status: "unknown" };
-      let got = this.#peek(one.repo, one.ref, one.path, now);
+      let got =
+        "url" in one
+          ? this.#peekUrl(one.url, now)
+          : this.#peek(one.repo, one.ref, one.path, now);
       // No own logo, or not known (a short "none" that has expired reads as not known): the
       // homepage's icon, kept under the entry's key for longer, is next. An own picture wins; a
       // homepage that is not known either does not turn an own logo not known into "none".
-      if ((got === null || got === undefined) && one.homepage) {
+      if (
+        !("url" in one) &&
+        (got === null || got === undefined) &&
+        one.homepage
+      ) {
         const site = this.#peek(
           one.repo,
           one.ref,
@@ -505,6 +564,17 @@ export class Logos {
       total += got.data.length;
       return { status: "hit", logo: got };
     });
+  }
+
+  /** What `fromUrl` kept for an address, read the same way as `fromUrl` does but never asked for. */
+  #peekUrl(address: string, now: number): Logo | null | undefined {
+    if (address === "") return undefined;
+    const hit = this.#kept.get(`https\n${address}`);
+    if (hit && now - hit.at < KEEP_MS) return hit.logo;
+    const row = this.#options.store?.peek(FROM_URL, address, address);
+    if (row === undefined) return undefined;
+    if (row.status === "miss") return now < row.expiresAt ? null : undefined;
+    return this.#checked(row.mime, row.bytes);
   }
 
   /** A picture, null (known: none), or undefined (not known). Reads only. */
@@ -697,9 +767,26 @@ export class Logos {
     return null;
   }
 
-  async #picture(address: string): Promise<Logo | null> {
-    const got = await this.#get(this.#address(address), MAX_PICTURE);
+  async #picture(
+    address: string,
+    httpsOnly = false,
+    svg = false,
+  ): Promise<Logo | null> {
+    const got = await this.#get(
+      this.#address(address, httpsOnly),
+      MAX_PICTURE,
+      httpsOnly,
+    );
     const type = pictureType(got.body);
+    if (!type && svg) {
+      const text = Buffer.from(got.body).toString("utf8");
+      return SVG_HEAD.test(text) && !SVG_UNSAFE.test(text)
+        ? {
+            type: "image/svg+xml",
+            data: Buffer.from(got.body).toString("base64"),
+          }
+        : null;
+    }
     return type
       ? await this.#shrunk(
           { type, data: Buffer.from(got.body).toString("base64") },
@@ -708,10 +795,12 @@ export class Logos {
       : null;
   }
 
-  #address(value: string): URL {
+  #address(value: string, httpsOnly = false): URL {
     const url = new URL(value);
-    if (url.protocol !== "https:" && url.protocol !== "http:")
-      throw new Refused("not an http(s) address");
+    if (url.protocol !== "https:" && (httpsOnly || url.protocol !== "http:"))
+      throw new Refused(
+        httpsOnly ? "not an https address" : "not an http(s) address",
+      );
     if (url.username || url.password)
       throw new Refused("an address with credentials");
     return url;
@@ -721,6 +810,7 @@ export class Logos {
   async #get(
     start: URL,
     cap: number,
+    httpsOnly = false,
   ): Promise<{ url: string; body: Uint8Array }> {
     let url = start;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -728,7 +818,10 @@ export class Logos {
       const status = response.status;
       if (status >= 300 && status < 400 && response.location) {
         // The GitHub proxy is for GitHub hosts only; viaProxy leaves any other address alone.
-        url = this.#address(viaProxy(new URL(response.location, url).href));
+        url = this.#address(
+          viaProxy(new URL(response.location, url).href),
+          httpsOnly,
+        );
         continue;
       }
       if (status !== 200) throw new Error(`HTTP ${status}`);
@@ -768,6 +861,7 @@ export class Logos {
           path: url.pathname + url.search,
           method: "GET",
           servername: secure && isIP(host) === 0 ? host : undefined,
+          ca: this.#options.ca,
           headers: {
             host: url.host,
             accept: "image/*,text/html;q=0.8",

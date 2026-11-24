@@ -206,6 +206,42 @@ The user can set environment variables on any stdio MCP server of an installed p
 
 A skill name must be lowercase `a-z0-9-`, at most 64 characters, no hyphen at either end, no `--`, and equal to its directory. A plugin's skill whose name breaks the character rules is not dropped: the loader formats it (lowercase, each run of other characters becomes one `-`, trimmed, cut to 64) through `formatSkillName` and `parseSkillText(..., nameOverride)`; the harness default is unchanged. A name that formats to nothing (for example all Chinese) is skipped with a reason in `reports`. Legal names keep theirs; formatted names that clash get `-2`, `-3` in directory order, so the result does not depend on load order. Each rename is listed in `reports` as `renamed "old" -> "new"` and the skill carries `renamedFrom`. The file is not changed. Known limit: eta's own loop still loads the directory by the name in the file (a warning, not a skip), so the formatted name is what the plugin lists, not necessarily what that loop shows; and a legal name that differs from its directory is still skipped.
 
+### The Composio source
+
+A built-in market source (`MarketSource.kind: "composio"`, address `composio:toolkits`, `plugins/composio.ts`). It is always listed, on unless switched off with `marketSetSourceEnabled`, and cannot be removed. Its toolkits are `ComposioToolkit` (`kind: "composio"`, slug, `auth`: `api_key` | `oauth` | `none` | `unknown` from `auth_schemes`, `composio_managed_auth_schemes` and `no_auth`, categories, https logo, tools count). The source's `status` is `ready`, `needs_key` (no key: an answer, not an error), `key_rejected` (401) or `error`; only this source is affected.
+
+- Key: `composioSetKey { key }`, `composioClearKey`, `composioStatus` (only `{ hasKey }`). Sealed with the host key in one row of the `credential` table (integration `market`, key `composio`, kind `secret`), like the Cursor credential; Composio has no migration of its own. It goes only to `https://backend.composio.dev` in `x-api-key`, redirects are refused, and it is in no cache key, log, error text or answer (a message built from a remote answer is cleaned of it).
+- List: `GET /api/v3/toolkits`, 100 per page, at most 30 pages, 3000 toolkits, 2 MB and 10 s per call. The checked list (not the raw answer) is kept in `market_catalog_cache` under `composio:toolkits`; opening shows it at once, a refresh failure keeps it with `stale`. No validators are sent: the list is paged.
+- Logo: `plugins.logo { composio: slug }`; the host takes the address from its own list and fetches it with the logo rules (public addresses only, redirects checked) over https only, never with the key. SVG is not accepted at all.
+- Link: `composioLink { slug }` → `{ redirectUrl }` (https only). It finds the project's Composio-managed auth config for the toolkit (`GET /api/v3/auth_configs?toolkit_slug&is_composio_managed=true`) or makes one (`POST /api/v3/auth_configs`, `use_composio_managed_auth`), then `POST /api/v3/connected_accounts/link`. `user_id` is a random `eta-<uuid>` made once and kept in the settings: Composio keeps connected accounts per user id, and nothing about the person is sent.
+- Not done: installing a toolkit adds no git source (`marketInstall` is untouched), and the shared MCP server is not connected.
+
+#### API key and OAuth toolkits
+
+`ComposioToolkit.auth` tells the card how a toolkit signs in; it changes nothing about how the link is made.
+
+- `oauth`: the person approves on the provider's page. Composio-managed auth means Composio's own OAuth app, so no client id or secret is needed.
+- `api_key`: the person gives the provider's own key on Composio's hosted page (as Composio describes it, not yet seen live). eta never receives that key.
+- `none` (`no_auth`) needs no sign-in and has no account to connect, so `composioLink` refuses it (no auth-config or link request is made) and the card shows Add instead of Connect; `unknown` is shown as it is, not guessed.
+- Adding a `none` toolkit: `plugins.composioAdd {slug}` → `{ status }` (`needs_key` without a key; only a slug the kept list says is `none` is accepted), `plugins.composioRemove {slug}` → `{ removed }` and `plugins.composioAdded` → `{ slugs }`. The slugs are kept in the setting `plugins.composioAdded`. An added toolkit is a plugin `@composio/<slug>` with its own checked tool_router session, like a connected one; this is the one exception to "only a connected (ACTIVE) toolkit becomes a plugin". Remove drops the slug and the kept session id, asks Composio for nothing and leaves the agents' ticks. Clearing or replacing the key drops the sessions but keeps the list. The cards say Added, not Connected, and the installed group counts both kinds. Whether Composio accepts a session for a no-auth toolkit is not verified.
+- In both cases the card's install action goes straight to `redirectUrl` with no confirm dialog. The result is a connected account at Composio under the stored `user_id`; nothing is written to eta's plugin store.
+- A connected toolkit can be signed in again (the same `link` as Connect; Composio's own `refresh` endpoint is deprecated and re-starts the sign-in too, so it is not used) or disconnected. `plugins.composioDisconnect {slug}` lists the ACTIVE accounts under eta's own `user_id`, then deletes those of that toolkit one by one (`DELETE /api/v3/connected_accounts/{id}`, no upstream revoke). It never deletes by slug alone and skips an account that names another user. It cannot be undone on Composio, so the client asks first. A failure returns only a status. Both buttons show in the market detail and in the installed page's Composio group, only while the key is set and the source is on. Not checked against the real service.
+- The list and the icon come from `meta` of each toolkit (`meta.logo`, `meta.categories`, `meta.tools_count`). Logos are fetched by the host and cached (see Caches); the client only names a slug.
+
+#### MCP: current state
+
+- Composio serves all toolkits through one shared server, `https://connect.composio.dev/mcp`; there is no per-toolkit server.
+- In eta, MCP servers come only from plugins. The Composio source creates no server and no plugin.
+- To use it, install or write a plugin that has an `mcp.json` with that URL, and put the Composio key in a secret `${VAR}` field. The plugin Settings panel then supplies it: the request-header editor sends it to the server's own origin, and "Test connection" lists the tools without calling one.
+- The key stored for the market source is not read by plugins. The plugin field is a separate entry.
+
+#### Known limits
+
+- Nothing here was checked against the real Composio service. Requests and answers follow its public API description and local fake servers (`apps/eta/test/composio.test.ts`). Field names, paging limits and the auth-config flow may differ.
+- It is not confirmed whether the key for `https://backend.composio.dev` (the market list) is the same key the shared MCP server accepts. Treat them as possibly two keys.
+- No real sign-in was done, so a link that opens, a callback and a connected account are untested.
+- The `user_id` is made once per eta installation and kept in the settings; Composio's connected accounts hang on it, so it is not a person's identity.
+
 ## Caches
 
 Both live in the host's database (migrations 0064 and 0065), behind a memory layer where there is one. Everything read back is treated as untrusted again, and the page still renders it as text.

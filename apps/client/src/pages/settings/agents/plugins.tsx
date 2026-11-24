@@ -7,6 +7,7 @@ import { icon, opacity, space, weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
+import { useComposioPlugins } from "../../plugins/composio-plugins";
 import {
   emptyStyle,
   SectionHeader,
@@ -19,10 +20,13 @@ import {
 const pluginLaneWidth = 108;
 
 export function AgentPlugins(props: { form: AgentForm }) {
-  const { plugins, phoneEditor } = props.form;
+  const { plugins, phoneEditor, runtime } = props.form;
   const host = useHost();
   const c = colors();
   const activePlugins = () => host.list<PluginView>("plugins");
+  /** The connected Composio toolkits, as plugins of their own after the installed ones. */
+  const composio = useComposioPlugins();
+  const shown = () => activePlugins().length + composio.list().length;
   const transports = { stdio: "stdio", "streamable-http": "HTTP", sse: "SSE" };
   const meta = (item: PluginView) => {
     const servers = item.servers
@@ -61,17 +65,19 @@ export function AgentPlugins(props: { form: AgentForm }) {
               : uiText("pluginNeedsSetup"),
             color: c().warning,
           };
+  /** What the row of a toolkit switched off for every agent says: the words and the mark of an installed plugin's. */
+  const off = () => ({ label: uiText("pluginOffForAll"), color: c().faint });
   return (
     <View>
       <If when={!phoneEditor()}>
         <SectionHeader
           title={uiText("plugins")}
-          count={activePlugins().length}
+          count={shown()}
           description={uiText("pluginsHint")}
         />
       </If>
       <If
-        when={activePlugins().length}
+        when={shown()}
         else={
           <Empty
             title={uiText("noPluginsInstalled")}
@@ -160,6 +166,73 @@ export function AgentPlugins(props: { form: AgentForm }) {
                     <If when={checked() && !ready()}>
                       <WarningLine text={uiText("pluginConfigurationStale")} />
                     </If>
+                  </View>
+                </If>
+              </CheckControl>
+            );
+          }}
+        </Each>
+        <Each of={composio.list()} key={(item) => item.name}>
+          {(item) => {
+            const checked = () => plugins().includes(item().name);
+            /** Only a toolkit that checked out, and only for an agent of eta's own loop. */
+            const usable = () =>
+              item().state === "ready" && runtime() === "eta";
+            return (
+              <CheckControl
+                label={item().name}
+                checked={checked()}
+                disabled={!usable() && !checked()}
+                onChange={(enabled) =>
+                  plugins.update((list) =>
+                    enabled
+                      ? [...new Set([...list, item().name])]
+                      : list.filter((entry) => entry !== item().name),
+                  )
+                }
+                size={icon.md}
+                // design-value: 10px mark in the phone's larger checkbox, between icon sizes
+                markSize={phoneEditor() ? 10 : icon.sm}
+                // design-value: 6px inset of the phone's larger checkbox, not on the space scale
+                indicatorStyle={{ margin: phoneEditor() ? 6 : space[4] }}
+                style={{
+                  ...row,
+                  alignItems: "flex-start",
+                  paddingHorizontal: space[16],
+                  paddingVertical: space[8],
+                  gap: 10, // design-value: 10px between the checkbox and the text, not on the space scale
+                  borderBottomWidth: 1,
+                  borderColor: c().border,
+                  cursor: usable() || checked() ? "pointer" : "default",
+                  opacity: item().enabled ? 1 : 0.55, // design-value: a switched-off row, fainter than muted and not disabled
+                }}
+              >
+                <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+                  <Label weight={500}>{item().name}</Label>
+                  {/* The same mark and words as an installed plugin's row: the phone's status line under the name; otherwise the lane, at the right end of the line of the name (below). */}
+                  <If when={phoneEditor() && !item().enabled}>
+                    <View testID="composio-plugin-off">
+                      <StatusLine status={off()} />
+                    </View>
+                  </If>
+                  <Label variant="small" tone="muted">
+                    {uiText("composioToolkit")}
+                  </Label>
+                  <If when={item().state !== "ready"}>
+                    <View testID="composio-plugin-error">
+                      <WarningLine text={uiText("composioPluginError")} />
+                    </View>
+                  </If>
+                  <If when={runtime() !== "eta"}>
+                    <View testID="composio-plugin-external">
+                      <WarningLine text={uiText("composioPluginExternal")} />
+                    </View>
+                  </If>
+                </View>
+                <If when={!phoneEditor() && !item().enabled}>
+                  <View testID="composio-plugin-off" style={{ flexShrink: 0 }}>
+                    {/* design-value: the status lane's own width, as on the installed plugin row */}
+                    <StatusLane width={108} status={off()} />
                   </View>
                 </If>
               </CheckControl>

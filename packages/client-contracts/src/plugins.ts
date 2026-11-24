@@ -258,7 +258,29 @@ export interface PluginArgs {
     repo?: string | null;
     ref?: string | null;
     path?: string | null;
+    /** A Composio toolkit's slug: the host looks up the logo address in its own list, and fetches it over https only. */
+    composio?: string | null;
   };
+  /** Keep the Composio API key, sealed. It is never sent back: `composioStatus` only says that one is set. */
+  composioSetKey: { key: string };
+  composioClearKey: Record<string, never>;
+  composioStatus: Record<string, never>;
+  /** Which toolkits are connected with Composio (read only). */
+  composioConnected: Record<string, never>;
+  /** The name and description of these toolkits, from the list the host keeps (read only, no request). */
+  composioToolkits: { slugs: string[] };
+  /** Start connecting one toolkit with Composio's own sign-in page; the user finishes it in the browser. */
+  composioLink: { slug: string };
+  /** Delete this host's accounts of one toolkit on Composio; it cannot be undone there. */
+  composioDisconnect: { slug: string };
+  /** Add a toolkit that needs no sign-in: it becomes a plugin, and Composio's sign-in is not asked for. */
+  composioAdd: { slug: string };
+  /** Take an added toolkit away again. Nothing is asked of Composio. */
+  composioRemove: { slug: string };
+  /** Which toolkits were added (read only). */
+  composioAdded: Record<string, never>;
+  /** The connected toolkits as plugins of their own (read only). */
+  composioPlugins: Record<string, never>;
 }
 
 /** What a connection test found. Secrets are never in it. */
@@ -291,14 +313,19 @@ export interface PluginTestResult {
  * read: nothing is fetched, so it answers at once. The answer has one item per entry asked, in order;
  * at most PLUGIN_LOGOS_CACHED_MAX entries are looked at (the rest are "unknown"), and hits past about
  * 2 MB of picture data are "unknown" too. Asked of a host without it, the call fails: treat all as unknown.
+ * An entry is a plugin in a repository, or `{ composio: slug }`, a Composio toolkit (the host finds
+ * the logo address from its own list). A host that does not know the second form answers "unknown" for it.
  */
 export interface PluginLogosCachedArgs {
-  entries: {
-    repo: string;
-    ref: string;
-    path: string;
-    homepage?: string | null;
-  }[];
+  entries: (
+    | {
+        repo: string;
+        ref: string;
+        path: string;
+        homepage?: string | null;
+      }
+    | { composio: string }
+  )[];
 }
 export const PLUGIN_LOGOS_CACHED_MAX = 200;
 export type PluginLogoCached =
@@ -337,6 +364,27 @@ export interface PluginResults {
   update: { names: string[] };
   remove: { name: string };
   recheck: Record<string, never>;
+  composioSetKey: { hasKey: boolean };
+  composioClearKey: { hasKey: boolean };
+  /** `enabled`: a key is set and the source is not switched off. */
+  composioStatus: { hasKey: boolean; enabled: boolean };
+  /**
+   * The slugs of the toolkits with an ACTIVE account. Only a mark: a status other than `ready`
+   * (no key, key refused, no answer) means none is known, not that none is connected.
+   */
+  composioConnected: { status: ComposioStatus; slugs: string[] };
+  /** Only the slugs the kept list has; none when there is no key. */
+  composioToolkits: {
+    toolkits: { slug: string; name: string; description: string }[];
+  };
+  /** An https address on Composio's side; open it in the browser. */
+  composioLink: { redirectUrl: string };
+  /** Only a status; `removed` counts the accounts deleted. */
+  composioDisconnect: { status: ComposioStatus; removed: number };
+  composioAdd: { status: ComposioStatus };
+  composioRemove: { removed: boolean };
+  composioAdded: { slugs: string[] };
+  composioPlugins: { plugins: ComposioPluginView[] };
 }
 
 /**
@@ -383,6 +431,8 @@ export interface MarketSource {
   name: string;
   /** A source that is off stays in the list, but is not read and shows no entries. */
   enabled: boolean;
+  /** `composio`: the Composio toolkit list (built in, can be switched off, not removed). Absent: a git catalog. */
+  kind?: "git" | "composio";
 }
 
 /** The sources and the GitHub proxy, as set. */
@@ -403,6 +453,54 @@ export interface MarketSourceCatalog {
   updatedAt?: number | null;
   /** Set when what is shown is a kept copy because reading again failed: why. */
   stale?: string | null;
+  /**
+   * Only for `source.kind === "composio"`: the toolkits are in `toolkits` (null when none is known yet);
+   * `entries` is empty, or null when there is no answer.
+   * `needs_key` and `key_rejected` are answers, not failures: `error` stays null.
+   */
+  status?: ComposioStatus;
+  toolkits?: ComposioToolkit[] | null;
+}
+
+export type ComposioStatus = "ready" | "needs_key" | "key_rejected" | "error";
+
+/**
+ * A connected Composio toolkit as a plugin: `@composio/<slug>`. It is not a `PluginView` (it has no
+ * files, skills or fields). `ready`: its session checked out and agents may use it; `error`: it did
+ * not, and nothing is offered. `enabled` is the user's switch for every agent, as for any plugin.
+ */
+export interface ComposioPluginView {
+  name: string;
+  slug: string;
+  state: "ready" | "error";
+  enabled: boolean;
+}
+
+/** How a toolkit signs in, from the schemes Composio lists: `unknown` for one eta does not know. */
+export type ComposioAuth = "api_key" | "oauth" | "none" | "unknown";
+
+/**
+ * A Composio toolkit. Installing it is not `marketInstall`: no git source is added. The user
+ * connects it with `composioLink`.
+ */
+export interface ComposioToolkit {
+  kind: "composio";
+  slug: string;
+  name: string;
+  description: string;
+  auth: ComposioAuth;
+  /** The schemes as Composio names them, for display. */
+  authSchemes: string[];
+  /** Whether Composio offers its own sign-in for it (no OAuth app of the user's own is needed). */
+  managed: boolean;
+  categories: string[];
+  /** An https address, or null; the picture is fetched by the host (`logo` with `composio`). */
+  logo: string | null;
+  appUrl: string | null;
+  toolsCount: number | null;
+  /** The source's address and its display name, as on a git entry. */
+  source: string;
+  sourceName: string;
 }
 
 /** Every source's catalog. Installed plugins are never touched by any of them. */

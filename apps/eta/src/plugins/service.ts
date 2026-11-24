@@ -77,6 +77,26 @@ export interface PluginsOptions {
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+/**
+ * Plugins that are not a directory on this host but are made by another part of it (a connected
+ * Composio toolkit, `@composio/<slug>`). They are agents' choices and have the user's switch like any
+ * plugin; they have no skills, fields or files, and are on the wire as their own list, not as a
+ * `PluginView`.
+ */
+export interface VirtualPlugins {
+  /** Whether the name is one of this kind, usable or not. */
+  owns: (name: string) => boolean;
+  /** Whether it can be used now. */
+  has: (name: string) => boolean;
+  /** The servers an agent of eta's own loop gets for it. */
+  mcpSource: (name: string) => McpConfigSource | undefined;
+  /** What the use is made of: another one reopens the sessions of the agents that have it. */
+  identity: (name: string) => string | undefined;
+  /** What no session may pass on. */
+  secrets: () => Redaction[];
+  onChange: (listener: () => void) => void;
+}
+
 /** A value of a field: what the caller sent, checked to be something a field can hold. */
 function isValue(value: unknown): value is PluginValue {
   return (
@@ -104,6 +124,7 @@ export class Plugins {
   readonly #found = new Map<string, Set<string>>();
   /** The sends in flight, by `machine:hash`. */
   readonly #sending = new Map<string, Promise<void>>();
+  #virtual: VirtualPlugins | undefined;
 
   constructor(options: PluginsOptions) {
     this.rows = new PluginRows(options.db, options.key);
@@ -124,6 +145,12 @@ export class Plugins {
     this.#warn = options.warn;
     // A machine that connects (or reconnects) is asked again what it has.
     options.hub.onReady(() => void this.recheck());
+  }
+
+  /** Take plugins that are made by another part of the host. */
+  setVirtual(virtual: VirtualPlugins): void {
+    this.#virtual = virtual;
+    virtual.onChange(() => this.#changed());
   }
 
   /** Read what is there and start noticing changes. */
@@ -186,6 +213,7 @@ export class Plugins {
 
   /** Whether a plugin can be turned on for an agent now. */
   canEnable(name: string): boolean {
+    if (this.#virtual?.owns(name) === true) return this.#virtual.has(name);
     const entry = this.registry.get(name);
     return entry !== undefined && this.#usable(entry);
   }
@@ -282,18 +310,28 @@ export class Plugins {
   }
 
   /** The plugins an agent's sessions load, and the ones it enabled that they skip. */
-  #split(agentId: string): { active: PluginEntry[]; skipped: string[] } {
+  #split(agentId: string): {
+    active: PluginEntry[];
+    skipped: string[];
+    virtual: string[];
+  } {
     const active: PluginEntry[] = [];
     const skipped: string[] = [];
+    const virtual: string[] = [];
     // The user's switch comes first: a plugin that is off is no one's, and is not "skipped" either.
     const off = this.rows.disabled();
     for (const name of this.rows.enabled(agentId)) {
       if (off.has(name)) continue;
+      // One that is not connected any more is not "skipped": nothing is wrong, it is only not there.
+      if (this.#virtual?.owns(name) === true) {
+        if (this.#virtual.has(name)) virtual.push(name);
+        continue;
+      }
       const entry = this.registry.get(name);
       if (entry !== undefined && this.#usable(entry)) active.push(entry);
       else skipped.push(name);
     }
-    return { active, skipped };
+    return { active, skipped, virtual };
   }
 
   active(agentId: string): PluginEntry[] {
@@ -306,12 +344,16 @@ export class Plugins {
 
   /** What an agent's sessions were opened with, as far as plugins go. */
   stampOf(agentId: string): string {
-    return this.active(agentId)
-      .map((entry) => {
+    const { active, virtual } = this.#split(agentId);
+    return [
+      ...active.map((entry) => {
         const at = this.rows.configuredAt(entry.name);
         return `${entry.name}@${entry.hash}:${at}`;
-      })
-      .join(",");
+      }),
+      ...virtual.map(
+        (name) => `${name}@${this.#virtual?.identity(name) ?? ""}`,
+      ),
+    ].join(",");
   }
 
   /* ------------------------------------------------------------ what a session gets */
@@ -344,16 +386,25 @@ export class Plugins {
    */
   mcpSourcesFor(agentId: string): McpConfigSource[] {
     if (this.#agents.get(agentId)?.runtime !== "eta") return [];
-    const active = this.active(agentId);
-    if (active.length === 0) return [];
-    return pluginMcpSources(
-      active.map((entry) => ({
-        plugin: entry.plugin!,
-        config: this.#config(entry),
-      })),
-      this.#dataDir,
-      this.#warn,
-    );
+    const { active, virtual } = this.#split(agentId);
+    const own =
+      active.length === 0
+        ? []
+        : pluginMcpSources(
+            active.map((entry) => ({
+              plugin: entry.plugin!,
+              config: this.#config(entry),
+            })),
+            this.#dataDir,
+            this.#warn,
+          );
+    return [
+      ...own,
+      ...virtual.flatMap((name) => {
+        const source = this.#virtual?.mcpSource(name);
+        return source === undefined ? [] : [source];
+      }),
+    ];
   }
 
   /**
@@ -399,6 +450,7 @@ export class Plugins {
     const host = this.rows.cursorCredential();
     if (host !== undefined)
       redactions.push({ value: host, label: "[secret cursor credential]" });
+    redactions.push(...(this.#virtual?.secrets() ?? []));
     for (const entry of this.registry.entries()) {
       if (entry.plugin === undefined) continue;
       // A header the user attached is a credential too, and no agent may read it.
@@ -702,7 +754,7 @@ export class Plugins {
 
   /** Switch a plugin on or off for every agent. What each agent enabled is left as it is. */
   setEnabled(name: string, enabled: boolean): void {
-    this.#existing(name);
+    if (this.#virtual?.has(name) !== true) this.#existing(name);
     this.rows.setDisabled(name, !enabled);
     this.#changed();
   }

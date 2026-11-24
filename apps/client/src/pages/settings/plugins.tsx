@@ -6,6 +6,7 @@ import {
   colors,
   Empty,
   emptyWidth,
+  Field,
   fontFamily,
   Fonts,
   grow,
@@ -16,9 +17,9 @@ import {
   textStyle,
 } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { control, icon, space, weight } from "../../components/tokens";
 import { emptyStyle } from "./section";
 
 /** How wide the source and proxy fields grow, and the hint above the proxy. */
@@ -56,6 +57,10 @@ export function PluginSettings(props: { phone?: boolean }) {
   const problem = signal("");
   const proxyProblem = signal("");
   const busy = signal(false);
+  /** Whether the host holds a key; unknown (undefined) until it has said, which is not "no key". */
+  const hasKey = signal<boolean>();
+  const typedKey = signal("");
+  const keyProblem = signal("");
   const sources = () => settings()?.sources ?? [];
 
   async function call(
@@ -73,9 +78,52 @@ export function PluginSettings(props: { phone?: boolean }) {
     proxy.set(result.proxy);
     return true;
   }
+  const hasComposio = () => sources().some((item) => item.kind === "composio");
+  /** The key is written and never read back: the host only says whether one is set. */
+  async function keyCall(method: string, args: Record<string, unknown>) {
+    if (busy()) return;
+    busy.set(true);
+    const result = await host.action(() =>
+      host.call<{ hasKey: boolean }>("plugins", method, args),
+    );
+    busy.set(false);
+    if (result) hasKey.set(result.hasKey);
+    return result;
+  }
+  async function saveKey() {
+    const clean = typedKey().trim();
+    if (clean === "") {
+      keyProblem.set(uiText("composioKeyEmpty"));
+      return;
+    }
+    keyProblem.set("");
+    if (await keyCall("composioSetKey", { key: clean })) {
+      typedKey.set("");
+      // The source is on only with a key: read the list again.
+      await call("marketSettings", {});
+    }
+  }
+  async function clearKey() {
+    keyProblem.set("");
+    if (await keyCall("composioClearKey", {})) {
+      typedKey.set("");
+      await call("marketSettings", {});
+    }
+  }
+  /** Read only: it holds nothing busy, and it never overwrites what a save has said since. */
+  async function readKey() {
+    const result = await host.action(() =>
+      host.call<{ hasKey: boolean }>("plugins", "composioStatus", {}),
+    );
+    if (result && hasKey() === undefined) hasKey.set(result.hasKey);
+  }
   effect(() => {
     host.subscriptionWire();
-    untracked(() => void call("marketSettings", {}));
+    untracked(() => {
+      void call("marketSettings", {}).then((ok) => {
+        if (ok && hasComposio()) void readKey();
+      });
+    });
   });
 
   async function add() {
@@ -138,79 +186,91 @@ export function PluginSettings(props: { phone?: boolean }) {
         }}
       >
         <Label weight={weight.regular}>{uiText("pluginsSourcesTitle")}</Label>
-        <Label variant="small" tone="muted">
-          {uiText("pluginsSourcesHint")}
-        </Label>
-        <If
-          when={sources().length}
-          else={
-            <Empty
-              title={uiText("pluginsNoSources")}
-              description={uiText("pluginsNoSourcesHint")}
-              icon="plugins"
-              iconSize={icon.lg}
-              descriptionWidth={emptyWidth.narrow}
-              style={{
-                ...emptyStyle,
-                paddingVertical: space[24],
-                flexBasis: "auto",
-              }}
-            />
-          }
-        >
-          <View style={{ borderWidth: 1, borderColor: c().border }}>
-            <Each of={sources()} key={(item) => item.url}>
-              {(item) => (
-                <View
-                  style={{
-                    ...row,
-                    gap: space[12],
-                    padding: space[8],
-                    borderBottomWidth: 1,
-                    borderColor: c().border,
-                  }}
-                >
-                  <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-                    <Label lines={1}>{item().name || item().url}</Label>
-                    <If when={item().name}>
-                      <Label
-                        variant="small"
-                        tone="muted"
-                        lines={1}
-                        style={{ userSelect: "text" }}
+        {/* Until the host has answered the page knows nothing, which is not "no sources". */}
+        <If when={settings()}>
+          <If
+            when={sources().length}
+            else={
+              <Empty
+                title={uiText("pluginsNoSources")}
+                description={uiText("pluginsNoSourcesHint")}
+                icon="plugins"
+                iconSize={icon.lg}
+                descriptionWidth={emptyWidth.narrow}
+                style={{
+                  ...emptyStyle,
+                  paddingVertical: space[24],
+                  flexBasis: "auto",
+                }}
+              />
+            }
+          >
+            <View style={{ borderWidth: 1, borderColor: c().border }}>
+              <Each of={sources()} key={(item) => item.url}>
+                {(item) => (
+                  <View
+                    style={{
+                      ...row,
+                      gap: space[12],
+                      padding: space[8],
+                      borderBottomWidth: 1,
+                      borderColor: c().border,
+                    }}
+                  >
+                    <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+                      <Label lines={1}>{item().name || item().url}</Label>
+                      <If
+                        when={item().kind === "composio" && hasKey() === false}
                       >
-                        {item().url}
-                      </Label>
+                        <Label variant="small" tone="muted" lines={1}>
+                          {uiText("composioSourceNeedsKey")}
+                        </Label>
+                      </If>
+                      <If when={item().name && item().kind !== "composio"}>
+                        <Label
+                          variant="small"
+                          tone="muted"
+                          lines={1}
+                          style={{ userSelect: "text" }}
+                        >
+                          {item().url}
+                        </Label>
+                      </If>
+                    </View>
+                    <ToggleSwitch
+                      label={uiText("pluginsSourceEnabled", {
+                        name: item().name || item().url,
+                      })}
+                      checked={item().enabled}
+                      disabled={
+                        busy() ||
+                        (item().kind === "composio" && hasKey() === false)
+                      }
+                      onChange={(enabled) =>
+                        void call("marketSetSourceEnabled", {
+                          url: item().url,
+                          enabled,
+                        })
+                      }
+                    />
+                    <If when={item().kind !== "composio"}>
+                      <Button
+                        label={uiText("pluginsRemove")}
+                        accessibilityLabel={uiText("pluginsRemoveSource", {
+                          name: item().name || item().url,
+                        })}
+                        size={props.phone ? control.touch : control.md}
+                        disabled={busy()}
+                        onPress={() =>
+                          void call("marketRemoveSource", { url: item().url })
+                        }
+                      />
                     </If>
                   </View>
-                  <ToggleSwitch
-                    label={uiText("pluginsSourceEnabled", {
-                      name: item().name || item().url,
-                    })}
-                    checked={item().enabled}
-                    disabled={busy()}
-                    onChange={(enabled) =>
-                      void call("marketSetSourceEnabled", {
-                        url: item().url,
-                        enabled,
-                      })
-                    }
-                  />
-                  <Button
-                    label={uiText("pluginsRemove")}
-                    accessibilityLabel={uiText("pluginsRemoveSource", {
-                      name: item().name || item().url,
-                    })}
-                    size={props.phone ? control.touch : control.md}
-                    disabled={busy()}
-                    onPress={() =>
-                      void call("marketRemoveSource", { url: item().url })
-                    }
-                  />
-                </View>
-              )}
-            </Each>
-          </View>
+                )}
+              </Each>
+            </View>
+          </If>
         </If>
         <View style={{ gap: space[8], maxWidth: fieldWidth }}>
           {field(uiText("pluginsSourceName"), name, name.set)}
@@ -237,33 +297,86 @@ export function PluginSettings(props: { phone?: boolean }) {
           </View>
         </View>
 
+        <If when={hasComposio()}>
+          <Label weight={weight.regular} style={{ paddingTop: space[8] }}>
+            {uiText("composioKeyTitle")}
+          </Label>
+          {/* design-value: a cap of its own, not a token */}
+          <View style={{ gap: space[8], maxWidth: 560 }}>
+            <If when={hasKey() !== undefined}>
+              <Label variant="small" weight={weight.regular}>
+                {hasKey()
+                  ? uiText("composioKeySet")
+                  : uiText("composioKeyNone")}
+              </Label>
+            </If>
+            <Field
+              label={uiText("composioKeyField")}
+              placeholder={uiText("composioKeyField")}
+              value={typedKey()}
+              masked
+              onChange={typedKey.set}
+              onSubmit={() => void saveKey()}
+              style={{ height: props.phone ? space[40] : control.md }}
+            />
+            <If when={keyProblem()}>
+              <Label variant="small" tone="mutedInk">
+                {keyProblem()}
+              </Label>
+            </If>
+            <View style={{ ...row, justifyContent: "flex-end", gap: space[8] }}>
+              <If when={hasKey()}>
+                <Button
+                  label={uiText("composioKeyClear")}
+                  size={props.phone ? control.touch : control.md}
+                  disabled={busy()}
+                  onPress={() => void clearKey()}
+                />
+              </If>
+              <Button
+                label={
+                  hasKey()
+                    ? uiText("composioKeyReplace")
+                    : uiText("composioKeySave")
+                }
+                tone="primary"
+                size={props.phone ? control.touch : control.md}
+                disabled={busy()}
+                onPress={() => void saveKey()}
+              />
+            </View>
+          </View>
+        </If>
+
         <Label weight={weight.regular} style={{ paddingTop: space[8] }}>
           {uiText("pluginsProxyTitle")}
         </Label>
         <Label variant="small" tone="muted" style={{ maxWidth: hintWidth }}>
           {uiText("pluginsProxyHint")}
         </Label>
-        <View style={{ gap: space[8], maxWidth: fieldWidth }}>
-          {field(
-            uiText("pluginsProxy"),
-            proxy,
-            proxy.set,
-            () => void saveProxy(),
-          )}
-          <If when={proxyProblem()}>
-            <Label variant="small" tone="mutedInk">
-              {proxyProblem()}
-            </Label>
-          </If>
-          <View style={{ ...row, justifyContent: "flex-end" }}>
-            <Button
-              label={uiText("pluginsProxySave")}
-              size={props.phone ? control.touch : control.md}
-              disabled={busy()}
-              onPress={() => void saveProxy()}
-            />
+        <If when={settings()}>
+          <View style={{ gap: space[8], maxWidth: fieldWidth }}>
+            {field(
+              uiText("pluginsProxy"),
+              proxy,
+              proxy.set,
+              () => void saveProxy(),
+            )}
+            <If when={proxyProblem()}>
+              <Label variant="small" tone="mutedInk">
+                {proxyProblem()}
+              </Label>
+            </If>
+            <View style={{ ...row, justifyContent: "flex-end" }}>
+              <Button
+                label={uiText("pluginsProxySave")}
+                size={props.phone ? control.touch : control.md}
+                disabled={busy()}
+                onPress={() => void saveProxy()}
+              />
+            </View>
           </View>
-        </View>
+        </If>
       </View>
     </SmoothScroll>
   );
