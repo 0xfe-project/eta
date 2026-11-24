@@ -607,7 +607,10 @@ export function createProduct(options: {
   // The task board, and the artifacts its cards list.
   const artifactRows = new ArtifactStore(db);
   const artifactsOf = (taskId: string) => artifactRows.latestOfTask(taskId);
+  // Files attached to messages and to tasks' comments.
+  const attachments = new AttachmentStore(db, dataDir);
   const board = new TaskBoard({
+    attachments,
     db,
     tasks: taskRows,
     runs: runRows,
@@ -647,7 +650,6 @@ export function createProduct(options: {
   // Reading the web: pages and searches, for every session that has the tools.
   const web =
     options.web === undefined ? undefined : new Web({ ...options.web, warn });
-  const attachments = new AttachmentStore(db, dataDir);
   const runHooks = combineRunHooks(
     memory === undefined
       ? []
@@ -705,6 +707,7 @@ export function createProduct(options: {
     conversations,
     timeline,
     engine,
+    attachments,
     transport,
     dataDir,
     hooks: runHooks,
@@ -1252,6 +1255,7 @@ export function createProduct(options: {
             steps: taskSteps,
             workspaceFor: taskWorkspaceFor,
             settings: taskSettings,
+            attachments,
             settingsChanged: () => {
               archiver.sweep();
               draftExpirer.sweep();

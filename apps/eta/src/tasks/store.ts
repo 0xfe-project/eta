@@ -394,6 +394,13 @@ export class TaskStore {
     })();
   }
 
+  /** Add to what an entry of the timeline keeps (`data`), as a later fact about it. */
+  annotate(activityId: string, data: Record<string, unknown>): void {
+    this.#db
+      .query("UPDATE task_activity SET data = json_patch(data, ?) WHERE id = ?")
+      .run(JSON.stringify(data), activityId);
+  }
+
   /** The comment a client already sent under `clientId` on this task, if any (a retry's twin). */
   commentByClientId(
     taskId: string,

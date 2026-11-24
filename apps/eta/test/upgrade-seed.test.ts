@@ -156,6 +156,7 @@ describe("the seeds a release upgrades", () => {
       "0061-captain-conversation",
       "0062-drop-email",
       "0063-plugins",
+      "0064-task-attachments",
     ]);
   });
 

@@ -1,5 +1,6 @@
 import type {
   ArtifactView,
+  AttachmentView,
   BoardTaskStatus,
   BoardTaskView,
   TaskActivityView,
@@ -22,6 +23,7 @@ import {
   row,
 } from "../../components";
 import { AgentFace, UserFace } from "../../components/agent-face";
+import { chatText, shownFiles } from "../../components/eta-editor";
 import { canHover, touchScreen } from "../../components/menu";
 import { densityDefaults } from "../../components/theme";
 import { icon, space, weight } from "../../components/tokens";
@@ -219,6 +221,12 @@ const standalone = new Set<TaskActivityView["kind"]>([
 
 /** Never a line: the description already says who made the task, and a queued run is said below. */
 const unlisted = new Set<TaskActivityView["kind"]>(["created", "run_queued"]);
+
+/** How many agents a comment's pictures went to as files only (`data.imagesUnseenBy`). */
+const unseenCount = (entry: TaskActivityView) =>
+  Array.isArray(entry.data.imagesUnseenBy)
+    ? entry.data.imagesUnseenBy.length
+    : 0;
 
 /** A sender's comments run together under one face while they follow each other within this. */
 const runOn = 5 * 60_000;
@@ -504,10 +512,22 @@ export function TaskActivity(props: {
       </View>
     );
   };
+  // A comment's files as a chat message shows them: a file saves, a picture opens large, and
+  // pictures are chips or cards as Settings › Appearance › Images in messages says.
+  const shown = [shownFiles()];
   const Message = (message: { entry: TaskActivityView; head: boolean }) => {
     const full = signal(false);
     const body = () => message.entry.body ?? "";
     const long = () => body().length > commentPreview;
+    const files = () =>
+      Array.isArray(message.entry.data.attachments)
+        ? (message.entry.data.attachments as AttachmentView[])
+        : [];
+    /** The agents its pictures went to as files only: their models take no images. */
+    const unseenBy = () =>
+      Array.isArray(message.entry.data.imagesUnseenBy)
+        ? (message.entry.data.imagesUnseenBy as string[])
+        : [];
     return (
       <View
         style={{
@@ -541,12 +561,33 @@ export function TaskActivity(props: {
               </Label>
             </View>
           </If>
-          <Markdown
-            value={
-              full() || !long() ? body() : `${body().slice(0, commentPreview)}…`
-            }
-            variant="small"
-          />
+          <If when={body()}>
+            <Markdown
+              value={
+                full() || !long()
+                  ? body()
+                  : `${body().slice(0, commentPreview)}…`
+              }
+              variant="small"
+            />
+          </If>
+          <If when={files().length > 0}>
+            <chatText.View
+              text={{ text: "", files: files() }}
+              plugins={shown}
+              variant="small"
+              label={uiText("commentFiles")}
+            />
+          </If>
+          <If when={unseenBy().length > 0}>
+            <Label variant="caption" tone="muted">
+              {uiText("commentImagesUnseen", {
+                names: unseenBy()
+                  .map((id) => host.agent(id)?.name ?? id)
+                  .join(", "),
+              })}
+            </Label>
+          </If>
           <If when={long()}>
             <View
               role="button"
@@ -575,7 +616,11 @@ export function TaskActivity(props: {
       <Each
         of={items()}
         key={(item) =>
-          item.kind === "updates" ? `u-${item.entries[0]!.id}` : item.entry.id
+          item.kind === "updates"
+            ? `u-${item.entries[0]!.id}`
+            : // A row is drawn once per key: a comment the host later says more about (its
+              // pictures were not shown to an agent) is drawn again.
+              `${item.entry.id}:${unseenCount(item.entry)}`
         }
       >
         {(item) => {

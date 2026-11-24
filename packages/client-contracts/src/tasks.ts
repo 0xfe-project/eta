@@ -23,7 +23,7 @@
  * `TaskStatus` already mean the session's todo items.
  */
 import type { CallFrame } from "@eta/client-wire-proto";
-import type { MessageView } from "./product";
+import type { AttachmentView, MessageView } from "./product";
 
 /* ------------------------------------------------------------------ views */
 
@@ -326,7 +326,9 @@ export interface BoardTaskDetail extends BoardTaskView {
 /**
  * What happened to a task. `data` by kind: `created` has the `status` it started with (and the
  * `draftId` it was confirmed from); `status` and `title` have `from` and `to`; `conversation` has
- * `from` and `to` (conversation ids or null); `comment` has its text in `body`; `description` says
+ * `from` and `to` (conversation ids or null); `comment` has its text in `body` (and, when files came
+ * with it, `attachments`: `AttachmentView[]`; `imagesUnseenBy`: the agents it was handed to whose
+ * model takes no images, so they got its pictures as files only); `description` says
  * only that it changed; `artifact` has `artifactId`, `title` and `version`. The `run_*` kinds are a
  * run's life (`runId` names it): `run_started` has the `workspace` it works in, `run_failed` and
  * `run_interrupted` say why in `body`. `dependency` is the graph: `action` (`added`, `removed`,
@@ -757,6 +759,9 @@ export const TASK_ACTIONS = [
   "setSettings",
   "workspaceFor",
   "usage",
+  "attach",
+  "unattach",
+  "attachment",
 ] as const;
 export type TaskAction = (typeof TASK_ACTIONS)[number];
 
@@ -818,8 +823,15 @@ export interface TaskArgs {
    */
   comment: {
     taskId: string;
+    /** May be empty when the comment carries files. */
     body: string;
     clientId?: string;
+    /**
+     * Files uploaded with `attach` for this task, by id (at most `MAX_ATTACHMENTS`): they go to the
+     * agents the comment reaches as files, and its pictures as images when their models take them.
+     * Kept in the comment's `data.attachments`.
+     */
+    attachments?: string[];
     /**
      * Agents the comment mentions (ids). Each that is not the executor is woken in a run of its own
      * on the task to answer in the thread; the comment wakes the executor only when it mentions the
@@ -890,6 +902,25 @@ export interface TaskArgs {
    * section is pushed when it moves.
    */
   usage: { taskId: string; includeSubtasks?: boolean };
+  /**
+   * One chunk of a file on its way to a comment of the task, as `conversations.attach` is for a
+   * message: in order from `index` 0, `data` in base64 (at most `ATTACH_CHUNK_BYTES`), `uploadId`
+   * the client's uuid that becomes the attachment's id. The reply has the `attachment` once `last`
+   * was sent.
+   */
+  attach: {
+    taskId: string;
+    uploadId: string;
+    name: string;
+    contentType?: string;
+    index: number;
+    last?: boolean;
+    data: string;
+  };
+  /** Takes back a file of the task that no comment has carried yet. */
+  unattach: { taskId: string; attachmentId: string };
+  /** Reads a picture a comment of the task carried, to show it on the timeline. */
+  attachment: { taskId: string; attachmentId: string };
 }
 export interface TaskResults {
   create: { tasks: BoardTaskDetail[] };
@@ -910,6 +941,9 @@ export interface TaskResults {
   setSettings: { settings: TaskBoardSettings };
   workspaceFor: { mode: TaskWorkspaceMode };
   usage: { usage: TaskUsageView };
+  attach: { attachment: AttachmentView | null };
+  unattach: { removed: boolean };
+  attachment: { contentType: string; data: string };
 }
 export type TaskCall = {
   [A in TaskAction]: Omit<CallFrame, "target" | "action" | "args"> & {

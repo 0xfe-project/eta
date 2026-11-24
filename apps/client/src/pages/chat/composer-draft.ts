@@ -7,12 +7,13 @@ import type { PasteRange } from "@eta/client-contracts/composer-draft";
 import type { StickyTarget } from "@eta/client-contracts/composer-target";
 import type { Uploads } from "../../components/eta-editor";
 import type { useHost } from "../../services/host";
-import { ATTACH_CHUNK_BYTES } from "@eta/client-contracts";
 import { legacyDraftToDoc } from "@eta/client-contracts/composer-doc";
 import { WireError } from "@eta/client-contracts/wire";
 import { cleanup, computed, effect, signal, Storage } from "nsh";
-import { uiText } from "../../i18n";
-import { forgetPicture, rememberPicture } from "../../services/pictures";
+import {
+  conversationUploads,
+  createUploadQueue,
+} from "../../services/upload-queue";
 
 export interface Outgoing {
   /** The `clientId` it is sent with, which the host makes the row's id. */
@@ -61,20 +62,20 @@ function createDraft(key: string, legacyKey: string) {
   const editing = signal<Outgoing | undefined>(undefined);
   const busy = signal(false);
   /** Upload states of this session's blocks: uploading, failed, done (the done ones persist). */
-  const states = signal<Record<string, UploadState>>({});
-  const bytes = new Map<string, File>();
-  const thumbnails = new Map<string, string>();
+  const queue = createUploadQueue({
+    onDone: (id, attachment) =>
+      void edit({ uploads: { ...value().uploads, [id]: attachment } }),
+    onIdle: () => release(),
+  });
+  const { states, uploading } = queue;
   let users = 0;
-  let uploadJobs = Promise.resolve();
-  let uploadCount = 0;
   let writes = Promise.resolve();
-  const uploading = signal(false);
   const unused = () =>
     !users &&
     !busy() &&
     !uploading() &&
     // A failed upload keeps its bytes here for a retry, in this chat, while the app runs.
-    !Object.values(states()).some((upload) => upload.state === "failed") &&
+    !queue.failed() &&
     ready() &&
     !value().outgoing.some((item) => !item.failure);
   function release() {
@@ -159,109 +160,9 @@ function createDraft(key: string, legacyKey: string) {
       .catch(() => {});
     return writes;
   }
-  function setState(id: string, state: UploadState) {
-    states.update((all) => ({ ...all, [id]: state }));
-    if (state.state === "done")
-      edit({ uploads: { ...value().uploads, [id]: state.attachment } });
-  }
-  /** Uploads one file in chunks as the attachment `id`, after the uploads before it. */
-  function queue(id: string, file: File, host: Host, conversationId: string) {
-    const origin = host.address()?.origin;
-    uploadCount++;
-    uploading.set(true);
-    setState(id, { state: "uploading" });
-    const job = async () => {
-      try {
-        const data = new Uint8Array(await file.arrayBuffer());
-        for (
-          let offset = 0, index = 0;
-          offset < data.length || index === 0;
-          offset += ATTACH_CHUNK_BYTES, index++
-        ) {
-          if (host.address()?.origin !== origin)
-            throw new Error(uiText("connectionLostReconnecting"));
-          const result = await host.call<ConversationResults["attach"]>(
-            "conversations",
-            "attach",
-            {
-              conversationId,
-              uploadId: id,
-              name: file.name,
-              contentType: file.type || undefined,
-              index,
-              last: offset + ATTACH_CHUNK_BYTES >= data.length,
-              data: Buffer.from(
-                data.subarray(offset, offset + ATTACH_CHUNK_BYTES),
-              ).toString("base64"),
-            },
-          );
-          if (result.attachment) {
-            // The draft shows the picture from the bytes it sent, not the host's copy (#735).
-            if (origin)
-              rememberPicture(
-                origin,
-                result.attachment.id,
-                data,
-                result.attachment.contentType,
-              );
-            setState(id, { state: "done", attachment: result.attachment });
-          }
-        }
-      } catch (error) {
-        if (host.address()?.origin === origin)
-          await host
-            .call("conversations", "unattach", {
-              conversationId,
-              attachmentId: id,
-            })
-            .catch(() => {});
-        setState(id, {
-          state: "failed",
-          error: error instanceof Error ? error.message : String(error),
-          retry: true,
-        });
-      }
-    };
-    uploadJobs = uploadJobs.then(job).finally(() => {
-      if (--uploadCount === 0) {
-        uploading.set(false);
-        release();
-      }
-    });
-  }
   /** The attachment plugin's view of this draft's uploads, for one host and chat. */
   function uploads(host: Host, conversationId: string): Uploads {
-    return {
-      state: (id) => states()[id],
-      thumbnail: (id) => {
-        // Read with the states: a thumbnail made later shows on the block.
-        states();
-        return thumbnails.get(id);
-      },
-      start(id, file, error) {
-        if (error) {
-          setState(id, { state: "failed", error });
-          return;
-        }
-        bytes.set(id, file);
-        if (file.type.startsWith("image/") && file.size <= 4 * 1024 * 1024)
-          void file.arrayBuffer().then((data) => {
-            thumbnails.set(
-              id,
-              `data:${file.type};base64,${Buffer.from(new Uint8Array(data)).toString("base64")}`,
-            );
-            // The block reads its thumbnail with its state: tell it.
-            states.update((all) => ({ ...all }));
-          });
-        queue(id, file, host, conversationId);
-      },
-      retry(id) {
-        const file = bytes.get(id);
-        if (!file) return false;
-        queue(id, file, host, conversationId);
-        return true;
-      },
-    };
+    return queue.uploads(host, conversationUploads(host, conversationId));
   }
   const entry = {
     value,
@@ -292,30 +193,14 @@ function createDraft(key: string, legacyKey: string) {
       landed.set(next);
     },
     /** Attachments of a message brought back to edit: uploaded already. */
-    remember(attachments: readonly AttachmentView[]) {
-      for (const attachment of attachments)
-        setState(attachment.id, { state: "done", attachment });
-    },
+    remember: queue.remember,
     /** Takes back uploads the sent message did not carry (blocks taken out before sending). */
     forget(host: Host, conversationId: string, kept: readonly string[]) {
       const left = Object.keys(value().uploads).filter(
         (id) => !kept.includes(id),
       );
-      const origin = host.address()?.origin;
-      for (const id of left) {
-        void host
-          .call("conversations", "unattach", {
-            conversationId,
-            attachmentId: id,
-          })
-          .catch(() => {});
-        // A picture taken out of the draft goes with it (#735).
-        if (origin) forgetPicture(origin, id);
-      }
+      queue.clear(host, conversationUploads(host, conversationId), left);
       edit({ uploads: {} });
-      states.set({});
-      bytes.clear();
-      thumbnails.clear();
     },
   };
   return entry;

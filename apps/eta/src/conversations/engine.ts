@@ -711,7 +711,7 @@ export class Engine {
 
     const id = input.clientId ?? crypto.randomUUID();
     const files = this.#attachments.check(
-      conversation.id,
+      { conversationId: conversation.id },
       input.attachments ?? [],
     );
     const planned: { agentId: string; join: boolean }[] = [];
@@ -1623,28 +1623,17 @@ export class Engine {
     const lines = new Map<string, string[]>();
     let images: PromptImage[] = [];
     if (files.size > 0) {
-      const all = [...files.values()].flat();
-      const placed = await this.#place(all, conversation, machine);
-      const sees = await this.#takesImages(handle);
-      for (const [rowId, carried] of files) {
+      const handed = await this.filesFor(
+        [...files.values()].flat(),
+        handle,
+        machine,
+      );
+      for (const [rowId, carried] of files)
         lines.set(
           rowId,
-          carried.map((file) => {
-            const path = placed.paths.get(file.id);
-            return path === undefined
-              ? `[attachment ${file.name} could not be put where you can read it: ${placed.failed.get(file.id) ?? "unknown error"}]`
-              : `[attachment: ${path} (${file.contentType}, ${file.size} bytes)${
-                  !sees && file.contentType.startsWith("image/")
-                    ? "; not shown: the model you run on does not support images"
-                    : ""
-                }]`;
-          }),
+          carried.map((file) => handed.lines.get(file.id) ?? ""),
         );
-      }
-      if (sees)
-        images = await this.#attachments.images(
-          all.filter((file) => placed.paths.has(file.id)),
-        );
+      images = handed.images;
     }
     return {
       ...briefing({
@@ -1662,12 +1651,51 @@ export class Engine {
     };
   }
 
-  /** Put the files where the conversation's sessions can open them; a machine out of reach fails them all. */
-  async #place(
+  /**
+   * Files that came with what a session is about to be told, as it can take them: put where it
+   * can open them (on its machine), each named in a line for the text, and the images among them
+   * as image input when its model takes them. `unseen` says there were images its model was not
+   * shown. How a conversation's briefing hands files over (`#briefingFor`), for a task's comment.
+   */
+  async filesFor(
     files: readonly AttachmentRecord[],
-    conversation: ConversationRecord,
+    handle: SessionHandle,
     machine: MachineRecord,
-  ) {
+  ): Promise<{
+    lines: Map<string, string>;
+    images: PromptImage[];
+    unseen: boolean;
+  }> {
+    const lines = new Map<string, string>();
+    if (files.length === 0) return { lines, images: [], unseen: false };
+    const placed = await this.#place(files, machine);
+    const sees = await this.#takesImages(handle);
+    let unseen = false;
+    for (const file of files) {
+      const path = placed.paths.get(file.id);
+      const image = file.contentType.startsWith("image/");
+      if (image && !sees) unseen = true;
+      lines.set(
+        file.id,
+        path === undefined
+          ? `[attachment ${file.name} could not be put where you can read it: ${placed.failed.get(file.id) ?? "unknown error"}]`
+          : `[attachment: ${path} (${file.contentType}, ${file.size} bytes)${
+              image && !sees
+                ? "; not shown: the model you run on does not support images"
+                : ""
+            }]`,
+      );
+    }
+    const images = sees
+      ? await this.#attachments.images(
+          files.filter((file) => placed.paths.has(file.id)),
+        )
+      : [];
+    return { lines, images, unseen };
+  }
+
+  /** Put the files where the conversation's sessions can open them; a machine out of reach fails them all. */
+  async #place(files: readonly AttachmentRecord[], machine: MachineRecord) {
     try {
       return await this.#attachments.deliver(
         files,
