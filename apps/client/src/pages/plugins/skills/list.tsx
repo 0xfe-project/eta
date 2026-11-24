@@ -14,7 +14,6 @@ import {
   Button,
   colors,
   Empty,
-  Field,
   grow,
   Header,
   Icon,
@@ -23,7 +22,6 @@ import {
   row,
   sizes,
   SmoothScroll,
-  textFaces,
 } from "../../../components";
 import { settled } from "../../../components/pending";
 import {
@@ -35,6 +33,7 @@ import {
 } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
+import { SearchField } from "../../../ui";
 import { SkillDetail } from "./detail";
 import { SkillSelect } from "./select";
 
@@ -52,7 +51,6 @@ export function Skills(props: {
 }) {
   const host = useHost();
   const c = colors();
-  const type = textFaces();
   const device = signal("");
   const scope = signal<"personal" | "project">("personal");
   const projectId = signal("");
@@ -353,30 +351,15 @@ export function Skills(props: {
       <If when={!tablet() && !phone()}>
         <View style={{ flex: 1 }} />
       </If>
-      <View style={{ width: tablet() || phone() ? "100%" : searchWidth }}>
-        <Field
-          label={uiText("searchLoadedSkills")}
-          placeholder={uiText("searchLoadedSkills")}
-          value={query()}
-          onChange={query.set}
-          style={{
-            width: "100%",
-            height: phone() ? space[32] : control.md,
-            fontSize: type("small").size,
-            paddingRight: space[24],
-          }}
-        />
-        <View
-          style={{
-            position: "absolute",
-            right: 8,
-            top: phone() ? 10 : 8,
-            pointerEvents: "none",
-          }}
-        >
-          <Icon name="search" size={icon.sm} />
-        </View>
-      </View>
+      <SearchField
+        label={uiText("searchLoadedSkills")}
+        placeholder={uiText("searchLoadedSkills")}
+        value={query()}
+        compact
+        onChange={query.set}
+        style={{ width: tablet() || phone() ? "100%" : searchWidth }}
+        inputStyle={phone() ? { height: space[32] } : undefined}
+      />
     </View>
   );
 
