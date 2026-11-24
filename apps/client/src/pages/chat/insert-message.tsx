@@ -9,6 +9,7 @@ import {
   serialize,
   submitKeys,
 } from "../../components/eta-editor";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -54,6 +55,11 @@ export function indexInserts(messages: MessageView[]) {
  * replying), who it goes to and the Insert button. Its draft is kept per
  * message, so closing the popover loses nothing.
  */
+/** The insert popover: its width, the room it keeps while its draft loads, its editor's bounds. */
+const popoverWidth = 288;
+const placeholderHeight = 120;
+const editorHeight = { min: 72, max: 200 } as const;
+
 export function InsertMessage(props: {
   message: MessageView;
   recipients: () => string[];
@@ -73,7 +79,7 @@ export function InsertMessage(props: {
   return (
     <If
       when={store.ready()}
-      else={<View style={{ width: 288, height: 120 }} />}
+      else={<View style={{ width: popoverWidth, height: placeholderHeight }} />}
     >
       {() => <InsertBody {...props} store={store} />}
     </If>
@@ -159,10 +165,10 @@ function InsertBody(props: {
     !sending() &&
     host.state().status === "open";
   return (
-    <View style={{ width: 288 }}>
-      <View style={{ padding: 8, gap: 6 }}>
+    <View style={{ width: popoverWidth }}>
+      <View style={{ padding: space[8], gap: space[4] }}>
         <If when={limits.tooLong()}>
-          <Label variant="caption" tone="amber">
+          <Label variant="caption" tone="warning">
             {uiText("composerTooLong")}
           </Label>
         </If>
@@ -172,9 +178,14 @@ function InsertBody(props: {
           placeholder={uiText("addToThisTurn")}
           autoFocus
           variant="small"
-          minHeight={72}
-          maxHeight={200}
-          padding={{ top: 6, bottom: 6, left: 8, right: 8 }}
+          minHeight={editorHeight.min}
+          maxHeight={editorHeight.max}
+          padding={{
+            top: space[8],
+            bottom: space[8],
+            left: space[8],
+            right: space[8],
+          }}
           style={{ borderWidth: 1, borderColor: c().border }}
         />
       </View>
@@ -182,7 +193,7 @@ function InsertBody(props: {
         <Label
           variant="caption"
           tone="red"
-          style={{ paddingHorizontal: 8, paddingBottom: 8 }}
+          style={{ paddingHorizontal: space[8], paddingBottom: space[8] }}
         >
           {error()}
         </Label>
@@ -191,9 +202,9 @@ function InsertBody(props: {
         style={{
           ...row,
           justifyContent: "space-between",
-          gap: 8,
-          paddingHorizontal: 8,
-          paddingBottom: 8,
+          gap: space[8],
+          paddingHorizontal: space[8],
+          paddingBottom: space[8],
         }}
       >
         <Label variant="caption" tone="faint" lines={1} style={{ flex: 1 }}>
@@ -203,7 +214,7 @@ function InsertBody(props: {
         </Label>
         <Button
           label={uiText("insert")}
-          size={22}
+          size={control.sm}
           labelTone={ready() ? "ink" : "faint"}
           dimDisabled={false}
           disabled={!ready()}

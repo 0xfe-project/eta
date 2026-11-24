@@ -1,6 +1,7 @@
 import type { Layout } from "../../../components";
 import { View } from "nsh";
 import { Button, grow, Label, row, SmoothScroll } from "../../../components";
+import { control, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { clientUpdatable } from "../../../services/client-update";
 import { useHost } from "../../../services/host";
@@ -33,7 +34,7 @@ export function UpdateSettings(props: {
   return (
     <View style={grow}>
       <GroupHeading title={uiText("update")} phone={phone()}>
-        <View style={{ ...row, gap: 10 }}>
+        <View style={{ ...row, gap: space[8] }}>
           <If when={checkedAt()}>
             <Label variant="small" tone="muted">
               {checkedLabel()}
@@ -47,7 +48,7 @@ export function UpdateSettings(props: {
                   ? uiText("checkAgain")
                   : uiText("checkForUpdates")
             }
-            size={phone() ? 28 : 24}
+            size={phone() ? control.md : control.sm}
             disabled={!canRead() || !!pending() || active()}
             onPress={() => void refresh()}
           />
@@ -57,7 +58,7 @@ export function UpdateSettings(props: {
         <If
           when={check()}
           else={
-            <View style={{ padding: 16, gap: 8 }}>
+            <View style={{ padding: space[16], gap: space[8] }}>
               <Label variant="small" tone="muted">
                 {!connected()
                   ? uiText("reconnectToCheckForUpdates")

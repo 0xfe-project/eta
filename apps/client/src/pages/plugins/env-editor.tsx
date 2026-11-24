@@ -2,9 +2,10 @@ import type { PluginEnvView, PluginView } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { Button, colors, Field, Label, row, textFaces } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
-import { useHost } from "../../services/host";
 
+import { useHost } from "../../services/host";
 import { looksSecret } from "./headers-model";
 
 interface Draft {
@@ -75,8 +76,13 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
     });
   }
   return (
-    <View style={{ gap: 12, opacity: off() ? 0.5 : 1 }}>
-      <View style={{ gap: 8 }}>
+    <View
+      style={{
+        gap: space[12],
+        opacity: off() ? 0.5 : 1, // design-value: a switched-off item's own dimming, between opacity.disabled and opacity.muted
+      }}
+    >
+      <View style={{ gap: space[8] }}>
         <Label variant="small" weight={600}>
           {uiText("envTitle")}
         </Label>
@@ -95,7 +101,7 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
       </View>
       <Each of={drafts()} key={(d) => d.id}>
         {(d) => (
-          <View style={{ ...row, gap: 12, alignItems: "center" }}>
+          <View style={{ ...row, gap: space[12], alignItems: "center" }}>
             <View style={{ flex: 2, minWidth: 0 }}>
               <Field
                 label={uiText("envName")}
@@ -144,7 +150,7 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
           {problem()}
         </Label>
       </If>
-      <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
+      <View style={{ ...row, gap: space[8], flexWrap: "wrap" }}>
         <Button
           label={uiText("envAdd")}
           tone="plain"
@@ -158,7 +164,9 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
           }
         />
       </View>
-      <View style={{ ...row, justifyContent: "flex-end", paddingTop: 4 }}>
+      <View
+        style={{ ...row, justifyContent: "flex-end", paddingTop: space[4] }}
+      >
         <Button
           label={uiText("envSave")}
           tone="primary"

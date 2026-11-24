@@ -44,6 +44,12 @@ import {
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
 import { taskOf } from "../session-owner";
+import {
+  ARCHIVED_RULE,
+  archivedGuard,
+  archivedSaid,
+  confirmArchivedParameter,
+} from "./archived";
 import { executorOf } from "./store";
 
 /** A failure the model can act on, from anything the board refused. */
@@ -191,13 +197,25 @@ function reading(deps: TaskToolDeps) {
     return task;
   };
 
+  const nameOf = (agentId: string): string =>
+    agents.get(agentId)?.name ?? "a deleted agent";
+
+  /** Who archived the task and when, in words; undefined when it is not archived. */
+  const archived = (task: BoardTaskView): string | undefined =>
+    archivedSaid(task, board.activity(task.id), nameOf);
+
+  /** The guard of the tools that write on a task (`archived.ts`). */
+  const guard = (options?: Parameters<typeof archivedGuard>[2]) =>
+    archivedGuard(board, nameOf, options);
+
   /** One line: what a model can read without asking for the task. */
   const line = (task: BoardTaskView): string => {
     const waits = task.waitingOn ?? [];
     const parent =
       task.parentId == null ? undefined : board.find(task.parentId);
+    const away = archived(task);
     return (
-      `#${task.number} [${task.status}] ${task.title} — ` +
+      `#${task.number} [${task.status}]${away === undefined ? "" : " [archived]"} ${task.title} — ` +
       `${task.runStatus === null ? "never run" : `run ${task.runStatus}`}, ` +
       `created by ${whoIs(task.createdBy)}${
         parent === undefined ? "" : `; subtask of #${parent.number}`
@@ -209,7 +227,7 @@ function reading(deps: TaskToolDeps) {
         waits.length === 0
           ? ""
           : `; waits for ${waits.map((edge) => `#${edge.number}${edge.state === "cancelled" ? " (cancelled)" : ""}${edge.via === null ? "" : ` (via #${edge.via})`}`).join(", ")}`
-      }`
+      }${away === undefined ? "" : `; archived: ${away}`}`
     );
   };
 
@@ -302,7 +320,8 @@ function reading(deps: TaskToolDeps) {
     name: "list_tasks",
     label: "list_tasks",
     description:
-      "List the tasks on the board, the one touched last first. Archived tasks (put away, usually done long ago) are left out unless `archived` asks for them.",
+      "List the tasks on the board, the one touched last first. Archived tasks (put away, usually done long ago) are left out unless `archived` asks for them; " +
+      "each archived one is marked [archived] and says who archived it and when.",
     parameters: Type.Object({
       status: Type.Optional(
         Type.String({ description: "Only the tasks in this status" }),
@@ -334,7 +353,7 @@ function reading(deps: TaskToolDeps) {
     label: "get_task",
     description:
       "One task in full: its description, where it is worked on, its runs and its timeline " +
-      "(comments, status changes, published artifacts).",
+      "(comments, status changes, published artifacts), and whether it is archived, by whom and when.",
     parameters: Type.Object({
       task: Type.String({ description: "The task's number (12 or #12) or id" }),
     }),
@@ -369,8 +388,13 @@ function reading(deps: TaskToolDeps) {
             ? undefined
             : `Waited for by:\n${task.dependents!.map(edgeLine).join("\n")}`,
         ].filter((part) => part !== undefined);
+        const away = archived(task);
+        const archivedPart =
+          away === undefined
+            ? ""
+            : `\nArchived: ${away}. Changing or commenting on it brings it back onto the board.`;
         return text(
-          `${line(task)}\nWorks in ${where}.\n\n${task.description}\n\n${graph.length === 0 ? "" : `${graph.join("\n\n")}\n\n`}Runs:\n${runs === "" ? "(none)" : runs}\n\nTimeline:\n${timeline}`,
+          `${line(task)}${archivedPart}\nWorks in ${where}.\n\n${task.description}\n\n${graph.length === 0 ? "" : `${graph.join("\n\n")}\n\n`}Runs:\n${runs === "" ? "(none)" : runs}\n\nTimeline:\n${timeline}`,
           { id: task.id, number: task.number },
         );
       } catch (error) {
@@ -379,7 +403,7 @@ function reading(deps: TaskToolDeps) {
     },
   });
 
-  return { whoIs, taskOf, list, get };
+  return { whoIs, taskOf, list, get, guard };
 }
 
 function conversationTools(
@@ -390,7 +414,11 @@ function conversationTools(
   const actor: TaskActor = { kind: "agent", agentId: who.agentId };
   const assignment = () =>
     deps.captain?.assignmentFor(who.conversationId, who.agentId);
-  const { taskOf, list, get } = reading(deps);
+  const { taskOf, list, get, guard } = reading(deps);
+  const archivedOnly = guard({
+    instead:
+      "if it is new work, make a new task instead (draft_task, or create_task when the user asked for one) and refer to #N in it",
+  });
 
   // The debt this comment used to record is paid on the prompt side. The session's own list is
   // now "steps" (`create_step` / `update_step` / `list_steps` / `get_step`), the base prompt says
@@ -596,8 +624,10 @@ function conversationTools(
     name: "update_task",
     label: "update_task",
     description:
-      "Change a task's title, description or status, or what it waits for. Only the fields you " +
-      "give change. Moving a task to done or cancelled stops its runs.",
+      `Change a task's title, description or status, or what it waits for. Only the fields you ` +
+      `give change. Moving a task to done or cancelled stops its runs. ${
+        ARCHIVED_RULE
+      }`,
     parameters: Type.Object({
       task: Type.String({ description: "The task's number (12 or #12) or id" }),
       title: Type.Optional(Type.String()),
@@ -621,6 +651,7 @@ function conversationTools(
             "Tasks this one should no longer wait for: numbers (12 or #12) or ids",
         }),
       ),
+      confirmArchived: confirmArchivedParameter,
     }),
     execute(args) {
       try {
@@ -629,9 +660,15 @@ function conversationTools(
           parent,
           addDependencies,
           removeDependencies,
+          confirmArchived,
           ...fields
         } = args;
         const id = taskOf(which).id;
+        const archived = archivedOnly.before(
+          id,
+          confirmArchived,
+          "update_task",
+        );
         if (parent !== undefined)
           board.setParent(id, parent.trim() === "" ? null : parent, actor);
         for (const other of removeDependencies ?? [])
@@ -645,7 +682,7 @@ function conversationTools(
           );
         const task = board.update(id, fields, actor);
         return text(
-          `#${task.number} is now [${task.status}] "${task.title}".`,
+          `#${task.number} is now [${task.status}] "${task.title}".${archived?.after() ?? ""}`,
           { id: task.id, status: task.status },
         );
       } catch (error) {
@@ -658,17 +695,27 @@ function conversationTools(
     name: "comment_task",
     label: "comment_task",
     description:
-      "Comment on a task. The comment is on its timeline and in its card, and if a run is " +
-      "working on the task it reads the comment and carries on with it.",
+      `Comment on a task. The comment is on its timeline and in its card, and if a run is ` +
+      `working on the task it reads the comment and carries on with it. ${
+        ARCHIVED_RULE
+      }`,
     parameters: Type.Object({
       task: Type.String({ description: "The task's number (12 or #12) or id" }),
       body: Type.String({ description: "What to say" }),
+      confirmArchived: confirmArchivedParameter,
     }),
     execute(args) {
       try {
         const task = taskOf(args.task);
+        const archived = archivedOnly.before(
+          task.id,
+          args.confirmArchived,
+          "comment_task",
+        );
         board.comment(task.id, args.body, actor);
-        return text(`Commented on #${task.number}.`, { id: task.id });
+        return text(`Commented on #${task.number}.${archived?.after() ?? ""}`, {
+          id: task.id,
+        });
       } catch (error) {
         return failure(error);
       }
@@ -693,23 +740,31 @@ function mentionedTools(
   who: { agentId: string; taskId: string; maker: boolean },
 ): KernelTool[] {
   const { runner, asks } = deps;
-  const { list, get } = reading(deps);
+  const { list, get, guard } = reading(deps);
+  const archivedOnly = guard();
 
   const answer = defineTool({
     name: "comment_task",
     label: "comment_task",
     description:
-      "Answer in this task's thread, in your name: what you were asked for, said once and in " +
-      "full. The user and the executor read it there. After it, stop: you are woken again when " +
-      "you are mentioned again.",
+      `Answer in this task's thread, in your name: what you were asked for, said once and in ` +
+      `full. The user and the executor read it there. After it, stop: you are woken again when ` +
+      `you are mentioned again. ${ARCHIVED_RULE}`,
     parameters: Type.Object({
       body: Type.String({ description: "Your answer" }),
+      confirmArchived: confirmArchivedParameter,
     }),
     execute(args) {
       try {
-        return text(runner.answer(who.taskId, who.agentId, args.body), {
-          id: who.taskId,
-        });
+        const archived = archivedOnly.before(
+          who.taskId,
+          args.confirmArchived,
+          "comment_task",
+        );
+        return text(
+          `${runner.answer(who.taskId, who.agentId, args.body)}${archived?.after() ?? ""}`,
+          { id: who.taskId },
+        );
       } catch (error) {
         return failure(error);
       }
@@ -792,7 +847,8 @@ function runTools(
 ): KernelTool[] {
   const { board, runner } = deps;
   const actor: TaskActor = { kind: "agent", agentId: who.agentId };
-  const { taskOf, list, get } = reading(deps);
+  const { taskOf, list, get, guard } = reading(deps);
+  const archivedOnly = guard();
 
   const task = (): TaskRecord => taskOf(who.taskId);
 
@@ -814,9 +870,11 @@ function runTools(
     name: "update_task",
     label: "update_task",
     description:
-      "Change this task's title, description or status while you work (for example to blocked " +
-      "when you wait on something). Only the fields you give change. Moving it to review is " +
-      "finish_task's job, and done or cancelled is the user's call.",
+      `Change this task's title, description or status while you work (for example to blocked ` +
+      `when you wait on something). Only the fields you give change. Moving it to review is ` +
+      `finish_task's job, and done or cancelled is the user's call. ${
+        ARCHIVED_RULE
+      }`,
     parameters: Type.Object({
       title: Type.Optional(Type.String()),
       description: Type.Optional(Type.String()),
@@ -825,9 +883,11 @@ function runTools(
           description: "backlog, todo, in_progress or blocked",
         }),
       ),
+      confirmArchived: confirmArchivedParameter,
     }),
     execute(args) {
       try {
+        const { confirmArchived, ...fields } = args;
         if (
           args.status === "done" ||
           args.status === "cancelled" ||
@@ -838,9 +898,14 @@ function runTools(
               ? "use finish_task to move the task to review"
               : `moving the task to ${args.status} is for the user to decide`,
           );
-        const updated = board.update(task().id, args, actor);
+        const archived = archivedOnly.before(
+          who.taskId,
+          confirmArchived,
+          "update_task",
+        );
+        const updated = board.update(task().id, fields, actor);
         return text(
-          `#${updated.number} is now [${updated.status}] "${updated.title}".`,
+          `#${updated.number} is now [${updated.status}] "${updated.title}".${archived?.after() ?? ""}`,
           { id: updated.id, status: updated.status },
         );
       } catch (error) {
@@ -922,19 +987,28 @@ function runTools(
     name: "comment_task",
     label: "comment_task",
     description:
-      "Post a comment on this task: a progress note or a question for the user. It is on the " +
-      "task's timeline. It does not end your run; finish_task does.",
+      `Post a comment on this task: a progress note or a question for the user. It is on the ` +
+      `task's timeline. It does not end your run; finish_task does. ${
+        ARCHIVED_RULE
+      }`,
     parameters: Type.Object({
       body: Type.String({ description: "What to say" }),
+      confirmArchived: confirmArchivedParameter,
     }),
     execute(args) {
       try {
         workingRun();
+        const archived = archivedOnly.before(
+          who.taskId,
+          args.confirmArchived,
+          "comment_task",
+        );
         // Your own comment is not sent back to you, and does not wake the task either.
         board.comment(task().id, args.body, actor, { deliver: false });
-        return text(`Commented on #${taskOf(who.taskId).number}.`, {
-          id: who.taskId,
-        });
+        return text(
+          `Commented on #${taskOf(who.taskId).number}.${archived?.after() ?? ""}`,
+          { id: who.taskId },
+        );
       } catch (error) {
         return failure(error);
       }

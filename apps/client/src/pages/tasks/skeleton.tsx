@@ -1,5 +1,12 @@
 import { View } from "nsh";
 import { colors, grow, row } from "../../components";
+import { space } from "../../components/tokens";
+
+/** The bars' sizes: a line of text, a title, a status glyph's square, the list's trailing bar and
+ * the detail's title and meta lines; a list row. */
+const barHeight = { text: 12, title: 20, glyph: 16 } as const;
+const barWidth = { glyph: 16, trailing: 40, title: 184, meta: 92 } as const;
+const listRowHeight = 36;
 
 /** One placeholder bar of the design's loading states: muted fill, 1px border. */
 function Bar(props: { width: number; height: number }) {
@@ -25,15 +32,22 @@ export function TaskListSkeleton(props: { label: string }) {
     <View
       role="progressbar"
       accessibilityLabel={props.label}
-      style={{ ...grow, paddingVertical: 8 }}
+      style={{ ...grow, paddingVertical: space[8] }}
     >
-      <Each of={[210, 140, 175, 245, 105]}>
+      <Each of={[212, 140, 176, 244, 104]}>
         {(width) => (
-          <View style={{ ...row, height: 36, paddingHorizontal: 8, gap: 12 }}>
-            <Bar width={14} height={14} />
-            <Bar width={width()} height={12} />
+          <View
+            style={{
+              ...row,
+              height: listRowHeight,
+              paddingHorizontal: space[8],
+              gap: space[12],
+            }}
+          >
+            <Bar width={barWidth.glyph} height={barHeight.glyph} />
+            <Bar width={width()} height={barHeight.text} />
             <View style={{ flex: 1 }} />
-            <Bar width={40} height={12} />
+            <Bar width={barWidth.trailing} height={barHeight.text} />
           </View>
         )}
       </Each>
@@ -47,13 +61,13 @@ export function TaskDetailSkeleton(props: { label: string }) {
     <View
       role="progressbar"
       accessibilityLabel={props.label}
-      style={{ ...grow, padding: 16, gap: 12 }}
+      style={{ ...grow, padding: space[16], gap: space[12] }}
     >
-      <Bar width={184} height={20} />
-      <Bar width={92} height={12} />
-      <View style={{ gap: 8, paddingTop: 12 }}>
-        <Each of={[211, 366, 183, 366, 122]}>
-          {(width) => <Bar width={width()} height={12} />}
+      <Bar width={barWidth.title} height={barHeight.title} />
+      <Bar width={barWidth.meta} height={barHeight.text} />
+      <View style={{ gap: space[8], paddingTop: space[12] }}>
+        <Each of={[212, 368, 184, 368, 124]}>
+          {(width) => <Bar width={width()} height={barHeight.text} />}
         </Each>
       </View>
     </View>

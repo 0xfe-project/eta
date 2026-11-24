@@ -38,6 +38,7 @@ import type { ConversationPolicies } from "./policy";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
 import { homedir } from "node:os";
+import { heldFor } from "@eta/client-contracts/routing";
 import { kernelOn } from "@eta/core";
 import { lastSeq, LinkError, listen } from "@eta/daemon";
 import { parseModelId } from "@eta/server";
@@ -732,13 +733,15 @@ export class Engine {
        * turns it into a message. Sending two in a row while the first is unanswered used to put
        * both in the transcript and leave the second one unrecallable.
        */
+      // The client tells it the same way as it sends (`heldFor`), and shows the message queued.
       const held =
-        planned.length > 0 &&
-        planned.every(
-          (target) =>
-            !target.join &&
-            this.#chains.has(keyOf(conversation.id, target.agentId)),
-        );
+        heldFor(
+          routing.targets,
+          (agentId) =>
+            !planned.some(
+              (target) => target.agentId === agentId && target.join,
+            ) && this.#chains.has(keyOf(conversation.id, agentId)),
+        ).length > 0;
       message = this.#timeline.append({
         id,
         conversationId: conversation.id,

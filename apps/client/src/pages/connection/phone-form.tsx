@@ -8,8 +8,12 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { ConnectionIntro, ConnectionMessage, PhoneHero } from "./visuals";
+
+/** The least room the intro over the form takes. */
+const introHeight = 192;
 
 export function PhoneConnectionForm(props: {
   children?: JSX.Element;
@@ -33,19 +37,19 @@ export function PhoneConnectionForm(props: {
       <View
         style={{
           flexGrow: 1,
-          minHeight: 190,
+          minHeight: introHeight,
           justifyContent: "flex-end",
-          paddingHorizontal: 16,
-          paddingBottom: 24,
-          paddingTop: 16,
-          gap: 12,
+          paddingHorizontal: space[16],
+          paddingBottom: space[24],
+          paddingTop: space[16],
+          gap: space[12],
         }}
       >
         <If
           when={props.remoteFailure}
           else={
             <>
-              <Label variant="display" style={{ letterSpacing: -1.28 }}>
+              <Label tracking="tight" variant="display">
                 ETA
               </Label>
               <ConnectionIntro phone />
@@ -61,10 +65,10 @@ export function PhoneConnectionForm(props: {
         <ConnectionMessage error={props.error} />
         <View
           style={{
-            paddingHorizontal: 16,
-            paddingTop: 16,
-            paddingBottom: 34,
-            gap: 8,
+            paddingHorizontal: space[16],
+            paddingTop: space[16],
+            paddingBottom: space[32],
+            gap: space[8],
           }}
         >
           <View style={{ position: "relative" }}>
@@ -77,7 +81,7 @@ export function PhoneConnectionForm(props: {
                     : uiText("connect")
               }
               tone="primary"
-              size={52}
+              size={control.touch}
               labelVariant="body"
               dimDisabled={props.connecting}
               disabled={props.busy || !props.address.trim()}
@@ -93,9 +97,9 @@ export function PhoneConnectionForm(props: {
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  minHeight: 52,
-                  paddingVertical: 10,
-                  paddingHorizontal: 12,
+                  minHeight: control.touch,
+                  paddingVertical: space[12],
+                  paddingHorizontal: space[12],
                   backgroundColor: c().button,
                 }}
               >
@@ -108,7 +112,7 @@ export function PhoneConnectionForm(props: {
           <If when={!props.remoteFailure}>
             <Button
               label={props.scanLabel}
-              size={52}
+              size={control.touch}
               labelVariant="body"
               disabled={props.busy}
               onPress={props.onScan}

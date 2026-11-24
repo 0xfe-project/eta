@@ -1,6 +1,14 @@
 import type { HostUpdate } from "./host-update";
 import { View } from "nsh";
-import { Button, Field, Label, Modal, row } from "../../../components";
+import {
+  Button,
+  dialogWidth,
+  Field,
+  Label,
+  Modal,
+  row,
+} from "../../../components";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
 export function UpdateSourceEditor(props: {
@@ -29,16 +37,16 @@ export function UpdateSourceEditor(props: {
               : uiText("setAccessToken")
           }
           phone={props.phone}
-          width={448}
+          width={dialogWidth.md}
           blurBackdrop={false}
           overPhoneNavigation
           dismissible={!pending()}
           onClose={closeEditor}
         >
-          <View style={{ padding: 16, gap: 12 }}>
+          <View style={{ padding: space[16], gap: space[12] }}>
             <Label
               variant="small"
-              tone={mode() === "upstream" ? "amber" : "muted"}
+              tone={mode() === "upstream" ? "warning" : "muted"}
             >
               {mode() === "upstream"
                 ? uiText("theHostInstallsAndRunsCode")
@@ -67,7 +75,7 @@ export function UpdateSourceEditor(props: {
                 ...row,
                 flexWrap: "wrap",
                 justifyContent: "flex-end",
-                gap: 8,
+                gap: space[8],
               }}
             >
               <If

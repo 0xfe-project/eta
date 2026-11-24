@@ -3,10 +3,18 @@ import type { light } from "../../components/theme";
 import type { UpgradeResult } from "../settings/updates/progress";
 import { cleanup, computed, effect, signal, untracked, View } from "nsh";
 import { Dialog } from "nsh/base";
-import { Button, colors, fill, Label, row } from "../../components";
+import {
+  Button,
+  colors,
+  dialogWidth,
+  fill,
+  Label,
+  row,
+} from "../../components";
 import { screenInsets } from "../../components/safe-area";
-import { StatusDot } from "../../components/status-dot";
+import { dotSize, StatusDot } from "../../components/status-dot";
 import { showToast } from "../../components/toast";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { megabytes, resultNotice } from "../settings/updates/progress";
@@ -192,10 +200,15 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
         </Label>
       );
     const tone: keyof typeof light =
-      state === "failed" ? "red" : state === "restoring" ? "amber" : "blue";
+      state === "failed" ? "red" : state === "restoring" ? "warning" : "blue";
     return state === "todo" ? (
       <View
-        style={{ width: 6, height: 6, borderWidth: 1, borderColor: c().strong }}
+        style={{
+          width: dotSize,
+          height: dotSize,
+          borderWidth: 1,
+          borderColor: c().strong,
+        }}
       />
     ) : (
       <StatusDot color={c()[tone]} />
@@ -206,8 +219,8 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
     <View
       testID="update-screen-steps"
       style={{
-        gap: 6,
-        paddingVertical: 12,
+        gap: space[4],
+        paddingVertical: space[12],
         borderTopWidth: 1,
         borderBottomWidth: 1,
         borderColor: c().border,
@@ -215,8 +228,8 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
     >
       <Each of={steps(shown, downloaded())} key={(step) => step.text}>
         {(step) => (
-          <View style={{ ...row, gap: 10 }}>
-            <View style={{ width: 16, alignItems: "center" }}>
+          <View style={{ ...row, gap: space[8] }}>
+            <View style={{ width: space[16], alignItems: "center" }}>
               {mark(step().state)}
             </View>
             <Label
@@ -258,20 +271,27 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
             accessibilityLabel={uiText("hostUpdateInProgress")}
             style={{
               ...fill,
+              // design-value: the update screen covers an open dialog (layer.modal), under toasts
               zIndex: 500,
               backgroundColor: c().canvas,
               justifyContent: "center",
               alignItems: "center",
               paddingTop: insets().top,
               paddingBottom: insets().bottom,
-              paddingHorizontal: 24,
+              paddingHorizontal: space[24],
             }}
           >
-            <View style={{ width: 448, maxWidth: "100%", gap: 16 }}>
+            <View
+              style={{
+                width: dialogWidth.md,
+                maxWidth: "100%",
+                gap: space[16],
+              }}
+            >
               <>
                 <If when={running()}>
-                  <View style={{ gap: 4 }}>
-                    <Label variant="subtitle" weight={500}>
+                  <View style={{ gap: space[4] }}>
+                    <Label variant="subtitle" weight={weight.regular}>
                       {current().to
                         ? uiText("updateScreenTitle", { version: current().to })
                         : uiText("updatingTheHost")}
@@ -297,23 +317,23 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                       </Label>
                     }
                   >
-                    <View testID="update-slow" style={{ gap: 12 }}>
+                    <View testID="update-slow" style={{ gap: space[12] }}>
                       <View
                         style={{
                           ...row,
                           alignItems: "flex-start",
-                          gap: 8,
-                          paddingVertical: 8,
-                          paddingHorizontal: 10,
+                          gap: space[8],
+                          paddingVertical: space[8],
+                          paddingHorizontal: space[12],
                           borderWidth: 1,
                           borderColor: c().strong,
                         }}
                       >
-                        <View style={{ paddingTop: 5 }}>
-                          <StatusDot color={c().amber} />
+                        <View style={{ paddingTop: space[4] }}>
+                          <StatusDot color={c().warning} />
                         </View>
-                        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                          <Label variant="small" weight={500}>
+                        <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+                          <Label variant="small" weight={weight.regular}>
                             {uiText("updateSlowTitle")}
                           </Label>
                           <Label variant="small" tone="mutedInk">
@@ -321,7 +341,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                           </Label>
                         </View>
                       </View>
-                      <View style={{ ...row, gap: 8, flexWrap: "wrap" }}>
+                      <View style={{ ...row, gap: space[8], flexWrap: "wrap" }}>
                         <Button
                           label={uiText("changeHost")}
                           onPress={props.onConnect}
@@ -336,8 +356,8 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                   </If>
                 </If>
                 <If when={current().state === "done"}>
-                  <View style={{ gap: 4 }}>
-                    <Label variant="subtitle" weight={500}>
+                  <View style={{ gap: space[4] }}>
+                    <Label variant="subtitle" weight={weight.regular}>
                       {uiText("updateDoneTitle", {
                         version: current().to ?? "",
                       })}
@@ -352,8 +372,8 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                   </Label>
                 </If>
                 <If when={current().state === "rolled-back"}>
-                  <View style={{ gap: 4 }}>
-                    <Label variant="subtitle" weight={500}>
+                  <View style={{ gap: space[4] }}>
+                    <Label variant="subtitle" weight={weight.regular}>
                       {uiText("updateRolledBackScreenTitle", {
                         version: current().to ?? "",
                       })}
@@ -366,8 +386,8 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                   </View>
                   <View
                     style={{
-                      gap: 12,
-                      paddingTop: 12,
+                      gap: space[12],
+                      paddingTop: space[12],
                       borderTopWidth: 1,
                       borderColor: c().border,
                     }}
@@ -375,10 +395,14 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                     <If when={current().error}>
                       {(error) => (
                         <View
-                          style={{ ...row, alignItems: "flex-start", gap: 8 }}
+                          style={{
+                            ...row,
+                            alignItems: "flex-start",
+                            gap: space[8],
+                          }}
                         >
-                          <View style={{ paddingTop: 5 }}>
-                            <StatusDot color={c().amber} />
+                          <View style={{ paddingTop: space[4] }}>
+                            <StatusDot color={c().warning} />
                           </View>
                           <Label
                             variant="small"
@@ -400,8 +424,8 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                   </View>
                 </If>
                 <If when={current().state === "broken"}>
-                  <View style={{ gap: 4 }}>
-                    <Label variant="subtitle" weight={500}>
+                  <View style={{ gap: space[4] }}>
+                    <Label variant="subtitle" weight={weight.regular}>
                       {uiText("updateBrokenTitle")}
                     </Label>
                     <Label tone="mutedInk">
@@ -413,8 +437,8 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                   </View>
                   <View
                     style={{
-                      gap: 12,
-                      paddingTop: 12,
+                      gap: space[12],
+                      paddingTop: space[12],
                       borderTopWidth: 1,
                       borderColor: c().border,
                     }}
@@ -422,9 +446,13 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                     <If when={current().error}>
                       {(error) => (
                         <View
-                          style={{ ...row, alignItems: "flex-start", gap: 8 }}
+                          style={{
+                            ...row,
+                            alignItems: "flex-start",
+                            gap: space[8],
+                          }}
                         >
-                          <View style={{ paddingTop: 5 }}>
+                          <View style={{ paddingTop: space[4] }}>
                             <StatusDot color={c().red} />
                           </View>
                           <Label
@@ -437,13 +465,13 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                         </View>
                       )}
                     </If>
-                    <View style={{ gap: 2 }}>
+                    <View style={{ gap: space[2] }}>
                       <Label variant="small">{uiText("updateWhatToDo")}</Label>
                       <Label variant="small" tone="mutedInk">
                         {uiText("updateBrokenNext")}
                       </Label>
                     </View>
-                    <View style={{ ...row, gap: 8 }}>
+                    <View style={{ ...row, gap: space[8] }}>
                       <Button
                         label={uiText("reconnect")}
                         tone="primary"

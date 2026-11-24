@@ -6,8 +6,13 @@ import { colors, focusRing, Label, row, RowChevron } from "../components";
 import { AgentFace } from "../components/agent-face";
 import { touchScreen } from "../components/menu";
 import { StatusDot } from "../components/status-dot";
+import { avatar, control, space } from "../components/tokens";
 import { relativeTime, useHost } from "../services/host";
 import { RailEntry } from "./rail-controls";
+
+const groupRowHeight = { phone: 64, regular: 52 } as const;
+/** A phone's group row: its members' faces, overlapped. */
+const facesWidth = 36;
 
 export function GroupRow(props: {
   group: ConversationSummary;
@@ -47,13 +52,13 @@ export function GroupRow(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       focusVisibleStyle={focusRing(c())}
       style={{
-        minHeight: phone() ? 64 : 53,
+        minHeight: phone() ? groupRowHeight.phone : groupRowHeight.regular,
         flexShrink: 0,
-        paddingLeft: phone() ? 16 : 14,
-        paddingRight: phone() ? 12 : 14,
-        paddingTop: phone() ? 0 : 8,
-        paddingBottom: phone() ? 0 : 6,
-        gap: phone() ? 12 : 2,
+        paddingLeft: space[16],
+        paddingRight: phone() ? space[12] : space[16],
+        paddingTop: phone() ? 0 : space[8],
+        paddingBottom: phone() ? 0 : space[8],
+        gap: phone() ? space[12] : space[2],
         borderBottomWidth: 1,
         borderColor: c().border,
         cursor: "pointer",
@@ -62,16 +67,23 @@ export function GroupRow(props: {
       }}
     >
       <If when={phone()}>
-        <View style={{ ...row, width: 36, paddingLeft: 2, flexShrink: 0 }}>
+        <View
+          style={{
+            ...row,
+            width: facesWidth,
+            paddingLeft: space[2],
+            flexShrink: 0,
+          }}
+        >
           <Each of={people()}>
             {(person, index) => (
-              <View style={{ marginLeft: index() ? -4 : 0 }}>
-                <AgentFace id={person().agentId} size={16} />
+              <View style={{ marginLeft: index() ? -space[4] : 0 }}>
+                <AgentFace id={person().agentId} size={avatar.sm} />
               </View>
             )}
           </Each>
         </View>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
           <Label lines={1}>{props.group.name}</Label>
           <Label variant="caption" tone="muted" lines={1}>
             {props.group.preview}
@@ -83,17 +95,17 @@ export function GroupRow(props: {
         <Label
           variant="caption"
           tone="muted"
-          style={{ width: 28, textAlign: "right", flexShrink: 0 }}
+          style={{ width: control.md, textAlign: "right", flexShrink: 0 }}
         >
           {time()}
         </Label>
         <RowChevron />
       </If>
       <If when={!phone()}>
-        <View style={{ ...row, gap: 6 }}>
+        <View style={{ ...row, gap: space[4] }}>
           <View style={row}>
             <Each of={people()}>
-              {(person) => <AgentFace id={person().agentId} size={16} />}
+              {(person) => <AgentFace id={person().agentId} size={avatar.sm} />}
             </Each>
           </View>
           <Label variant="subtitle" lines={1} style={{ flex: 1 }}>
@@ -121,11 +133,11 @@ export function GroupRow(props: {
           )}
           onPress={props.onPress}
         >
-          <View style={{ ...row, height: 14 }}>
+          <View style={{ ...row, height: avatar.sm }}>
             <Each of={people()} key={(person) => person.agentId}>
               {(person, index) => (
-                <View style={{ marginLeft: index() ? -3 : 0 }}>
-                  <AgentFace id={person().agentId} size={14} />
+                <View style={{ marginLeft: index() ? -space[4] : 0 }}>
+                  <AgentFace id={person().agentId} size={avatar.sm} />
                 </View>
               )}
             </Each>

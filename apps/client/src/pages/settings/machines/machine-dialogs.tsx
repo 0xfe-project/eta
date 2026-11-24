@@ -2,6 +2,7 @@ import type { MachineView } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { Button, Label, Modal } from "../../../components";
 import { FieldDialog } from "../../../components/field-dialog";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -114,7 +115,7 @@ export function RevokeMachine(props: {
       sheet={props.phone}
       onClose={props.onClose}
     >
-      <View style={{ padding: 16, gap: 8 }}>
+      <View style={{ padding: space[16], gap: space[8] }}>
         <Label>
           {uiText("willNoLongerBeAbleTo", { name: props.item.name })}
         </Label>

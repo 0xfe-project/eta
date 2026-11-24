@@ -12,6 +12,7 @@ import type { EntityStatus } from "../section";
 import { keyMissing, providerLabel } from "@eta/client-contracts";
 import { View } from "nsh";
 import { ActionItem, colors, Label, row } from "../../../components";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EntityRow, LetterBox } from "../section";
@@ -23,6 +24,9 @@ import {
   monthlyWindows,
   percentText,
 } from "./quota";
+
+/** The bar showing how much of a source's quota is used. */
+const usageBarWidth = 56;
 
 /** Every model source in one list: the gateway's accounts first, then the config's providers. */
 export function useModelSources() {
@@ -58,7 +62,7 @@ export function ModelSourceList(props: {
   const providerStatus = (item: ProviderSummary): EntityStatus => {
     const check = checks()[item.id];
     if (keyMissing(item))
-      return { label: uiText("sourceNeedsKey"), color: c().amber };
+      return { label: uiText("sourceNeedsKey"), color: c().warning };
     if (check?.state === "invalid_key")
       return { label: uiText("sourceKeyRefused"), color: c().red };
     if (check?.state === "unreachable")
@@ -100,7 +104,7 @@ export function ModelSourceList(props: {
     if (item.state === "needs_login" || item.state === "error")
       return item.error?.code === "invalid_api_key"
         ? { label: uiText("sourceKeyRefused"), color: c().red }
-        : { label: uiText("sourceNeedsLogin"), color: c().amber };
+        : { label: uiText("sourceNeedsLogin"), color: c().warning };
     return { label: uiText("sourceWorking"), color: c().green };
   };
   return (
@@ -117,15 +121,15 @@ export function ModelSourceList(props: {
               />
             }
             meta={
-              <View style={{ ...row, gap: 10 }}>
+              <View style={{ ...row, gap: space[8] }}>
                 <Label variant="small" tone="muted">
                   {modelCount(item())}
                 </Label>
                 <If when={!props.phone && used(item()) !== undefined}>
                   <View
                     style={{
-                      width: 56,
-                      height: 4,
+                      width: usageBarWidth,
+                      height: space[4],
                       borderWidth: 1,
                       borderColor: c().strong,
                     }}
@@ -133,7 +137,7 @@ export function ModelSourceList(props: {
                     <View
                       style={{
                         width: (54 * (used(item()) ?? 0)) / 100,
-                        height: 2,
+                        height: space[2],
                         backgroundColor: c().ink,
                       }}
                     />

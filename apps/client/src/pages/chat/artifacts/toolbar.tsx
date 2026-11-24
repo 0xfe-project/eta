@@ -11,7 +11,13 @@ import {
   row,
 } from "../../../components";
 import { CloseButton } from "../../../components/navigation-buttons";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
+
+/** The version picker's least width, the phone buttons' least widths, the bar off phones. */
+const pickerWidth = { phone: 132, desktop: 116 } as const;
+const phoneButtonWidth = { share: 100, export: 84 } as const;
+const barHeight = { desktop: 40, tablet: 36 } as const;
 
 export function ArtifactToolbar(props: {
   title: string;
@@ -50,8 +56,8 @@ export function ArtifactToolbar(props: {
         label={uiText("artifactVersion")}
         value={versionLabel(props.version ?? 1)}
         triggerStyle={{
-          height: phone() ? 28 : 24,
-          minWidth: phone() ? 132 : 114,
+          height: phone() ? control.md : space[24],
+          minWidth: phone() ? pickerWidth.phone : pickerWidth.desktop,
         }}
       >
         <Each of={props.versions} key={(entry) => entry.number}>
@@ -72,11 +78,11 @@ export function ArtifactToolbar(props: {
       <Button
         label={props.shared ? uiText("unshare") : uiText("sharePublicly")}
         icon={phone() ? undefined : "globe"}
-        iconSize={12}
+        iconSize={icon.sm}
         tone={phone() ? "plain" : "ghost"}
-        size={phone() ? 28 : 24}
+        size={phone() ? control.md : control.sm}
         labelVariant="caption"
-        style={{ minWidth: phone() ? 99 : undefined }}
+        style={{ minWidth: phone() ? phoneButtonWidth.share : undefined }}
         disabled={props.sharing || !props.item}
         onPress={props.onShare}
       />
@@ -89,11 +95,11 @@ export function ArtifactToolbar(props: {
         <Button
           label={uiText("exportPdf")}
           icon={phone() ? undefined : "printer"}
-          iconSize={12}
+          iconSize={icon.sm}
           tone={phone() ? "plain" : "ghost"}
-          size={phone() ? 28 : 24}
+          size={phone() ? control.md : control.sm}
           labelVariant="caption"
-          style={{ minWidth: phone() ? 82 : undefined }}
+          style={{ minWidth: phone() ? phoneButtonWidth.export : undefined }}
           disabled={props.exportDisabled}
           onPress={props.onExport}
         />
@@ -108,25 +114,26 @@ export function ArtifactToolbar(props: {
         <View
           style={{
             ...row,
-            paddingLeft: 12,
-            paddingRight: 14,
-            gap: 8,
+            paddingLeft: space[12],
+            paddingRight: space[16],
+            gap: space[8],
             flexShrink: 0,
-            height: props.layout === "desktop" ? 40 : 36,
+            height:
+              props.layout === "desktop" ? barHeight.desktop : barHeight.tablet,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <Icon name="appWindow" size={14} tone="muted" />
+          <Icon name="appWindow" size={icon.md} tone="muted" />
           <Label
             variant="small"
-            weight={500}
+            weight={weight.regular}
             lines={1}
             style={{ flex: 1, minWidth: 0 }}
           >
             {props.title}
           </Label>
-          <View style={{ ...row, gap: 4 }}>
+          <View style={{ ...row, gap: space[4] }}>
             {versionPicker()}
             {shareButton()}
             {exportButton()}
@@ -134,9 +141,9 @@ export function ArtifactToolbar(props: {
               <Button
                 label={uiText("openInNewWindow")}
                 icon="external"
-                iconSize={12}
+                iconSize={icon.sm}
                 tone="ghost"
-                size={24}
+                size={control.sm}
                 labelVariant="caption"
                 disabled={!props.previewReady}
                 onPress={props.onPreview}
@@ -145,9 +152,9 @@ export function ArtifactToolbar(props: {
             <Button
               label={uiText(props.downloading ? "downloading" : "download")}
               icon="download"
-              iconSize={12}
+              iconSize={icon.sm}
               tone="ghost"
-              size={24}
+              size={control.sm}
               labelVariant="caption"
               disabled={props.downloadDisabled}
               onPress={props.onDownload}
@@ -155,9 +162,9 @@ export function ArtifactToolbar(props: {
           </View>
           {/* The actions end 48pt from the edge, the bare close glyph 14pt. */}
           <CloseButton
-            iconSize={14}
+            iconSize={icon.md}
             onPress={props.onClose}
-            style={{ marginLeft: 7, marginRight: -5 }}
+            style={{ marginLeft: space[8], marginRight: -space[4] }}
           />
         </View>
       }
@@ -168,16 +175,16 @@ export function ArtifactToolbar(props: {
           justifyContent: "space-between",
           flexWrap: "wrap",
           flexShrink: 0,
-          paddingHorizontal: 16,
-          paddingVertical: 6,
-          minHeight: 44,
+          paddingHorizontal: space[16],
+          paddingVertical: space[8],
+          minHeight: control.touch,
           borderBottomWidth: 1,
           borderColor: c().border,
-          gap: 4,
+          gap: space[4],
         }}
       >
         {versionPicker()}
-        <View style={{ ...row, gap: 8 }}>
+        <View style={{ ...row, gap: space[8] }}>
           {exportButton()}
           {shareButton()}
         </View>

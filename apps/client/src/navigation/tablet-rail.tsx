@@ -1,11 +1,14 @@
 import type { Navigation } from "./routes";
 import { View } from "nsh";
 import { colors, focusRing, sizes } from "../components";
+import { avatar, space } from "../components/tokens";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 import { CaptainFace } from "./captain";
 import { sections } from "./routes";
 import { NavItem } from "./sidebar";
+
+const captainHeight = 56;
 
 export function TabletRail(props: Navigation) {
   const text = useText();
@@ -20,8 +23,8 @@ export function TabletRail(props: Navigation) {
         width: sizes.rail,
         height: "100%",
         flexShrink: 0,
-        padding: 4,
-        gap: 4,
+        padding: space[4],
+        gap: space[4],
         borderRightWidth: 1,
         borderColor: c().border,
         backgroundColor: c().surface,
@@ -34,13 +37,13 @@ export function TabletRail(props: Navigation) {
         hoverStyle={{ backgroundColor: c().selected }}
         focusVisibleStyle={focusRing(c())}
         style={{
-          height: 56,
+          height: captainHeight,
           alignItems: "center",
           justifyContent: "center",
           cursor: "pointer",
         }}
       >
-        <CaptainFace size={28} />
+        <CaptainFace size={avatar.lg} />
       </View>
       <Each of={sections}>
         {(item) => (
@@ -62,8 +65,8 @@ export function TabletRail(props: Navigation) {
         style={{
           borderTopWidth: 1,
           borderColor: c().border,
-          paddingBottom: 6,
-          paddingTop: 3,
+          paddingBottom: space[8],
+          paddingTop: space[4],
         }}
       >
         <NavItem

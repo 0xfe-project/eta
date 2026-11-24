@@ -9,6 +9,9 @@ import { Modal } from "../../../components";
  * the frame. On a phone it is the whole screen, over the tab bar. The body (`MemberRun`) draws its
  * own header and close button off a phone; a phone keeps the page header unless `hideHeader`.
  */
+/** A run's panel on a desktop-wide window; narrower windows leave a margin around it. */
+const runPanelWidth = 960;
+
 export function RunPanel(props: {
   /** The dialog's name; shown only in a phone's page header. */
   title: string;
@@ -21,7 +24,7 @@ export function RunPanel(props: {
   return (
     <Modal
       title={props.title}
-      width={desktop() ? 960 : Math.max(0, windowSize().width - 144)}
+      width={desktop() ? runPanelWidth : Math.max(0, windowSize().width - 144)}
       height={
         props.phone
           ? "100%"

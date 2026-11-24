@@ -1,6 +1,7 @@
 import type { PluginView } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Empty, Icon, Label } from "../../components";
+import { icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export function PluginGlyph(props: { size: number }) {
@@ -45,7 +46,7 @@ export const authStyle = (
     | "serverNeedsSetup";
   tone: "green" | "warningInk" | "red";
   /** The quiet badge: a ~15% tint of the state colour as its background, and a low-alpha edge of the same hue. */
-  fill: "greenFill" | "amberFill" | "redFill";
+  fill: "greenFill" | "warningFill" | "redFill";
   edge: "green" | "warning" | "red";
 } =>
   state === "signed_in"
@@ -61,13 +62,13 @@ export const authStyle = (
         ? {
             text: "serverNeedsLogin",
             tone: "warningInk",
-            fill: "amberFill",
+            fill: "warningFill",
             edge: "warning",
           }
         : {
             text: "serverNeedsSetup",
             tone: "warningInk",
-            fill: "amberFill",
+            fill: "warningFill",
             edge: "warning",
           };
 
@@ -125,7 +126,7 @@ export function Status(props: {
         tone={missing() ? "warningInk" : "muted"}
         style={{
           alignSelf: props.phone ? "flex-start" : "center",
-          paddingHorizontal: missing() ? 6 : 0,
+          paddingHorizontal: missing() ? space[8] : 0,
           paddingVertical: 1,
           borderWidth: missing() ? 1 : 0,
           borderColor: c().warning,
@@ -138,18 +139,17 @@ export function Status(props: {
 }
 
 /** No plugins: the design's empty state, under the intro. */
-export function NoPlugins(props: { width: number }) {
+export function NoPlugins() {
   return (
     <Empty
       title={uiText("noPluginsYet")}
       description={uiText("noPluginsHint")}
       icon="plugins"
-      iconSize={32}
-      descriptionWidth={props.width}
+      iconSize={icon.xl}
       style={{
         flex: undefined,
         justifyContent: "flex-start",
-        paddingVertical: 40,
+        paddingVertical: space[40],
       }}
     />
   );

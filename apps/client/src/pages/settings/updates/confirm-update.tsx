@@ -1,6 +1,7 @@
 import type { HostUpdate } from "./host-update";
 import { View } from "nsh";
-import { Button, Label, Modal, row } from "../../../components";
+import { Button, dialogWidth, Label, Modal, row } from "../../../components";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { BusyList } from "./busy-list";
 
@@ -15,7 +16,7 @@ export function ConfirmHostUpdate(props: {
       <Modal
         title={uiText("updateTheHostTo", { value1: check()?.latest ?? "" })}
         phone={props.phone}
-        width={448}
+        width={dialogWidth.md}
         blurBackdrop={false}
         overPhoneNavigation
         dismissible={!pending()}
@@ -24,7 +25,7 @@ export function ConfirmHostUpdate(props: {
           error.set("");
         }}
       >
-        <View style={{ padding: 16, gap: 10 }}>
+        <View style={{ padding: space[16], gap: space[8] }}>
           <Label variant="small" tone="mutedInk">
             {uiText("etaDownloadsTheReleaseBacksUp")}
           </Label>
@@ -42,7 +43,7 @@ export function ConfirmHostUpdate(props: {
               ...row,
               flexWrap: "wrap",
               justifyContent: "flex-end",
-              gap: 8,
+              gap: space[8],
             }}
           >
             <Button

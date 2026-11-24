@@ -11,7 +11,12 @@ import {
   row,
   textFaces,
 } from "../theme";
+import { icon, opacity, space } from "../tokens";
 import { LineRoom } from "./room";
+
+const chipMaxWidth = 280;
+/** A pasted text's preview beside its chip. */
+const previewMaxWidth = 420;
 
 /**
  * An inline block in the editor's text: a folded paste, a file, a picture. One line high, so it
@@ -31,7 +36,7 @@ export function Chip(props: {
   detail?: string;
   /** A state after the label: "uploading…", "failed · retry". */
   status?: string;
-  tone?: "ink" | "amber" | "red";
+  tone?: "ink" | "warning" | "red";
   /** Shown on hover (desktop): the whole reason of a failure, or the picture of an image. */
   tooltip?: string | JSX.Element;
   /** The pointer over the block's body ("zoom-in" for a picture that opens). */
@@ -72,23 +77,25 @@ export function Chip(props: {
       onMouseLeave={() => hovered.set(false)}
       style={{
         ...row,
-        gap: 5,
-        maxWidth: room() ? Math.min(280, room() - 16) : 280,
+        gap: space[4],
+        maxWidth: room()
+          ? Math.min(chipMaxWidth, room() - space[16])
+          : chipMaxWidth,
         overflow: "hidden",
         height: type("small").line + 4,
-        paddingLeft: props.thumbnail ? 2 : 5,
-        paddingRight: removable() ? 2 : 6,
+        paddingLeft: props.thumbnail ? space[2] : space[4],
+        paddingRight: removable() ? space[2] : space[8],
         marginHorizontal: 1,
         borderWidth: 1,
         borderColor: props.selected
           ? c().ink
           : props.tone === "red"
             ? c().red
-            : props.tone === "amber"
+            : props.tone === "warning"
               ? c().warning
               : c().strong,
         backgroundColor: props.tone === "red" ? c().redFill : c().selected,
-        opacity: props.dim ? 0.6 : 1,
+        opacity: props.dim ? opacity.muted : 1,
       }}
     >
       <View
@@ -98,7 +105,7 @@ export function Chip(props: {
         onPress={props.onPress}
         style={{
           ...row,
-          gap: 5,
+          gap: space[4],
           flexShrink: 1,
           cursor: props.cursor ?? (props.onPress ? "pointer" : "default"),
         }}
@@ -115,7 +122,7 @@ export function Chip(props: {
           />
         </If>
         <If when={!props.thumbnail && props.icon}>
-          <Icon name={props.icon!} size={12} tone="muted" />
+          <Icon name={props.icon!} size={icon.sm} tone="muted" />
         </If>
         <If when={props.kind}>
           {text(c().muted, props.kind!)}
@@ -127,7 +134,7 @@ export function Chip(props: {
           {text(
             props.tone === "red"
               ? c().red
-              : props.tone === "amber"
+              : props.tone === "warning"
                 ? c().warningInk
                 : c().muted,
             props.status!,
@@ -164,7 +171,7 @@ export function PastePreview(props: { text: string }) {
   const type = textFaces();
   const lines = () => props.text.split("\n");
   return (
-    <View style={{ maxWidth: 420, padding: 8 }}>
+    <View style={{ maxWidth: previewMaxWidth, padding: space[8] }}>
       <Text
         style={{
           fontFamily: monoFontFamily(fonts()),
@@ -206,7 +213,7 @@ export function MentionChip(props: {
         fontSize: type(props.variant ?? "body").size,
         color: c().blue,
         backgroundColor: c().blueFill,
-        paddingHorizontal: 2,
+        paddingHorizontal: space[2],
         borderWidth: 1,
         borderColor: props.selected || hovered() ? c().blue : c().blueFill,
       }}

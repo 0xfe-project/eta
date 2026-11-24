@@ -12,7 +12,9 @@ import {
   monoFontFamily,
   row,
 } from "../../components";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { cardWidth } from "./visuals";
 
 function Mono(props: { children?: string }) {
   const fonts = Fonts();
@@ -63,7 +65,7 @@ export function ConnectionError(
     <View
       style={{
         width: "100%",
-        maxWidth: 480,
+        maxWidth: cardWidth,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
@@ -72,10 +74,10 @@ export function ConnectionError(
       <Header
         title={lost() ? uiText("lostTheConnectionToTheHost") : props.message[0]}
         layout={props.layout}
-        inset={16}
+        inset={space[16]}
         dialog
       />
-      <View style={{ padding: 16, gap: lost() ? 8 : 12 }}>
+      <View style={{ padding: space[16], gap: lost() ? space[8] : space[12] }}>
         <If
           when={lost()}
           else={
@@ -108,9 +110,9 @@ export function ConnectionError(
           justifyContent: "flex-end",
           borderTopWidth: 1,
           borderColor: c().border,
-          gap: 8,
-          padding: 12,
-          paddingHorizontal: 16,
+          gap: space[8],
+          padding: space[12],
+          paddingHorizontal: space[16],
         }}
       >
         <If
@@ -120,14 +122,14 @@ export function ConnectionError(
               <Button
                 label={uiText("retry")}
                 tone="primary"
-                size={24}
-                style={{ paddingHorizontal: 12 }}
+                size={control.sm}
+                style={{ paddingHorizontal: space[12] }}
                 onPress={props.onRetry}
               />
               <Button
                 label={uiText("changeConnection")}
-                size={24}
-                style={{ paddingHorizontal: 12 }}
+                size={control.sm}
+                style={{ paddingHorizontal: space[12] }}
                 onPress={props.onChange}
               />
             </>
@@ -135,17 +137,17 @@ export function ConnectionError(
         >
           <Button
             label={uiText("useAnotherHost")}
-            size={44}
+            size={control.touch}
             labelVariant="body"
-            style={{ paddingHorizontal: 24 }}
+            style={{ paddingHorizontal: space[24] }}
             onPress={props.onChange}
           />
           <Button
             label={uiText("retry")}
             tone="primary"
-            size={44}
+            size={control.touch}
             labelVariant="body"
-            style={{ paddingHorizontal: 24 }}
+            style={{ paddingHorizontal: space[24] }}
             onPress={props.onRetry}
           />
         </If>
@@ -163,15 +165,15 @@ export function LostPhoneConnection(
         style={{
           ...grow,
           justifyContent: "flex-end",
-          gap: 8,
-          paddingHorizontal: 16,
-          paddingBottom: 32,
+          gap: space[8],
+          paddingHorizontal: space[16],
+          paddingBottom: space[32],
         }}
       >
-        <Label variant="display" style={{ letterSpacing: -1.28 }}>
+        <Label tracking="tight" variant="display">
           ETA
         </Label>
-        <Label variant="title" style={{ letterSpacing: -0.24 }}>
+        <Label tracking="tight" variant="title">
           {uiText("lostTheConnectionToTheHost")}
         </Label>
         <Label tone="muted">{lastSeen(props.address, props.lastOnline)}</Label>
@@ -179,22 +181,22 @@ export function LostPhoneConnection(
       </View>
       <View
         style={{
-          paddingHorizontal: 16,
-          paddingTop: 8,
-          paddingBottom: 34,
-          gap: 8,
+          paddingHorizontal: space[16],
+          paddingTop: space[8],
+          paddingBottom: space[32],
+          gap: space[8],
         }}
       >
         <Button
           label={uiText("retry")}
           tone="primary"
-          size={52}
+          size={control.touch}
           labelVariant="body"
           onPress={props.onRetry}
         />
         <Button
           label={uiText("useAnotherHost")}
-          size={52}
+          size={control.touch}
           labelVariant="body"
           onPress={props.onChange}
         />

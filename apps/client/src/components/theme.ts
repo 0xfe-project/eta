@@ -1,9 +1,11 @@
 import type { ViewStyle } from "nsh";
 import type { Flavor, PaletteId } from "./palettes";
+import type { DensityName } from "./tokens";
 import { context } from "nsh";
 import dwg from "../../assets/AKRDWGSCNFM-Regular.woff2";
 import inter from "../../assets/InterVariable.woff2";
 import { catppuccin, shared } from "./palettes";
+import { densities, focus } from "./tokens";
 // One family, three real faces: an imported font registers under the family name and the weight
 // inside its file, so these add Light (300) and Bold (700) to the Regular above, and a `fontWeight`
 // of 600 or 700 draws Bold instead of a bold the platform synthesizes (THIRD_PARTY_NOTICES.md).
@@ -26,21 +28,27 @@ export const light = {
   blueFill: "#e0eff8",
   green: "#008035",
   greenFill: "#e8f2eb",
-  amber: "#a46700",
-  amberFill: "#f7efdf",
-  /** The design's state-warning: a warning's border or mark. */
-  warning: "#c37000",
+  /** The design's state-warning: a warning's border, mark or line of text. */
+  warning: "#a46700",
   /** The design's state-warning-ink: text on or beside a warning. */
   warningInk: "#955a00",
+  /** The ground of a warning (a status chip, a draft that lost its connection). */
+  warningFill: "#f7efdf",
+  /** The border of a warning bar (state-warning at 40%). */
+  warningLine: "#c3700066",
   red: "#c61623",
   redFill: "#fce9eb",
   /** The design's --color-ring: the keyboard focus ring. */
   ring: "#737373",
-  shade: "#00000020",
-  modalShade: "#0000001e",
+  /** A row's ground between `canvas` and `selected`: hovered or pressed in a list. */
+  selectedSoft: "#f2f2f280",
+  /** The design's --color-overlay: the foreground at 3%, a faint wash over a part. */
+  overlay: "#11111108",
+  /** The scrim of a desktop dialog (12%). */
+  scrim: "#0000001e",
   /** The foreground at 16%: the scrim of phone sheets, tablet drawers and
-   * tablet dialogs. Desktop dialogs use `modalShade` (12%). */
-  sheetShade: "#11111129",
+   * tablet dialogs. Desktop dialogs use `scrim`. */
+  sheetScrim: "#11111129",
   /** The design's --color-highlight: what a search matched, marked. */
   highlight: "#fae8a2",
 };
@@ -61,16 +69,17 @@ const dark: typeof light = {
   blueFill: "#132a3b",
   green: "#52bb81",
   greenFill: "#16291e",
-  amber: "#e0aa53",
-  amberFill: "#302618",
-  warning: "#de9300",
+  warning: "#e0aa53",
   warningInk: "#de9300",
+  warningFill: "#302618",
+  warningLine: "#de930066",
   red: "#ff6874",
   redFill: "#3a1d21",
   ring: "#a1a1a1",
-  shade: "#00000080",
-  modalShade: "#00000048",
-  sheetShade: "#0a0a0a99",
+  selectedSoft: "#16161680",
+  overlay: "#fafafa08",
+  scrim: "#00000048",
+  sheetScrim: "#0a0a0a99",
   highlight: "#635418",
 };
 
@@ -97,10 +106,17 @@ export function colors() {
   return Palette();
 }
 
-/** The design's keyboard focus: a 2px ring in `ring`, 2px outside the view.
+/** The design's keyboard focus, in `ring`: 2px outside the view, or `inset` 1px inside it for a
+ * row against an edge that would cut a ring outside it off (tokens.ts `focus`).
  * Only keyboard focus shows it (`focusVisibleStyle`); a press shows none. */
-export function focusRing(c: typeof light): ViewStyle {
-  return { outlineWidth: 2, outlineColor: c.ring, outlineOffset: 2 };
+export function focusRing(
+  c: typeof light,
+  kind: "ring" | "inset" = "ring",
+): ViewStyle {
+  return {
+    ...(kind === "inset" ? focus.ringInset : focus.ring),
+    outlineColor: c.ring,
+  };
 }
 
 export const row: ViewStyle = { flexDirection: "row", alignItems: "center" };
@@ -142,19 +158,25 @@ export function monoFontFamily(fonts: { interface: string; mono: string }) {
   return fontFamily(fonts.mono, fontFamily(fonts.interface, defaultMonoFont));
 }
 
-export const sizes = {
-  sidebar: 288,
-  tabletList: 320,
-  rail: 64,
-  panel: 400,
-  header: 40,
-  phoneNav: 64,
-};
-
 export type Layout = "desktop" | "tablet" | "phone";
 
 /** The layout the app is drawn in, for what follows it everywhere (the type scale). */
 export const Screen = context<() => Layout>(() => "desktop");
+
+/**
+ * How tightly the part of the app around is drawn (tokens.ts `densities`): `regular` unless a
+ * part says `compact` at its root. `Label`, `Button`, `Icon`, `AgentFace` and the editors take
+ * their defaults from it.
+ * @public
+ */
+export const Density = context<() => DensityName>(() => "regular");
+
+/** The defaults of the density around, inside a reactive scope: `const d = densityDefaults();`
+ * then `props.size ?? d().icon`. */
+export function densityDefaults() {
+  const density = Density();
+  return () => densities[density()];
+}
 
 /** A role of text. Text takes one of these, never a number: each role's size
  * and line height per layout are set once, in `typeScale`. */
@@ -219,6 +241,13 @@ const typeScale: Record<TextVariant, Record<Layout, TextFace>> = {
     phone: face(30, 36, 36),
   },
 };
+
+/** Whether the part of the app around is compact, inside a reactive scope, for a component whose
+ * regular look is not the regular defaults (a 28px control): `const compact = inCompact();`. */
+export function inCompact() {
+  const density = Density();
+  return () => density() === "compact";
+}
 
 /** The type scale in the current layout: `const type = textFaces();` then
  * `fontSize: type("small").size`, inside a reactive scope. */

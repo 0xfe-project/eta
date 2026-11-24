@@ -3,7 +3,11 @@
  * by `captain.direct`, talked in like any conversation, but nobody joins or leaves it, it is not
  * edited, and it is not a row of `conversations.list`.
  */
-import type { ConversationSummary, MemberView } from "@eta/client-contracts";
+import type {
+  CaptainIdentitySection,
+  ConversationSummary,
+  MemberView,
+} from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
 import { world } from "./support/world";
@@ -102,5 +106,34 @@ describe("captain's conversation", () => {
         .map((row) => row.id),
     ).toEqual([again.conversationId]);
     expect(published(w, again.conversationId)).toBe(true);
+  });
+
+  it("comes with Captain's identity, with its last message and Captain's session", async () => {
+    const { w, conversationId, captain } = await captainWorld();
+    // Followed as a client follows it; an eager target otherwise comes with hello only.
+    w.client.subscribe("captain");
+    const identity = () =>
+      w.client.section<CaptainIdentitySection>("captain", "identity");
+    await until(() => identity()?.conversation?.id === conversationId);
+    expect(identity()!.conversation).toMatchObject({
+      kind: "captain",
+      lastMessageAt: null,
+    });
+    await w.watch(conversationId);
+    const sent = await w.send(conversationId, "What is going on?");
+    await w.settled(conversationId, sent.replies[0]!.id);
+    await until(
+      () =>
+        identity()!.conversation!.participants.find(
+          (member) => member.agentId === captain.agentId,
+        )?.sessionId != null,
+    );
+    const last = (await w.client.call("conversations", "history", {
+      conversationId,
+      limit: 1,
+    })) as { messages: { createdAt: number }[] };
+    expect(identity()!.conversation!.lastMessageAt).toBe(
+      last.messages.at(-1)!.createdAt,
+    );
   });
 });

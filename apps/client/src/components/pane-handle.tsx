@@ -8,7 +8,7 @@ import {
 } from "../app/pane-width";
 import { useText } from "../i18n";
 
-const grip = 6;
+const gripWidth = 8;
 const labels = {
   sidebar: "resizeSidebar",
   panel: "resizePanel",
@@ -42,8 +42,8 @@ export function PaneHandle(props: { pane: Pane }) {
         position: "absolute",
         top: 0,
         bottom: 0,
-        [props.pane === "sidebar" ? "right" : "left"]: -grip / 2,
-        width: grip,
+        [props.pane === "sidebar" ? "right" : "left"]: -gripWidth / 2,
+        width: gripWidth,
         cursor: "col-resize",
         zIndex: 1,
       }}

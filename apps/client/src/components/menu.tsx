@@ -2,8 +2,15 @@ import type { JSX, ViewStyle } from "nsh";
 import type { Layout } from "./theme";
 import { context, platform, signal, View } from "nsh";
 import { Menu, MenuItem, MenuSeparator, Popover, Sheet } from "nsh/base";
+import { Compact } from "./density";
 import { SmoothScroll } from "./smooth-scroll";
 import { colors, Screen } from "./theme";
+import { space } from "./tokens";
+
+/** The grabber atop a phone sheet. */
+const grabberWidth = 36;
+/** How much of the screen a phone's menu sheet may take. */
+const sheetMaxHeight = "80%";
 
 /** How a menu shows: a sheet at the bottom of the screen, or a popup at its trigger. */
 export type MenuPresentation = "sheet" | "popup";
@@ -85,9 +92,19 @@ function Grabber() {
   return (
     <View
       testID="menu-grabber"
-      style={{ alignItems: "center", paddingTop: 8, paddingBottom: 4 }}
+      style={{
+        alignItems: "center",
+        paddingTop: space[8],
+        paddingBottom: space[4],
+      }}
     >
-      <View style={{ width: 36, height: 4, backgroundColor: c().strong }} />
+      <View
+        style={{
+          width: grabberWidth,
+          height: space[4],
+          backgroundColor: c().strong,
+        }}
+      />
     </View>
   );
 }
@@ -129,7 +146,7 @@ export function MenuFrame(props: {
   const close = () => change(false);
   const sheetStyle = (): ViewStyle => ({
     width: "100%",
-    paddingBottom: 8,
+    paddingBottom: space[8],
     borderTopWidth: 1,
     borderColor: c().strong,
     backgroundColor: c().canvas,
@@ -143,7 +160,7 @@ export function MenuFrame(props: {
         <Grabber />
         {props.sheetHeader}
       </If>
-      {props.children}
+      <Compact>{props.children}</Compact>
     </MenuHost.Provider>
   );
   const viaMenu = () => (
@@ -155,7 +172,7 @@ export function MenuFrame(props: {
       open={props.disabled ? false : props.open}
       onOpenChange={(event) => change(event.open)}
       popupStyle={sheet() ? sheetStyle() : props.popupStyle}
-      backdropStyle={{ backgroundColor: c().sheetShade }}
+      backdropStyle={{ backgroundColor: c().sheetScrim }}
       trigger={props.trigger}
     >
       {content(true)}
@@ -196,8 +213,8 @@ export function MenuFrame(props: {
         side="bottom"
         open={opened()}
         onOpenChange={(event) => change(event.open)}
-        popupStyle={{ ...sheetStyle(), maxHeight: "80%" }}
-        backdropStyle={{ backgroundColor: c().sheetShade }}
+        popupStyle={{ ...sheetStyle(), maxHeight: sheetMaxHeight }}
+        backdropStyle={{ backgroundColor: c().sheetScrim }}
       >
         <SmoothScroll role="menu" style={{ flexShrink: 1 }} scrollbar={false}>
           {content(false)}

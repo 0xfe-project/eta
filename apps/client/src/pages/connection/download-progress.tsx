@@ -2,8 +2,10 @@ import type { Layout } from "../../components";
 import { View } from "nsh";
 import { colors, Header, Label } from "../../components";
 import { DownloadProgressBar } from "../../components/download-progress";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { localProgress } from "./local-host";
+import { cardWidth } from "./visuals";
 
 export function DownloadStatus(props: { layout: Layout }) {
   const c = colors();
@@ -20,7 +22,7 @@ export function DownloadStatus(props: { layout: Layout }) {
     <View
       style={{
         width: "100%",
-        maxWidth: 480,
+        maxWidth: cardWidth,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
@@ -29,10 +31,10 @@ export function DownloadStatus(props: { layout: Layout }) {
       <Header
         title={uiText("downloadingTheHost")}
         layout={props.layout}
-        inset={16}
+        inset={space[16]}
         dialog
       />
-      <View style={{ padding: 16, gap: 12 }}>
+      <View style={{ padding: space[16], gap: space[12] }}>
         <Label tone="mutedInk">
           {stats()?.version
             ? `eta-host ${stats()!.version}`

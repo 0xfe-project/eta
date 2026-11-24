@@ -3,14 +3,15 @@ import type {
   BoardTaskView,
   TaskResults,
 } from "@eta/client-contracts";
-import type { JSX } from "nsh";
+import type { Accessor, JSX } from "nsh";
 import type { TextVariant } from "../../components";
-import { Image, Scroll, signal, View } from "nsh";
+import { computed, Image, Scroll, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
   Button,
   colors,
+  dialogWidth,
   Field,
   grow,
   Icon,
@@ -19,6 +20,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
@@ -32,42 +34,49 @@ import {
 } from "./facts";
 import { statusName, TaskGlyph } from "./status";
 
+/** A dependency line's sample in the legend; the strip at a card's right edge that starts one;
+ * a parent's header row over its subtasks. */
+const legendLineWidth = 16;
+const handleWidth = 12;
+const frameHeaderHeight = 36;
+
 /** The sizes the plan is drawn at: on the Tasks page, and on a parent's own Plan tab, on desktop and tablet. */
 const sizes = {
   page: {
     cardWidth: 256,
     cardHeight: 52,
-    columnGap: 36,
-    rowGap: 9,
-    left: 13,
+    columnGap: space[32],
+    rowGap: space[8],
+    left: 12,
     labelTop: 16,
-    cardsTop: 37,
-    tileHeight: 30,
+    cardsTop: 36,
+    tileHeight: 32,
     legendGap: 12,
     bottom: 16,
-    padding: 9,
+    padding: space[8],
     titleVariant: "small" as TextVariant,
     criticalBorder: 1,
     indent: 0,
   },
   detail: {
-    cardWidth: 254,
-    cardHeight: 49,
-    columnGap: 38,
-    rowGap: 11,
+    cardWidth: 256,
+    cardHeight: 48,
+    columnGap: space[32],
+    rowGap: space[12],
     left: 12,
-    labelTop: 15,
+    labelTop: 16,
     cardsTop: 36,
-    tileHeight: 33,
+    tileHeight: 32,
     legendGap: 16,
-    bottom: 15,
-    padding: 10,
+    bottom: 16,
+    padding: space[12],
     titleVariant: "caption" as TextVariant,
     criticalBorder: 2,
-    indent: 18,
+    // The title after its glyph.
+    indent: icon.sm + space[4],
   },
   tabletPage: tabletSize(180),
-  tabletDetail: tabletSize(170),
+  tabletDetail: tabletSize(168),
 };
 
 /** Taller cards whose title and line wrap, in a 12px frame; the legend sits outside it. */
@@ -75,18 +84,19 @@ function tabletSize(cardWidth: number) {
   return {
     cardWidth,
     cardHeight: 64,
-    columnGap: 36,
-    rowGap: 12,
+    columnGap: space[32],
+    rowGap: space[12],
     left: 12,
     labelTop: 12,
     cardsTop: 40,
     tileHeight: 28,
     legendGap: 0,
     bottom: 12,
-    padding: 8,
+    padding: space[8],
     titleVariant: "small" as TextVariant,
     criticalBorder: 1,
-    indent: 18,
+    // The title after its glyph.
+    indent: icon.sm + space[4],
   };
 }
 
@@ -107,12 +117,47 @@ function planGraph(all: BoardTaskView[]) {
     critical.add(last);
     last = parents.get(last);
   }
-  return { columns, critical, parents };
+  // What the drawing depends on: which task is in which step, how far each is, and what it waits for.
+  const shape = columns
+    .map((column) =>
+      column
+        .map(
+          (task) =>
+            `${task.id}:${task.status}:${(task.dependsOn ?? []).map((edge) => edge.taskId).join(",")}`,
+        )
+        .join(" "),
+    )
+    .join("|");
+  return { columns, critical, parents, shape };
+}
+
+type Plan = ReturnType<typeof planGraph>;
+
+/**
+ * A plan's graph, built again when its tasks are, but only passed on when its shape changed: the
+ * host sends every task anew whenever any of them moves (a running task's tokens, every few
+ * seconds), and that must not lay the whole plan out again. Its tasks are the ones of when the
+ * shape last changed; what a card shows is read from the tasks of now.
+ */
+function createPlan(tasks: () => BoardTaskView[]): Accessor<Plan> {
+  return computed(() => planGraph(tasks()), {
+    equals: (previous, next) => previous.shape === next.shape,
+  });
+}
+
+/** The tasks of the plan that are not cancelled in its last step, for a step added after it. */
+function lastStep(plan: Plan) {
+  return (
+    plan.columns
+      .at(-1)
+      ?.filter((task) => task.status !== "cancelled")
+      .map((task) => task.id) ?? []
+  );
 }
 
 /** How many of a plan's steps still have something not done. */
-function stepsToGo(tasks: BoardTaskView[]) {
-  return planGraph(tasks).columns.filter((column) =>
+function stepsToGo(plan: Plan) {
+  return plan.columns.filter((column) =>
     column.some(
       (task) => task.status !== "done" && task.status !== "cancelled",
     ),
@@ -122,6 +167,7 @@ function stepsToGo(tasks: BoardTaskView[]) {
 /** Tasks laid out by step, one column per step, with the waits between them drawn as curves. */
 function PlanGraph(props: {
   tasks: BoardTaskView[];
+  plan: Plan;
   variant: keyof typeof sizes;
   desktop: boolean;
   onOpen: (id: string) => void;
@@ -132,7 +178,10 @@ function PlanGraph(props: {
   const c = colors();
   const host = useHost();
   const size = () => sizes[props.variant];
-  const graph = () => planGraph(props.tasks);
+  const graph = () => props.plan;
+  const current = computed(
+    () => new Map(props.tasks.map((task) => [task.id, task])),
+  );
   const drag = taskDropZones<string>((from, to) => {
     if (from !== to && props.tasks.some((task) => task.id === to))
       props.onConnect(from, to);
@@ -217,7 +266,7 @@ function PlanGraph(props: {
                 justifyContent: "space-between",
               }}
             >
-              <Label variant="caption" weight={600}>
+              <Label variant="caption" weight={weight.strong}>
                 {uiText("step", { value1: index() + 1 })}
               </Label>
               <Label variant="caption" tone="muted">
@@ -231,7 +280,7 @@ function PlanGraph(props: {
             <Each of={column()} key={(task) => task.id}>
               {(task, rowIndex) => (
                 <PlanCard
-                  task={task()}
+                  task={current().get(task().id) ?? task()}
                   variant={props.variant}
                   critical={graph().critical.has(task().id)}
                   dependents={dependentsOf(task(), host.tasks()).length}
@@ -260,8 +309,10 @@ function PlanGraph(props: {
                 top: y(graph().columns.at(-1)?.length ?? 0),
                 width: size().cardWidth,
                 height: size().tileHeight,
-                paddingHorizontal: isTablet(props.variant) ? 8 : 10,
-                gap: 6,
+                paddingHorizontal: isTablet(props.variant)
+                  ? space[8]
+                  : space[12],
+                gap: space[4],
                 borderWidth: 1,
                 borderStyle: "dashed",
                 borderColor: c().strong,
@@ -270,7 +321,7 @@ function PlanGraph(props: {
             >
               <Icon
                 name="plus"
-                size={isTablet(props.variant) ? 11 : 10}
+                size={isTablet(props.variant) ? icon.sm : icon.sm}
                 tone="mutedInk"
               />
               <Label variant="caption" tone="mutedInk">
@@ -287,7 +338,7 @@ function PlanGraph(props: {
         <View
           style={{
             ...row,
-            gap: 18,
+            gap: space[16],
             paddingLeft: size().left - 1,
             marginTop: size().legendGap,
             marginBottom: size().bottom,
@@ -310,35 +361,35 @@ function PlanLegend() {
   const c = colors();
   return (
     <>
-      <View style={{ ...row, gap: 5 }}>
-        <TaskGlyph status="done" size={11} />
+      <View style={{ ...row, gap: space[4] }}>
+        <TaskGlyph status="done" size={icon.sm} />
         <Label variant="caption" tone="muted">
           {uiText("taskDone")}
         </Label>
       </View>
-      <View style={{ ...row, gap: 5 }}>
-        <TaskGlyph status="in_review" size={12} />
+      <View style={{ ...row, gap: space[4] }}>
+        <TaskGlyph status="in_review" size={icon.sm} />
         <Label variant="caption" tone="muted">
           {uiText("inReviewLetsNextGo")}
         </Label>
       </View>
-      <View style={{ ...row, gap: 5 }}>
-        <TaskGlyph status="in_progress" size={11} />
+      <View style={{ ...row, gap: space[4] }}>
+        <TaskGlyph status="in_progress" size={icon.sm} />
         <Label variant="caption" tone="muted">
           {statusName("in_progress")}
         </Label>
       </View>
-      <View style={{ ...row, gap: 5 }}>
-        <Icon name="lock" size={11} tone="muted" />
+      <View style={{ ...row, gap: space[4] }}>
+        <Icon name="lock" size={icon.sm} tone="muted" />
         <Label variant="caption" tone="muted">
           {uiText("taskWaitingForOthers")}
         </Label>
       </View>
-      <View style={{ ...row, gap: 5 }}>
+      <View style={{ ...row, gap: space[4] }}>
         <View
           style={{
-            width: 14,
-            height: 2,
+            width: legendLineWidth,
+            height: space[2],
             backgroundColor: c().ink,
           }}
         />
@@ -375,7 +426,7 @@ function PlanCard(props: {
   };
   const tone = () =>
     props.task.status === "in_review"
-      ? "amber"
+      ? "warning"
       : props.task.status === "in_progress"
         ? "blue"
         : "muted";
@@ -392,36 +443,38 @@ function PlanCard(props: {
         top: props.top,
         width: size().cardWidth,
         height: size().cardHeight,
-        paddingVertical: isTablet(props.variant) ? 7 : 6,
+        paddingVertical: isTablet(props.variant) ? space[8] : space[8],
         paddingHorizontal: size().padding,
-        gap: isTablet(props.variant) ? 3 : 6,
+        gap: isTablet(props.variant) ? space[2] : space[4],
         borderWidth: props.critical ? size().criticalBorder : 1,
         borderColor: props.critical ? c().ink : c().strong,
         backgroundColor: c().canvas,
-        opacity: props.drag.active() === props.task.id ? 0.65 : 1,
+        opacity: props.drag.active() === props.task.id ? opacity.muted : 1,
         cursor: "pointer",
       }}
     >
-      <View style={{ ...row, gap: 6 }}>
+      <View style={{ ...row, gap: space[4] }}>
         <TaskGlyph
           status={props.task.status}
-          size={isTablet(props.variant) ? 12 : 11}
+          size={isTablet(props.variant) ? icon.sm : icon.sm}
         />
         <Label
           variant={size().titleVariant}
-          weight={size().titleVariant === "caption" ? 600 : 400}
+          weight={
+            size().titleVariant === "caption" ? weight.strong : weight.regular
+          }
           lines={isTablet(props.variant) ? 2 : 1}
           style={{ flex: 1, minWidth: 0 }}
         >
           {props.task.title}
         </Label>
       </View>
-      <View style={{ ...row, gap: 4, paddingLeft: size().indent }}>
+      <View style={{ ...row, gap: space[4], paddingLeft: size().indent }}>
         <Label variant="caption" tone="muted">
           {`#${props.task.number} ·`}
         </Label>
         <If when={isWaiting(props.task)}>
-          <Icon name="lock" size={10} tone="muted" />
+          <Icon name="lock" size={icon.sm} tone="muted" />
         </If>
         <Label
           variant="caption"
@@ -447,7 +500,7 @@ function PlanCard(props: {
             top: 0,
             right: 0,
             bottom: 0,
-            width: 10,
+            width: handleWidth,
             cursor: "crosshair",
           }}
         />
@@ -512,11 +565,11 @@ function createPlanEditing(owner: () => string | undefined) {
           {(target) => (
             <Modal
               title={target().title}
-              width={440}
+              width={dialogWidth.md}
               overPhoneNavigation
               onClose={() => adding.set(undefined)}
             >
-              <View style={{ padding: 16, gap: 8 }}>
+              <View style={{ padding: space[16], gap: space[8] }}>
                 <If when={target().dependsOn.length}>
                   <Label variant="small" tone="muted">
                     {uiText("thisTaskWaitsForTheTasks")}
@@ -542,10 +595,10 @@ function createPlanEditing(owner: () => string | undefined) {
           {(target) => (
             <Modal
               title={uiText("addDependency")}
-              width={440}
+              width={dialogWidth.md}
               onClose={() => connecting.set(undefined)}
             >
-              <View style={{ padding: 16, gap: 8 }}>
+              <View style={{ padding: space[16], gap: space[8] }}>
                 <Label>{uiText("chooseTheTaskThatWaitsAnd")}</Label>
                 <ActionMenu
                   label={uiText("taskThatWaits")}
@@ -608,8 +661,8 @@ function createPlanEditing(owner: () => string | undefined) {
 }
 
 /** The steps still to go, for a parent's plan. */
-function stepsCaption(number: number, tasks: BoardTaskView[]) {
-  const left = stepsToGo(tasks);
+function stepsCaption(number: number, plan: Plan) {
+  const left = stepsToGo(plan);
   return left
     ? uiText("stepsToGo", { number, count: left })
     : uiText("stepsAllDone", { number });
@@ -629,7 +682,7 @@ export function TaskPlan(props: {
     props.task().createdBy.agentId ??
     host.people()[0]?.id;
   const editing = createPlanEditing(owner);
-  const children = () => {
+  const children = computed(() => {
     const known = new Map(
       [...host.list<BoardTaskView>("tasks", "archived"), ...host.tasks()].map(
         (task) => [task.id, task],
@@ -646,23 +699,27 @@ export function TaskPlan(props: {
       const task = known.get(id);
       return task ? [task] : [];
     });
-  };
-  const lastStep = () =>
-    planGraph(children())
-      .columns.at(-1)
-      ?.filter((task) => task.status !== "cancelled")
-      .map((task) => task.id) ?? [];
+  });
+  const plan = createPlan(children);
   return (
     <SmoothScroll style={grow}>
       <View
         style={
           props.tablet
-            ? { paddingHorizontal: 20, paddingVertical: 14, gap: 12 }
-            : { paddingHorizontal: 22, paddingTop: 16, gap: 14 }
+            ? {
+                paddingHorizontal: space[20],
+                paddingVertical: space[16],
+                gap: space[12],
+              }
+            : {
+                paddingHorizontal: space[24],
+                paddingTop: space[16],
+                gap: space[12],
+              }
         }
       >
         <Label variant="caption" tone="muted">
-          {stepsCaption(props.task().number, children())}
+          {stepsCaption(props.task().number, plan())}
         </Label>
         <Scroll horizontal>
           <View
@@ -675,6 +732,7 @@ export function TaskPlan(props: {
           >
             <PlanGraph
               tasks={children()}
+              plan={plan()}
               variant={props.tablet ? "tabletDetail" : "detail"}
               desktop={props.desktop}
               onOpen={props.onOpen}
@@ -685,7 +743,7 @@ export function TaskPlan(props: {
                   ? () =>
                       editing.startAdding(
                         props.task().id,
-                        lastStep(),
+                        lastStep(plan()),
                         uiText("addAStepAtTheEnd"),
                       )
                   : undefined
@@ -694,7 +752,7 @@ export function TaskPlan(props: {
           </View>
         </Scroll>
         <If when={props.tablet}>
-          <View style={{ ...row, gap: 18 }}>
+          <View style={{ ...row, gap: space[16] }}>
             <PlanLegend />
           </View>
           <Label variant="caption" tone="muted">
@@ -716,97 +774,121 @@ export function TaskPlanBoard(props: {
   const c = colors();
   const host = useHost();
   const editing = createPlanEditing(() => host.people()[0]?.id);
-  const ids = () => new Set(props.items.map((task) => task.id));
-  const parents = () =>
-    props.items.filter(
-      (task) =>
-        task.subtasks?.total ||
-        props.items.some((other) => other.parentId === task.id),
+  /** The parents among the tasks, each with its children among them, and the tasks under none of them; in one pass. */
+  const groups = computed(() => {
+    const items = props.items;
+    const ids = new Set(items.map((task) => task.id));
+    const children = new Map<string, BoardTaskView[]>();
+    for (const task of items) {
+      if (!task.parentId) continue;
+      const siblings = children.get(task.parentId);
+      if (siblings) siblings.push(task);
+      else children.set(task.parentId, [task]);
+    }
+    const parents = items.filter(
+      (task) => task.subtasks?.total || children.has(task.id),
     );
+    const parentIds = new Set(parents.map((task) => task.id));
+    const orphans = items.filter(
+      (task) =>
+        !(task.parentId && ids.has(task.parentId)) && !parentIds.has(task.id),
+    );
+    return { children, parents, orphans };
+  });
   const childrenOf = (parent: BoardTaskView) =>
-    props.items.filter((task) => task.parentId === parent.id);
-  const orphans = () =>
-    props.items.filter(
-      (task) =>
-        !(task.parentId && ids().has(task.parentId)) &&
-        !parents().some((parent) => parent.id === task.id),
-    );
+    groups().children.get(parent.id) ?? [];
+  const orphans = () => groups().orphans;
+  const orphanPlan = createPlan(orphans);
   return (
     <View
       style={
         props.tablet
-          ? { paddingHorizontal: 14, paddingVertical: 12, gap: 12 }
-          : { paddingHorizontal: 22, paddingVertical: 14, gap: 15 }
+          ? {
+              paddingHorizontal: space[16],
+              paddingVertical: space[12],
+              gap: space[12],
+            }
+          : {
+              paddingHorizontal: space[24],
+              paddingVertical: space[16],
+              gap: space[16],
+            }
       }
     >
-      <Each of={parents()} key={(task) => task.id}>
-        {(parent) => (
-          <PlanFrame>
-            <View
-              style={{
-                ...row,
-                height: props.tablet ? 36 : 37,
-                paddingHorizontal: props.tablet ? 12 : 13,
-                gap: 8,
-                borderBottomWidth: 1,
-                borderColor: c().border,
-              }}
-            >
-              <TaskGlyph status={parent().status} size={12} />
+      <Each of={groups().parents} key={(task) => task.id}>
+        {(parent) => {
+          const plan = createPlan(() => childrenOf(parent()));
+          return (
+            <PlanFrame>
               <View
-                role="button"
-                accessibilityLabel={parent().title}
-                onPress={() => props.onOpen(parent().id)}
-                style={{ cursor: "pointer" }}
+                style={{
+                  ...row,
+                  height: frameHeaderHeight,
+                  paddingHorizontal: space[12],
+                  gap: space[8],
+                  borderBottomWidth: 1,
+                  borderColor: c().border,
+                }}
               >
-                <Label weight={600}>{parent().title}</Label>
+                <TaskGlyph status={parent().status} size={icon.sm} />
+                <View
+                  role="button"
+                  accessibilityLabel={parent().title}
+                  onPress={() => props.onOpen(parent().id)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <Label weight={weight.strong}>{parent().title}</Label>
+                </View>
+                <Label variant="caption" tone="muted" style={{ flex: 1 }}>
+                  {stepsCaption(parent().number, plan())}
+                </Label>
+                <View
+                  role="button"
+                  accessibilityLabel={uiText("addSubtask")}
+                  onPress={() =>
+                    editing.startAdding(parent().id, [], uiText("addSubtask"))
+                  }
+                  hoverStyle={{ backgroundColor: c().selected }}
+                  style={{
+                    ...row,
+                    gap: space[4],
+                    height: space[24],
+                    cursor: "pointer",
+                  }}
+                >
+                  <Icon name="plus" size={icon.sm} />
+                  <Label variant="caption">{uiText("subtask")}</Label>
+                </View>
               </View>
-              <Label variant="caption" tone="muted" style={{ flex: 1 }}>
-                {stepsCaption(parent().number, childrenOf(parent()))}
-              </Label>
-              <View
-                role="button"
-                accessibilityLabel={uiText("addSubtask")}
-                onPress={() =>
-                  editing.startAdding(parent().id, [], uiText("addSubtask"))
+              <PlanGraph
+                tasks={childrenOf(parent())}
+                plan={plan()}
+                variant={props.tablet ? "tabletPage" : "page"}
+                desktop
+                onOpen={props.onOpen}
+                onConnect={(from, to) => void editing.connect(from, to)}
+                onConnectFrom={(id) =>
+                  editing.startConnecting(childrenOf(parent()), id)
                 }
-                hoverStyle={{ backgroundColor: c().selected }}
-                style={{ ...row, gap: 4, height: 24, cursor: "pointer" }}
-              >
-                <Icon name="plus" size={props.tablet ? 11 : 10} />
-                <Label variant="caption">{uiText("subtask")}</Label>
-              </View>
-            </View>
-            <PlanGraph
-              tasks={childrenOf(parent())}
-              variant={props.tablet ? "tabletPage" : "page"}
-              desktop
-              onOpen={props.onOpen}
-              onConnect={(from, to) => void editing.connect(from, to)}
-              onConnectFrom={(id) =>
-                editing.startConnecting(childrenOf(parent()), id)
-              }
-              onAddStep={() =>
-                editing.startAdding(
-                  parent().id,
-                  planGraph(childrenOf(parent()))
-                    .columns.at(-1)
-                    ?.filter((task) => task.status !== "cancelled")
-                    .map((task) => task.id) ?? [],
-                  uiText("addAStepAtTheEnd"),
-                )
-              }
-            />
-          </PlanFrame>
-        )}
+                onAddStep={() =>
+                  editing.startAdding(
+                    parent().id,
+                    lastStep(plan()),
+                    uiText("addAStepAtTheEnd"),
+                  )
+                }
+              />
+            </PlanFrame>
+          );
+        }}
       </Each>
       <If when={orphans().length}>
         <PlanFrame>
           <View
             style={{
               ...row,
-              height: props.tablet ? 36 : 37,
-              paddingHorizontal: props.tablet ? 12 : 13,
+              height: frameHeaderHeight,
+              paddingHorizontal: space[12],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -817,6 +899,7 @@ export function TaskPlanBoard(props: {
           </View>
           <PlanGraph
             tasks={orphans()}
+            plan={orphanPlan()}
             variant={props.tablet ? "tabletPage" : "page"}
             desktop
             onOpen={props.onOpen}

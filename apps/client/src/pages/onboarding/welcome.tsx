@@ -1,12 +1,21 @@
 import { Image, View } from "nsh";
 import photo from "../../../assets/onboard.jpg";
 import { fill, Label, row } from "../../components";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
+
+/** The photograph atop the welcome step. */
+const photoHeight = { phone: 200, other: 272 } as const;
 
 export function WelcomeStep(props: { phone: boolean }) {
   return (
     <>
-      <View style={{ height: props.phone ? 200 : 272, position: "relative" }}>
+      <View
+        style={{
+          height: props.phone ? photoHeight.phone : photoHeight.other,
+          position: "relative",
+        }}
+      >
         <Image
           src={photo}
           style={{
@@ -31,28 +40,34 @@ export function WelcomeStep(props: { phone: boolean }) {
             position: "absolute",
             right: 12,
             bottom: 10,
-            color: "#ffffffb3",
+            color: "#ffffffb3", // design-value: text over the photograph, which is the same in either theme
           }}
         >
           Photo: Barnabas Davoti / Unsplash
         </Label>
       </View>
-      <View style={{ paddingHorizontal: 16, paddingVertical: 24, gap: 16 }}>
-        <View style={{ gap: 6 }}>
-          <Label variant="title" weight={600} style={{ letterSpacing: -0.2 }}>
+      <View
+        style={{
+          paddingHorizontal: space[16],
+          paddingVertical: space[24],
+          gap: space[16],
+        }}
+      >
+        <View style={{ gap: space[4] }}>
+          <Label tracking="tight" variant="title" weight={weight.strong}>
             {uiText("welcomeToEta")}
           </Label>
           <Label tone="mutedInk">{uiText("twoShortStepsThenYourAgents")}</Label>
         </View>
-        <View style={{ gap: 6 }}>
-          <View style={{ ...row, gap: 10 }}>
-            <Label variant="small" tone="muted" style={{ width: 16 }}>
+        <View style={{ gap: space[4] }}>
+          <View style={{ ...row, gap: space[8] }}>
+            <Label variant="small" tone="muted" style={{ width: space[16] }}>
               1
             </Label>
             <Label>{uiText("connectAModel")}</Label>
           </View>
-          <View style={{ ...row, gap: 10 }}>
-            <Label variant="small" tone="muted" style={{ width: 16 }}>
+          <View style={{ ...row, gap: space[8] }}>
+            <Label variant="small" tone="muted" style={{ width: space[16] }}>
               2
             </Label>
             <Label>{uiText("installAgents")}</Label>

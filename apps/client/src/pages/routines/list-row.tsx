@@ -1,8 +1,12 @@
 import type { RoutineSummary } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Label, row } from "../../components";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clockDistance, runHistory, scheduleLabel } from "./schedule";
+
+/** A row of the tablet's flush list. */
+const tabletRowHeight = 60;
 
 export function RoutineRow(props: {
   item: RoutineSummary;
@@ -12,27 +16,41 @@ export function RoutineRow(props: {
   onOpen: () => void;
 }) {
   const c = colors();
-  // The tablet list is a flush column of 60px rows.
   return (
     <View
       role="button"
       accessibilityLabel={props.item.name}
       onPress={props.onOpen}
-      // Hover is the selected fill at 60%, so the open row still stands out.
+      // Hover is the selected fill at half strength, so the open row still stands out.
       hoverStyle={{
-        backgroundColor: props.selected ? c().selected : `${c().selected}99`,
+        backgroundColor: props.selected ? c().selected : c().selectedSoft,
       }}
       style={{
         ...row,
         ...(props.tablet
-          ? { height: 60, paddingHorizontal: 14, gap: 10 }
-          : { padding: 7, gap: 16 }),
+          ? {
+              height: tabletRowHeight,
+              paddingHorizontal: space[16],
+              gap: space[8],
+            }
+          : { padding: space[8], gap: space[16] }),
         cursor: "pointer",
         backgroundColor: props.selected ? c().selected : c().canvas,
       }}
     >
-      <View style={{ flex: 1, minWidth: 0, gap: props.tablet ? 3 : 4 }}>
-        <Label weight={props.tablet && props.selected ? 600 : 400} lines={1}>
+      <View
+        style={{
+          flex: 1,
+          minWidth: 0,
+          gap: props.tablet ? space[2] : space[4],
+        }}
+      >
+        <Label
+          weight={
+            props.tablet && props.selected ? weight.strong : weight.regular
+          }
+          lines={1}
+        >
           {props.item.name}
         </Label>
         <Label variant="small" tone="muted">
@@ -42,7 +60,7 @@ export function RoutineRow(props: {
       <View
         style={{
           alignItems: "flex-end",
-          gap: props.tablet ? 5 : 4,
+          gap: space[4],
           flexShrink: 0,
         }}
       >
@@ -52,8 +70,8 @@ export function RoutineRow(props: {
               {(entry) => (
                 <View
                   style={{
-                    width: props.tablet ? 9 : 8,
-                    height: 8,
+                    width: space[8],
+                    height: space[8],
                     backgroundColor:
                       entry() === "failed"
                         ? c().red

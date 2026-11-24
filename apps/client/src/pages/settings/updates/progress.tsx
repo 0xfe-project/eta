@@ -7,6 +7,7 @@ import type { light } from "../../../components/theme";
 import { View } from "nsh";
 import { colors, Label, row } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
+import { space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
 // What Settings › Update and the restart screen say about an upgrade: the steps it goes through,
@@ -63,7 +64,7 @@ export function recentResult(
   return now - at < RESULT_WINDOW ? (status as UpgradeResult) : undefined;
 }
 
-export type ResultTone = "green" | "red" | "amber" | "faint";
+export type ResultTone = "green" | "red" | "warning" | "faint";
 
 export function resultTone(result: UpgradeResult): ResultTone {
   switch (result.state) {
@@ -75,7 +76,7 @@ export function resultTone(result: UpgradeResult): ResultTone {
     case "cancelled":
       return "faint";
     default:
-      return "amber";
+      return "warning";
   }
 }
 
@@ -149,7 +150,7 @@ export function UpdateSteps(props: { phase: UpgradePhase; percent?: number }) {
   const c = colors();
   const current = () => stepOf[props.phase];
   return (
-    <View testID="update-steps" style={{ ...row, gap: 4 }}>
+    <View testID="update-steps" style={{ ...row, gap: space[4] }}>
       <Each of={[...stepNames]} key={(name) => name}>
         {(name, index) => {
           const state = () =>
@@ -167,17 +168,17 @@ export function UpdateSteps(props: { phase: UpgradePhase; percent?: number }) {
                 ? "0%"
                 : "100%";
           return (
-            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+            <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
               <View
                 style={{
-                  height: 3,
+                  height: space[4],
                   backgroundColor: c().border,
                   flexDirection: "row",
                 }}
               >
                 <View
                   style={{
-                    height: 3,
+                    height: space[4],
                     width: fill(),
                     backgroundColor: state() === "done" ? c().green : c().blue,
                   }}
@@ -218,18 +219,18 @@ export function UpdateNotice(props: {
       style={{
         ...row,
         alignItems: "flex-start",
-        gap: 8,
-        paddingVertical: 8,
-        paddingHorizontal: 10,
+        gap: space[8],
+        paddingVertical: space[8],
+        paddingHorizontal: space[12],
         borderWidth: 1,
         borderColor: c().border,
       }}
     >
-      <View style={{ paddingTop: 5 }}>
+      <View style={{ paddingTop: space[4] }}>
         <StatusDot color={c()[props.tone as keyof typeof light]} />
       </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Label variant="small" weight={500}>
+      <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+        <Label variant="small" weight={weight.regular}>
           {props.title}
         </Label>
         <If when={props.body}>

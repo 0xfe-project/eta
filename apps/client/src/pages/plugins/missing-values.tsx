@@ -1,6 +1,7 @@
 import type { PluginView } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { Button, Field, Label, row } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -53,7 +54,7 @@ export function MissingValues(props: { item: PluginView }) {
   }
   return (
     <If when={missingFields(props.item).length}>
-      <View testID="missing-values" style={{ gap: 8 }}>
+      <View testID="missing-values" style={{ gap: space[8] }}>
         <Label variant="small" weight={600}>
           {uiText("missingTitle", {
             names: missingFields(props.item)

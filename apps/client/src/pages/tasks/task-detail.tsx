@@ -10,6 +10,7 @@ import {
   Modal,
   row,
 } from "../../components";
+import { control, icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ArtifactPreview } from "../chat/artifacts/preview";
@@ -23,6 +24,10 @@ import { createTaskDetailState } from "./task-detail-state";
 import { TaskCommentBox, TaskReviewActions } from "./task-fields";
 import { TaskOverview } from "./task-overview";
 import { TaskTopBar } from "./top-bar";
+
+/** The task's ⋯ menu and its rows. */
+const menuWidth = 172;
+const menuRowHeight = 32;
 
 export function TaskDetail(props: {
   id: string;
@@ -106,12 +111,12 @@ export function TaskDetail(props: {
       style={{
         ...row,
         justifyContent: "center",
-        minWidth: 32,
-        height: 30,
+        minWidth: space[32],
+        height: control.lg,
         cursor: "pointer",
       }}
     >
-      <Icon name="more" size={17} />
+      <Icon name="more" size={icon.md} />
     </View>
   );
   return (
@@ -127,7 +132,7 @@ export function TaskDetail(props: {
             overPhoneNavigation
             onClose={() => more.set(false)}
           >
-            <View style={{ paddingTop: 4, paddingBottom: 24 }}>
+            <View style={{ paddingTop: space[4], paddingBottom: space[24] }}>
               <Each of={actions()} key={(action) => action.label}>
                 {(action, index) => (
                   <View
@@ -137,11 +142,11 @@ export function TaskDetail(props: {
                       more.set(false);
                       action().run();
                     }}
-                    activeStyle={{ backgroundColor: `${c().selected}80` }}
+                    activeStyle={{ backgroundColor: c().selectedSoft }}
                     style={{
                       ...row,
-                      height: 48,
-                      paddingHorizontal: 16,
+                      height: space[48],
+                      paddingHorizontal: space[16],
                       borderBottomWidth: index() < actions().length - 1 ? 1 : 0,
                       borderColor: c().border,
                     }}
@@ -167,8 +172,8 @@ export function TaskDetail(props: {
             }
             layout={props.layout}
             onBack={paned() ? undefined : props.onClose}
-            inset={props.docked ? 8 : paned() ? 16 : undefined}
-            end={paned() ? 10 : undefined}
+            inset={props.docked ? space[8] : paned() ? space[16] : undefined}
+            end={paned() ? space[12] : undefined}
             titleVariant={
               props.layout === "desktop" && !props.docked ? "small" : undefined
             }
@@ -178,7 +183,7 @@ export function TaskDetail(props: {
                 : undefined
             }
             backIconSize={
-              props.layout === "desktop" && !props.docked ? 14 : undefined
+              props.layout === "desktop" && !props.docked ? icon.md : undefined
             }
           >
             <View style={{ flex: 1 }} />
@@ -190,30 +195,30 @@ export function TaskDetail(props: {
                     { value: "plan", label: uiText("plan") },
                   ]}
                   value={plan() ? "plan" : "overview"}
-                  height={paned() ? 20 : 22}
+                  height={control.sm}
                   labelVariant="caption"
                   boldActive={!paned()}
-                  paddingHorizontal={paned() ? 8 : undefined}
+                  paddingHorizontal={paned() ? space[8] : undefined}
                   strong={paned()}
                   onChange={(value) => plan.set(value === "plan")}
                 />
-                <View style={{ width: paned() ? 0 : 8 }} />
+                <View style={{ width: paned() ? 0 : space[8] }} />
               </If>
               <If when={paned()}>
                 <Button
                   label={uiText("panel")}
                   icon="sidebar"
-                  iconSize={14}
+                  iconSize={icon.md}
                   labelVariant="caption"
                   onPress={() => panel.set(true)}
                 />
               </If>
-              <TaskMenu width={172} align="end" trigger={<MoreTrigger />}>
+              <TaskMenu width={menuWidth} align="end" trigger={<MoreTrigger />}>
                 <Each of={actions()} key={(action) => action.label}>
                   {(action) => (
                     <TaskMenuItem
                       label={action().label}
-                      height={30}
+                      height={menuRowHeight}
                       onSelect={action().run}
                     />
                   )}
@@ -225,7 +230,7 @@ export function TaskDetail(props: {
       >
         <TaskTopBar
           number={task()?.number}
-          inset={16}
+          inset={space[16]}
           touch
           background="canvas"
           onBack={props.onClose}
@@ -274,8 +279,8 @@ export function TaskDetail(props: {
                 style={{
                   ...row,
                   justifyContent: "space-between",
-                  padding: 14,
-                  gap: 12,
+                  padding: space[16],
+                  gap: space[12],
                   borderTopWidth: 1,
                   borderColor: c().border,
                 }}
@@ -296,9 +301,9 @@ export function TaskDetail(props: {
               >
                 <View
                   style={{
-                    paddingVertical: 12,
-                    paddingHorizontal: 16,
-                    gap: 8,
+                    paddingVertical: space[12],
+                    paddingHorizontal: space[16],
+                    gap: space[8],
                     borderTopWidth: 1,
                     borderColor: c().border,
                   }}

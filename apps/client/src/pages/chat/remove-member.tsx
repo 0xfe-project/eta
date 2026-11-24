@@ -1,6 +1,7 @@
 import type { ConversationInfo, MemberView } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { Button, Label, Modal } from "../../components";
+import { Button, dialogWidth, Label, Modal } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -34,7 +35,7 @@ export function RemoveMember(props: {
   return (
     <Modal
       title={uiText("removeMember")}
-      width={432}
+      width={dialogWidth.md}
       phone={props.phone}
       sheet={props.phone}
       overPhoneNavigation
@@ -42,7 +43,7 @@ export function RemoveMember(props: {
       dismissible={!busy()}
       onClose={props.onClose}
     >
-      <View style={{ padding: 16, gap: 10 }}>
+      <View style={{ padding: space[16], gap: space[8] }}>
         <Label>
           {uiText("removeFrom", {
             memberName: host.agent(props.agentId)?.name ?? props.agentId,

@@ -15,12 +15,29 @@ import { uiText } from "../../i18n";
 import { forgetPicture, rememberPicture } from "../../services/pictures";
 
 export interface Outgoing {
+  /** The `clientId` it is sent with, which the host makes the row's id. */
   id: string;
   text: string;
   mentions?: string[];
   attachments: AttachmentView[];
   blocks?: PasteRange[];
   failure?: string;
+  /** When it was sent, for its row in the transcript. */
+  at?: number;
+  /**
+   * Where it shows until the host answers: the agents it will wait for (every agent it goes to was
+   * answering as it was sent: the queue above the composer), or none (the end of the transcript).
+   * Told once, as it is sent, so it does not move while it goes; a message saved from an earlier
+   * run of the app has none yet and is told again when its chat opens (`outboxPlaces`).
+   */
+  waitsFor?: string[];
+}
+
+/** A sent message the host took, until its row reaches this window. */
+export interface Landed {
+  message: Outgoing;
+  /** The agents the host held it for (it waits in the queue), or none (it is in the transcript). */
+  held: string[];
 }
 /** What a chat keeps between visits: the editor's document, its finished uploads, the outbox. */
 interface Draft {
@@ -38,6 +55,10 @@ const opened = new Map<string, ReturnType<typeof createDraft>>();
 function createDraft(key: string, legacyKey: string) {
   const value = signal<Draft>(empty());
   const ready = signal(false);
+  /** Messages the host took whose row has not come yet: they stay where they were shown. */
+  const landed = signal<Record<string, Landed>>({});
+  /** A failed message the reader chose to edit: the composer takes it back into the box. */
+  const editing = signal<Outgoing | undefined>(undefined);
   const busy = signal(false);
   /** Upload states of this session's blocks: uploading, failed, done (the done ones persist). */
   const states = signal<Record<string, UploadState>>({});
@@ -83,7 +104,9 @@ function createDraft(key: string, legacyKey: string) {
           doc: saved.doc ?? null,
           uploads: saved.uploads ?? {},
           sticky: saved.sticky,
-          outgoing: Array.isArray(saved.outgoing) ? saved.outgoing : [],
+          outgoing: Array.isArray(saved.outgoing)
+            ? saved.outgoing.map(unplaced)
+            : [],
         });
         return;
       }
@@ -101,7 +124,7 @@ function createDraft(key: string, legacyKey: string) {
         ),
         sticky: saved.sticky as StickyTarget | undefined,
         outgoing: Array.isArray(saved.outgoing)
-          ? (saved.outgoing as Outgoing[])
+          ? (saved.outgoing as Outgoing[]).map(unplaced)
           : [],
       });
       await edit({});
@@ -242,6 +265,8 @@ function createDraft(key: string, legacyKey: string) {
   }
   const entry = {
     value,
+    landed,
+    editing,
     loaded,
     ready,
     busy,
@@ -258,6 +283,14 @@ function createDraft(key: string, legacyKey: string) {
       });
     },
     edit,
+    /** The rows of these landed messages have come: they show as the host's from now on. */
+    settle(ids: readonly string[]) {
+      const all = landed();
+      if (!ids.some((id) => id in all)) return;
+      const next = { ...all };
+      for (const id of ids) delete next[id];
+      landed.set(next);
+    },
     /** Attachments of a message brought back to edit: uploaded already. */
     remember(attachments: readonly AttachmentView[]) {
       for (const attachment of attachments)
@@ -286,6 +319,26 @@ function createDraft(key: string, legacyKey: string) {
     },
   };
   return entry;
+}
+
+/** How long a sent message waits for its row before it stops being shown. */
+const LANDED_FOR_MS = 15_000;
+
+/** Messages sent in this run of the app: they keep the place they were given as they went. */
+const sentThisRun = new Set<string>();
+/** Remembers a message as sent in this run, so a chat opened again shows it where it was. */
+export function placedNow(message: Outgoing): Outgoing {
+  sentThisRun.add(message.id);
+  return message;
+}
+/**
+ * A message read back from storage. One from an earlier run of the app is placed again (`waitsFor`)
+ * by who is busy now; one from this run, read again because its chat was opened again, stays put.
+ */
+function unplaced(message: Outgoing): Outgoing {
+  if (sentThisRun.has(message.id)) return message;
+  const { waitsFor: _waitsFor, ...rest } = message;
+  return rest;
 }
 
 const storagePrefix = "eta.composer.v2.";
@@ -326,16 +379,34 @@ export async function drainOutbox(
     for (let attempt = 1; ; attempt++) {
       if (host.address()?.origin !== origin) return;
       try {
-        await host.call<ConversationResults["send"]>("conversations", "send", {
-          conversationId,
-          clientId: message.id,
-          text: message.text,
-          mode: "queue",
-          mentions: message.mentions,
-          blocks: message.blocks,
-          attachments: message.attachments.map((file) => file.id),
-        });
+        const sent = await host.call<ConversationResults["send"]>(
+          "conversations",
+          "send",
+          {
+            conversationId,
+            clientId: message.id,
+            text: message.text,
+            mode: "queue",
+            mentions: message.mentions,
+            blocks: message.blocks,
+            attachments: message.attachments.map((file) => file.id),
+          },
+        );
+        // Shown where the host put it until its row comes (it may have come already).
+        store.landed.update((all) => ({
+          ...all,
+          [message.id]: {
+            message,
+            held:
+              sent.message.data.held === true &&
+              Array.isArray(sent.message.data.woke)
+                ? (sent.message.data.woke as string[])
+                : [],
+          },
+        }));
         edit({ outgoing: outgoing().filter((item) => item.id !== message.id) });
+        // A row that never comes to this window (taken back from another one) goes all the same.
+        setTimeout(() => store.settle([message.id]), LANDED_FOR_MS);
         return;
       } catch (cause) {
         if (
@@ -373,6 +444,24 @@ export async function drainOutbox(
     busy.set(false);
     store.release();
   }
+}
+
+/** Sends a failed message again, with the same id: the host keeps one copy whatever happened. */
+export function retryOutgoing(
+  store: ReturnType<typeof openComposerDraft>,
+  host: Host,
+  origin: string,
+  conversationId: string,
+  id: string,
+) {
+  store.edit({
+    outgoing: store
+      .value()
+      .outgoing.map((item) =>
+        item.id === id ? { ...item, failure: undefined } : item,
+      ),
+  });
+  void drainOutbox(store, host, origin, conversationId);
 }
 
 // A queued send belongs to its conversation even when another chat is on screen.

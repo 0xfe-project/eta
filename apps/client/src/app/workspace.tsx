@@ -37,6 +37,11 @@ import { TaskDetail } from "../pages/tasks/task-detail";
 import { TaskWorkspace } from "../pages/tasks/task-workspace";
 import { follow, useHost } from "../services/host";
 
+/** The conversation list on a tablet narrower than 960. */
+const narrowListWidth = 280;
+/** What covers the workspace's own panes: a task opened over a page, Settings over all of it. */
+const paneOrder = { task: 10, settings: 30 } as const;
+
 export function Workspace(props: {
   layout: Layout;
   theme: Theme;
@@ -314,7 +319,9 @@ export function Workspace(props: {
             }
           >
             <ChatList
-              width={windowSize().width < 960 ? 280 : sizes.tabletList}
+              width={
+                windowSize().width < 960 ? narrowListWidth : sizes.tabletList
+              }
               layout={props.layout}
               selected={conversation()}
               onConversation={open}
@@ -444,7 +451,7 @@ export function Workspace(props: {
           <View
             style={{
               ...fill,
-              zIndex: 30,
+              zIndex: paneOrder.settings,
               left: props.layout === "tablet" ? sizes.rail : 0,
               bottom: phoneTabs() ? sizes.phoneNav : 0,
             }}
@@ -498,7 +505,7 @@ export function Workspace(props: {
       <If
         when={task() && page() !== "tasks" && (phone() || page() === "pending")}
       >
-        <View style={{ ...fill, zIndex: 10 }}>
+        <View style={{ ...fill, zIndex: paneOrder.task }}>
           <Each of={[task()]}>
             {(id) => (
               <TaskDetail

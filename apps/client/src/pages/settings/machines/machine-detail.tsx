@@ -15,14 +15,18 @@ import {
   SmoothScroll,
 } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, relativeTime, useHost } from "../../../services/host";
 import { TaskGlyph } from "../../tasks/status";
-import { EntityRow, SectionHeader } from "../section";
+import { EntityRow, leadingBoxWidth, SectionHeader } from "../section";
 import { SettingRow } from "../setting-row";
 import { MachineRunsLimit, RevokeMachine } from "./machine-dialogs";
 import { useMachineUpdate } from "./machine-update";
 import { machineStatus } from "./machines";
+
+/** A machine's detail dialog off phones. */
+const detailHeight = 488;
 
 export function MachineDetail(props: {
   item: MachineView;
@@ -41,7 +45,7 @@ export function MachineDetail(props: {
   const candidates = () =>
     host.tasks().filter((item) => item.status === "in_progress");
   const statusTone = () =>
-    props.item.status === "online" ? "green" : pending() ? "amber" : "muted";
+    props.item.status === "online" ? "green" : pending() ? "warning" : "muted";
   const statusLabel = () =>
     props.item.status === "online"
       ? uiText("machineOnline")
@@ -80,10 +84,10 @@ export function MachineDetail(props: {
   };
   const rowStyle = () => ({
     ...row,
-    minHeight: 44,
-    paddingHorizontal: 16,
-    paddingVertical: props.phone ? 8 : undefined,
-    gap: props.phone ? 16 : 12,
+    minHeight: control.touch,
+    paddingHorizontal: space[16],
+    paddingVertical: props.phone ? space[8] : undefined,
+    gap: props.phone ? space[16] : space[12],
     borderBottomWidth: 1,
     borderColor: c().border,
   });
@@ -107,7 +111,7 @@ export function MachineDetail(props: {
       subtitleTone={statusTone()}
       phone={props.phone}
       phonePage={props.phone}
-      height={props.phone ? "100%" : 490}
+      height={props.phone ? "100%" : detailHeight}
       onClose={props.onClose}
     >
       <SmoothScroll style={grow} scrollbar={false}>
@@ -146,7 +150,7 @@ export function MachineDetail(props: {
                           ...row,
                           flex: 1,
                           minWidth: 0,
-                          gap: 6,
+                          gap: space[4],
                           justifyContent: "flex-end",
                         }}
                       >
@@ -157,7 +161,7 @@ export function MachineDetail(props: {
                             props.item.build === "outdated"
                           }
                         >
-                          <StatusDot color={c().amber} />
+                          <StatusDot color={c().warning} />
                         </If>
                         <Label
                           variant="small"
@@ -208,7 +212,9 @@ export function MachineDetail(props: {
                 when={props.phone}
                 else={
                   <View style={rowStyle()}>
-                    <Label weight={600}>{uiText("runningOnThisMachine")}</Label>
+                    <Label weight={weight.strong}>
+                      {uiText("runningOnThisMachine")}
+                    </Label>
                     <Label variant="small" tone="muted">
                       {active().length}
                     </Label>
@@ -238,8 +244,10 @@ export function MachineDetail(props: {
                   >
                     <EntityRow
                       title={item().title}
-                      leading={<TaskGlyph status={item().status} size={16} />}
-                      leadingSize={28}
+                      leading={
+                        <TaskGlyph status={item().status} size={icon.md} />
+                      }
+                      leadingSize={leadingBoxWidth}
                       stacked
                       caret
                       status={{
@@ -257,8 +265,8 @@ export function MachineDetail(props: {
         >
           <View
             style={{
-              padding: 16,
-              gap: 8,
+              padding: space[16],
+              gap: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -291,14 +299,14 @@ export function MachineDetail(props: {
             <Label style={{ flex: 1 }}>{uiText("removeMachine")}</Label>
             <Button
               label={uiText("remove2")}
-              size={props.phone ? 28 : undefined}
-              style={props.phone ? { paddingHorizontal: 10 } : undefined}
+              size={props.phone ? control.md : undefined}
+              style={props.phone ? { paddingHorizontal: space[12] } : undefined}
               onPress={() => removing.set(true)}
             />
           </View>
         </If>
         <If when={props.item.updateError}>
-          <Label tone="red" variant="small" style={{ padding: 16 }}>
+          <Label tone="red" variant="small" style={{ padding: space[16] }}>
             {props.item.updateError}
           </Label>
         </If>
@@ -306,8 +314,8 @@ export function MachineDetail(props: {
       <If when={pending() || upgrade()}>
         <View
           style={{
-            paddingHorizontal: 16,
-            paddingVertical: 8,
+            paddingHorizontal: space[16],
+            paddingVertical: space[8],
             borderTopWidth: 1,
             borderColor: c().border,
           }}
@@ -326,7 +334,7 @@ export function MachineDetail(props: {
                       : uiText("updateMachine")
                 }
                 tone="primary"
-                size={props.phone ? 32 : undefined}
+                size={props.phone ? control.lg : undefined}
                 style={props.phone ? { alignSelf: "stretch" } : undefined}
                 disabled={busy() || machineUpdate.state() === "updating"}
                 onPress={() => void machineUpdate.start()}
@@ -336,7 +344,7 @@ export function MachineDetail(props: {
             <Button
               label={uiText("approve")}
               tone="primary"
-              size={props.phone ? 32 : undefined}
+              size={props.phone ? control.lg : undefined}
               style={props.phone ? { alignSelf: "stretch" } : undefined}
               disabled={busy() || !fingerprint().trim()}
               onPress={() =>

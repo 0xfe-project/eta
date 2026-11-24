@@ -1,7 +1,8 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { TaskDetailState } from "./task-detail-state";
 import { View } from "nsh";
-import { colors, Icon, Label, row } from "../../components";
+import { colors, Icon, inCompact, Label, row } from "../../components";
+import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { StatusOptions, TaskMenu } from "./menu";
 import { statusName, TaskGlyph, tones } from "./status";
@@ -9,7 +10,7 @@ import { statusName, TaskGlyph, tones } from "./status";
 /** The statuses whose trigger is tinted in their colour: running, waiting for review, done. */
 const statusFill = {
   in_progress: "blueFill",
-  in_review: "amberFill",
+  in_review: "warningFill",
   done: "greenFill",
 } as const;
 
@@ -24,6 +25,10 @@ const statusFill = {
  * its way the trigger is dimmed and takes no presses; a change that fails
  * says why under it.
  */
+/** The select at its narrowest, and its menu (an error under it runs as wide). */
+const selectWidth = 128;
+const menuWidth = 264;
+
 export function StatusSelect(props: {
   item: BoardTaskDetail;
   state: TaskDetailState;
@@ -41,6 +46,8 @@ export function StatusSelect(props: {
   const plain = () => !!props.compact && !tint();
   const ink = () => (tint() ? tones[props.item.status] : "ink");
   const busy = () => changing() !== undefined;
+  /** In the conversation panel: a 24px trigger with 12px glyphs. */
+  const dense = inCompact();
   const open = () => {
     statusError.set("");
     status.set(true);
@@ -58,31 +65,38 @@ export function StatusSelect(props: {
         onPress={pressable ? open : undefined}
         style={{
           ...row,
-          height: plain() ? 22 : 28,
-          minWidth: plain() ? undefined : 128,
+          height: plain() || dense() ? control.sm : control.md,
+          minWidth: plain() ? undefined : selectWidth,
           maxWidth: "100%",
-          paddingHorizontal: 8,
-          gap: 6,
+          paddingHorizontal: space[8],
+          gap: space[4],
           borderWidth: 1,
           borderColor: tint() ? c()[tones[props.item.status]] : c().strong,
           backgroundColor: tint() ? c()[tint()!] : c().canvas,
-          opacity: busy() ? 0.6 : 1,
+          opacity: busy() ? opacity.muted : 1,
           cursor: busy() ? "default" : "pointer",
         }}
       >
         <If when={!plain()}>
-          <TaskGlyph status={props.item.status} size={14} />
+          <TaskGlyph
+            status={props.item.status}
+            size={dense() ? icon.sm : icon.md}
+          />
         </If>
         <Label
           variant={plain() ? "caption" : "small"}
-          weight={plain() ? 600 : 400}
+          weight={plain() ? weight.strong : weight.regular}
           tone={ink()}
           lines={1}
           style={plain() ? undefined : { flex: 1, minWidth: 0 }}
         >
           {statusName(props.item.status)}
         </Label>
-        <Icon name="down" size={plain() ? 10 : 14} tone={ink()} />
+        <Icon
+          name="down"
+          size={plain() ? icon.sm : dense() ? icon.sm : icon.md}
+          tone={ink()}
+        />
       </View>
     );
   };
@@ -90,14 +104,14 @@ export function StatusSelect(props: {
     <View
       style={{
         alignItems: props.align === "end" ? "flex-end" : "flex-start",
-        gap: 4,
+        gap: space[4],
         minWidth: 0,
         flexShrink: 1,
       }}
     >
       <If when={!props.state.phone()} else={<Trigger pressable />}>
         <TaskMenu
-          width={264}
+          width={menuWidth}
           align={props.align}
           caption={uiText("changeStatus")}
           open={status()}
@@ -117,7 +131,7 @@ export function StatusSelect(props: {
             variant="caption"
             tone="red"
             lines={2}
-            style={{ maxWidth: 264 }}
+            style={{ maxWidth: menuWidth }}
           >
             {message()}
           </Label>

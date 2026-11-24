@@ -1,5 +1,5 @@
 import { signal, Storage } from "nsh";
-import { sizes } from "../components/theme";
+import { sizes } from "../components/tokens";
 
 /**
  * The widths the reader dragged the desktop sidebar, conversation panel and task page's rail to,

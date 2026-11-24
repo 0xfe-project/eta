@@ -1,6 +1,7 @@
 import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../components";
 import { CheckControl } from "../../components/check-control";
+import { icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export interface Persona {
@@ -9,7 +10,14 @@ export interface Persona {
   description: string;
 }
 
-// Skeleton bars of the two placeholder rows: name and description widths.
+// Skeleton bars of the two placeholder rows: name and description widths, a line of text tall;
+// the trailing bar stands for the row's state.
+const lineHeight = 12;
+const stateBarWidth = 40;
+/** The column at a row's end: its state, or the install bar. */
+const stateWidth = 96;
+/** How wide the reason under "Unable to load agents" runs. */
+const reasonWidth = 320;
 const skeletonRows = {
   wide: [
     [88, 420],
@@ -25,12 +33,12 @@ const skeletonRows = {
  * and a short trailing bar, two rows as on the web. */
 function PersonaSkeleton(props: { phone: boolean }) {
   const c = colors();
-  const bar = (width: number, height: number) => (
+  const bar = (width: number) => (
     <View
       style={{
         width,
         maxWidth: "100%",
-        height,
+        height: lineHeight,
         flexShrink: 0,
         backgroundColor: c().border,
       }}
@@ -44,36 +52,43 @@ function PersonaSkeleton(props: { phone: boolean }) {
             style={{
               ...row,
               alignItems: "flex-start",
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-              gap: 12,
+              paddingHorizontal: space[16],
+              paddingVertical: space[12],
+              gap: space[12],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
           >
             <View
               style={{
-                width: 16,
-                height: 16,
-                marginTop: 2,
+                width: space[16],
+                height: space[16],
+                marginTop: space[2],
                 flexShrink: 0,
                 backgroundColor: c().border,
               }}
             />
-            <View style={{ flex: 1, minWidth: 0, gap: 6, paddingTop: 4 }}>
-              {bar(widths()[0], 12)}
-              {bar(widths()[1], 10)}
+            <View
+              style={{
+                flex: 1,
+                minWidth: 0,
+                gap: space[4],
+                paddingTop: space[4],
+              }}
+            >
+              {bar(widths()[0])}
+              {bar(widths()[1])}
             </View>
             <View
               style={{
                 ...row,
-                width: 96,
-                height: 20,
+                width: stateWidth,
+                height: space[20],
                 flexShrink: 0,
                 justifyContent: "flex-end",
               }}
             >
-              {bar(40, 10)}
+              {bar(stateBarWidth)}
             </View>
           </View>
         )}
@@ -100,22 +115,22 @@ export function PersonaStep(props: {
   const c = colors();
   const emptyState = {
     alignItems: "center",
-    paddingVertical: 40,
-    paddingHorizontal: 24,
-    gap: 8,
+    paddingVertical: space[40],
+    paddingHorizontal: space[24],
+    gap: space[8],
   } as const;
   return (
     <>
       <View
         style={{
-          padding: 16,
-          paddingTop: 24,
+          padding: space[16],
+          paddingTop: space[24],
           borderBottomWidth: 1,
           borderColor: c().border,
-          gap: 4,
+          gap: space[4],
         }}
       >
-        <Label variant="subtitle" weight={600}>
+        <Label variant="subtitle" weight={weight.strong}>
           {props.working
             ? uiText("gettingYourAgentsReady")
             : uiText("whoWouldYouLikeToWork")}
@@ -126,20 +141,20 @@ export function PersonaStep(props: {
             : uiText("pickAFewToStart")}
         </Label>
       </View>
-      <View style={{ paddingBottom: 8 }}>
+      <View style={{ paddingBottom: space[8] }}>
         <If when={props.loading}>
           <PersonaSkeleton phone={props.phone} />
         </If>
         <If when={props.missing}>
           <View style={emptyState}>
-            <Icon name="warning" size={16} tone="red" />
-            <Label weight={500} style={{ textAlign: "center" }}>
+            <Icon name="warning" size={icon.md} tone="red" />
+            <Label weight={weight.regular} style={{ textAlign: "center" }}>
               {uiText("unableToLoadAgents")}
             </Label>
             <Label
               variant="small"
               tone="muted"
-              style={{ maxWidth: 320, textAlign: "center" }}
+              style={{ maxWidth: reasonWidth, textAlign: "center" }}
             >
               {props.missingReason || uiText("theHostDidntAnswerCheckYour")}
             </Label>
@@ -147,7 +162,7 @@ export function PersonaStep(props: {
         </If>
         <If when={!(props.missing || props.loading || props.cards.length)}>
           <View style={emptyState}>
-            <Label weight={500} style={{ textAlign: "center" }}>
+            <Label weight={weight.regular} style={{ textAlign: "center" }}>
               {uiText("noPersonaCardsToInstall")}
             </Label>
           </View>
@@ -165,10 +180,10 @@ export function PersonaStep(props: {
                 checked={checked()}
                 disabled={installed() || props.working}
                 onChange={() => props.onToggle(card().id)}
-                size={16}
-                markSize={12}
+                size={icon.md}
+                markSize={icon.sm}
                 indicatorStyle={{
-                  marginTop: 2,
+                  marginTop: space[2],
                   borderColor: settled()
                     ? c().strong
                     : checked()
@@ -182,29 +197,33 @@ export function PersonaStep(props: {
                 }}
                 style={{
                   ...row,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  gap: 12,
+                  paddingHorizontal: space[16],
+                  paddingVertical: space[12],
+                  gap: space[12],
                   borderBottomWidth:
                     card().id === props.cards.at(-1)?.id ? 0 : 1,
                   borderColor: c().border,
                   alignItems: "flex-start",
-                  opacity: props.working && !checked() ? 0.5 : 1,
+                  opacity: props.working && !checked() ? opacity.disabled : 1,
                 }}
               >
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Label weight={500}>{card().name}</Label>
+                <View style={{ flex: 1, gap: space[2] }}>
+                  <Label weight={weight.regular}>{card().name}</Label>
                   <Label variant="small" tone="muted">
                     {card().description}
                   </Label>
                 </View>
                 <View
-                  style={{ width: 96, flexShrink: 0, alignItems: "flex-end" }}
+                  style={{
+                    width: stateWidth,
+                    flexShrink: 0,
+                    alignItems: "flex-end",
+                  }}
                 >
                   <If when={installed()}>
-                    <View style={{ ...row, height: 20, gap: 4 }}>
+                    <View style={{ ...row, height: space[20], gap: space[4] }}>
                       <If when={props.installedHere(card().id)}>
-                        <Icon name="check" size={12} />
+                        <Icon name="check" size={icon.sm} />
                       </If>
                       <Label
                         variant="small"
@@ -216,19 +235,23 @@ export function PersonaStep(props: {
                   </If>
                   <If when={active()}>
                     <View
-                      style={{ gap: 6, paddingTop: 2, alignItems: "flex-end" }}
+                      style={{
+                        gap: space[4],
+                        paddingTop: space[2],
+                        alignItems: "flex-end",
+                      }}
                     >
                       <Label variant="small">{uiText("installing")}</Label>
                       <View
                         style={{
-                          width: 96,
-                          height: 2,
+                          width: stateWidth,
+                          height: space[2],
                           backgroundColor: c().border,
                         }}
                       >
                         <View
                           style={{
-                            height: 2,
+                            height: space[2],
                             backgroundColor: c().ink,
                             width: `${Math.max(20, (100 * (props.installedCount + 0.5)) / Math.max(1, props.total))}%`,
                           }}
@@ -237,7 +260,7 @@ export function PersonaStep(props: {
                     </View>
                   </If>
                   <If when={!installed() && !active()}>
-                    <View style={{ height: 20 }} />
+                    <View style={{ height: space[20] }} />
                   </If>
                 </View>
               </CheckControl>

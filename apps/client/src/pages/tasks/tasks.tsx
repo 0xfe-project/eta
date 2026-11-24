@@ -5,13 +5,14 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX, Signal } from "nsh";
 import type { Layout } from "../../components";
-import { signal, View } from "nsh";
+import { computed, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
   Button,
   colors,
   Empty,
+  emptyWidth,
   Field,
   grow,
   Header,
@@ -22,6 +23,7 @@ import {
   textStyle,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
@@ -39,6 +41,11 @@ const taskViews = {
   List: "listView",
   Plan: "plan",
 } as const;
+
+/** The header's search box; the Part of and Executor filter menus; the archive's column. */
+const searchWidth = 152;
+const menuWidth = { partOf: 220, executor: 200 } as const;
+const archiveWidth = 916;
 
 export function Tasks(props: {
   layout: Layout;
@@ -88,16 +95,17 @@ export function Tasks(props: {
       return agent ? [agent] : [];
     });
   };
-  const filtered = () =>
-    shown().filter(
+  // Read by every row, card and plan below: filtered once per change, not on each read.
+  const filtered = computed(() => {
+    const words = query().trim().toLowerCase();
+    return shown().filter(
       (task) =>
         (!executor() ||
           (task.assigneeAgentId ?? task.createdBy.agentId) === executor()) &&
         (!part() || task.parentId === part() || task.id === part()) &&
-        `${task.title} #${task.number}`
-          .toLowerCase()
-          .includes(query().trim().toLowerCase()),
+        `${task.title} #${task.number}`.toLowerCase().includes(words),
     );
+  });
   const groupByParent = () =>
     view() === "List" &&
     !archive() &&
@@ -120,8 +128,8 @@ export function Tasks(props: {
             title={uiText("tasks2")}
             count={shown().length}
             layout={props.layout}
-            inset={14}
-            end={10}
+            inset={space[16]}
+            end={space[12]}
             countVariant="body"
           >
             <View style={{ flex: 1 }} />
@@ -140,14 +148,14 @@ export function Tasks(props: {
                   style={{
                     ...row,
                     justifyContent: "center",
-                    width: 24,
-                    height: 24,
+                    width: space[24],
+                    height: space[24],
                     cursor: "pointer",
                     backgroundColor:
                       filterOpen() || executor() ? c().selected : undefined,
                   }}
                 >
-                  <Icon name="funnel" size={14} />
+                  <Icon name="funnel" size={icon.md} />
                 </View>
               }
             />
@@ -170,8 +178,8 @@ export function Tasks(props: {
                 : shown().length
           }
           layout={props.layout}
-          inset={tablet() ? 14 : undefined}
-          end={phone() ? 8 : undefined}
+          inset={tablet() ? space[16] : undefined}
+          end={phone() ? space[8] : undefined}
         >
           <If when={phone()}>
             <View style={{ flex: 1 }} />
@@ -182,19 +190,25 @@ export function Tasks(props: {
               <View
                 style={
                   tablet()
-                    ? { ...row, flex: 1, minWidth: 0, gap: 6, marginLeft: 4 }
+                    ? {
+                        ...row,
+                        flex: 1,
+                        minWidth: 0,
+                        gap: space[4],
+                        marginLeft: space[4],
+                      }
                     : {
                         ...row,
-                        width: 150,
-                        height: 25,
-                        paddingHorizontal: 8,
-                        gap: 7,
-                        marginRight: 7,
+                        width: searchWidth,
+                        height: control.sm,
+                        paddingHorizontal: space[8],
+                        gap: space[8],
+                        marginRight: space[8],
                         flexShrink: 0,
                       }
                 }
               >
-                <Icon name="search" size={tablet() ? 12 : 12.6} tone="muted" />
+                <Icon name="search" size={icon.sm} tone="muted" />
                 <Field
                   label={uiText("searchTasks")}
                   placeholder={uiText("search")}
@@ -203,7 +217,7 @@ export function Tasks(props: {
                   style={{
                     flex: 1,
                     minWidth: 0,
-                    height: 25,
+                    height: control.sm,
                     paddingHorizontal: 0,
                     paddingVertical: 0,
                     borderWidth: 0,
@@ -218,19 +232,19 @@ export function Tasks(props: {
                     onPress={() => query.set("")}
                     hoverStyle={{ backgroundColor: c().selected }}
                     style={{
-                      width: 20,
-                      height: 20,
+                      width: space[20],
+                      height: space[20],
                       alignItems: "center",
                       justifyContent: "center",
                       cursor: "pointer",
                     }}
                   >
-                    <Icon name="close" size={10} />
+                    <Icon name="close" size={icon.sm} />
                   </View>
                 </If>
               </View>
             </If>
-            <View style={{ ...row, gap: tablet() ? 12 : 8 }}>
+            <View style={{ ...row, gap: tablet() ? space[12] : space[8] }}>
               <If when={!archive()}>
                 <ExecutorMenu
                   tablet={tablet()}
@@ -248,7 +262,7 @@ export function Tasks(props: {
                   }
                 />
                 <TaskMenu
-                  width={220}
+                  width={menuWidth.partOf}
                   caption={uiText("partOfCaption")}
                   open={partOpen()}
                   onOpenChange={partOpen.set}
@@ -276,7 +290,7 @@ export function Tasks(props: {
                         label={entry().title}
                         suffix={`#${entry().number}`}
                         leading={
-                          <TaskGlyph status={entry().status} size={12} />
+                          <TaskGlyph status={entry().status} size={icon.sm} />
                         }
                         checked={part() === entry().id}
                         onSelect={() => part.set(entry().id)}
@@ -306,7 +320,7 @@ export function Tasks(props: {
               >
                 <ActionMenu
                   label={uiText("groupTasksBy")}
-                  triggerStyle={{ borderWidth: 0, height: 25 }}
+                  triggerStyle={{ borderWidth: 0, height: control.sm }}
                   value={uiText("taskGrouping", {
                     name: uiText(
                       listGrouping() === "Part of" ? "groupByPartOf" : "status",
@@ -366,12 +380,12 @@ export function Tasks(props: {
                       host.state().missing.tasks || !host.state().targets.tasks
                         ? undefined
                         : phone()
-                          ? { gap: 10, paddingHorizontal: 40 }
+                          ? { gap: space[8], paddingHorizontal: space[40] }
                           : {
                               flex: 1,
                               justifyContent: "flex-start",
-                              paddingTop: 64,
-                              gap: tablet() ? 8 : 10,
+                              paddingTop: space[64],
+                              gap: space[8],
                             }
                     }
                     title={
@@ -386,9 +400,9 @@ export function Tasks(props: {
                     icon={host.state().missing.tasks ? "warning" : "tasks"}
                     iconSize={
                       host.state().missing.tasks
-                        ? 32
+                        ? icon.xl
                         : designed()
-                          ? 28
+                          ? icon.xl
                           : undefined
                     }
                     iconTone={
@@ -398,7 +412,7 @@ export function Tasks(props: {
                           ? "ink"
                           : undefined
                     }
-                    titleWeight={designed() ? 600 : undefined}
+                    titleWeight={designed() ? weight.strong : undefined}
                     titleTone={designed() ? "ink" : undefined}
                     description={
                       host.state().missing.tasks
@@ -412,8 +426,8 @@ export function Tasks(props: {
                       <Button
                         label={uiText("retry")}
                         icon="refresh"
-                        size={28}
-                        style={{ marginTop: 4 }}
+                        size={control.md}
+                        style={{ marginTop: space[4] }}
                         onPress={host.retry}
                       />
                     </If>
@@ -505,7 +519,7 @@ function ExecutorMenu(props: {
 }) {
   return (
     <TaskMenu
-      width={200}
+      width={menuWidth.executor}
       caption={uiText("executor")}
       align={props.align}
       open={props.open}
@@ -522,7 +536,7 @@ function ExecutorMenu(props: {
         {(agent) => (
           <TaskMenuItem
             label={agent().name}
-            leading={<AgentFace id={agent().id} size={10} />}
+            leading={<AgentFace id={agent().id} size={avatar.sm} />}
             checked={props.value === agent().id}
             onSelect={() => props.onChange(agent().id)}
           />
@@ -549,9 +563,9 @@ function ArchiveToggle(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        height: 25,
-        paddingHorizontal: props.tablet && !props.selected ? 0 : 8,
-        gap: 4,
+        height: control.sm,
+        paddingHorizontal: props.tablet && !props.selected ? 0 : space[8],
+        gap: space[4],
         flexShrink: 0,
         cursor: "pointer",
         backgroundColor: props.selected ? c().selected : undefined,
@@ -559,7 +573,7 @@ function ArchiveToggle(props: {
     >
       <Icon
         name="archive"
-        size={props.selected ? 13 : 12}
+        size={icon.sm}
         tone={props.selected ? "ink" : "muted"}
       />
       <Label variant="small" tone={props.selected ? "ink" : "muted"}>
@@ -595,15 +609,17 @@ function ArchivedTasks(props: {
         ...grow,
         alignSelf: props.tablet ? "stretch" : "center",
         width: props.tablet ? undefined : "100%",
-        maxWidth: props.tablet ? undefined : 916,
-        paddingTop: 20,
-        paddingHorizontal: props.tablet ? 20 : 0,
-        gap: 12,
+        maxWidth: props.tablet ? undefined : archiveWidth,
+        paddingTop: space[20],
+        paddingHorizontal: props.tablet ? space[20] : 0,
+        gap: space[12],
       }}
     >
-      <View style={{ ...row, gap: 8 }}>
-        <View style={{ ...row, flex: 1, gap: 6, alignItems: "baseline" }}>
-          <Label weight={600}>{uiText("archivedTitle")}</Label>
+      <View style={{ ...row, gap: space[8] }}>
+        <View
+          style={{ ...row, flex: 1, gap: space[4], alignItems: "baseline" }}
+        >
+          <Label weight={weight.strong}>{uiText("archivedTitle")}</Label>
           <Label variant="small" tone="muted">
             {props.count}
           </Label>
@@ -615,28 +631,28 @@ function ArchivedTasks(props: {
           hoverStyle={{ backgroundColor: c().selected }}
           style={{
             ...row,
-            height: 24,
-            paddingHorizontal: 6,
-            gap: 4,
+            height: space[24],
+            paddingHorizontal: space[8],
+            gap: space[4],
             cursor: "pointer",
           }}
         >
-          <Icon name="arrowLeft" size={12} />
+          <Icon name="arrowLeft" size={icon.sm} />
           <Label variant="small">{uiText("backToBoard")}</Label>
         </View>
       </View>
       <View
         style={{
           ...row,
-          height: 30,
-          paddingHorizontal: 10,
-          gap: 8,
+          height: control.lg,
+          paddingHorizontal: space[12],
+          gap: space[8],
           borderWidth: 1,
           borderColor: c().border,
           flexShrink: 0,
         }}
       >
-        <Icon name="search" size={12} tone="muted" />
+        <Icon name="search" size={icon.sm} tone="muted" />
         <Field
           label={uiText("searchTitleOrNumber")}
           placeholder={uiText("searchTitleOrNumber")}
@@ -645,7 +661,7 @@ function ArchivedTasks(props: {
           style={{
             flex: 1,
             minWidth: 0,
-            height: 28,
+            height: control.md,
             paddingHorizontal: 0,
             paddingVertical: 0,
             borderWidth: 0,
@@ -657,7 +673,7 @@ function ArchivedTasks(props: {
       <View
         style={{
           ...grow,
-          marginBottom: 12,
+          marginBottom: space[12],
           borderWidth: 1,
           borderColor: c().border,
         }}
@@ -667,23 +683,23 @@ function ArchivedTasks(props: {
           else={
             <Empty
               icon="archive"
-              iconSize={28}
+              iconSize={icon.xl}
               title={
                 props.count
                   ? uiText("noArchivedTasksMatch")
                   : uiText("noArchivedTasks")
               }
-              titleWeight={600}
+              titleWeight={weight.strong}
               titleTone="ink"
               description={
                 props.count ? undefined : uiText("noArchivedTasksDescription")
               }
-              descriptionWidth={props.tablet ? 420 : 448}
+              descriptionWidth={emptyWidth.wide}
               style={{
                 flex: 1,
                 justifyContent: "flex-start",
-                paddingTop: 64,
-                gap: 10,
+                paddingTop: space[64],
+                gap: space[8],
               }}
             />
           }

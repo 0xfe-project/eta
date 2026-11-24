@@ -90,7 +90,7 @@ export function ContextRing(props: {
       system: [color.faint, 1],
       context: [color.muted, 1],
       user: [color.green, 1],
-      assistant: [color.amber, 1],
+      assistant: [color.warning, 1],
       toolDefs: [color.blue, 0.45],
       tool: [color.blue, 1],
     };

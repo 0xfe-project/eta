@@ -1,6 +1,7 @@
 import type { TextVariant } from "../../components";
 import { View } from "nsh";
 import { colors, Label, row } from "../../components";
+import { space, weight } from "../../components/tokens";
 
 /** One bordered group of choices, the chosen one filled: Board / List / Plan, Overview / Plan. */
 export function Segmented<T extends string>(props: {
@@ -24,7 +25,7 @@ export function Segmented<T extends string>(props: {
       style={{
         ...row,
         alignItems: "stretch",
-        height: props.height ?? 24,
+        height: props.height ?? space[24],
         borderWidth: props.bordered === false ? 0 : 1,
         borderColor: props.strong ? c().strong : c().border,
         backgroundColor: props.bordered === false ? undefined : c().canvas,
@@ -45,14 +46,16 @@ export function Segmented<T extends string>(props: {
               }
               style={{
                 ...row,
-                paddingHorizontal: props.paddingHorizontal ?? 9,
+                paddingHorizontal: props.paddingHorizontal ?? space[8],
                 backgroundColor: active() ? c().button : undefined,
                 cursor: "pointer",
               }}
             >
               <Label
                 variant={props.labelVariant ?? "small"}
-                weight={active() && props.boldActive ? 600 : 400}
+                weight={
+                  active() && props.boldActive ? weight.strong : weight.regular
+                }
                 tone={active() ? "buttonInk" : "muted"}
               >
                 {option().label}

@@ -141,7 +141,11 @@ jobs:
       # To press the real button in the runner's Chrome, for this run only.
       - run: bun add --no-save playwright-core@1
 
+      # On Windows every host it runs reads Win32 error codes through a shim compiled at run time
+      # (apps/daemon/src/windows-api.ts): this makes a build without it fail, not go back quietly.
       - name: Run it
+        env:
+          ETA_REQUIRE_WIN32_SHIM: "1"
         run: bun scripts/upgrade-e2e/drive.ts "$BUILDS"
 
       # For people testing on a real Windows computer: the fake server is compiled so they need

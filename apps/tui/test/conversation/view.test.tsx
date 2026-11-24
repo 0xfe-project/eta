@@ -372,8 +372,13 @@ describe("tab label", () => {
     expect(frameLines(r).at(-1)).toContain("1:Release notes");
   });
 
-  it("is the start of the id while the list does not have it", async () => {
+  it("is the conversation's own name while the list does not have it (Captain's is never listed)", async () => {
     const { r } = await show({ list: [] });
+    expect(frameLines(r).at(-1)).toContain("1:Release notes");
+  });
+
+  it("is the start of the id while neither the list nor the conversation's target has it", async () => {
+    const { r } = await show({ list: [], undelivered: true });
     expect(frameLines(r).at(-1)).toContain(`1:${ID.slice(0, 8)}`);
     expect(frameLines(r).at(-1)).not.toContain(`1:${ID.slice(0, 9)}`);
   });

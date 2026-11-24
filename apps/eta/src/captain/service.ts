@@ -2,6 +2,7 @@ import type {
   BoardTaskDetail,
   BoardTaskView,
   CaptainAssignmentView,
+  CaptainIdentitySection,
   CaptainIdentityView,
   CaptainMemoryPauseView,
   CaptainOperationView,
@@ -40,6 +41,7 @@ import { createCaptainIdentity } from "../agents/create";
 import { ensureHome, homeOf } from "../agents/home";
 import { checkModel } from "../agents/model";
 import { agentHome } from "../agents/store";
+import { summaryOf } from "../conversations/views";
 import { conversationOf, ownerOf, taskKey } from "../session-owner";
 import { isActive } from "../tasks/status";
 import { executorOf } from "../tasks/store";
@@ -188,6 +190,34 @@ export class CaptainService {
     const agent = this.#deps.store.captainAgent();
     if (agent === undefined) return undefined;
     return this.#viewOf(agent);
+  }
+
+  /**
+   * What the `identity` section publishes: the identity, and Captain's conversation as a list row
+   * would show it. That conversation is not a row of `conversations.list`, so a client reads its
+   * last message, unread count and Captain's session here. Kept apart from `identity()`, which the
+   * host reads often and needs none of it.
+   */
+  published(): CaptainIdentitySection | undefined {
+    const identity = this.identity();
+    if (identity === undefined) return undefined;
+    const conversation =
+      identity.conversationId === null
+        ? undefined
+        : this.#deps.conversations.get(identity.conversationId);
+    return {
+      ...identity,
+      conversation:
+        conversation === undefined
+          ? null
+          : summaryOf(
+              {
+                conversations: this.#deps.conversations,
+                timeline: this.#deps.timeline,
+              },
+              conversation,
+            ),
+    };
   }
 
   /**

@@ -16,19 +16,33 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { BackButton, CloseButton } from "../../components/navigation-buttons";
+import { StatusDot } from "../../components/status-dot";
+import {
+  avatar,
+  control,
+  icon,
+  opacity,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { TaskGlyph } from "../tasks/status";
+import { statusName, TaskGlyph } from "../tasks/status";
 import { ArtifactBrowser } from "./artifacts/conversation-artifacts";
 import { RECENT, recentArtifacts } from "./artifacts/filter";
 import { memberStatus } from "./member-status";
 import { messageTime } from "./message-time";
+import { SubtaskProgress, SubtaskToggle } from "./panel-tasks";
+import { needingYou, setParentOpen, taskRoots, treeRows } from "./panel-tree";
 import { ViewAll } from "./section-heading";
 
 /**
  * A phone's conversation info sheet: members, tasks and the latest artifacts in one list; "View
  * all" turns the sheet into the group's whole Artifacts list (search, filter, pages).
  */
+/** A task's row, and a row with a second line (an artifact, a member). */
+const rowHeight = { task: 48, twoLine: 52 } as const;
+
 export function PhoneConversationInfo(props: {
   id: string;
   name: string;
@@ -46,8 +60,19 @@ export function PhoneConversationInfo(props: {
   const tasks = () =>
     host
       .tasks()
-      .filter((task) => task.conversationId === props.id && !task.archivedAt)
-      .sort((a, b) => a.number - b.number);
+      .filter((task) => task.conversationId === props.id && !task.archivedAt);
+  // Parents folded over their subtasks, as the Context tab lists them.
+  const tree = () => {
+    const { roots, revealed } = taskRoots(tasks(), host.tasks());
+    return {
+      count: roots.length,
+      rows: treeRows(
+        roots.sort((a, b) => a.number - b.number),
+        revealed,
+        host.tasks(),
+      ),
+    };
+  };
   const artifacts = () =>
     host.artifacts().filter((artifact) => artifact.conversationId === props.id);
   return (
@@ -56,14 +81,14 @@ export function PhoneConversationInfo(props: {
         <View
           style={{
             ...row,
-            height: 44,
-            paddingLeft: 16,
-            paddingRight: 8,
+            height: control.touch,
+            paddingLeft: space[16],
+            paddingRight: space[8],
             flexShrink: 0,
           }}
         >
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Label weight={600} lines={1}>
+            <Label weight={weight.strong} lines={1}>
               {props.name}
             </Label>
             <If when={props.project}>
@@ -72,7 +97,11 @@ export function PhoneConversationInfo(props: {
               </Label>
             </If>
           </View>
-          <CloseButton size={32} iconSize={16} onPress={props.onClose} />
+          <CloseButton
+            size={control.lg}
+            iconSize={icon.md}
+            onPress={props.onClose}
+          />
         </View>
         <SmoothScroll style={grow} scrollbar={false}>
           <Section
@@ -90,15 +119,43 @@ export function PhoneConversationInfo(props: {
               />
             )}
           </Each>
-          <Section label={uiText("tasks2")} count={tasks().length} />
-          <Each of={tasks()} key={(task) => task.id}>
-            {(task) => (
+          <Section label={uiText("tasks2")} count={tree().count} />
+          <Each of={tree().rows} key={(entry) => entry.task.id}>
+            {(entry) => (
               <InfoRow
-                height={48}
-                title={`#${task().number} ${task().title}`}
-                onPress={() => props.onTask(task().id)}
+                height={rowHeight.task}
+                // Under the parent's title: its mark and the row's gap, a step per level.
+                indent={entry().depth * (icon.md + space[12])}
+                title={`#${entry().task.number} ${entry().task.title}`}
+                detail={
+                  entry().depth ? statusName(entry().task.status) : undefined
+                }
+                onPress={() => props.onTask(entry().task.id)}
+                trailing={
+                  entry().parent ? (
+                    <>
+                      <If
+                        when={
+                          !entry().open &&
+                          needingYou(entry().task, host.tasks())
+                        }
+                      >
+                        <StatusDot color={c().warning} />
+                      </If>
+                      <SubtaskProgress task={entry().task} />
+                      <SubtaskToggle
+                        task={entry().task}
+                        open={entry().open}
+                        size={control.touch}
+                        onToggle={() =>
+                          setParentOpen(entry().task.id, !entry().open)
+                        }
+                      />
+                    </>
+                  ) : undefined
+                }
               >
-                <TaskGlyph status={task().status} size={14} />
+                <TaskGlyph status={entry().task.status} size={icon.md} />
               </InfoRow>
             )}
           </Each>
@@ -118,7 +175,7 @@ export function PhoneConversationInfo(props: {
           >
             {(artifact) => (
               <InfoRow
-                height={52}
+                height={rowHeight.twoLine}
                 title={artifact().title}
                 detail={[
                   host.agent(artifact().publisherAgentId ?? "")?.name,
@@ -130,18 +187,18 @@ export function PhoneConversationInfo(props: {
                   .join(" · ")}
                 onPress={() => props.onArtifact(artifact())}
               >
-                <Icon name="artifact" size={16} />
+                <Icon name="artifact" size={icon.md} />
               </InfoRow>
             )}
           </Each>
           <If when={!artifacts().length}>
             <Empty
               icon="appWindow"
-              iconSize={24}
+              iconSize={icon.lg}
               title={uiText("noArtifactsYet")}
               description={uiText("artifactsEmptyHelp")}
               descriptionVariant="caption"
-              style={{ flex: 0, paddingVertical: 32 }}
+              style={{ flex: 0, paddingVertical: space[32] }}
             />
           </If>
         </SmoothScroll>
@@ -155,27 +212,31 @@ export function PhoneConversationInfo(props: {
         <View
           style={{
             ...row,
-            height: 44,
-            gap: 4,
-            paddingLeft: 4,
-            paddingRight: 8,
+            height: control.touch,
+            gap: space[4],
+            paddingLeft: space[4],
+            paddingRight: space[8],
             flexShrink: 0,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
           <BackButton
-            size={32}
-            iconSize={16}
+            size={control.lg}
+            iconSize={icon.md}
             onPress={() => allArtifacts.set(false)}
           />
-          <Label weight={600} lines={1}>
+          <Label weight={weight.strong} lines={1}>
             {uiText("chatArtifacts")}
           </Label>
           <Label variant="small" tone="muted" style={{ flex: 1 }}>
             {artifacts().length}
           </Label>
-          <CloseButton size={32} iconSize={16} onPress={props.onClose} />
+          <CloseButton
+            size={control.lg}
+            iconSize={icon.md}
+            onPress={props.onClose}
+          />
         </View>
         <ArtifactBrowser
           artifacts={artifacts()}
@@ -198,9 +259,9 @@ export function PhoneConversationInfo(props: {
       <View
         style={{
           ...row,
-          height: 32,
-          gap: 6,
-          paddingHorizontal: 16,
+          height: space[32],
+          gap: space[4],
+          paddingHorizontal: space[16],
           flexShrink: 0,
           backgroundColor: c().selected,
           borderTopWidth: section.first ? 1 : 0,
@@ -208,7 +269,7 @@ export function PhoneConversationInfo(props: {
           borderColor: c().border,
         }}
       >
-        <Caption text={section.label} phone />
+        <Caption text={section.label} />
         <Label variant="caption" tone="muted">
           {section.count}
         </Label>
@@ -235,7 +296,7 @@ function MemberRow(props: {
   };
   return (
     <InfoRow
-      height={52}
+      height={rowHeight.twoLine}
       title={host.agent(props.member.agentId)?.name ?? uiText("agent")}
       titleVariant="body"
       detail={detail()}
@@ -250,19 +311,19 @@ function MemberRow(props: {
         else={
           <View
             style={{
-              width: 32,
-              height: 32,
+              width: space[32],
+              height: space[32],
               alignItems: "center",
               justifyContent: "center",
               flexShrink: 0,
             }}
           >
-            <AgentFace id={props.member.agentId} size={20} />
+            <AgentFace id={props.member.agentId} size={avatar.md} />
           </View>
         }
       >
-        <ContextRing usage={usage} size={32} label={false}>
-          <AgentFace id={props.member.agentId} size={20} />
+        <ContextRing usage={usage} size={avatar.lg} label={false}>
+          <AgentFace id={props.member.agentId} size={avatar.md} />
         </ContextRing>
       </If>
     </InfoRow>
@@ -276,6 +337,10 @@ function InfoRow(props: {
   detail?: string;
   children: JSX.Element;
   onPress?: () => void;
+  /** How far in it starts, for a subtask under its parent. */
+  indent?: number;
+  /** In place of the chevron. */
+  trailing?: JSX.Element | undefined;
 }) {
   const c = colors();
   return (
@@ -287,9 +352,9 @@ function InfoRow(props: {
       style={{
         ...row,
         height: props.height,
-        gap: 12,
-        paddingLeft: 16,
-        paddingRight: 12,
+        gap: space[12],
+        paddingLeft: space[16] + (props.indent ?? 0),
+        paddingRight: space[12],
         flexShrink: 0,
         borderBottomWidth: 1,
         borderColor: c().border,
@@ -307,9 +372,18 @@ function InfoRow(props: {
           </Label>
         </If>
       </View>
-      <View style={{ opacity: 0.45 }}>
-        <Icon name="right" size={14} />
-      </View>
+      <If
+        when={props.trailing}
+        else={
+          <View style={{ opacity: opacity.disabled }}>
+            <Icon name="right" size={icon.md} />
+          </View>
+        }
+      >
+        <View style={{ ...row, gap: space[8], flexShrink: 0 }}>
+          {props.trailing}
+        </View>
+      </If>
     </View>
   );
 }

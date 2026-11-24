@@ -5,10 +5,12 @@ import {
   ActionItem,
   colors,
   Empty,
+  emptyWidth,
   grow,
   Icon,
   SmoothScroll,
 } from "../../../components";
+import { icon, weight } from "../../../components/tokens";
 import { uiText, useText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -73,11 +75,11 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
             else={
               <Empty
                 icon="plug"
-                iconSize={24}
+                iconSize={icon.lg}
                 title={uiText("mcpEmptyTitle")}
-                titleWeight={500}
+                titleWeight={weight.regular}
                 description={uiText("mcpEmptyHint")}
-                descriptionWidth={320}
+                descriptionWidth={emptyWidth.narrow}
                 style={emptyStyle}
               />
             }
@@ -97,7 +99,7 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
                           titleTone={item().overriddenBy ? "muted" : "ink"}
                           strike={!!item().overriddenBy}
                           leading={
-                            <Icon name="plugins" size={16} tone="muted" />
+                            <Icon name="plugins" size={icon.md} tone="muted" />
                           }
                           meta={meta(item())}
                           status={

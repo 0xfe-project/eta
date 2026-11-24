@@ -9,6 +9,7 @@ import {
   textFaces,
   textStyle,
 } from "../theme";
+import * as tokens from "../tokens";
 
 // The look of a text, said once for the editor (nsh `RichEditor`) and for the text shown
 // (nsh `TextView`). A plugin says it by part (`TextParts`, TextView's names); each side turns the
@@ -16,9 +17,11 @@ import {
 // side has (the editor's list markers and caret, a node's attribute selector; the view's code
 // block parts) the plugin says for that side alone.
 
-/** What a text's styles are made of: the theme's colours, type scale and faces. */
+/** What a text's styles are made of: the theme's colours, type scale, faces and tokens. */
 export interface TextTheme {
   colors: typeof light;
+  /** The design's numbers (tokens.ts), for a plugin's spacing and rules. */
+  tokens: typeof tokens;
   face: (variant: TextVariant) => TextFace;
   /** The interface font's family stack. */
   font: string;
@@ -33,6 +36,7 @@ export function useTextTheme(): () => TextTheme {
   const type = textFaces();
   return () => ({
     colors: c(),
+    tokens,
     face: type,
     font: fontFamily(fonts().interface),
     mono: monoFontFamily(fonts()),

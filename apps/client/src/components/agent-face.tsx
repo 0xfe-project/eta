@@ -2,6 +2,7 @@ import { blobatar } from "blobatar";
 import { computed, Image, View } from "nsh";
 import { Host } from "../services/host";
 import { faceFrame } from "./face-frame";
+import { densityDefaults } from "./theme";
 
 /**
  * The agent's face, drawn from its avatar seed, or from its id when it never drew one, so a rename
@@ -14,7 +15,8 @@ export function AgentFace(props: {
   size?: number;
 }) {
   const host = Host();
-  const size = () => props.size ?? 20;
+  const density = densityDefaults();
+  const size = () => props.size ?? density().avatar;
   const seed = () =>
     props.seed ?? host?.agent(props.id)?.avatarSeed ?? props.id ?? "agent";
   // Blobatar draws somewhere inside a 100x100 box; show the square around this
@@ -50,6 +52,7 @@ export function UserFace(props: { size?: number }) {
     top: size() * 0.4,
     width: Math.max(1, Math.round(size() * 0.12)),
     height: Math.max(1, Math.round(size() * 0.2)),
+    // design-value: the drawn face's own ink, the same in both themes
     backgroundColor: "#2b2b2b",
   });
   return (
@@ -59,6 +62,7 @@ export function UserFace(props: { size?: number }) {
         width: size(),
         height: size(),
         borderRadius: size() / 2,
+        // design-value: the drawn face's own skin, the same in both themes
         backgroundColor: "#b8b8b8",
         flexShrink: 0,
       }}

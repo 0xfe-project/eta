@@ -4,10 +4,14 @@ import { Image, View } from "nsh";
 import { colors, Label, row, sizes } from "../components";
 import { pickerTarget } from "../components/element-picker";
 import { phoneTabPaths } from "../components/icons";
+import { avatar, border, icon, space, weight } from "../components/tokens";
 import { useText } from "../i18n";
 import { taskNeedsAttention } from "../pages/tasks/status";
 import { useHost } from "../services/host";
 import { CaptainFace } from "./captain";
+
+/** An unread count over a tab icon. */
+const badgeHeight = 16;
 
 export const phoneTabs = [
   ["chat", "chat"],
@@ -56,26 +60,26 @@ export function PhoneTabItem(props: {
       onPress={() => props.onPress()}
       style={{
         flex: 1,
-        height: 63,
+        height: sizes.phoneNav - border.hair,
         alignItems: "center",
         justifyContent: "center",
-        gap: 4,
+        gap: space[4],
         position: "relative",
         cursor: "pointer",
       }}
     >
       <If when={page() === "captain"}>
-        <CaptainFace size={32} />
+        <CaptainFace size={avatar.lg} />
       </If>
       <If when={page() !== "captain"}>
         <Image
           src={glyph()}
           fadeDuration={0}
-          style={{ width: 22, height: 22, flexShrink: 0 }}
+          style={{ width: icon.lg, height: icon.lg, flexShrink: 0 }}
         />
         <Label
           variant="caption"
-          weight={props.selected ? 600 : 400}
+          weight={props.selected ? weight.strong : weight.regular}
           tone={props.selected ? "ink" : "muted"}
         >
           {text(props.tab[1])}
@@ -87,16 +91,16 @@ export function PhoneTabItem(props: {
             position: "absolute",
             top: 8,
             left: "50%",
-            marginLeft: 4,
-            height: 14,
-            minWidth: 14,
-            paddingHorizontal: 3,
+            marginLeft: space[4],
+            height: badgeHeight,
+            minWidth: badgeHeight,
+            paddingHorizontal: space[4],
             backgroundColor: c().blue,
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Label variant="caption" style={{ color: "#ffffff" }}>
+          <Label variant="caption" tone="buttonInk">
             {props.count}
           </Label>
         </View>

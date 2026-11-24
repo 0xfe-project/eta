@@ -17,9 +17,14 @@ import {
   row,
 } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { SectionHeader } from "./section";
+
+/** The draft timeout's minutes field and its action menu. */
+const minutesWidth = 72;
+const actionWidth = 160;
 
 export function TaskSettings(props: { phone?: boolean }) {
   const host = useHost();
@@ -87,10 +92,10 @@ export function TaskSettings(props: { phone?: boolean }) {
     uiText(action === "accept" ? "draftTimeoutAccept" : "draftTimeoutDiscard");
   const rowStyle = {
     ...row,
-    minHeight: 40,
-    gap: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    minHeight: space[40],
+    gap: space[16],
+    paddingHorizontal: space[16],
+    paddingVertical: space[8],
     borderBottomWidth: 1,
     borderColor: c().border,
   };
@@ -101,15 +106,15 @@ export function TaskSettings(props: { phone?: boolean }) {
         <View
           style={{
             ...row,
-            minHeight: 40,
-            gap: 16,
-            paddingHorizontal: 16,
-            paddingVertical: 8,
+            minHeight: space[40],
+            gap: space[16],
+            paddingHorizontal: space[16],
+            paddingVertical: space[8],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
             <Label>{uiText("reactToResults")}</Label>
             <Label variant="small" tone="muted">
               {uiText("reactToResultsHint")}
@@ -125,15 +130,15 @@ export function TaskSettings(props: { phone?: boolean }) {
         <View
           style={{
             ...row,
-            minHeight: 40,
-            gap: 16,
-            paddingHorizontal: 16,
-            paddingVertical: 8,
+            minHeight: space[40],
+            gap: space[16],
+            paddingHorizontal: space[16],
+            paddingVertical: space[8],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
             <Label>{uiText("taskAsksMakerFirst")}</Label>
             <Label variant="small" tone="muted">
               {uiText("taskAsksHint")}
@@ -148,7 +153,7 @@ export function TaskSettings(props: { phone?: boolean }) {
         </View>
         <SectionHeader title={uiText("taskDraftTimeout")} phone={props.phone} />
         <View style={rowStyle}>
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
             <Label>{uiText("draftTimeoutEnabled")}</Label>
             <Label variant="small" tone="muted">
               {uiText("draftTimeoutEnabledHint")}
@@ -162,7 +167,7 @@ export function TaskSettings(props: { phone?: boolean }) {
           />
         </View>
         <View style={rowStyle}>
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
             <Label>{uiText("draftTimeoutMinutes")}</Label>
             <Label variant="small" tone={minutesInvalid() ? "red" : "muted"}>
               {uiText(
@@ -177,7 +182,7 @@ export function TaskSettings(props: { phone?: boolean }) {
             label={uiText("draftTimeoutMinutes")}
             value={typed() ?? String(timeout().minutes)}
             maxLength={4}
-            style={{ width: 72, height: 28 }}
+            style={{ width: minutesWidth, height: control.md }}
             onChange={(value) => typed.set(value)}
             onSubmit={() => void commitMinutes()}
             onBlur={() => void commitMinutes()}
@@ -187,7 +192,7 @@ export function TaskSettings(props: { phone?: boolean }) {
           </Label>
         </View>
         <View style={rowStyle}>
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
             <Label>{uiText("draftTimeoutAction")}</Label>
             <Label variant="small" tone="muted">
               {uiText("draftTimeoutActionHint")}
@@ -197,10 +202,10 @@ export function TaskSettings(props: { phone?: boolean }) {
             label={uiText("draftTimeoutAction")}
             value={actionLabel(timeout().action)}
             triggerStyle={{
-              width: 160,
-              height: 24,
-              paddingLeft: 10,
-              paddingRight: 8,
+              width: actionWidth,
+              height: space[24],
+              paddingLeft: space[12],
+              paddingRight: space[8],
             }}
           >
             <Each of={[...TASK_DRAFT_TIMEOUT_ACTIONS]}>

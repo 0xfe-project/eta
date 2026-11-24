@@ -10,7 +10,11 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
+import { icon, opacity, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
+
+/** The column of a skill's files beside the file. */
+const treeWidth = { tablet: 120, desktop: 160 } as const;
 
 export function SkillFileTree(props: {
   layout: Layout;
@@ -28,7 +32,10 @@ export function SkillFileTree(props: {
         props.layout === "phone"
           ? grow
           : {
-              width: props.layout === "tablet" ? 120 : 160,
+              width:
+                props.layout === "tablet"
+                  ? treeWidth.tablet
+                  : treeWidth.desktop,
               flexShrink: 0,
               borderRightWidth: 1,
               borderColor: c().border,
@@ -36,7 +43,7 @@ export function SkillFileTree(props: {
       }
       scrollbar={false}
     >
-      <View style={{ padding: 4, gap: phone() ? 2 : 0 }}>
+      <View style={{ padding: space[4], gap: phone() ? space[2] : 0 }}>
         <If when={props.directory}>
           <Button
             label={uiText("parentDirectory")}
@@ -72,17 +79,17 @@ export function SkillFileTree(props: {
                 hoverStyle={{ backgroundColor: c().selected }}
                 style={{
                   ...row,
-                  height: phone() ? 32 : 24,
-                  paddingHorizontal: phone() ? 10 : 8,
-                  gap: 5,
-                  opacity: item().kind === "blocked" ? 0.45 : 1,
+                  height: phone() ? space[32] : space[24],
+                  paddingHorizontal: phone() ? space[12] : space[8],
+                  gap: space[4],
+                  opacity: item().kind === "blocked" ? opacity.disabled : 1,
                   backgroundColor:
                     props.selected === path() ? c().selected : c().canvas,
                   cursor: item().kind === "blocked" ? "default" : "pointer",
                 }}
               >
                 <If when={item().kind === "directory"}>
-                  <Icon name="folder" size={12} />
+                  <Icon name="folder" size={icon.sm} />
                 </If>
                 <Label variant="small" lines={1}>
                   {item().path}

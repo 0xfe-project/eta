@@ -4,15 +4,21 @@ import { View } from "nsh";
 import {
   Button,
   colors,
+  focusRing,
   grow,
   Header,
   Label,
   row,
+  sizes,
   SmoothScroll,
 } from "../../components";
+import { avatar, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { PluginName } from "./plugin-name";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
+
+/** A plugin's row in the tablet list. */
+const rowHeight = 60;
 
 export function PluginTablet(props: {
   items: PluginView[];
@@ -29,15 +35,19 @@ export function PluginTablet(props: {
   return (
     <View style={{ ...row, ...grow, alignItems: "stretch" }}>
       <View
-        style={{ width: 320, borderRightWidth: 1, borderColor: c().border }}
+        style={{
+          width: sizes.tabletList,
+          borderRightWidth: 1,
+          borderColor: c().border,
+        }}
       >
         <Header
           title={uiText("plugins")}
           count={props.items.length}
           layout="tablet"
           background="canvas"
-          inset={14}
-          end={10}
+          inset={space[16]}
+          end={space[12]}
         >
           <View style={{ flex: 1 }} />
           <Button
@@ -65,12 +75,12 @@ export function PluginTablet(props: {
                 }}
                 onPress={() => props.onSelect(item().name)}
                 hoverStyle={{ backgroundColor: c().selected }}
-                focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+                focusVisibleStyle={focusRing(c(), "inset")}
                 style={{
                   ...row,
-                  gap: 10,
-                  height: 60,
-                  paddingHorizontal: 14,
+                  gap: space[8],
+                  height: rowHeight,
+                  paddingHorizontal: space[16],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   backgroundColor:
@@ -78,11 +88,11 @@ export function PluginTablet(props: {
                       ? c().selected
                       : c().canvas,
                   cursor: "pointer",
-                  opacity: item().enabled ? 1 : 0.55,
+                  opacity: item().enabled ? 1 : 0.55, // design-value: a switched-off item's own dimming, between opacity.disabled and opacity.muted
                 }}
               >
-                <PluginGlyph size={28} />
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <PluginGlyph size={avatar.lg} />
+                <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                   <PluginName name={item().name} />
                   <Label variant="caption" tone="muted" lines={1}>
                     {[
@@ -101,7 +111,7 @@ export function PluginTablet(props: {
             )}
           </Each>
           <If when={!props.items.length}>
-            <NoPlugins width={240} />
+            <NoPlugins />
           </If>
           {props.extra}
         </SmoothScroll>
@@ -109,8 +119,8 @@ export function PluginTablet(props: {
           style={{
             borderTopWidth: 1,
             borderColor: c().border,
-            paddingHorizontal: 14,
-            paddingVertical: 12,
+            paddingHorizontal: space[16],
+            paddingVertical: space[12],
           }}
         >
           <Label variant="caption" tone="muted">
@@ -125,7 +135,7 @@ export function PluginTablet(props: {
           <View style={grow}>
             <View
               style={{
-                height: 40,
+                height: space[40],
                 flexShrink: 0,
                 backgroundColor: c().surface,
                 borderBottomWidth: 1,

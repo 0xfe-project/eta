@@ -1,8 +1,9 @@
 import type { PluginView } from "@eta/client-contracts";
 import type { AgentForm } from "./form";
 import { View } from "nsh";
-import { colors, Empty, Label, row } from "../../../components";
+import { colors, Empty, emptyWidth, Label, row } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
+import { icon, space, weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
@@ -14,6 +15,9 @@ import {
   StatusLine,
   WarningLine,
 } from "../section";
+
+/** A plugin's status column: room for "Needs setup" and its dot. */
+const pluginLaneWidth = 108;
 
 export function AgentPlugins(props: { form: AgentForm }) {
   const { plugins, phoneEditor, runtime } = props.form;
@@ -59,7 +63,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
             label: phoneEditor()
               ? uiText("pluginNeedsConfiguring")
               : uiText("pluginNeedsSetup"),
-            color: c().amber,
+            color: c().warning,
           };
   /** What the row of a toolkit switched off for every agent says: the words and the mark of an installed plugin's. */
   const off = () => ({ label: uiText("pluginOffForAll"), color: c().faint });
@@ -77,7 +81,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
         else={
           <Empty
             title={uiText("noPluginsInstalled")}
-            descriptionWidth={320}
+            descriptionWidth={emptyWidth.narrow}
             style={emptyStyle}
           />
         }
@@ -98,27 +102,27 @@ export function AgentPlugins(props: { form: AgentForm }) {
                       : list.filter((entry) => entry !== item().name),
                   )
                 }
-                size={16}
-                markSize={phoneEditor() ? 10 : 12}
-                indicatorStyle={{ margin: phoneEditor() ? 6 : 4 }}
+                size={icon.md}
+                markSize={icon.sm}
+                indicatorStyle={{ margin: phoneEditor() ? space[8] : space[4] }}
                 style={{
                   ...row,
                   alignItems: "flex-start",
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
-                  gap: 10,
+                  paddingHorizontal: space[16],
+                  paddingVertical: space[8],
+                  gap: space[8],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   cursor: ready() || checked() ? "pointer" : "default",
-                  opacity: item().enabled ? 1 : 0.55,
+                  opacity: item().enabled ? 1 : 0.55, // design-value: a switched-off item's own dimming, between opacity.disabled and opacity.muted
                 }}
               >
                 <If
                   when={phoneEditor()}
                   else={
                     <>
-                      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                        <Label weight={500}>{item().name}</Label>
+                      <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+                        <Label weight={weight.regular}>{item().name}</Label>
                         <If
                           when={checked() && !ready()}
                           else={
@@ -136,13 +140,18 @@ export function AgentPlugins(props: { form: AgentForm }) {
                         </If>
                       </View>
                       <If when={status(item())}>
-                        {(shown) => <StatusLane width={108} status={shown()} />}
+                        {(shown) => (
+                          <StatusLane
+                            width={pluginLaneWidth}
+                            status={shown()}
+                          />
+                        )}
                       </If>
                     </>
                   }
                 >
-                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                    <Label weight={500}>{item().name}</Label>
+                  <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+                    <Label weight={weight.regular}>{item().name}</Label>
                     <If when={status(item())}>
                       {(shown) => <StatusLine status={shown()} />}
                     </If>

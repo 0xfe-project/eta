@@ -1,11 +1,18 @@
 import { Image, View } from "nsh";
 import photo from "../../../assets/onboard.jpg";
 import { colors, fill, Label } from "../../components";
+import { opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
+
+/** The connection card's width off phones (the form, an error, a download). */
+export const cardWidth = 480;
+/** The phone hero's photograph, and how wide its headline runs over it. */
+const heroHeight = 296;
+const headlineWidth = 320;
 
 export function ConnectionIntro(props: { phone: boolean }) {
   return (
-    <View style={{ gap: props.phone ? 12 : 6 }}>
+    <View style={{ gap: props.phone ? space[12] : space[4] }}>
       <Label variant="subtitle">{uiText("connectToOneHostReachEvery")}</Label>
       <Label variant="small" tone="muted">
         {uiText("thePhoneIsOnlyAScreen")}
@@ -17,7 +24,7 @@ export function ConnectionIntro(props: { phone: boolean }) {
 export function ConnectionMessage(props: { error: string; detail?: string }) {
   return (
     <If when={props.error}>
-      <View style={{ gap: 2, paddingVertical: 4 }}>
+      <View style={{ gap: space[2], paddingVertical: space[4] }}>
         <Label>{props.error}</Label>
         <If when={props.detail}>
           <Label variant="small" tone="muted">
@@ -52,11 +59,11 @@ export function LocationOption(props: {
       style={{
         borderColor: props.selected ? c().ink : c().strong,
         borderWidth: 1,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        gap: 2,
+        paddingHorizontal: space[12],
+        paddingVertical: space[8],
+        gap: space[2],
         cursor: props.disabled ? "default" : "pointer",
-        opacity: props.disabled ? 0.5 : 1,
+        opacity: props.disabled ? opacity.disabled : 1,
       }}
     >
       <Label>{props.title}</Label>
@@ -71,11 +78,11 @@ export function PhoneHero() {
   return (
     <View
       style={{
-        height: 295,
+        height: heroHeight,
         flexShrink: 0,
         justifyContent: "flex-end",
-        padding: 16,
-        gap: 8,
+        padding: space[16],
+        gap: space[8],
       }}
     >
       <Image
@@ -104,13 +111,22 @@ export function PhoneHero() {
         }}
       />
       <Label
+        tracking="tight"
         variant="display"
-        weight={600}
-        style={{ color: "#ffffff", maxWidth: 320, letterSpacing: -0.9 }}
+        weight={weight.strong}
+        style={{
+          // design-value: text over the photograph, the same in either theme
+          color: "#ffffff",
+          maxWidth: headlineWidth,
+        }}
       >
         {uiText("yourMachinesInYourPocket")}
       </Label>
-      <Label variant="caption" style={{ color: "#ffffffbf" }}>
+      <Label
+        variant="caption"
+        // design-value: text over the photograph, the same in either theme
+        style={{ color: "#ffffffbf" }}
+      >
         Photo: Barnabas Davoti / Unsplash
       </Label>
     </View>

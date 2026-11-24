@@ -75,11 +75,11 @@ test("the badge is a quiet tint: a soft fill token and a low-alpha edge, never a
     edge: "red",
   });
   expect(authStyle("needs_login")).toMatchObject({
-    fill: "amberFill",
+    fill: "warningFill",
     edge: "warning",
   });
   expect(authStyle("needs_setup")).toMatchObject({
-    fill: "amberFill",
+    fill: "warningFill",
     edge: "warning",
   });
   expect(BADGE_EDGE_ALPHA).toBe("55");

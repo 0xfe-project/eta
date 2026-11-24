@@ -22,12 +22,24 @@ import {
 } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
 import { ToggleSwitch } from "../../../components/toggle-switch";
+import {
+  border,
+  control,
+  icon,
+  space,
+  weight,
+} from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { LetterBox, PaneBack, SectionHeader, WarningLine } from "../section";
 import { BalanceSummary } from "./balance-summary";
 import { logoKey, useSourceLogos } from "./logos";
 import { ProviderEditor } from "./provider-editor";
+
+/** The source's name field (narrower on phones) and the model search. */
+const nameWidth = 200;
+const phoneNameWidth = 160;
+const searchWidth = 240;
 
 export function ProviderDetail(props: {
   id: string;
@@ -160,10 +172,10 @@ export function ProviderDetail(props: {
       .join(" · ");
   const preference = {
     ...row,
-    minHeight: 40,
-    gap: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    minHeight: space[40],
+    gap: space[16],
+    paddingHorizontal: space[16],
+    paddingVertical: space[8],
     borderBottomWidth: 1,
     borderColor: c().border,
   } as const;
@@ -181,7 +193,7 @@ export function ProviderDetail(props: {
       <Button
         label={uiText("remove2")}
         icon="trash"
-        style={{ gap: 6, paddingHorizontal: 10 }}
+        style={{ gap: space[4], paddingHorizontal: space[12] }}
         onPress={() => removing.set(true)}
       />
     </View>
@@ -205,9 +217,9 @@ export function ProviderDetail(props: {
         phone={props.phone}
       >
         <If when={check()}>
-          <View style={{ ...row, gap: 6 }}>
+          <View style={{ ...row, gap: space[4] }}>
             <StatusDot
-              color={check()?.state === "ok" ? c().green : c().amber}
+              color={check()?.state === "ok" ? c().green : c().warning}
             />
             <Label variant="small" tone="mutedInk">
               {check()?.state === "ok"
@@ -221,7 +233,7 @@ export function ProviderDetail(props: {
         <Button
           label={busy() === "check" ? uiText("checking") : uiText("check")}
           disabled={!!busy()}
-          style={{ paddingHorizontal: 10 }}
+          style={{ paddingHorizontal: space[12] }}
           onPress={() => void test()}
         />
       </SectionHeader>
@@ -230,10 +242,10 @@ export function ProviderDetail(props: {
         style={{
           ...row,
           alignItems: "stretch",
-          height: 40,
+          height: space[40],
           flexShrink: 0,
-          gap: props.phone ? 0 : 20,
-          paddingHorizontal: props.phone ? 0 : 16,
+          gap: props.phone ? 0 : space[20],
+          paddingHorizontal: props.phone ? 0 : space[16],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
@@ -251,15 +263,21 @@ export function ProviderDetail(props: {
               onPress={() => tab.set(item())}
               style={{
                 ...row,
-                gap: 6,
+                gap: space[4],
                 ...(props.phone ? { flex: 1, justifyContent: "center" } : {}),
-                borderBottomWidth: 2,
+                borderBottomWidth: border.thick,
                 borderColor: tab() === item() ? c().ink : "transparent",
                 cursor: "pointer",
               }}
             >
               <Label
-                weight={tab() === item() ? (props.phone ? 600 : 500) : 400}
+                weight={
+                  tab() === item()
+                    ? props.phone
+                      ? weight.strong
+                      : weight.regular
+                    : weight.regular
+                }
                 tone={
                   tab() === item() ? "ink" : props.phone ? "mutedInk" : "muted"
                 }
@@ -282,8 +300,8 @@ export function ProviderDetail(props: {
           tone="red"
           variant="small"
           style={{
-            paddingHorizontal: 16,
-            paddingVertical: 8,
+            paddingHorizontal: space[16],
+            paddingVertical: space[8],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
@@ -309,17 +327,17 @@ export function ProviderDetail(props: {
                   onSubmit={() => void rename()}
                   onBlur={() => void rename()}
                   style={{
-                    width: props.phone ? 160 : 200,
-                    height: 24,
+                    width: props.phone ? phoneNameWidth : nameWidth,
+                    height: space[24],
                     ...textStyle(type("small")),
-                    paddingHorizontal: 10,
-                    paddingVertical: 3,
+                    paddingHorizontal: space[12],
+                    paddingVertical: space[4],
                     borderColor: c().strong,
                   }}
                 />
               </View>
               <View style={preference}>
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                   <Label>{uiText("sourceApiKey")}</Label>
                   <Label variant="small" tone="muted">
                     {provider()?.hasApiKey
@@ -329,7 +347,7 @@ export function ProviderDetail(props: {
                 </View>
                 <Button
                   label={uiText("settingsChange")}
-                  style={{ paddingHorizontal: 10 }}
+                  style={{ paddingHorizontal: space[12] }}
                   onPress={() => connection.set(true)}
                 />
               </View>
@@ -339,11 +357,11 @@ export function ProviderDetail(props: {
                 accessibilityState={{ expanded: advanced() }}
                 onPress={() => advanced.set(!advanced())}
                 hoverStyle={{ backgroundColor: c().selected }}
-                style={{ ...preference, gap: 8, cursor: "pointer" }}
+                style={{ ...preference, gap: space[8], cursor: "pointer" }}
               >
                 <Icon
                   name={advanced() ? "down" : "right"}
-                  size={12}
+                  size={icon.sm}
                   tone="mutedInk"
                 />
                 <Label>{uiText("sourceAdvanced")}</Label>
@@ -375,7 +393,7 @@ export function ProviderDetail(props: {
                   </Label>
                   <Button
                     label={uiText("settingsChange")}
-                    style={{ paddingHorizontal: 10 }}
+                    style={{ paddingHorizontal: space[12] }}
                     onPress={() => connection.set(true)}
                   />
                 </View>
@@ -389,9 +407,9 @@ export function ProviderDetail(props: {
         <View
           style={{
             ...row,
-            gap: 8,
-            paddingHorizontal: 16,
-            paddingVertical: 8,
+            gap: space[8],
+            paddingHorizontal: space[16],
+            paddingVertical: space[8],
             flexShrink: 0,
             borderBottomWidth: 1,
             borderColor: c().border,
@@ -400,15 +418,17 @@ export function ProviderDetail(props: {
           <View
             style={{
               ...row,
-              height: 24,
-              gap: 8,
-              paddingHorizontal: 10,
+              height: space[24],
+              gap: space[8],
+              paddingHorizontal: space[12],
               borderWidth: 1,
               borderColor: c().strong,
-              ...(props.phone ? { flex: 1, minWidth: 0 } : { width: 240 }),
+              ...(props.phone
+                ? { flex: 1, minWidth: 0 }
+                : { width: searchWidth }),
             }}
           >
-            <Icon name="search" size={12} tone="muted" />
+            <Icon name="search" size={icon.sm} tone="muted" />
             <Field
               label={uiText("searchModels")}
               placeholder={uiText("searchModels")}
@@ -416,9 +436,9 @@ export function ProviderDetail(props: {
               onChange={query.set}
               style={{
                 flex: 1,
-                height: 22,
+                height: control.sm - 2 * border.hair,
                 paddingHorizontal: 0,
-                paddingVertical: 3,
+                paddingVertical: space[4],
                 borderWidth: 0,
                 ...textStyle(type("small")),
               }}
@@ -435,7 +455,7 @@ export function ProviderDetail(props: {
             }
             icon="refresh"
             disabled={!!busy()}
-            style={{ gap: 6, paddingHorizontal: 10 }}
+            style={{ gap: space[4], paddingHorizontal: space[12] }}
             onPress={() => void refresh()}
           />
         </View>
@@ -445,16 +465,16 @@ export function ProviderDetail(props: {
               <View
                 style={{
                   ...row,
-                  gap: 10,
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
+                  gap: space[8],
+                  paddingHorizontal: space[16],
+                  paddingVertical: space[8],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                 }}
               >
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                   <Label
-                    weight={500}
+                    weight={weight.regular}
                     tone={configured(model().id) ? "ink" : "muted"}
                   >
                     {model().name ?? model().id}
@@ -480,7 +500,7 @@ export function ProviderDetail(props: {
             )}
           </Each>
           <If when={!shown().length}>
-            <Label variant="small" tone="muted" style={{ padding: 16 }}>
+            <Label variant="small" tone="muted" style={{ padding: space[16] }}>
               {query().trim()
                 ? uiText("noMatchingModels")
                 : uiText("refreshTheListToFindModels")}
@@ -503,9 +523,9 @@ export function ProviderDetail(props: {
           sheet={props.phone}
           onClose={() => removing.set(false)}
         >
-          <View style={{ padding: 16, gap: 8 }}>
+          <View style={{ padding: space[16], gap: space[8] }}>
             <Label>{uiText("agentsUsingTheseModelsWillNeed")}</Label>
-            <View style={{ ...row, gap: 8, justifyContent: "flex-end" }}>
+            <View style={{ ...row, gap: space[8], justifyContent: "flex-end" }}>
               <Button
                 label={uiText("cancel")}
                 disabled={!!busy()}
