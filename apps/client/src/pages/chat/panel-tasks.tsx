@@ -297,14 +297,16 @@ export function TasksTab(props: {
           ...row,
           justifyContent: "space-between",
           gap: space[8],
-          paddingBottom: space[8],
+          paddingBottom: space[12],
           paddingHorizontal: inset,
         }}
       >
-        <Label weight={weight.strong} style={{ flexShrink: 0 }}>
-          {uiText("tasks2")}
-        </Label>
-        {/* The /tasks list's "Group: …" menu, on the title's line so the scopes keep their row. */}
+        <View style={{ ...row, gap: space[4] }}>
+          {scope(props.conversationName, !everywhere(), () =>
+            everywhere.set(false),
+          )}
+          {scope(uiText("allGroups"), everywhere(), () => everywhere.set(true))}
+        </View>
         <ActionMenu
           label={uiText("tasksSortBy")}
           sheetTitle={uiText("tasksSortBy")}
@@ -334,19 +336,6 @@ export function TasksTab(props: {
             )}
           </Each>
         </ActionMenu>
-      </View>
-      <View
-        style={{
-          ...row,
-          gap: space[4],
-          paddingBottom: space[12],
-          paddingHorizontal: inset,
-        }}
-      >
-        {scope(props.conversationName, !everywhere(), () =>
-          everywhere.set(false),
-        )}
-        {scope(uiText("allGroups"), everywhere(), () => everywhere.set(true))}
       </View>
       <If when={taskPanelSort() === "updated"}>
         <View style={{ height: space[2] }} />
