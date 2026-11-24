@@ -597,6 +597,28 @@ describe("a Composio toolkit as a plugin of the agents", () => {
       expect(JSON.stringify(mcpServers)).not.toContain(KEY);
     });
 
+    it("hands a daemon the same servers, for the agent that enabled a ready toolkit only", async () => {
+      const { composio, plugins } = setup();
+      await composio.sync(["gmail"]);
+      expect(plugins.toolkitServersFor("ada")).toEqual([
+        {
+          name: "composio-gmail",
+          type: "http",
+          url: `${base()}/tool_router/sess-1/mcp`,
+          headers: { "x-api-key": KEY },
+        },
+      ]);
+      expect(plugins.toolkitServersFor("bob")).toEqual([]);
+      composio.setEnabled(false);
+      expect(plugins.toolkitServersFor("ada")).toEqual([]);
+      composio.setEnabled(true);
+      await composio.sync([]);
+      expect(plugins.toolkitServersFor("ada")).toEqual([]);
+      await composio.sync(["gmail"]);
+      composio.clearKey();
+      expect(plugins.toolkitServersFor("ada")).toEqual([]);
+    });
+
     it("gives nothing for a toolkit whose session did not check out", async () => {
       const { composio, plugins } = setup();
       echo = (body) => ({
