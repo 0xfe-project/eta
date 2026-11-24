@@ -18,6 +18,7 @@ export const sections = [
   ["Model services", "plugsConnected", "modelServices"],
   ["Machines", "monitor", "machines"],
   ["MCP servers", "plug", "mcpServers"],
+  ["Plugins", "plugins", "plugins"],
   ["External agents", "terminal", "externalAgents"],
   ["Tasks", "tasks", "tasks"],
   ["Runtimes", "cpu", "runtimes"],
@@ -114,6 +115,8 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
             }
           : { text: String(new Set(servers.map((item) => item.server)).size) };
       }
+      case "Plugins":
+        return { text: "" };
       case "External agents":
         return { text: String(externalAgents().length) };
       case "Tasks":

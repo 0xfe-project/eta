@@ -42,6 +42,7 @@ export {
 export {
   type ActivePlugin,
   claimServerNames,
+  plainRemote,
   pluginDataDir,
   pluginMcpSources,
   type PluginServersInput,
@@ -55,6 +56,8 @@ export {
   sessionServerName,
   toMcpEntries,
   toSessionServers,
+  type UserEnvInput,
+  type UserHeaderInput,
 } from "./plugin-launch";
 export {
   loadPlugin,

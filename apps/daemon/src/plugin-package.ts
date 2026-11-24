@@ -18,12 +18,20 @@
 import type { PluginField } from "@eta/client-contracts";
 import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import {
   ETA_EXTENSION,
   parseConfigFields,
 } from "@eta/client-contracts/plugin-fields";
-import { loadSkills } from "@eta/harness";
+import { formatSkillName, loadSkills, parseSkillText } from "@eta/harness";
 
 export class PluginError extends Error {
   override readonly name = "PluginError";
@@ -44,6 +52,28 @@ const MANIFEST_FIELDS = new Set([
   "keywords",
   "extensions",
 ]);
+/**
+ * Where a manifest is looked for, in order. The first is the spec's; the other two are the
+ * Cursor and Claude Code plugin layouts, which share `skills/<name>/SKILL.md` with it.
+ */
+const MANIFEST_PATHS = [
+  "plugin.json",
+  ".cursor-plugin/plugin.json",
+  ".claude-plugin/plugin.json",
+] as const;
+/** Fields only a Cursor or Claude Code manifest has, and eta reads nothing from. */
+const FOREIGN_FIELDS = new Set(["displayName", "logo", "category", "tags"]);
+/** (`logo` is kept as a path for the host to read safely; the rest is not read.) */
+/** Components of those plugins that eta does not load. */
+const FOREIGN_COMPONENTS = [
+  "commands",
+  "agents",
+  "hooks",
+  "rules",
+  "lspServers",
+  "outputStyles",
+  "themes",
+];
 const RESERVED_ENV = new Set(["PLUGIN_ROOT", "PLUGIN_DATA"]);
 const ENV_NAME = /^[A-Z_]\w*$/i;
 /** RFC 9110's `token`. */
@@ -56,6 +86,10 @@ interface PluginManifest {
   name: string;
   version?: string;
   description?: string;
+  /** Where the plugin says it lives; only a hint for its icon. */
+  homepage?: string;
+  /** The plugin's own picture, a path inside its root, as a Cursor or Claude manifest names it. Never read here. */
+  logo?: string;
 }
 
 interface PluginSkill {
@@ -63,6 +97,8 @@ interface PluginSkill {
   description: string;
   /** Its directory: `<root>/skills/<name>`. */
   dir: string;
+  /** The name the file gave, when it was not a legal one and `name` is the formatted one. */
+  renamedFrom?: string;
 }
 
 type PluginServerConfig =
@@ -103,6 +139,8 @@ export interface PluginPackage {
   manifest: PluginManifest;
   /** What was found wrong and ignored, for the user. */
   reports: string[];
+  /** The manifest path of a Claude Code or Cursor layout; absent for a native plugin.json. Information, not a problem. */
+  layout?: string;
   skills: PluginSkill[];
   servers: PluginServer[];
   fields: PluginField[];
@@ -115,6 +153,15 @@ export interface PluginPackage {
 
 const isPlain = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isString = (value: unknown): value is string => typeof value === "string";
+
+const isAuthor = (value: unknown): boolean =>
+  isPlain(value) &&
+  Object.entries(value).every(
+    ([key, item]) =>
+      ["name", "email", "url"].includes(key) && typeof item === "string",
+  );
 
 const isStrings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -144,16 +191,64 @@ export function isWithin(root: string, path: string): boolean {
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`));
 }
 
+/** Whether a manifest's `skills` is `skills/`, or a list of directories that are under it. */
+function skillsInPlace(value: unknown, root: string): boolean {
+  const paths =
+    typeof value === "string" ? [value] : isStrings(value) ? value : undefined;
+  if (paths === undefined) return false;
+  return paths.every((path) => {
+    if (/^(?:\.\/)?skills\/?$/.test(path)) return true;
+    const name = /^(?:\.\/)?skills\/([^/]+)\/?$/.exec(path)?.[1];
+    return (
+      name !== undefined &&
+      name !== ".." &&
+      statSync(join(root, "skills", name), {
+        throwIfNoEntry: false,
+      })?.isDirectory() === true
+    );
+  });
+}
+
 /** The manifest, or the reason the plugin is rejected. */
 function parseManifest(
   raw: unknown,
   reports: string[],
+  foreign: boolean,
+  root: string,
 ): { manifest: PluginManifest; extensions: Record<string, unknown> } {
   if (!isPlain(raw)) throw new PluginError("plugin.json must be a JSON object");
-  for (const field of Object.keys(raw))
-    if (!MANIFEST_FIELDS.has(field))
+  for (const field of Object.keys(raw)) {
+    if (MANIFEST_FIELDS.has(field)) continue;
+    if (foreign && FOREIGN_FIELDS.has(field)) continue;
+    // Claude and Cursor manifests carry fields eta does not know; that is normal, not a problem.
+    if (foreign && field === "mcpServers") continue;
+    if (foreign && field === "skills") {
+      if (!skillsInPlace(raw.skills, root))
+        reports.push(
+          "plugin.json: skills is not at skills/; only skills/ is read",
+        );
+    } else if (foreign && FOREIGN_COMPONENTS.includes(field))
+      reports.push(`plugin.json: ${field} is not supported by eta; ignored`);
+    else if (!foreign)
       reports.push(`plugin.json: unknown field ${field} was ignored`);
-  if (raw.$schema !== PLUGIN_SCHEMA)
+  }
+  if (foreign) {
+    // Someone else's manifest: a field that does not fit is left out, the plugin is not refused.
+    const optional = {
+      version: isString,
+      description: isString,
+      homepage: isString,
+      repository: isString,
+      license: isString,
+      keywords: isStrings,
+      author: isAuthor,
+    } as const;
+    for (const [field, fits] of Object.entries(optional))
+      if (raw[field] !== undefined && !fits(raw[field])) {
+        reports.push(`plugin.json: ${field} does not fit and was ignored`);
+        delete raw[field];
+      }
+  } else if (raw.$schema !== PLUGIN_SCHEMA)
     throw new PluginError(
       `plugin.json: unsupported $schema ${JSON.stringify(raw.$schema)}`,
     );
@@ -205,6 +300,8 @@ function parseManifest(
       ...(raw.description === undefined
         ? {}
         : { description: raw.description as string }),
+      ...(typeof raw.homepage === "string" ? { homepage: raw.homepage } : {}),
+      ...(foreign && typeof raw.logo === "string" ? { logo: raw.logo } : {}),
     },
     extensions,
   };
@@ -376,6 +473,250 @@ async function loadServers(
   return servers;
 }
 
+/** `${NAME}` in a Claude Code or Cursor MCP file. */
+const FOREIGN_VAR = /\$\{([^}]*)\}/g;
+/** A variable that is a secret by its name. */
+const SECRET_NAME = /key|token|secret|auth|password|credential/i;
+/** Claude Code's file, then Cursor's. */
+const FOREIGN_MCP_FILES = [".mcp.json", "mcp.json"] as const;
+const FOREIGN_SERVER_KEYS = new Set([
+  "type",
+  "command",
+  "args",
+  "env",
+  "cwd",
+  "url",
+  "headers",
+]);
+
+interface ForeignServer {
+  /** The server as eta's own `mcp.json` writes it. */
+  raw: Record<string, unknown>;
+  /** Environment variable to the variable of the file that fills it. */
+  env: Record<string, string>;
+  /** Header name to template (`Bearer {TOKEN}`). */
+  headers: Record<string, string>;
+  ignored: string[];
+}
+
+/** The variables of `text` other than the plugin's own directory, or why it cannot be used. */
+function foreignVars(text: string): string[] | string {
+  const names: string[] = [];
+  for (const [, name] of text.matchAll(FOREIGN_VAR)) {
+    if (name === "PLUGIN_ROOT") continue;
+    if (!ENV_NAME.test(name!)) return `\${${name}} is not a plain variable`;
+    names.push(name!);
+  }
+  return names;
+}
+
+/** One server of a Claude Code or Cursor file, in the shape eta's own file has, or why it is skipped. */
+function mapForeignServer(entry: unknown): ForeignServer | string {
+  if (!isPlain(entry)) return "must be an object";
+  if (entry.auth !== undefined)
+    return "it signs in with OAuth, which eta does not do for these plugins";
+  const swap = (text: string): string =>
+    text.replaceAll("${CLAUDE_PLUGIN_ROOT}", "${PLUGIN_ROOT}");
+  const ignored = Object.keys(entry).filter(
+    (key) => !FOREIGN_SERVER_KEYS.has(key),
+  );
+  const kind = entry.type ?? (typeof entry.url === "string" ? "http" : "stdio");
+  const raw: Record<string, unknown> = {
+    type: kind === "http" ? "streamable-http" : kind,
+  };
+  const env: Record<string, string> = {};
+  const headers: Record<string, string> = {};
+
+  if (raw.type === "stdio") {
+    if (typeof entry.command !== "string") return "command must be a string";
+    let command = swap(entry.command);
+    if (command.startsWith("${PLUGIN_ROOT}/"))
+      command = `./${command.slice("${PLUGIN_ROOT}/".length)}`;
+    if (command.includes("${")) return "command holds a variable";
+    raw.command = command;
+    if (entry.args !== undefined) {
+      if (!isStrings(entry.args)) return "args must be strings";
+      const args = entry.args.map(swap);
+      for (const arg of args) {
+        const names = foreignVars(arg);
+        if (typeof names === "string" || names.length > 0)
+          return "args hold a variable eta cannot fill in";
+      }
+      raw.args = args;
+    }
+    if (entry.cwd !== undefined) {
+      if (typeof entry.cwd !== "string") return "cwd must be a string";
+      raw.cwd = swap(entry.cwd);
+    }
+    if (entry.env !== undefined) {
+      if (!isStringMap(entry.env)) return "env must be strings";
+      const fixed: Record<string, string> = {};
+      for (const [name, value] of Object.entries(entry.env)) {
+        const text = swap(value);
+        const names = foreignVars(text);
+        if (typeof names === "string") return `env ${name}: ${names}`;
+        if (names.length === 0) fixed[name] = text;
+        else if (names.length === 1 && text === `\${${names[0]}}`)
+          env[name] = names[0]!;
+        else return `env ${name} mixes text with a variable`;
+      }
+      raw.env = fixed;
+    }
+  } else {
+    if (typeof entry.url !== "string") return "url must be a string";
+    if (entry.url.includes("${")) return "url holds a variable";
+    raw.url = entry.url;
+    if (entry.headers !== undefined) {
+      if (!isStringMap(entry.headers)) return "headers must be strings";
+      const fixed: Record<string, string> = {};
+      for (const [name, value] of Object.entries(entry.headers)) {
+        const names = foreignVars(value);
+        if (typeof names === "string") return `header ${name}: ${names}`;
+        if (value.includes("${PLUGIN_ROOT}"))
+          return `header ${name} holds the plugin directory`;
+        if (names.length === 0) fixed[name] = value;
+        else
+          headers[name] = value.replace(
+            FOREIGN_VAR,
+            (_, field: string) => `{${field}}`,
+          );
+      }
+      raw.headers = fixed;
+    }
+  }
+  return { raw, env, headers, ignored };
+}
+
+/**
+ * The MCP servers of a Cursor or Claude Code plugin: `.mcp.json` and a root `mcp.json`, both
+ * `{ "mcpServers": { ... } }`. They become the servers eta's own file has; a `${VAR}` becomes a
+ * field the user fills in after installing, and nothing runs before that.
+ */
+async function loadForeignServers(
+  root: string,
+  reports: string[],
+  declared?: unknown,
+): Promise<Pick<PluginPackage, "servers" | "fields" | "bindings">> {
+  const servers: PluginServer[] = [];
+  const bindings: Record<string, PluginServerBinding> = {};
+  const specs: Record<string, unknown> = {};
+  // What plugin.json's mcpServers names (a path, a list of paths, or the servers themselves),
+  // then the conventional files; a file named twice is read once.
+  const sources: { file: string; inline?: unknown; declared: boolean }[] = [];
+  for (const item of Array.isArray(declared)
+    ? declared
+    : declared === undefined
+      ? []
+      : [declared]) {
+    if (typeof item === "string") sources.push({ file: item, declared: true });
+    else if (isPlain(item))
+      sources.push({
+        file: "plugin.json mcpServers",
+        inline: item,
+        declared: true,
+      });
+    else
+      reports.push(
+        "plugin.json: mcpServers must be a path or an object; ignored",
+      );
+  }
+  for (const file of FOREIGN_MCP_FILES) sources.push({ file, declared: false });
+  const read = new Set<string>();
+  for (const source of sources) {
+    const { file } = source;
+    const refused = (why: string): void => {
+      reports.push(`${file}: ${why}; its MCP servers are not loaded`);
+    };
+    let raw: unknown;
+    if (source.inline !== undefined) raw = { mcpServers: source.inline };
+    else {
+      if (isAbsolute(file) || file.split(/[\\/]/).includes("..")) {
+        refused("the path must be relative and stay inside the plugin");
+        continue;
+      }
+      const path = join(root, file);
+      if (statSync(path, { throwIfNoEntry: false }) === undefined) {
+        if (source.declared) refused("the file does not exist");
+        continue;
+      }
+      const real = await resolvedPath(path);
+      if (!isWithin(root, real)) {
+        refused("it resolves outside the plugin");
+        continue;
+      }
+      if (!statSync(path).isFile()) {
+        refused("it is not a file");
+        continue;
+      }
+      if (read.has(real)) continue;
+      read.add(real);
+      try {
+        raw = JSON.parse(readFileSync(path, "utf8"));
+      } catch (error) {
+        refused(`not valid JSON (${messageOf(error)})`);
+        continue;
+      }
+    }
+    if (!isPlain(raw) || !isPlain(raw.mcpServers)) {
+      refused("it has no mcpServers object");
+      continue;
+    }
+    for (const [name, entry] of Object.entries(raw.mcpServers)) {
+      const skip = (why: string): void => {
+        reports.push(`${file}: server ${name} skipped: ${why}`);
+      };
+      if (servers.some((server) => server.name === name)) {
+        skip("a server of that name is already loaded");
+        continue;
+      }
+      const mapped = mapForeignServer(entry);
+      if (typeof mapped === "string") {
+        skip(mapped);
+        continue;
+      }
+      const config = await parseServer(mapped.raw, root);
+      if (typeof config === "string") {
+        skip(config);
+        continue;
+      }
+      const names = [
+        ...Object.values(mapped.env),
+        ...Object.values(mapped.headers).flatMap((t) =>
+          [...t.matchAll(/\{([^}]*)\}/g)].map((m) => m[1]!),
+        ),
+      ];
+      const fresh: Record<string, unknown> = {};
+      for (const variable of names)
+        fresh[variable] = {
+          type: "string",
+          title: variable,
+          description: `Used by the MCP server ${name}.`,
+          required: true,
+          secret: SECRET_NAME.test(variable),
+        };
+      const { problems } = parseConfigFields({ ...specs, ...fresh });
+      if (problems.length > 0) {
+        skip(
+          `its variables cannot be configuration fields (${problems.join("; ")})`,
+        );
+        continue;
+      }
+      Object.assign(specs, fresh);
+      servers.push({ name, config });
+      if (
+        Object.keys(mapped.env).length > 0 ||
+        Object.keys(mapped.headers).length > 0
+      )
+        bindings[name] = { env: mapped.env, headers: mapped.headers };
+      if (mapped.ignored.length > 0)
+        reports.push(
+          `${file}: server ${name}: ${mapped.ignored.join(", ")} not supported by eta; ignored`,
+        );
+    }
+  }
+  return { servers, bindings, fields: parseConfigFields(specs).fields };
+}
+
 async function loadSkillDirs(
   root: string,
   reports: string[],
@@ -394,26 +735,102 @@ async function loadSkillDirs(
     reports.push("skills: not a directory inside the plugin; ignored");
     return [];
   }
-  const skills: PluginSkill[] = [];
-  for (const name of readdirSync(location).sort()) {
-    const dir = join(location, name);
+  interface Found {
+    dirName: string;
+    dir: string;
+    file: string;
+    raw: string;
+    legal: boolean;
+  }
+  const found: Found[] = [];
+  for (const dirName of readdirSync(location).sort()) {
+    const dir = join(location, dirName);
     const file = join(dir, "SKILL.md");
     if (!statSync(file, { throwIfNoEntry: false })?.isFile()) continue;
     if (!isWithin(root, await resolvedPath(file))) {
-      reports.push(`skills/${name}: resolves outside the plugin; skipped`);
+      reports.push(`skills/${dirName}: resolves outside the plugin; skipped`);
       continue;
     }
     // One directory at a time: the spec looks at immediate children and goes no deeper.
-    const { skills: found, diagnostics } = await loadSkills([dir]);
-    const skill = found.find((candidate) => candidate.filePath === file);
-    if (skill === undefined || diagnostics.length > 0) {
+    const parsed = parseSkillText(
+      readFileSync(file, "utf8"),
+      file,
+      dirName,
+      true,
+    );
+    if (parsed.skill === null) {
       const why =
-        diagnostics.map((item) => item.message).join("; ") ||
+        parsed.diagnostics.map((item) => item.message).join("; ") ||
         "it has no description";
-      reports.push(`skills/${name}: skipped: ${why}`);
+      reports.push(`skills/${dirName}: skipped: ${why}`);
       continue;
     }
-    skills.push({ name: skill.name, description: skill.description, dir });
+    // The harness loader honours the ignore files in the skill's directory; a skill it leaves out is
+    // one they ignore (the text itself was read above).
+    const visible = await loadSkills([dir]);
+    if (!visible.skills.some((candidate) => candidate.filePath === file)) {
+      reports.push(`skills/${dirName}: skipped: ignored by an ignore file`);
+      continue;
+    }
+    found.push({
+      dirName,
+      dir,
+      file,
+      raw: parsed.skill.name,
+      legal: parsed.diagnostics.length === 0,
+    });
+  }
+  // Legal names keep theirs. A name that is not legal is formatted; when two end up the same, the
+  // one whose directory sorts first keeps it and the next get -2, -3, so the result does not depend
+  // on the order the directories were read in.
+  const taken = new Set(found.filter((one) => one.legal).map((one) => one.raw));
+  const skills: PluginSkill[] = [];
+  for (const one of found) {
+    let name = one.raw;
+    if (!one.legal) {
+      const base = formatSkillName(one.raw);
+      if (base === "") {
+        reports.push(
+          `skills/${one.dirName}: skipped: name "${one.raw}" has no usable characters`,
+        );
+        continue;
+      }
+      name = base;
+      for (let n = 2; taken.has(name); n++) {
+        const suffix = `-${n}`;
+        name = base.slice(0, 64 - suffix.length).replace(/-+$/, "") + suffix;
+      }
+      const checked = parseSkillText(
+        readFileSync(one.file, "utf8"),
+        one.file,
+        one.dirName,
+        true,
+        name,
+      );
+      if (name === one.raw || checked.diagnostics.length > 0) {
+        // Not a naming fault we fix (a name that is legal but not the directory's, a bad description).
+        const why =
+          checked.diagnostics.map((item) => item.message).join("; ") ||
+          "the name does not match its directory";
+        reports.push(`skills/${one.dirName}: skipped: ${why}`);
+        continue;
+      }
+      taken.add(name);
+      reports.push(`skills/${one.dirName}: renamed "${one.raw}" -> "${name}"`);
+    }
+    const description = parseSkillText(
+      readFileSync(one.file, "utf8"),
+      one.file,
+      one.dirName,
+      true,
+      name,
+    ).skill!.description;
+    skills.push({
+      name,
+      description,
+      dir: one.dir,
+      ...(name === one.raw ? {} : { renamedFrom: one.raw }),
+    });
   }
   return skills;
 }
@@ -543,21 +960,60 @@ export function fillTemplate(
 /** Read and validate the plugin at `dir`; throws `PluginError` when the spec rejects it. */
 export async function loadPlugin(dir: string): Promise<PluginPackage> {
   const root = await resolvedPath(dir);
-  const path = join(root, "plugin.json");
-  if (!statSync(path, { throwIfNoEntry: false })?.isFile())
-    throw new PluginError("plugin.json is missing");
+  const found = MANIFEST_PATHS.find((candidate) =>
+    statSync(join(root, candidate), { throwIfNoEntry: false })?.isFile(),
+  );
+  if (found === undefined) throw new PluginError("plugin.json is missing");
+  const path = join(root, found);
   if (!isWithin(root, await resolvedPath(path)))
-    throw new PluginError("plugin.json resolves outside the plugin");
+    throw new PluginError(`${found} resolves outside the plugin`);
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
-    throw new PluginError(`plugin.json: ${messageOf(error)}`);
+    throw new PluginError(`${found}: ${messageOf(error)}`);
   }
+  const foreign = found !== "plugin.json";
   const reports: string[] = [];
-  const { manifest, extensions } = parseManifest(raw, reports);
+  const { manifest, extensions } = parseManifest(raw, reports, foreign, root);
   const skills = await loadSkillDirs(root, reports);
-  const listed = await loadServers(root, reports);
-  const extension = parseExtension(extensions[ETA_EXTENSION], listed, reports);
-  return { root, manifest, reports, skills, ...extension };
+  if (!foreign) {
+    const listed = await loadServers(root, reports);
+    const extension = parseExtension(
+      extensions[ETA_EXTENSION],
+      listed,
+      reports,
+    );
+    return { root, manifest, reports, skills, ...extension };
+  }
+  const mapped = await loadForeignServers(
+    root,
+    reports,
+    isPlain(raw) ? raw.mcpServers : undefined,
+  );
+  reportForeignParts(root, reports);
+  const extension = parseExtension(
+    extensions[ETA_EXTENSION],
+    mapped.servers,
+    reports,
+  );
+  return {
+    root,
+    manifest,
+    reports,
+    layout: found,
+    skills,
+    ...extension,
+    fields: [...mapped.fields, ...extension.fields],
+    bindings: { ...mapped.bindings, ...extension.bindings },
+  };
+}
+
+/** What a Cursor or Claude Code plugin ships that eta does not load, for the user to see. */
+function reportForeignParts(root: string, reports: string[]): void {
+  for (const name of FOREIGN_COMPONENTS) {
+    const kind = statSync(join(root, name), { throwIfNoEntry: false });
+    if (kind === undefined) continue;
+    reports.push(`${name}/: not supported by eta; ignored`);
+  }
 }

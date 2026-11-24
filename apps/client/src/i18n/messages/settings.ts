@@ -498,9 +498,7 @@ export const settingsMessages = {
     "Tick the plugins this agent may use.",
     "勾选这个智能体可以使用的插件。",
   ],
-  pluginCanEnable: ["Can enable", "可启用"],
   pluginNeedsSetup: ["Needs setup", "待配置"],
-  pluginCanBeEnabled: ["Can be enabled", "可以启用"],
   pluginNeedsConfiguring: ["Needs configuring", "需要配置"],
   pluginConfigurationStale: [
     "Its configuration no longer fits: this agent's sessions skip it.",

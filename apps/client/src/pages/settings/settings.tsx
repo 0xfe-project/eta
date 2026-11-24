@@ -38,6 +38,7 @@ import { SubscriptionDetail } from "./models/subscription-detail";
 import { SettingsNavigation } from "./navigation";
 import { NetworkSettings } from "./network";
 import { sections, useSettingsOverview } from "./overview";
+import { PluginSettings } from "./plugins";
 import { RuntimeList } from "./runtimes/runtime-list";
 import { emptyStyle, SectionHeader } from "./section";
 import { AgentSetting } from "./setting-row";
@@ -305,6 +306,9 @@ export function Settings(
                   layout={props.layout}
                   onBack={() => section.set(undefined)}
                 />
+              </If>
+              <If when={current() === "Plugins"}>
+                <PluginSettings phone={phone()} />
               </If>
               <If when={current() === "External agents"}>
                 <If

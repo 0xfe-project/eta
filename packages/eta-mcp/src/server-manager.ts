@@ -128,6 +128,51 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * A fetch that sends its request only to `origin`: a redirect to another origin is refused, so the
+ * headers a user attached never reach a host the server was not configured with. Same-origin
+ * redirects are followed by hand.
+ */
+export function sameOriginFetch(base: FetchLike, origin: string): FetchLike {
+  const MAX_HOPS = 5;
+  return async (input, init) => {
+    let target: string | URL = input;
+    for (let hop = 0; hop <= MAX_HOPS; hop++) {
+      const response = await base(target, { ...init, redirect: "manual" });
+      const location = response.headers.get("location");
+      if (response.status < 300 || response.status >= 400 || location === null)
+        return response;
+      const next = new URL(location, target);
+      if (next.origin !== origin)
+        throw new Error(
+          `the server redirected to another host (${next.host}); request headers are sent only to ${new URL(origin).host}, so it was refused`,
+        );
+      target = next;
+    }
+    throw new Error("too many redirects");
+  };
+}
+
+/**
+ * The SDK puts a transport's `requestInit` headers on its sign-in requests too (metadata, register,
+ * authorize, token, refresh), which can be on another host (Google, for a Cursor server). The
+ * headers configured for this server are taken off every request that is not to its own origin.
+ */
+export function ownHeadersOnly(
+  base: FetchLike,
+  origin: string,
+  names: readonly string[],
+): FetchLike {
+  const own = new Set(names.map((name) => name.toLowerCase()));
+  return async (input, init) => {
+    if (own.size === 0 || new URL(String(input)).origin === origin)
+      return await base(input, init);
+    const next = new Headers(init?.headers);
+    for (const name of [...next.keys()]) if (own.has(name)) next.delete(name);
+    return await base(input, { ...init, headers: next });
+  };
+}
+
 function isUnauthorized(error: unknown): boolean {
   return (
     error instanceof UnauthorizedError ||
@@ -541,10 +586,55 @@ export class ServerManager {
       }
       headers.Authorization = `Bearer ${token}`;
     }
+    // A header the user configured under the same name carries a credential of its own (a Cursor
+    // account's, say): the sign-in token never replaces it.
+    const tokenHeader =
+      authProvider &&
+      !Object.keys(headers).some(
+        (one) =>
+          one.toLowerCase() === definition.tokenHeader?.name.toLowerCase(),
+      )
+        ? definition.tokenHeader
+        : undefined;
+    // The sign-in token as a header of the server's own choosing, read fresh on every request (a
+    // refresh in between is picked up), and only on a request to this server's origin.
+    const withToken = (base: FetchLike): FetchLike =>
+      tokenHeader === undefined
+        ? base
+        : async (input, init) => {
+            const tokens = await authProvider!.tokens();
+            if (
+              tokens?.access_token === undefined ||
+              new URL(String(input)).origin !== url.origin
+            )
+              return await base(input, init);
+            const next = new Headers(init?.headers);
+            next.set(
+              tokenHeader.name,
+              tokenHeader.format === "bearer"
+                ? `Bearer ${tokens.access_token}`
+                : tokens.access_token,
+            );
+            return await base(input, { ...init, headers: next });
+          };
     const transportOptions = {
       ...(Object.keys(headers).length > 0 ? { requestInit: { headers } } : {}),
       ...(authProvider ? { authProvider } : {}),
-      ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
+      // Headers configured for this server stay with it: no redirect may carry them elsewhere.
+      ...(Object.keys(headers).length > 0 || tokenHeader !== undefined
+        ? {
+            fetch: sameOriginFetch(
+              ownHeadersOnly(
+                withToken(this.options.fetch ?? fetch),
+                url.origin,
+                Object.keys(headers),
+              ),
+              url.origin,
+            ),
+          }
+        : this.options.fetch
+          ? { fetch: this.options.fetch }
+          : {}),
     };
 
     const kinds =
@@ -576,7 +666,9 @@ export class ServerManager {
           connection.authMessage =
             definition.auth === "oauth"
               ? "OAuth sign-in is required"
-              : 'the server rejected the credentials (HTTP 401); set auth to "oauth" or send a token';
+              : Object.keys(headers).length > 0
+                ? "credential rejected (HTTP 401): the server did not accept the headers sent to it"
+                : 'the server rejected the credentials (HTTP 401); set auth to "oauth" or send a token';
           return;
         }
         if (index < kinds.length - 1 && shouldFallBackToSse(error)) continue;

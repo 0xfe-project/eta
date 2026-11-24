@@ -26,6 +26,13 @@ export interface OpMeta {
   description?: string | undefined;
   /** A JSON schema for `args`, published in `hello.ops` for clients that want to check. */
   schema?: unknown | undefined;
+  /**
+   * The call does not have to wait for the calls before it on its connection, and the calls after
+   * it do not wait for it. For a read-only call that depends on no other frame and may take a
+   * while (a lookup over the network). Absent means in order, which is what `prompt` then
+   * `abort` need. The flag is the host's: it is not published in `hello.ops`.
+   */
+  unordered?: boolean | undefined;
 }
 
 /** A target's state: what it shows, and when. */

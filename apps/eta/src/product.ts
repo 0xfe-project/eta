@@ -95,6 +95,9 @@ import { memoryPlugin } from "./memory/plugin";
 import { MachinePlaces, wireFailure } from "./places/on-machine";
 import { placesPlugin } from "./places/plugin";
 import { PlaceStore } from "./places/store";
+import { IconCache } from "./plugins/icon-cache";
+import { Market } from "./plugins/market";
+import { CatalogCache } from "./plugins/market-cache";
 import { pluginsPlugin } from "./plugins/plugin";
 import { Plugins } from "./plugins/service";
 import { pluginSessionTools } from "./plugins/tools";
@@ -547,7 +550,11 @@ export function createProduct(options: {
     // Read when a session opens or the settings page asks; the plugins are made just below.
     pluginSources: ({ agentId }) => later.plugins?.mcpSourcesFor(agentId) ?? [],
     publicUrl: options.publicUrl,
-    changed: () => wire?.pushNow("mcp"),
+    changed: () => {
+      wire?.pushNow("mcp");
+      // A plugin's server shows its sign-in; one that just signed in or out moved it.
+      wire?.pushNow("plugins");
+    },
     warn,
     ...options.mcp,
   });
@@ -1056,7 +1063,22 @@ export function createProduct(options: {
       await plugins.start();
       server.mount(
         "plugins",
-        pluginsPlugin({ plugins, agents }, applied("plugins")),
+        pluginsPlugin(
+          {
+            plugins,
+            agents,
+            market: new Market({
+              settings: new SettingStore(db),
+              plugins,
+              dataDir,
+              cache: new CatalogCache(db, { maxRowBytes: 1024 * 1024 }),
+            }),
+            mcp,
+            icons: new IconCache(db),
+            settings: new SettingStore(db),
+          },
+          applied("plugins"),
+        ),
       );
       server.mount(
         "agents",

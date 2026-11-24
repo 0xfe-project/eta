@@ -19,7 +19,9 @@ import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
 import { pluginText as text } from "./labels";
+import { PluginEnabled } from "./plugin-name";
 import { PluginGlyph, Status } from "./plugin-status";
+import { ServerRows, SkillRows } from "./servers-panel";
 import { PluginWarnings, pluginWarnings } from "./warnings";
 function excerpt(source: PluginView["source"]) {
   if (source.kind === "local")
@@ -91,6 +93,7 @@ export function PluginDetail(props: DetailProps) {
       ? { gap: space[4], paddingHorizontal: space[16], paddingTop: top }
       : { gap: space[4] };
   const needsConfig = () => props.item.state === "needs_config";
+  const enabledSwitch = () => <PluginEnabled item={props.item} />;
   function update() {
     if (updating()) return;
     updating.set(true);
@@ -127,6 +130,7 @@ export function PluginDetail(props: DetailProps) {
               </Label>
               <Status item={props.item} />
             </View>
+            {enabledSwitch()}
             <If when={git()}>
               <Button
                 label={updating() ? uiText("updating") : uiText("update")}
@@ -204,8 +208,22 @@ export function PluginDetail(props: DetailProps) {
                   </Label>
                 </View>
                 <Status item={props.item} phone />
+                {enabledSwitch()}
               </View>
             </View>
+          </If>
+          <If when={!props.item.enabled}>
+            <Label
+              variant="small"
+              tone="muted"
+              style={
+                props.phone
+                  ? { paddingHorizontal: space[16], paddingTop: space[8] }
+                  : undefined
+              }
+            >
+              {uiText("pluginSwitchHint")}
+            </Label>
           </If>
           <If
             when={
@@ -315,56 +333,9 @@ export function PluginDetail(props: DetailProps) {
           </View>
           <View style={section(16)}>
             <Caption text={text("runs")} />
-            <View style={{ borderWidth: 1, borderColor: c().border }}>
-              <Each of={props.item.servers} key={(server) => server.name}>
-                {(server) => (
-                  <View
-                    style={{
-                      justifyContent: "center",
-                      paddingHorizontal: space[12],
-                      paddingVertical: space[4],
-                      minHeight: rowHeight,
-                      borderBottomWidth: 1,
-                      borderColor: c().border,
-                    }}
-                  >
-                    <View
-                      style={{
-                        ...row,
-                        flexWrap: "wrap",
-                        gap: space[8],
-                      }}
-                    >
-                      <Icon name="terminal" size={icon.md} tone="muted" />
-                      <Label variant="small">{server().name}</Label>
-                      <Label
-                        variant="caption"
-                        tone={props.phone ? "ink" : "mutedInk"}
-                        style={{
-                          paddingHorizontal: space[4],
-                          borderWidth: 1,
-                          borderColor: c().strong,
-                        }}
-                      >
-                        {server().transport}
-                      </Label>
-                      <View style={{ flex: 1 }} />
-                      <If when={server().env.length}>
-                        <Label
-                          variant="caption"
-                          tone="muted"
-                        >{`${text(props.phone ? "envShort" : "env")}: ${server().env.join(", ")}`}</Label>
-                      </If>
-                      <If when={server().headers.length}>
-                        <Label
-                          variant="caption"
-                          tone="muted"
-                        >{`${text("headers")}: ${server().headers.join(", ")}`}</Label>
-                      </If>
-                    </View>
-                  </View>
-                )}
-              </Each>
+            <View style={{ gap: space[12] }}>
+              <ServerRows item={props.item} phone={props.phone} />
+              <SkillRows item={props.item} />
               <Label
                 variant="small"
                 tone="muted"

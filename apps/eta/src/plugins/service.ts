@@ -13,13 +13,17 @@ import type {
   FieldIssue,
   OpenedPlugin,
   PluginAgentLevel,
+  PluginEnvView,
   PluginField,
+  PluginHeaderView,
+  PluginServerView,
   PluginState,
+  PluginTestResult,
   PluginValue,
   PluginView,
   Redaction,
 } from "@eta/client-contracts";
-import type { McpConfigSource } from "@eta/mcp";
+import type { McpConfigSource, McpServerEntry } from "@eta/mcp";
 import type { RuntimeExtras, SessionMeta } from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { Buffer } from "node:buffer";
@@ -27,6 +31,7 @@ import type { AgentStore } from "../agents/store";
 import type { MachineHub, MachineLink } from "../machines/hub";
 import type { MachineStore } from "../machines/store";
 import type { PluginEntry } from "./registry";
+import type { UserHeader } from "./store";
 import process from "node:process";
 import {
   agentLevel,
@@ -37,14 +42,25 @@ import {
 } from "@eta/client-contracts/plugin-fields";
 import {
   claimServerNames,
+  plainRemote,
   pluginChunks,
   pluginMcpSources,
+  resolvePluginServers,
   runtimeExtras,
   serversConfig,
-  serverSupported,
+  toMcpEntries,
 } from "@eta/daemon";
+import { CURSOR_AUTH_HEADER, isCursorServer } from "./cursor-login";
+import {
+  envProblem,
+  headerProblem,
+  MAX_ENV_PER_SERVER,
+  MAX_HEADERS_PER_SERVER,
+} from "./headers";
 import { PluginRegistry } from "./registry";
+import { serverViews } from "./server-view";
 import { PluginRows } from "./store";
+import { notTested, secretsOf } from "./test-server";
 
 export interface PluginsOptions {
   db: Database;
@@ -132,12 +148,35 @@ export class Plugins {
     );
   }
 
+  /**
+   * Variables a stdio server's file declares with an empty value: the author means "you fill this
+   * in". Until the user has set each one, the plugin is not usable and nothing is started.
+   */
+  #missingEnv(entry: PluginEntry): { server: string; name: string }[] {
+    const set = new Set(
+      this.rows.env(entry.name).map((one) => `${one.server}\0${one.name}`),
+    );
+    return (entry.plugin?.servers ?? []).flatMap((def) =>
+      def.config.type !== "stdio"
+        ? []
+        : Object.entries(
+            (def.config as { env?: Record<string, string> }).env ?? {},
+          )
+            .filter(
+              ([name, value]) =>
+                value === "" && !set.has(`${def.name}\0${name}`),
+            )
+            .map(([name]) => ({ server: def.name, name })),
+    );
+  }
+
   #usable(entry: PluginEntry): boolean {
     return (
       entry.plugin !== undefined &&
       entry.problem === undefined &&
       entry.plugin.configProblems.length === 0 &&
-      this.#issues(entry).length === 0
+      this.#issues(entry).length === 0 &&
+      this.#missingEnv(entry).length === 0
     );
   }
 
@@ -151,11 +190,105 @@ export class Plugins {
     return entry !== undefined && this.#usable(entry);
   }
 
+  /**
+   * What a plugin's servers are given: its fields' values, then the user's headers on top. A server
+   * on cursor.com with no Cursor credential of its own gets the host's, as one of the user's headers:
+   * the service behind it still signs in with OAuth.
+   */
+  #config(entry: PluginEntry): ReturnType<typeof serversConfig> {
+    const own = this.rows.headers(entry.name);
+    const host = this.rows.cursorCredential();
+    const shared: UserHeader[] =
+      host === undefined
+        ? []
+        : (entry.plugin?.servers ?? []).flatMap((def) =>
+            def.config.type === "stdio" ||
+            !isCursorServer(def.config.url) ||
+            own.some(
+              (header) =>
+                header.server === def.name &&
+                header.name.toLowerCase() === CURSOR_AUTH_HEADER,
+            )
+              ? []
+              : [
+                  {
+                    server: def.name,
+                    name: CURSOR_AUTH_HEADER,
+                    value: host,
+                    secret: true,
+                    plainOk: false,
+                  },
+                ],
+          );
+    return serversConfig(
+      entry.plugin!,
+      this.rows.values(entry.name),
+      [...own, ...shared],
+      this.rows.env(entry.name),
+      this.rows.tokenHeaders(entry.name),
+    );
+  }
+
+  /** Names the plugin itself fixes on a stdio server (its file, or a field): read-only for the user. */
+  #fixedEnv(entry: PluginEntry, server: string): string[] {
+    const def = entry.plugin?.servers.find((one) => one.name === server);
+    if (def === undefined || def.config.type !== "stdio") return [];
+    return [
+      ...new Set([
+        // An empty value in the file is a blank for the user to fill, not a fixed one.
+        ...Object.entries(
+          (def.config as { env?: Record<string, string> }).env ?? {},
+        )
+          .filter(([, value]) => value !== "")
+          .map(([name]) => name),
+        ...Object.keys(entry.plugin?.bindings[server]?.env ?? {}),
+        "PLUGIN_ROOT",
+        "PLUGIN_DATA",
+      ]),
+    ];
+  }
+
+  /**
+   * What a connection test of one server needs: the server as a session would get it, or the
+   * reason there is nothing to connect to. Nothing here connects.
+   */
+  testPlan(
+    name: string,
+    server: string,
+  ):
+    | { result: PluginTestResult }
+    | { entry: McpServerEntry; secrets: string[] } {
+    const entry = this.#existing(name);
+    if (this.rows.disabled().has(name))
+      return { result: notTested("off", "the plugin is off") };
+    const def = entry.plugin?.servers.find((one) => one.name === server);
+    if (entry.plugin === undefined || def === undefined)
+      throw new Error(`${name} has no server ${server}`);
+    if (!this.#usable(entry))
+      return {
+        result: notTested("needs_setup", "required values are missing"),
+      };
+    const resolved = resolvePluginServers(
+      [{ plugin: entry.plugin, config: this.#config(entry) }],
+      this.#dataDir,
+      this.#warn,
+    ).filter((one) => one.server === server);
+    const [mcp] = Object.values(toMcpEntries(resolved));
+    if (mcp === undefined)
+      return {
+        result: notTested("failed", "the server could not be resolved"),
+      };
+    return { entry: mcp, secrets: secretsOf(mcp) };
+  }
+
   /** The plugins an agent's sessions load, and the ones it enabled that they skip. */
   #split(agentId: string): { active: PluginEntry[]; skipped: string[] } {
     const active: PluginEntry[] = [];
     const skipped: string[] = [];
+    // The user's switch comes first: a plugin that is off is no one's, and is not "skipped" either.
+    const off = this.rows.disabled();
     for (const name of this.rows.enabled(agentId)) {
+      if (off.has(name)) continue;
       const entry = this.registry.get(name);
       if (entry !== undefined && this.#usable(entry)) active.push(entry);
       else skipped.push(name);
@@ -198,7 +331,7 @@ export class Plugins {
       this.active(agentId).map((entry) => ({
         plugin: entry.plugin!,
         hash: entry.hash!,
-        config: serversConfig(entry.plugin!, this.rows.values(entry.name)),
+        config: this.#config(entry),
       })),
       { dataDir: this.#dataDir, runtime: meta.runtime, warn: this.#warn },
     );
@@ -216,7 +349,7 @@ export class Plugins {
     return pluginMcpSources(
       active.map((entry) => ({
         plugin: entry.plugin!,
-        config: serversConfig(entry.plugin!, this.rows.values(entry.name)),
+        config: this.#config(entry),
       })),
       this.#dataDir,
       this.#warn,
@@ -263,8 +396,25 @@ export class Plugins {
             readable.add(`${entry.name}.${field.name}`);
       }
     const redactions: Redaction[] = [];
+    const host = this.rows.cursorCredential();
+    if (host !== undefined)
+      redactions.push({ value: host, label: "[secret cursor credential]" });
     for (const entry of this.registry.entries()) {
       if (entry.plugin === undefined) continue;
+      // A header the user attached is a credential too, and no agent may read it.
+      for (const header of this.rows.headers(entry.name))
+        if (header.secret)
+          redactions.push({
+            value: header.value,
+            label: `[secret ${entry.name}.${header.server}.${header.name}]`,
+          });
+      // So is a secret variable the user set on a stdio server.
+      for (const one of this.rows.env(entry.name))
+        if (one.secret)
+          redactions.push({
+            value: one.value,
+            label: `[secret ${entry.name}.${one.server}.${one.name}]`,
+          });
       const values = this.rows.values(entry.name);
       for (const field of entry.plugin.fields) {
         const value = values[field.name];
@@ -301,7 +451,7 @@ export class Plugins {
         name: entry.name,
         hash: entry.hash!,
         // An external runtime and eta's own loop both start the servers on the machine.
-        servers: serversConfig(entry.plugin!, this.rows.values(entry.name)),
+        servers: this.#config(entry),
       });
     }
     return opened;
@@ -348,12 +498,14 @@ export class Plugins {
     const { plugin } = entry;
     const values = this.rows.values(entry.name);
     const levels = this.rows.levels(entry.name);
+    const off = this.rows.disabled();
     const requires = plugin?.requires ?? [];
     return {
       name: entry.name,
       version: plugin?.manifest.version ?? null,
       description: plugin?.manifest.description ?? "",
       source: entry.source,
+      enabled: !off.has(entry.name),
       state: this.stateOf(entry),
       problem:
         entry.problem ??
@@ -365,24 +517,12 @@ export class Plugins {
         name,
         description,
       })),
-      servers: (plugin?.servers ?? []).map((server) => {
-        const binding = plugin?.bindings[server.name];
-        const { config } = server;
-        return {
-          name: server.name,
-          transport: config.type,
-          ...(config.type === "stdio"
-            ? { command: [config.command, ...config.args] }
-            : { url: config.url }),
-          env: Object.keys(binding?.env ?? {}),
-          headers: Object.keys(binding?.headers ?? {}),
-          problem: serverSupported(server)
-            ? null
-            : "legacy HTTP+SSE: external runtimes skip it; eta's own loop takes it",
-        };
-      }),
+      servers: this.#serversOf(entry),
       requires,
       machines: this.#machineViews(requires),
+      headers: this.#headerViews(entry),
+      tokenHeaders: this.rows.tokenHeaders(entry.name),
+      env: this.#envViews(entry),
       fields: (plugin?.fields ?? []).map((field: PluginField) => {
         const saved = values[field.name];
         return {
@@ -399,6 +539,61 @@ export class Plugins {
         return agent === undefined ? [] : [{ id, name: agent.name }];
       }),
     };
+  }
+
+  /**
+   * The servers as shown, with the Cursor state worked out here from the address and the saved
+   * header, not from what a test saw: a Cursor-hosted server without a saved credential needs the
+   * Cursor sign-in whatever its 401 says. Says nothing of whether the server accepts the credential.
+   */
+  #serversOf(entry: PluginEntry): PluginServerView[] {
+    const saved = this.rows.headers(entry.name);
+    const host = this.rows.cursorCredential() !== undefined;
+    return serverViews(entry.plugin).map((view) => {
+      if (view.url === undefined || !isCursorServer(view.url)) return view;
+      return {
+        ...view,
+        cursorServer: true,
+        cursorSignedIn:
+          host ||
+          saved.some(
+            (one) =>
+              one.server === view.name &&
+              one.name.toLowerCase() === CURSOR_AUTH_HEADER,
+          ),
+      };
+    });
+  }
+
+  /** The user's headers as the page sees them: a secret's value stays here. */
+  #headerViews(entry: PluginEntry): PluginHeaderView[] {
+    return this.rows.headers(entry.name).map((header) => {
+      const server = entry.plugin?.servers.find(
+        (one) => one.name === header.server,
+      );
+      const plain =
+        server !== undefined &&
+        server.config.type !== "stdio" &&
+        plainRemote(server.config.url);
+      return {
+        server: header.server,
+        name: header.name,
+        secret: header.secret,
+        value: header.secret ? null : header.value,
+        plainOk: header.plainOk,
+        blocked: plain && !header.plainOk ? "plain-http" : null,
+      };
+    });
+  }
+
+  /** The user's variables on stdio servers as the page sees them: a secret's value stays here. */
+  #envViews(entry: PluginEntry): PluginEnvView[] {
+    return this.rows.env(entry.name).map((one) => ({
+      server: one.server,
+      name: one.name,
+      secret: one.secret,
+      value: one.secret ? null : one.value,
+    }));
   }
 
   #machineViews(requires: readonly string[]): PluginView["machines"] {
@@ -503,6 +698,204 @@ export class Plugins {
       state: this.stateOf(entry),
       issues: configIssues(fields, values),
     };
+  }
+
+  /** Switch a plugin on or off for every agent. What each agent enabled is left as it is. */
+  setEnabled(name: string, enabled: boolean): void {
+    this.#existing(name);
+    this.rows.setDisabled(name, !enabled);
+    this.#changed();
+  }
+
+  /**
+   * Replace the headers of one remote server. A secret is written and not read back: a `null`
+   * value keeps what is saved under that name. Nothing that does not fit is ever saved.
+   */
+  setHeaders(
+    name: string,
+    server: string,
+    headers: readonly {
+      name: string;
+      value: string | null;
+      secret: boolean;
+      plainOk?: boolean;
+    }[],
+  ): void {
+    const entry = this.#existing(name);
+    const def = entry.plugin?.servers.find((one) => one.name === server);
+    if (def === undefined || def.config.type === "stdio")
+      throw new Error(`${name} has no remote server ${server}`);
+    if (headers.length > MAX_HEADERS_PER_SERVER)
+      throw new Error(`at most ${MAX_HEADERS_PER_SERVER} headers per server`);
+    const saved = new Map(
+      this.rows
+        .headers(name)
+        .filter((header) => header.server === server)
+        .map((header) => [header.name.toLowerCase(), header]),
+    );
+    const plain = plainRemote(def.config.url);
+    const seen = new Set<string>();
+    const next = headers.map((header) => {
+      const key = header.name.trim().toLowerCase();
+      const value = header.value ?? saved.get(key)?.value;
+      if (value === undefined)
+        throw new Error(`header ${header.name} has no saved value to keep`);
+      const problem = headerProblem(header.name.trim(), value);
+      if (problem !== undefined) throw new Error(problem);
+      if (seen.has(key))
+        throw new Error(`header ${header.name} is listed twice`);
+      seen.add(key);
+      return {
+        server,
+        name: header.name.trim(),
+        value,
+        secret: header.secret,
+        plainOk: plain && header.plainOk === true,
+      };
+    });
+    this.rows.saveHeaders(name, server, next);
+    this.#changed();
+  }
+
+  /**
+   * Save one secret header of one remote server (replacing a header of that name, keeping the
+   * others). For a credential the host got itself; the value is sealed like any secret header and
+   * is in no message.
+   */
+  setSecretHeader(
+    name: string,
+    server: string,
+    header: string,
+    value: string,
+  ): void {
+    const entry = this.#existing(name);
+    const def = entry.plugin?.servers.find((one) => one.name === server);
+    if (def === undefined || def.config.type === "stdio")
+      throw new Error(`${name} has no remote server ${server}`);
+    const clean = header.trim();
+    const problem = headerProblem(clean, value);
+    if (problem !== undefined) throw new Error(problem);
+    const key = clean.toLowerCase();
+    const kept = this.rows
+      .headers(name)
+      .filter((one) => one.server === server && one.name.toLowerCase() !== key);
+    if (kept.length + 1 > MAX_HEADERS_PER_SERVER)
+      throw new Error(`at most ${MAX_HEADERS_PER_SERVER} headers per server`);
+    this.rows.saveHeaders(name, server, [
+      ...kept,
+      { server, name: clean, value, secret: true, plainOk: false },
+    ]);
+    this.#changed();
+  }
+
+  /**
+   * Save the Cursor credential for the host: every server on cursor.com uses it unless it has a
+   * header of its own. A copy the user already has on a Cursor server is brought up to date, or it
+   * would keep the old one in front of this.
+   */
+  setCursorCredential(value: string): void {
+    const problem = headerProblem(CURSOR_AUTH_HEADER, value);
+    if (problem !== undefined) throw new Error(problem);
+    this.rows.saveCursorCredential(value);
+    for (const entry of this.registry.entries()) {
+      const own = this.rows.headers(entry.name);
+      const isCopy = (header: UserHeader): boolean => {
+        const def = entry.plugin?.servers.find(
+          (one) => one.name === header.server,
+        );
+        return (
+          header.name.toLowerCase() === CURSOR_AUTH_HEADER &&
+          def !== undefined &&
+          def.config.type !== "stdio" &&
+          isCursorServer(def.config.url)
+        );
+      };
+      for (const server of new Set(
+        own.filter(isCopy).map((header) => header.server),
+      ))
+        this.rows.saveHeaders(
+          entry.name,
+          server,
+          own
+            .filter((header) => header.server === server)
+            .map((header) => (isCopy(header) ? { ...header, value } : header)),
+        );
+    }
+    this.#changed();
+  }
+
+  /**
+   * Tell one remote server to carry its sign-in token in a request header (`null` turns it off).
+   * Only the header's name and format are saved; the token is read from the sign-in store on each
+   * request. `Authorization` is refused: the sign-in already sends it there.
+   */
+  setTokenHeader(
+    name: string,
+    server: string,
+    header: { name: string; format: "raw" | "bearer" } | null,
+  ): void {
+    const entry = this.#existing(name);
+    const def = entry.plugin?.servers.find((one) => one.name === server);
+    if (def === undefined || def.config.type === "stdio")
+      throw new Error(`${name} has no remote server ${server}`);
+    if (header !== null) {
+      const clean = header.name.trim();
+      const problem = headerProblem(clean, "x");
+      if (problem !== undefined) throw new Error(problem);
+      if (clean.toLowerCase() === "authorization")
+        throw new Error("Authorization already carries the sign-in token");
+      if (header.format !== "raw" && header.format !== "bearer")
+        throw new Error("the format is raw or bearer");
+      this.rows.saveTokenHeader(name, server, {
+        name: clean,
+        format: header.format,
+      });
+    } else this.rows.saveTokenHeader(name, server, null);
+    this.#changed();
+  }
+
+  /**
+   * Replace the environment variables the user set on one stdio server. A secret is written and
+   * not read back: a `null` value keeps what is saved under that name. A name the plugin fixes
+   * itself cannot be set. Nothing that does not fit is ever saved, and no message has a value.
+   */
+  setEnv(
+    name: string,
+    server: string,
+    env: readonly { name: string; value: string | null; secret: boolean }[],
+  ): void {
+    const entry = this.#existing(name);
+    const def = entry.plugin?.servers.find((one) => one.name === server);
+    if (def === undefined || def.config.type !== "stdio")
+      throw new Error(`${name} has no stdio server ${server}`);
+    if (env.length > MAX_ENV_PER_SERVER)
+      throw new Error(`at most ${MAX_ENV_PER_SERVER} variables per server`);
+    const saved = new Map(
+      this.rows
+        .env(name)
+        .filter((one) => one.server === server)
+        .map((one) => [one.name, one]),
+    );
+    const fixed = new Set(this.#fixedEnv(entry, server));
+    const seen = new Set<string>();
+    const next = env.map((one) => {
+      const variable = one.name.trim();
+      const value = one.value ?? saved.get(variable)?.value;
+      if (value === undefined)
+        throw new Error(`variable ${one.name} has no saved value to keep`);
+      const problem = envProblem(variable, value);
+      if (problem !== undefined) throw new Error(problem);
+      if (fixed.has(variable))
+        throw new Error(
+          `${variable} is set by the plugin and cannot be changed`,
+        );
+      if (seen.has(variable))
+        throw new Error(`variable ${variable} is listed twice`);
+      seen.add(variable);
+      return { server, name: variable, value, secret: one.secret };
+    });
+    this.rows.saveEnv(name, server, next);
+    this.#changed();
   }
 
   /** Move a field's level; what the manifest declares is the most it can be. */

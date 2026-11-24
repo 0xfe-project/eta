@@ -25,9 +25,72 @@ const WINDOWS_TAR = join(
 const TAR =
   process.platform === "win32" && existsSync(WINDOWS_TAR) ? WINDOWS_TAR : "tar";
 
+/**
+ * The prefix of a GitHub proxy (`https://proxy.example/`, in front of the whole original URL), or `""`
+ * for none. The market sets it from the settings; every `git` call reads it. Only github.com and
+ * raw.githubusercontent.com are ever sent through it.
+ */
+export const githubProxy = { prefix: "" };
+const GITHUB_HOSTS = ["github.com", "raw.githubusercontent.com"];
+
+/** A prefix as it is kept: http(s), one trailing slash; `""` is none. */
+export function normalizeProxy(value: string): string {
+  const clean = value.trim();
+  if (clean === "") return "";
+  let url: URL;
+  try {
+    url = new URL(clean);
+  } catch {
+    throw new PluginError(`the proxy is not a URL: ${clean}`);
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:")
+    throw new PluginError("the proxy is not an http(s) URL");
+  return `${clean.replace(/\/+$/, "")}/`;
+}
+
+/** `url` as it is fetched: behind the proxy when it is a GitHub address, else itself. */
+export function viaProxy(url: string, prefix = githubProxy.prefix): string {
+  // The same normalization as when it is saved, so the stored value and the built URL agree.
+  let base: string;
+  try {
+    base = normalizeProxy(prefix);
+  } catch {
+    return url;
+  }
+  if (base === "" || url.startsWith(base)) return url;
+  try {
+    const address = new URL(url);
+    const web = address.protocol === "https:" || address.protocol === "http:";
+    return web && GITHUB_HOSTS.includes(address.hostname.toLowerCase())
+      ? base + url
+      : url;
+  } catch {
+    return url;
+  }
+}
+
+/** What an error says when the address was reached through the proxy: the repository is always the original. */
+const through = (repo: string): string =>
+  viaProxy(repo) === repo ? "" : " (through the GitHub proxy)";
+
+/** How long one `git` call may take before it is killed and reported. `ms` is changed by tests only. */
+export const GIT_TIMEOUT_MS = 20_000;
+export const gitLimit = { ms: GIT_TIMEOUT_MS };
+
+/** Stop `child` and what it started: on Windows `git` leaves `git-remote-https` behind otherwise. */
+function stop(child: Bun.Subprocess): void {
+  if (process.platform === "win32")
+    Bun.spawnSync(["taskkill", "/T", "/F", "/PID", String(child.pid)], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+  child.kill();
+}
+
 async function run(
   args: string[],
   cwd?: string,
+  repo?: string,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const child = Bun.spawn(["git", ...args], {
     ...(cwd === undefined ? {} : { cwd }),
@@ -44,12 +107,25 @@ async function run(
       GIT_ALLOW_PROTOCOL: "https:ssh:git:file",
     },
   });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  return { code, stdout, stderr };
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    stop(child);
+  }, gitLimit.ms);
+  try {
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    if (timedOut)
+      throw new PluginError(
+        `git ${args[0]}${repo === undefined ? "" : ` for ${repo}${through(repo)}`} gave no answer in ${gitLimit.ms / 1000} s: the network is slow, or the repository needs credentials`,
+      );
+    return { code, stdout, stderr };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const lastLine = (text: string): string => text.trim().split("\n").at(-1) ?? "";
@@ -58,8 +134,9 @@ async function must(
   args: string[],
   cwd: string | undefined,
   what: string,
+  repo?: string,
 ): Promise<string> {
-  const result = await run(args, cwd);
+  const result = await run(args, cwd, repo);
   if (result.code !== 0)
     throw new PluginError(`${what}: ${lastLine(result.stderr)}`);
   return result.stdout;
@@ -109,14 +186,15 @@ export async function resolveRev(
     [
       "ls-remote",
       "--",
-      cleanRepo(repo),
+      viaProxy(cleanRepo(repo)),
       name,
       `refs/tags/${name}`,
       `refs/tags/${name}^{}`,
       `refs/heads/${name}`,
     ],
     undefined,
-    `cannot read ${repo}`,
+    `cannot read ${repo}${through(repo)}`,
+    repo,
   );
   const refs = new Map<string, string>();
   for (const line of listed.split("\n")) {
@@ -148,6 +226,7 @@ export async function fetchInto(options: {
   const { dir, sha, ref } = options;
   const repo = cleanRepo(options.repo);
   const path = cleanPath(options.path);
+  const remote = viaProxy(repo);
   await mkdir(join(dir, ".."), { recursive: true });
   const work = `${dir}.work-${process.pid}-${Date.now()}`;
   const scratch = join(work, "repo");
@@ -157,17 +236,19 @@ export async function fetchInto(options: {
     await mkdir(tree, { recursive: true });
     await must(["init", "-q"], scratch, "cannot prepare a checkout");
     let fetched = await run(
-      ["fetch", "-q", "--depth", "1", "--", repo, sha],
+      ["fetch", "-q", "--depth", "1", "--", remote, sha],
       scratch,
+      repo,
     );
     if (fetched.code !== 0 && ref !== null)
       fetched = await run(
-        ["fetch", "-q", "--depth", "1", "--", repo, ref],
+        ["fetch", "-q", "--depth", "1", "--", remote, ref],
         scratch,
+        repo,
       );
     if (fetched.code !== 0)
       throw new PluginError(
-        `cannot fetch ${sha.slice(0, 12)} from ${repo}: ${lastLine(fetched.stderr)}`,
+        `cannot fetch ${sha.slice(0, 12)} from ${repo}${through(repo)}: ${lastLine(fetched.stderr)}`,
       );
     const head = (
       await must(["rev-parse", "FETCH_HEAD"], scratch, "no commit")
@@ -187,6 +268,7 @@ export async function fetchInto(options: {
       ],
       scratch,
       `${path === "" ? "the repository" : path} is not in ${repo} at ${sha.slice(0, 12)}`,
+      repo,
     );
     const untar = Bun.spawn([TAR, "-xf", archive, "-C", tree], {
       stdout: "ignore",

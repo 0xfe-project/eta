@@ -12,8 +12,9 @@ import {
   sizes,
   SmoothScroll,
 } from "../../components";
-import { avatar, space } from "../../components/tokens";
+import { avatar, opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { PluginName } from "./plugin-name";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
 
 /** A plugin's row in the tablet list. */
@@ -85,13 +86,12 @@ export function PluginTablet(props: {
                       ? c().selected
                       : c().canvas,
                   cursor: "pointer",
+                  opacity: item().enabled ? 1 : opacity.muted,
                 }}
               >
                 <PluginGlyph size={avatar.lg} />
                 <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-                  <Label variant="small" lines={1}>
-                    {item().name}
-                  </Label>
+                  <PluginName name={item().name} />
                   <Label variant="caption" tone="muted" lines={1}>
                     {[
                       item().version,

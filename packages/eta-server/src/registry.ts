@@ -67,6 +67,8 @@ export interface TargetRegistry {
   unregister: (target: string, action: string) => boolean;
   /** Take a target's state away, whoever registered it. */
   unregisterState: (target: string) => boolean;
+  /** Whether an op was registered `unordered` (see `OpMeta`); false for an unknown op. */
+  isUnordered: (target: string, action: string) => boolean;
   /** Route one call. Throws `UnknownOpError` when nobody claims it. */
   dispatch: (call: CallFrame, context: OpContext) => Promise<DispatchOutcome>;
   /** Everything callable, as `hello` publishes it. */
@@ -137,6 +139,10 @@ export function createTargetRegistry(): TargetRegistry {
 
     unregisterState(target): boolean {
       return states.delete(target);
+    },
+
+    isUnordered(target, action): boolean {
+      return actions.get(key(target, action))?.meta.unordered === true;
     },
 
     async dispatch(call, context): Promise<DispatchOutcome> {

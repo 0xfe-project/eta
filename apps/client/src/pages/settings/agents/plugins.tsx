@@ -3,7 +3,7 @@ import type { AgentForm } from "./form";
 import { View } from "nsh";
 import { colors, Empty, emptyWidth, Label, row } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
-import { icon, space, weight } from "../../../components/tokens";
+import { icon, opacity, space, weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
@@ -49,20 +49,18 @@ export function AgentPlugins(props: { form: AgentForm }) {
     item.servers
       .map((server) => `${transports[server.transport]} · ${server.name}`)
       .join(", ");
+  /** Nothing for a ready plugin: "can enable" adds nothing. */
   const status = (item: PluginView) =>
-    item.state === "ready"
-      ? {
-          label: phoneEditor()
-            ? uiText("pluginCanBeEnabled")
-            : uiText("pluginCanEnable"),
-          color: c().faint,
-        }
-      : {
-          label: phoneEditor()
-            ? uiText("pluginNeedsConfiguring")
-            : uiText("pluginNeedsSetup"),
-          color: c().warning,
-        };
+    !item.enabled
+      ? { label: uiText("pluginOffForAll"), color: c().faint }
+      : item.state === "ready"
+        ? undefined
+        : {
+            label: phoneEditor()
+              ? uiText("pluginNeedsConfiguring")
+              : uiText("pluginNeedsSetup"),
+            color: c().warning,
+          };
   return (
     <View>
       <If when={!phoneEditor()}>
@@ -110,6 +108,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   cursor: ready() || checked() ? "pointer" : "default",
+                  opacity: item().enabled ? 1 : opacity.muted,
                 }}
               >
                 <If
@@ -134,16 +133,22 @@ export function AgentPlugins(props: { form: AgentForm }) {
                           />
                         </If>
                       </View>
-                      <StatusLane
-                        width={pluginLaneWidth}
-                        status={status(item())}
-                      />
+                      <If when={status(item())}>
+                        {(shown) => (
+                          <StatusLane
+                            width={pluginLaneWidth}
+                            status={shown()}
+                          />
+                        )}
+                      </If>
                     </>
                   }
                 >
                   <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                     <Label weight={weight.regular}>{item().name}</Label>
-                    <StatusLine status={status(item())} />
+                    <If when={status(item())}>
+                      {(shown) => <StatusLine status={shown()} />}
+                    </If>
                     <Label variant="small" tone="muted">
                       {counts(item())}
                     </Label>

@@ -259,6 +259,22 @@ export class McpService {
     const definition = this.#scopeOf(agentId, server).definition(server);
     if (definition?.auth !== "oauth" || definition.url === undefined)
       throw new Error(`${server} does not sign in with OAuth`);
+    return await this.loginUrl(
+      definition.url,
+      definition.headers,
+      redirectOrigin,
+    );
+  }
+
+  /**
+   * Start a login for a server by its URL alone: credentials are kept per URL hash, so no agent is
+   * needed. A plugin's panel uses this; the callback and the pending state are the same as `login`.
+   */
+  async loginUrl(
+    url: string,
+    headers: Record<string, string> | undefined,
+    redirectOrigin: string | undefined,
+  ): Promise<{ pendingId: string; authorizationUrl: string }> {
     const origin =
       originOf(this.#options.publicUrl) ?? originOf(redirectOrigin);
     if (origin === undefined)
@@ -269,11 +285,9 @@ export class McpService {
     const logins = this.#loginsFor(redirectUrl);
     this.#redirect = redirectUrl;
     const pending = await logins.beginLogin({
-      serverKey: mcpServerKey(definition.url),
-      serverUrl: definition.url,
-      ...(definition.headers === undefined
-        ? {}
-        : { headers: definition.headers }),
+      serverKey: mcpServerKey(url),
+      serverUrl: url,
+      ...(headers === undefined ? {} : { headers }),
     });
     this.#pending.set(pending.pendingId, { logins, redirectUrl });
     return {
@@ -282,7 +296,10 @@ export class McpService {
     };
   }
 
-  async completeLogin(pendingId: string, callbackUrl: string): Promise<void> {
+  async completeLogin(
+    pendingId: string,
+    callbackUrl: string,
+  ): Promise<string | undefined> {
     const held = this.#pending.get(pendingId);
     if (held === undefined)
       throw new LoginError(
@@ -290,13 +307,14 @@ export class McpService {
         "No pending login with that id (it may have been cancelled, replaced or already completed)",
       );
     try {
-      const { serverKey } = await held.logins.completeLogin(
+      const { serverKey, note } = await held.logins.completeLogin(
         pendingId,
         callbackUrl,
       );
       this.#pending.delete(pendingId);
       this.#options.changed();
       void this.#retry(serverKey);
+      return note;
     } catch (error) {
       if (!(error instanceof LoginError && error.code === "state_mismatch"))
         this.#pending.delete(pendingId);
@@ -325,7 +343,13 @@ export class McpService {
     const definition = this.#scopeOf(agentId, server).definition(server);
     if (definition?.url === undefined)
       throw new Error(`${server} has no URL to sign out of`);
-    const serverKey = mcpServerKey(definition.url);
+    await this.#forget(definition.url);
+    await this.host.manager.servers.close(agentId, server);
+    this.#options.changed();
+  }
+
+  async #forget(url: string): Promise<void> {
+    const serverKey = mcpServerKey(url);
     for (const logins of this.#logins.values()) await logins.logout(serverKey);
     for (const kind of [
       "tokens",
@@ -334,7 +358,72 @@ export class McpService {
       "discoveryState",
     ] as const)
       await this.credentials.delete(serverKey, kind);
-    await this.host.manager.servers.close(agentId, server);
+  }
+
+  /** The key a URL's credentials are kept under. */
+  keyOf(url: string): string {
+    return mcpServerKey(url);
+  }
+
+  /** Whether a sign-in is stored for this URL. */
+  /** Which stored sign-in this URL has now (a stamp, not the token); undefined when none. */
+  signInStamp(url: string): string | undefined {
+    return this.credentials.stamp(mcpServerKey(url), "tokens");
+  }
+
+  signedIn(url: string): boolean {
+    return this.credentials.has(mcpServerKey(url), "tokens");
+  }
+
+  /**
+   * For a plugin's connection test: the provider that sends this URL's stored sign-in (refreshing
+   * it when it has expired), or undefined when none is stored, so a test never starts a login.
+   */
+  storedAuthProvider(url: string): AuthProviderFor | undefined {
+    if (!this.signedIn(url)) return undefined;
+    return (_name, context) =>
+      createOAuthProvider({
+        serverKey: mcpServerKey(context.url),
+        serverUrl: context.url,
+        store: this.credentials,
+        redirectUrl: this.#redirect,
+      });
+  }
+
+  /** Sign out of a URL (a plugin's panel); the servers using it reconnect without the token. */
+  async logoutUrl(url: string): Promise<void> {
+    await this.#forget(url);
+    for (const agent of this.#options.agents()) {
+      const scope = this.host.inspect(agent.id);
+      for (const definition of scope.servers())
+        if (
+          definition.url !== undefined &&
+          mcpServerKey(definition.url) === mcpServerKey(url)
+        )
+          await this.host.manager.servers.close(agent.id, definition.name);
+    }
+    this.#options.changed();
+  }
+
+  /**
+   * An uninstalled plugin's sign-ins: removed only for a URL no other server uses (another plugin,
+   * given in `others`, or any other source of any agent), since the tokens are shared by URL.
+   */
+  async releaseUrls(
+    urls: readonly string[],
+    plugin: string,
+    others: ReadonlySet<string>,
+  ): Promise<void> {
+    const used = new Set(others);
+    for (const agent of this.#options.agents())
+      for (const definition of this.host.inspect(agent.id).servers())
+        if (
+          definition.url !== undefined &&
+          definition.source !== `${PLUGIN}${plugin}`
+        )
+          used.add(mcpServerKey(definition.url));
+    for (const url of urls)
+      if (!used.has(mcpServerKey(url))) await this.#forget(url);
     this.#options.changed();
   }
 
@@ -372,8 +461,12 @@ export class McpService {
         "Sign-in not found",
         "No sign-in is waiting for this address. Start it again from eta's settings.",
       );
+    let note: string | undefined;
     try {
-      await this.completeLogin(state, `${held.redirectUrl}${url.search}`);
+      note = await this.completeLogin(
+        state,
+        `${held.redirectUrl}${url.search}`,
+      );
     } catch (error) {
       return page(
         400,
@@ -381,7 +474,11 @@ export class McpService {
         error instanceof LoginError ? error.message : messageOf(error),
       );
     }
-    return page(200, "Signed in", "You can close this tab and go back to eta.");
+    return page(
+      200,
+      "Signed in",
+      note ?? "You can close this tab and go back to eta.",
+    );
   }
 
   async close(): Promise<void> {

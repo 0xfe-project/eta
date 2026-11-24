@@ -382,14 +382,21 @@ export function providersPlugin(options: ProvidersPluginOptions) {
               result: await balances.read(args.id, args.refresh === true),
             };
           }),
-          wire.handle("providers", "logos", async (call) => {
-            const { sources } = (call.args ?? {}) as Partial<
-              ProviderArgs["logos"]
-            >;
-            return {
-              result: await logos.logos(Array.isArray(sources) ? sources : []),
-            };
-          }),
+          wire.handle(
+            "providers",
+            "logos",
+            async (call) => {
+              const { sources } = (call.args ?? {}) as Partial<
+                ProviderArgs["logos"]
+              >;
+              return {
+                result: await logos.logos(
+                  Array.isArray(sources) ? sources : [],
+                ),
+              };
+            },
+            { unordered: true },
+          ),
           wire.handle("providers", "check", async (call) => {
             const { id } = (call.args ?? {}) as Partial<ProviderArgs["check"]>;
             const { config } = await options.store.read();

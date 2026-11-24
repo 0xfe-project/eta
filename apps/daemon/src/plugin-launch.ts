@@ -31,6 +31,7 @@ import type { RuntimeExtras } from "@eta/server";
 import type { PluginPackage, PluginServer } from "./plugin-package";
 import { mkdirSync, realpathSync, symlinkSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { isCursorServer } from "@eta/client-contracts";
 import { effectiveValue } from "@eta/client-contracts/plugin-fields";
 import { renderSkillDirs } from "@eta/server";
 import { fillTemplate, isWithin } from "./plugin-package";
@@ -39,6 +40,44 @@ import { fillTemplate, isWithin } from "./plugin-package";
 interface ServerConfig {
   env?: Record<string, string>;
   headers?: Record<string, string>;
+  /** Some of `headers` were attached by the user, not by the plugin: no sign-in is offered instead. */
+  userHeaders?: boolean;
+  /** The sign-in token goes in this header too (from the user's choice for this server). */
+  tokenHeader?: { name: string; format: "raw" | "bearer" };
+}
+
+/** A header the user attached to one remote server of a plugin. */
+export interface UserHeaderInput {
+  server: string;
+  name: string;
+  value: string;
+  /** The user confirmed sending it over plain http to a host that is not this machine. */
+  plainOk: boolean;
+}
+
+/** An environment variable the user set on one stdio server of a plugin. */
+export interface UserEnvInput {
+  server: string;
+  name: string;
+  value: string;
+}
+
+/** Plain http to a host other than this machine: a header sent there crosses the network in clear. */
+export function plainRemote(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:") return false;
+  const host = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  return !(
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "::1" ||
+    /^127\./.test(host)
+  );
 }
 export type ServersConfig = Record<string, ServerConfig>;
 
@@ -56,8 +95,16 @@ function textOf(value: PluginValue): string {
 
 /** What the extension makes of these values, for each server that has a binding. */
 export function serversConfig(
-  plugin: Pick<PluginPackage, "bindings" | "fields">,
+  plugin: Pick<PluginPackage, "bindings" | "fields"> &
+    Partial<Pick<PluginPackage, "servers">>,
   values: Readonly<Record<string, PluginValue | null | undefined>>,
+  userHeaders: readonly UserHeaderInput[] = [],
+  userEnv: readonly UserEnvInput[] = [],
+  tokenHeaders: readonly {
+    server: string;
+    name: string;
+    format: "raw" | "bearer";
+  }[] = [],
 ): ServersConfig {
   const texts: Record<string, string | undefined> = {};
   for (const field of plugin.fields as PluginField[]) {
@@ -77,6 +124,41 @@ export function serversConfig(
       if (filled !== undefined) headers[name] = filled;
     }
     config[server] = { env, headers };
+  }
+  // The user's headers go on top, whatever the case of a name the file or a binding set already.
+  for (const header of userHeaders) {
+    // An empty row (the editor's default Authorization) is nothing: not sent, not a choice.
+    if (header.name.trim() === "" || header.value.trim() === "") continue;
+    const server = plugin.servers?.find((one) => one.name === header.server);
+    // Only a remote server takes headers; plain http to another machine needs the user's yes.
+    if (server === undefined || server.config.type === "stdio") continue;
+    if (plainRemote(server.config.url) && !header.plainOk) continue;
+    const entry = (config[header.server] ??= { env: {}, headers: {} });
+    const headers = entry.headers ?? {};
+    for (const name of Object.keys(headers))
+      if (name.toLowerCase() === header.name.toLowerCase())
+        delete headers[name];
+    headers[header.name] = header.value;
+    entry.headers = headers;
+    entry.userHeaders = true;
+  }
+  for (const one of tokenHeaders) {
+    const server = plugin.servers?.find(
+      (candidate) => candidate.name === one.server,
+    );
+    if (server === undefined || server.config.type === "stdio") continue;
+    const entry = (config[one.server] ??= { env: {}, headers: {} });
+    entry.tokenHeader = { name: one.name, format: one.format };
+  }
+  // The user's variables go on top of what the binding set, for a stdio server only.
+  for (const one of userEnv) {
+    if (one.name.trim() === "" || one.value === "") continue;
+    const server = plugin.servers?.find(
+      (candidate) => candidate.name === one.server,
+    );
+    if (server === undefined || server.config.type !== "stdio") continue;
+    const entry = (config[one.server] ??= { env: {}, headers: {} });
+    entry.env = { ...entry.env, [one.name]: one.value };
   }
   return config;
 }
@@ -119,6 +201,9 @@ export type ResolvedServer = {
       headers: Record<string, string>;
       /** What the extension declares (`mcp.<server>.auth`); left out, `toMcpEntries` infers it. */
       auth?: false | "oauth";
+      /** Some of `headers` are the user's: a 401 then means they were refused, not that a sign-in is due. */
+      userHeaders?: boolean;
+      tokenHeader?: { name: string; format: "raw" | "bearer" };
     }
 );
 
@@ -260,6 +345,7 @@ export function resolvePluginServers(
         continue;
       }
       const given = config[server.name]?.headers ?? {};
+      const userHeaders = config[server.name]?.userHeaders === true;
       const auth = plugin.bindings[server.name]?.auth;
       const fixed = Object.entries(server.config.headers).filter(
         ([name]) =>
@@ -275,6 +361,10 @@ export function resolvePluginServers(
         url: server.config.url,
         headers: { ...Object.fromEntries(fixed), ...given },
         ...(auth === undefined ? {} : { auth }),
+        ...(userHeaders ? { userHeaders } : {}),
+        ...(config[server.name]?.tokenHeader === undefined
+          ? {}
+          : { tokenHeader: config[server.name]!.tokenHeader! }),
       });
     }
   }
@@ -333,10 +423,24 @@ const hasAuthorization = (headers: Record<string, string>): boolean =>
  * already sent an `Authorization` header. The one place this is decided.
  */
 function authOf(server: {
+  url?: string;
   headers: Record<string, string>;
   auth?: false | "oauth";
+  userHeaders?: boolean;
+  tokenHeader?: unknown;
 }): false | "oauth" | undefined {
   if (server.auth !== undefined) return server.auth;
+  // A token header only means something with a sign-in.
+  if (server.tokenHeader !== undefined) return "oauth";
+  // The user chose how to authenticate: a refusal is reported as such, with no sign-in offered. A
+  // Cursor-hosted server is two layers: the Cursor credential the user saved is a header, and the
+  // service behind it (Google, say) still signs in with OAuth, unless the user sends Authorization.
+  if (server.userHeaders === true)
+    return server.url !== undefined &&
+      isCursorServer(server.url) &&
+      !hasAuthorization(server.headers)
+      ? "oauth"
+      : undefined;
   return hasAuthorization(server.headers) ? undefined : "oauth";
 }
 
@@ -371,6 +475,9 @@ export function toMcpEntries(
             ? {}
             : { headers: server.headers }),
           ...(auth === undefined ? {} : { auth }),
+          ...(server.tokenHeader === undefined
+            ? {}
+            : { tokenHeader: server.tokenHeader }),
         },
       ];
     }),

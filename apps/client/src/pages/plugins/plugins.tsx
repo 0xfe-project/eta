@@ -14,22 +14,36 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { avatar, control, icon, space, weight } from "../../components/tokens";
+import {
+  avatar,
+  control,
+  icon,
+  opacity,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { AddPlugin, ConfigurePlugin, sheetEdge } from "./configure";
 import { pluginText } from "./labels";
+import { Market } from "./market";
 import { PluginDetail } from "./plugin-detail";
-import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
+import { PluginLogo } from "./plugin-logo";
+import { PluginEnabled, PluginName } from "./plugin-name";
+import {
+  authStyle,
+  cardLogin,
+  NoPlugins,
+  PluginGlyph,
+  Status,
+} from "./plugin-status";
+import { ServersDialog } from "./servers-panel";
 import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
 import { pluginWarnings, PluginWarningsDialog } from "./warnings";
 
-/** The intro line over the grid of plugins. */
-const introWidth = 1000;
-/** A plugin's card in the grid, and its glyph's tile. */
+/** A plugin's card in the grid. */
 const cardWidth = 268;
-const glyphWidth = 36;
 /** The card's two lines of description, and its footer of actions. */
 const descriptionHeight = 36;
 const footerHeight = 36;
@@ -46,6 +60,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
   const warnings = signal("");
   const source = signal("");
   const remove = signal("");
+  const servers = signal("");
   const list = () => host.list<PluginView>("plugins");
   const plugin = () => list().find((item) => item.name === config());
   const phone = () => props.layout === "phone";
@@ -57,6 +72,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
     list().filter((item) => item.state === "needs_config");
   const installed = () =>
     list().filter((item) => item.state !== "needs_config");
+  const serversPlugin = () => list().find((item) => item.name === servers());
   const warningPlugin = () => list().find((item) => item.name === warnings());
   const sourcePlugin = () => list().find((item) => item.name === source());
   async function refreshPlugins() {
@@ -73,9 +89,15 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
 
   const hoveredTab = signal("");
   function tabs(tablet = false) {
-    const items = ["Plugins", "Skills"];
+    const items = ["Plugins", "Skills", "Market"];
     const label = (item: string) =>
-      uiText(item === "Plugins" ? "plugins" : "skillsTab");
+      uiText(
+        item === "Plugins"
+          ? "plugins"
+          : item === "Skills"
+            ? "skillsTab"
+            : "pluginMarket",
+      );
     return (
       <View
         style={{
@@ -168,9 +190,6 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           gap: space[16],
         }}
       >
-        <Label variant="small" tone="muted" style={{ maxWidth: introWidth }}>
-          {uiText("pluginsGiveAgentsSkillsAndMcp")}
-        </Label>
         <If when={!list().length}>
           <NoPlugins />
         </If>
@@ -191,6 +210,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                 onUpdate={() => void update(item().name)}
                 onRemove={() => remove.set(item().name)}
                 onConfigure={() => config.set(item().name)}
+                onServers={() => servers.set(item().name)}
               />
             )}
           </Each>
@@ -264,11 +284,22 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                 <If
                   when={tab() === "Plugins"}
                   else={
-                    <Skills
-                      layout={props.layout}
-                      onBack={props.onBack}
-                      tabs={() => tabs(props.layout === "tablet")}
-                    />
+                    <If
+                      when={tab() === "Skills"}
+                      else={
+                        <Market
+                          layout={props.layout}
+                          onBack={props.onBack}
+                          tabs={() => tabs(props.layout === "tablet")}
+                        />
+                      }
+                    >
+                      <Skills
+                        layout={props.layout}
+                        onBack={props.onBack}
+                        tabs={() => tabs(props.layout === "tablet")}
+                      />
+                    </If>
                   }
                 >
                   <If when={phone()} else={desktopList()}>
@@ -329,6 +360,15 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           <PluginWarningsDialog
             item={item()}
             onClose={() => warnings.set("")}
+          />
+        )}
+      </If>
+      <If when={serversPlugin()}>
+        {(item) => (
+          <ServersDialog
+            item={item()}
+            phone={phone()}
+            onClose={() => servers.set("")}
           />
         )}
       </If>
@@ -423,12 +463,16 @@ function PluginCard(props: {
   onUpdate: () => void;
   onRemove: () => void;
   onConfigure: () => void;
+  onServers: () => void;
 }) {
   const c = colors();
   const git = () =>
     props.item.source.kind === "git" ? props.item.source : undefined;
   return (
     <View
+      role="button"
+      accessibilityLabel={props.item.name}
+      onPress={props.onServers}
       style={{
         width: cardWidth,
         padding: space[12],
@@ -436,24 +480,35 @@ function PluginCard(props: {
         borderWidth: 1,
         borderColor: c().border,
         gap: space[8],
+        opacity: props.item.enabled ? 1 : opacity.muted,
       }}
     >
       <View style={{ ...row, alignItems: "flex-start", gap: space[12] }}>
-        <View
-          style={{
-            width: glyphWidth,
-            height: glyphWidth,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: c().selected,
-          }}
-        >
-          <Icon name="plugins" size={icon.lg} tone="muted" />
-        </View>
         <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
-          <Label weight={weight.regular} lines={1}>
-            {props.item.name}
-          </Label>
+          <View style={{ ...row, gap: space[8] }}>
+            <PluginLogo name={props.item.name} installed />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <PluginName name={props.item.name} />
+            </View>
+            <If when={cardLogin(props.item)}>
+              {(state) => (
+                <View
+                  testID={`card-login:${props.item.name}`}
+                  style={{
+                    flexShrink: 0,
+                    opacity: props.item.enabled ? 1 : opacity.muted,
+                    paddingHorizontal: space[8],
+                    paddingVertical: 1,
+                    backgroundColor: c()[authStyle(state()).fill],
+                  }}
+                >
+                  <Label variant="caption" tone={authStyle(state()).tone}>
+                    {uiText(authStyle(state()).text)}
+                  </Label>
+                </View>
+              )}
+            </If>
+          </View>
           <View style={{ ...row, height: space[20], gap: space[8] }}>
             <If when={props.item.version}>
               <Label variant="small" tone="muted">
@@ -503,13 +558,27 @@ function PluginCard(props: {
             )}
           </If>
         </View>
-        <View style={{ ...row, height: space[24], gap: space[4] }}>
-          <Label variant="small" tone="muted">
+        <View style={{ ...row, height: control.md, gap: space[4] }}>
+          <Label
+            variant="small"
+            tone="muted"
+            lines={1}
+            style={{ flex: 1, minWidth: 0 }}
+          >
             {uiText("skillsMcpServers", {
               length: props.item.skills.length,
               value2: props.item.servers.length,
             })}
           </Label>
+          <If when={props.item.servers.length}>
+            <Button
+              label={uiText("serversButton")}
+              tone="ghost"
+              labelVariant="small"
+              style={{ flexShrink: 0 }}
+              onPress={props.onServers}
+            />
+          </If>
           <If when={pluginWarnings(props.item).length}>
             <Button
               label={uiText("warningsFor", { name: props.item.name })}
@@ -535,9 +604,17 @@ function PluginCard(props: {
           borderColor: c().border,
           paddingTop: space[8],
           gap: space[4],
-          justifyContent: "flex-end",
+          alignItems: "center",
         }}
       >
+        {/* Switch at the left end; with all three buttons the row is tight, so the label becomes a tooltip. */}
+        <PluginEnabled
+          item={props.item}
+          compact={
+            props.item.source.kind === "git" && props.item.fields.length > 0
+          }
+        />
+        <View style={{ flex: 1 }} />
         <If when={props.item.source.kind === "git"}>
           <Button
             label={uiText("update")}
@@ -551,7 +628,7 @@ function PluginCard(props: {
           />
         </If>
         <If when={props.item.fields.length}>
-          <Button label={uiText("configure")} onPress={props.onConfigure} />
+          <Button label={uiText("cardValues")} onPress={props.onConfigure} />
         </If>
       </View>
     </View>
@@ -642,7 +719,7 @@ function PluginRows(props: {
             >
               <PluginGlyph size={avatar.lg} />
               <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-                <Label lines={1}>{item().name}</Label>
+                <PluginName name={item().name} />
                 <Label variant="caption" tone="muted" lines={1}>
                   {[
                     item().version,

@@ -23,7 +23,6 @@ export const commonMessages = {
   archived: ["Archived {{length}}", "已归档 {{length}}"],
   artifacts: ["Artifacts {{length}}", "产物 {{length}}"],
   back: ["Back", "返回"],
-  canBeEnabled: ["Can be enabled", "可启用"],
   cancel: ["Cancel", "取消"],
   captainWillAppearWhenItIs: [
     "Captain will appear when it is ready.",
