@@ -7,5 +7,6 @@ export { Field, FormField } from "./input";
 export { SearchField } from "./search-field";
 export { CheckControl, ToggleSwitch } from "./selection-controls";
 export { Card, Separator } from "./surface";
+export { Segmented, Tabs } from "./tabs";
 export { Caption, Icon, Label, RowChevron } from "./text";
 export { TimeField } from "./time-field";
