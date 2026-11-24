@@ -273,6 +273,12 @@ export interface PluginArgs {
   composioLink: { slug: string };
   /** Delete this host's accounts of one toolkit on Composio; it cannot be undone there. */
   composioDisconnect: { slug: string };
+  /** Add a toolkit that needs no sign-in: it becomes a plugin, and Composio's sign-in is not asked for. */
+  composioAdd: { slug: string };
+  /** Take an added toolkit away again. Nothing is asked of Composio. */
+  composioRemove: { slug: string };
+  /** Which toolkits were added (read only). */
+  composioAdded: Record<string, never>;
   /** The connected toolkits as plugins of their own (read only). */
   composioPlugins: Record<string, never>;
 }
@@ -370,6 +376,9 @@ export interface PluginResults {
   composioLink: { redirectUrl: string };
   /** Only a status; `removed` counts the accounts deleted. */
   composioDisconnect: { status: ComposioStatus; removed: number };
+  composioAdd: { status: ComposioStatus };
+  composioRemove: { removed: boolean };
+  composioAdded: { slugs: string[] };
   composioPlugins: { plugins: ComposioPluginView[] };
 }
 

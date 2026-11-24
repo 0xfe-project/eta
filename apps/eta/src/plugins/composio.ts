@@ -42,7 +42,10 @@ const CREDENTIAL = { integration: "market", key: "composio", kind: "secret" };
 /** The kept id of one toolkit's session is a row of its own beside the key's: `composio-session:<slug>`. */
 const SESSION_PREFIX = "composio-session:";
 
-/** The plugin name of a connected toolkit: `@composio/<slug>`. */
+/** The toolkits that need no sign-in and were added, as slugs: plugins like the connected ones. */
+const ADDED_KEY = "plugins.composioAdded";
+
+/** The plugin name of a connected (or added) toolkit: `@composio/<slug>`. */
 const VIRTUAL_PREFIX = "@composio/";
 /** The sessions kept, as slugs only (the ids are sealed rows of their own): to erase them all. */
 const SESSIONS_KEY = "plugins.composioSessions";
@@ -485,9 +488,11 @@ export class Composio {
 
   /**
    * A connected toolkit is a plugin of its own, `@composio/<slug>`, with one tool_router session of
-   * Composio's behind it. There is no file of it on disk: this source says what exists, `Plugins`
+   * Composio's behind it. The one exception to "only a connected (ACTIVE) toolkit": a toolkit that
+   * needs no sign-in has no account to be connected, so it is a plugin once it was added (`add`).
+   * There is no file of it on disk: this source says what exists, `Plugins`
    * asks it (see `VirtualPlugins`), and the agents' own choice and the user's switch work as they do
-   * for any plugin. The session is made when the toolkit is connected, kept as its id only (sealed,
+   * for any plugin. The session is made when the toolkit is connected or added, kept as its id only (sealed,
    * one row each, and the slugs in a setting so they can all be erased), and what Composio says it
    * made is checked before it is used: one toolkit, no removal of connections, no workbench.
    */
@@ -626,7 +631,9 @@ export class Composio {
     let opened: { id: string; url: string } | undefined;
     try {
       // A session uses the accounts under a config that is on for the tool router; see #authConfig.
-      await this.#enableRouter(slug, key);
+      // A toolkit that needs no sign-in has no account and no config to switch.
+      if (this.#known(slug)?.auth !== "none")
+        await this.#enableRouter(slug, key);
       const kept = this.#keptId(slug);
       if (kept !== undefined) {
         try {
@@ -809,6 +816,9 @@ export class Composio {
     const key = this.#apiKey();
     if (key === undefined)
       throw new PluginError("set the Composio API key first");
+    // A toolkit that needs no sign-in has no page to sign in on: it is added, not linked.
+    if (this.#known(slug)?.auth === "none")
+      throw new PluginError("that toolkit needs no sign-in: add it instead");
     try {
       const config = await this.#authConfig(slug, key);
       const made = await this.#call(
@@ -855,9 +865,66 @@ export class Composio {
    */
   async follow(): Promise<{ status: ComposioStatus; slugs: string[] }> {
     const read = await this.connected();
+    // What was added needs no account, so it is wanted as well as what is connected.
     if (read.status === "ready")
-      void this.sync(read.slugs).catch(() => undefined);
+      void this.sync([...read.slugs, ...this.added()]).catch(() => undefined);
     return read;
+  }
+
+  /** The toolkits that were added (they need no sign-in); none while there is no key. */
+  added(): string[] {
+    return this.#apiKey() === undefined ? [] : this.#addedSlugs();
+  }
+
+  #addedSlugs(): string[] {
+    const saved = this.#settings.get(ADDED_KEY);
+    return Array.isArray(saved)
+      ? saved.filter(
+          (one): one is string => typeof one === "string" && SLUG.test(one),
+        )
+      : [];
+  }
+
+  /**
+   * Adds a toolkit that needs no sign-in (its `auth` in the kept list is `none`): it is written to
+   * the added list and its session is made, with no auth config and no link asked of Composio. Any
+   * other toolkit, one the kept list does not know, and a name that is no slug are refused before
+   * a request. Whether Composio accepts a tool_router session for such a toolkit is not verified.
+   */
+  async add(slug: string): Promise<{ status: ComposioStatus }> {
+    if (!SLUG.test(slug)) throw new PluginError("that is not a toolkit name");
+    const key = this.#apiKey();
+    if (key === undefined) return { status: "needs_key" };
+    if (this.#known(slug)?.auth !== "none")
+      throw new PluginError("only a toolkit that needs no sign-in is added");
+    this.#settings.set(ADDED_KEY, [...new Set([...this.#addedSlugs(), slug])]);
+    if (this.source().enabled) {
+      const before = this.#snapshot();
+      await this.#ensure(slug, key).catch(() => undefined);
+      if (this.#snapshot() !== before) this.#notify();
+    }
+    return { status: "ready" };
+  }
+
+  /**
+   * Takes an added toolkit off the list and drops its session and kept id. Nothing is asked of
+   * Composio, and the agents' choices of it stay. A slug that was not added is left alone.
+   */
+  remove(slug: string): { removed: boolean } {
+    const added = this.#addedSlugs();
+    if (!added.includes(slug)) return { removed: false };
+    const rest = added.filter((one) => one !== slug);
+    if (rest.length === 0) this.#settings.delete(ADDED_KEY);
+    else this.#settings.set(ADDED_KEY, rest);
+    this.#drop(slug);
+    return { removed: true };
+  }
+
+  /** One toolkit of the kept list, if there is a list and it has it. */
+  #known(slug: string): ComposioToolkit | undefined {
+    return this.#fromCache(this.source())?.toolkits.find(
+      (one) => one.slug === slug,
+    );
   }
 
   /**

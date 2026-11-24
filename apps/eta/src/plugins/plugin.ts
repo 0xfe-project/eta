@@ -455,6 +455,15 @@ export function pluginsPlugin(
             new Args(call).string("slug"),
           ),
         })),
+        wire.handle("plugins", "composioAdd", async (call) => ({
+          result: await needComposio().add(new Args(call).string("slug")),
+        })),
+        wire.handle("plugins", "composioRemove", async (call) => ({
+          result: needComposio().remove(new Args(call).string("slug")),
+        })),
+        wire.handle("plugins", "composioAdded", async () => ({
+          result: { slugs: needComposio().added() },
+        })),
         wire.handle("plugins", "composioPlugins", async () => {
           const off = plugins.rows.disabled();
           return {

@@ -13,13 +13,6 @@ import { CatalogCache } from "../src/plugins/market-cache";
 import { Plugins } from "../src/plugins/service";
 import { SettingStore } from "../src/settings/store";
 
-/** What a Composio gets with adding: not there yet, so the tests name it here. */
-interface Adding {
-  add: (slug: string) => Promise<{ status: string }>;
-  remove: (slug: string) => { removed: boolean };
-  added: () => string[];
-}
-
 const KEY = "ck_test_SECRET_0123456789";
 const OTHER_KEY = "ck_test_OTHER_9876543210";
 const json = (value: unknown, status = 200) =>
@@ -159,7 +152,7 @@ function open(options: { now?: () => number } = {}) {
       cache,
       baseUrl: base(),
       ...options,
-    }) as Composio & Adding;
+    });
   const composio = start();
   composio.setKey(KEY);
   const stored = (slug: string) =>
@@ -582,7 +575,7 @@ const signIn = () =>
   );
 
 describe("adding a toolkit that needs no sign-in", () => {
-  it.fails("asks Composio for no auth config and no link, and makes its one session", async () => {
+  it("asks Composio for no auth config and no link, and makes its one session", async () => {
     const { composio, settings } = open();
     await list(composio);
     expect(await composio.add("hackernews")).toEqual({ status: "ready" });
@@ -603,7 +596,7 @@ describe("adding a toolkit that needs no sign-in", () => {
     expect(composio.has("@composio/hackernews")).toBe(true);
   });
 
-  it.fails("refuses a toolkit that signs in, one the list does not know, and a name that is no slug: no request, nothing kept", async () => {
+  it("refuses a toolkit that signs in, one the list does not know, and a name that is no slug: no request, nothing kept", async () => {
     const { composio, settings } = open();
     await list(composio);
     for (const slug of ["gmail", "odd", "ghost", "../x"])
@@ -613,7 +606,7 @@ describe("adding a toolkit that needs no sign-in", () => {
     expect(settings.get("plugins.composioAdded")).toBeUndefined();
   });
 
-  it.fails("needs a key: a status, no request, nothing kept", async () => {
+  it("needs a key: a status, no request, nothing kept", async () => {
     const { composio, settings } = open();
     await list(composio);
     composio.clearKey();
@@ -622,7 +615,7 @@ describe("adding a toolkit that needs no sign-in", () => {
     expect(settings.get("plugins.composioAdded")).toBeUndefined();
   });
 
-  it.fails("is kept across a restart, and its session is found again with one read", async () => {
+  it("is kept across a restart, and its session is found again with one read", async () => {
     const { composio, start } = open();
     await list(composio);
     await composio.add("hackernews");
@@ -637,7 +630,7 @@ describe("adding a toolkit that needs no sign-in", () => {
     expect(gets()).toHaveLength(1);
   });
 
-  it.fails("is not dropped when the connected accounts are read: it is made for what is added as well as what is connected", async () => {
+  it("is not dropped when the connected accounts are read: it is made for what is added as well as what is connected", async () => {
     const { composio } = open();
     await list(composio);
     accounts = ["gmail"];
@@ -651,7 +644,7 @@ describe("adding a toolkit that needs no sign-in", () => {
     ]);
   });
 
-  it.fails("is removed without a request to Composio: its session and kept id go, the list loses it", async () => {
+  it("is removed without a request to Composio: its session and kept id go, the list loses it", async () => {
     const { composio, settings, stored } = open();
     await list(composio);
     await composio.add("hackernews");
@@ -668,7 +661,7 @@ describe("adding a toolkit that needs no sign-in", () => {
     expect(composio.virtuals()).toEqual([]);
   });
 
-  it.fails("is removed from the list only for a slug that was added: a connected toolkit's session is not touched", async () => {
+  it("is removed from the list only for a slug that was added: a connected toolkit's session is not touched", async () => {
     const { composio } = open();
     await list(composio);
     await composio.sync(["gmail"]);
@@ -676,7 +669,7 @@ describe("adding a toolkit that needs no sign-in", () => {
     expect(composio.has("@composio/gmail")).toBe(true);
   });
 
-  it.fails("keeps the list when the key goes, and makes the session again when a key comes back", async () => {
+  it("keeps the list when the key goes, and makes the session again when a key comes back", async () => {
     const { composio, settings, stored } = open();
     await list(composio);
     await composio.add("hackernews");
@@ -693,7 +686,7 @@ describe("adding a toolkit that needs no sign-in", () => {
     expect(composio.added()).toEqual(["hackernews"]);
   });
 
-  it.fails("is not trusted when Composio echoes another toolkit list: no plugin, and the self-check is the one the connected ones have", async () => {
+  it("is not trusted when Composio echoes another toolkit list: no plugin, and the self-check is the one the connected ones have", async () => {
     const { composio } = open();
     await list(composio);
     echo = (body) => ({
@@ -708,7 +701,7 @@ describe("adding a toolkit that needs no sign-in", () => {
     expect(composio.has("@composio/hackernews")).toBe(false);
   });
 
-  it.fails("is an agent's choice like any plugin's: the choice stays when it is removed", async () => {
+  it("is an agent's choice like any plugin's: the choice stays when it is removed", async () => {
     const { composio, db } = open();
     await list(composio);
     const plugins = new Plugins({
@@ -731,7 +724,7 @@ describe("adding a toolkit that needs no sign-in", () => {
     expect(plugins.rows.enabled("ada")).toEqual(["@composio/hackernews"]);
   });
 
-  it.fails("has the key in no answer and no kept list", async () => {
+  it("has the key in no answer and no kept list", async () => {
     const { composio, settings } = open();
     await list(composio);
     await composio.add("hackernews");

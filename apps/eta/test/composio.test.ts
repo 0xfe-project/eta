@@ -479,7 +479,7 @@ describe("the link", () => {
     expect(requests).toHaveLength(0);
   });
 
-  it.fails("does not ask for an auth config or a link for a toolkit that needs no sign-in, and still does for any other kind", async () => {
+  it("does not ask for an auth config or a link for a toolkit that needs no sign-in, and still does for any other kind", async () => {
     const { composio, market } = open();
     composio.setKey(KEY);
     handler = () =>
