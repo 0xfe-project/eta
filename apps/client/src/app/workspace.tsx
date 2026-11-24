@@ -1,5 +1,5 @@
 import type {
-  AgentResults,
+  AgentView,
   CaptainResults,
   ProvidersView,
 } from "@eta/client-contracts";
@@ -41,6 +41,7 @@ import { Settings } from "../pages/settings/settings";
 import { NewTask } from "../pages/tasks/new-task";
 import { TaskDetail } from "../pages/tasks/task-detail";
 import { TaskWorkspace } from "../pages/tasks/task-workspace";
+import { openAgentChat } from "../pages/templates/agent-chat";
 import { TemplateGallery } from "../pages/templates/gallery";
 import { requestedTemplate } from "../pages/templates/link";
 import { follow, useHost } from "../services/host";
@@ -230,12 +231,10 @@ export function Workspace(props: {
     }
     if (phone()) void settingsPush.leave();
   }
-  /** The private chat with an agent, made the first time and found every time after. */
-  async function direct(agentId: string) {
-    const result = await host.action(() =>
-      host.call<AgentResults["direct"]>("agents", "direct", { agentId }),
-    );
-    if (result) open(result.conversation.id);
+  /** The chat of an agent just made from a template: a group of its own, opened. */
+  async function chatWith(agent: AgentView) {
+    const id = await openAgentChat(host, agent);
+    if (id) open(id);
   }
   let openingCaptain = false;
   async function openCaptain() {
@@ -628,9 +627,9 @@ export function Workspace(props: {
           phone={phone()}
           initialId={templateGallery() || undefined}
           onClose={() => templateGallery.set(undefined)}
-          onCreated={(agentId) => {
+          onCreated={(agent) => {
             templateGallery.set(undefined);
-            void direct(agentId);
+            void chatWith(agent);
           }}
           onModelServices={() => {
             templateGallery.set(undefined);

@@ -1,4 +1,4 @@
-import type { AgentResults } from "@eta/client-contracts";
+import type { AgentResults, AgentView } from "@eta/client-contracts";
 import type { ScrollRef } from "nsh";
 import type { AgentTemplate } from "./template";
 import { computed, signal, View } from "nsh";
@@ -45,7 +45,7 @@ export interface TemplateGalleryProps {
   initialId?: string;
   onClose: () => void;
   /** The agent made from a template. */
-  onCreated: (agentId: string) => void;
+  onCreated: (agent: AgentView) => void;
   onModelServices: () => void;
 }
 
@@ -118,7 +118,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
           avatarSeed: template.id,
         })
         .catch(() => {});
-      props.onCreated(agent.id);
+      props.onCreated(agent);
     } catch (cause) {
       error.set(cause instanceof Error ? cause.message : String(cause));
     } finally {
