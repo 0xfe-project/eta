@@ -178,85 +178,88 @@ export function PluginSettings(props: { phone?: boolean }) {
         }}
       >
         <Label weight={weight.regular}>{uiText("pluginsSourcesTitle")}</Label>
-        <If
-          when={sources().length}
-          else={
-            <Empty
-              title={uiText("pluginsNoSources")}
-              description={uiText("pluginsNoSourcesHint")}
-              icon="plugins"
-              iconSize={icon.lg}
-              descriptionWidth={emptyWidth.narrow}
-              style={{
-                ...emptyStyle,
-                paddingVertical: space[24],
-                flexBasis: "auto",
-              }}
-            />
-          }
-        >
-          <View style={{ borderWidth: 1, borderColor: c().border }}>
-            <Each of={sources()} key={(item) => item.url}>
-              {(item) => (
-                <View
-                  style={{
-                    ...row,
-                    gap: space[12],
-                    padding: space[8],
-                    borderBottomWidth: 1,
-                    borderColor: c().border,
-                  }}
-                >
-                  <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-                    <Label lines={1}>{item().name || item().url}</Label>
-                    <If when={item().kind === "composio" && !hasKey()}>
-                      <Label variant="small" tone="muted" lines={1}>
-                        {uiText("composioSourceNeedsKey")}
-                      </Label>
-                    </If>
-                    <If when={item().name && item().kind !== "composio"}>
-                      <Label
-                        variant="small"
-                        tone="muted"
-                        lines={1}
-                        style={{ userSelect: "text" }}
-                      >
-                        {item().url}
-                      </Label>
-                    </If>
-                  </View>
-                  <ToggleSwitch
-                    label={uiText("pluginsSourceEnabled", {
-                      name: item().name || item().url,
-                    })}
-                    checked={item().enabled}
-                    disabled={
-                      busy() || (item().kind === "composio" && !hasKey())
-                    }
-                    onChange={(enabled) =>
-                      void call("marketSetSourceEnabled", {
-                        url: item().url,
-                        enabled,
-                      })
-                    }
-                  />
-                  <If when={item().kind !== "composio"}>
-                    <Button
-                      label={uiText("pluginsRemove")}
-                      accessibilityLabel={uiText("pluginsRemoveSource", {
+        {/* Until the host has answered the page knows nothing, which is not "no sources". */}
+        <If when={settings()}>
+          <If
+            when={sources().length}
+            else={
+              <Empty
+                title={uiText("pluginsNoSources")}
+                description={uiText("pluginsNoSourcesHint")}
+                icon="plugins"
+                iconSize={icon.lg}
+                descriptionWidth={emptyWidth.narrow}
+                style={{
+                  ...emptyStyle,
+                  paddingVertical: space[24],
+                  flexBasis: "auto",
+                }}
+              />
+            }
+          >
+            <View style={{ borderWidth: 1, borderColor: c().border }}>
+              <Each of={sources()} key={(item) => item.url}>
+                {(item) => (
+                  <View
+                    style={{
+                      ...row,
+                      gap: space[12],
+                      padding: space[8],
+                      borderBottomWidth: 1,
+                      borderColor: c().border,
+                    }}
+                  >
+                    <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+                      <Label lines={1}>{item().name || item().url}</Label>
+                      <If when={item().kind === "composio" && !hasKey()}>
+                        <Label variant="small" tone="muted" lines={1}>
+                          {uiText("composioSourceNeedsKey")}
+                        </Label>
+                      </If>
+                      <If when={item().name && item().kind !== "composio"}>
+                        <Label
+                          variant="small"
+                          tone="muted"
+                          lines={1}
+                          style={{ userSelect: "text" }}
+                        >
+                          {item().url}
+                        </Label>
+                      </If>
+                    </View>
+                    <ToggleSwitch
+                      label={uiText("pluginsSourceEnabled", {
                         name: item().name || item().url,
                       })}
-                      size={props.phone ? control.touch : control.md}
-                      disabled={busy()}
-                      onPress={() =>
-                        void call("marketRemoveSource", { url: item().url })
+                      checked={item().enabled}
+                      disabled={
+                        busy() || (item().kind === "composio" && !hasKey())
+                      }
+                      onChange={(enabled) =>
+                        void call("marketSetSourceEnabled", {
+                          url: item().url,
+                          enabled,
+                        })
                       }
                     />
-                  </If>
-                </View>
-              )}
-            </Each>
-          </View>
+                    <If when={item().kind !== "composio"}>
+                      <Button
+                        label={uiText("pluginsRemove")}
+                        accessibilityLabel={uiText("pluginsRemoveSource", {
+                          name: item().name || item().url,
+                        })}
+                        size={props.phone ? control.touch : control.md}
+                        disabled={busy()}
+                        onPress={() =>
+                          void call("marketRemoveSource", { url: item().url })
+                        }
+                      />
+                    </If>
+                  </View>
+                )}
+              </Each>
+            </View>
+          </If>
         </If>
         <View style={{ gap: space[8], maxWidth: fieldWidth }}>
           {field(uiText("pluginsSourceName"), name, name.set)}
@@ -336,27 +339,29 @@ export function PluginSettings(props: { phone?: boolean }) {
         <Label variant="small" tone="muted" style={{ maxWidth: hintWidth }}>
           {uiText("pluginsProxyHint")}
         </Label>
-        <View style={{ gap: space[8], maxWidth: fieldWidth }}>
-          {field(
-            uiText("pluginsProxy"),
-            proxy,
-            proxy.set,
-            () => void saveProxy(),
-          )}
-          <If when={proxyProblem()}>
-            <Label variant="small" tone="mutedInk">
-              {proxyProblem()}
-            </Label>
-          </If>
-          <View style={{ ...row, justifyContent: "flex-end" }}>
-            <Button
-              label={uiText("pluginsProxySave")}
-              size={props.phone ? control.touch : control.md}
-              disabled={busy()}
-              onPress={() => void saveProxy()}
-            />
+        <If when={settings()}>
+          <View style={{ gap: space[8], maxWidth: fieldWidth }}>
+            {field(
+              uiText("pluginsProxy"),
+              proxy,
+              proxy.set,
+              () => void saveProxy(),
+            )}
+            <If when={proxyProblem()}>
+              <Label variant="small" tone="mutedInk">
+                {proxyProblem()}
+              </Label>
+            </If>
+            <View style={{ ...row, justifyContent: "flex-end" }}>
+              <Button
+                label={uiText("pluginsProxySave")}
+                size={props.phone ? control.touch : control.md}
+                disabled={busy()}
+                onPress={() => void saveProxy()}
+              />
+            </View>
           </View>
-        </View>
+        </If>
       </View>
     </SmoothScroll>
   );
