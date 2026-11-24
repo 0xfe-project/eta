@@ -122,11 +122,9 @@ export function ClientUpdateConfirm(props: { onClose: () => void }) {
             onPress={props.onClose}
           />
           <Button
-            label={
-              update.restarting() ? uiText("restarting") : uiText("restartNow")
-            }
+            label={uiText("restartNow")}
             tone="primary"
-            disabled={update.restarting()}
+            busy={update.restarting()}
             onPress={() => void update.restart()}
           />
         </View>
@@ -240,14 +238,13 @@ export function ClientAppUpdate(props: { phone: boolean }) {
         </Label>
         <Button
           label={
-            update.checking()
-              ? uiText("checking")
-              : update.checked()
-                ? uiText("checkAgain")
-                : uiText("checkAppUpdate")
+            update.checked() ? uiText("checkAgain") : uiText("checkAppUpdate")
           }
           size={props.phone ? control.md : control.sm}
-          disabled={update.busy() || update.ready()}
+          disabled={
+            update.downloading() || update.restarting() || update.ready()
+          }
+          busy={update.checking()}
           onPress={() => void update.check()}
         />
       </View>
@@ -266,14 +263,29 @@ export function ClientAppUpdate(props: { phone: boolean }) {
               <Label variant="small" style={{ flex: 1 }}>
                 {uiText("versionAvailable", { version: offer().version })}
               </Label>
-              <Button
-                label={clientUpdateAction(offer())}
-                tone={update.ready() ? "primary" : undefined}
-                disabled={update.downloading() || update.restarting()}
-                onPress={() => pressClientUpdate(() => confirm.set(true))}
-              />
+              <If
+                when={!update.downloading()}
+                else={
+                  <Label variant="small" tone="muted">
+                    {clientUpdateAction(offer())}
+                  </Label>
+                }
+              >
+                <Button
+                  label={clientUpdateAction(offer())}
+                  tone={update.ready() ? "primary" : undefined}
+                  busy={update.restarting()}
+                  onPress={() => pressClientUpdate(() => confirm.set(true))}
+                />
+              </If>
             </View>
-            <If when={update.downloading() ? update.percentage() : undefined}>
+            <If
+              when={
+                update.downloading() && update.percentage() !== undefined
+                  ? update.percentage()
+                  : undefined
+              }
+            >
               {(value) => <DownloadProgressBar value={value()} />}
             </If>
             <If when={update.ready() && offer().kind === "package"}>

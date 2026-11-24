@@ -28,7 +28,7 @@ export function ProviderEditor(props: {
   const key = signal("");
   const models = signal(item?.models.map((model) => model.id).join(", ") ?? "");
   const discovered = signal<ProviderSummary["models"]>(item?.models ?? []);
-  const busy = signal(false);
+  const busy = signal<"" | "discover" | "save">("");
   const valid = () =>
     name().trim() &&
     /^https?:\/\//i.test(url().trim()) &&
@@ -36,7 +36,7 @@ export function ProviderEditor(props: {
     (preset()?.auth !== "key" || item?.hasApiKey || key().trim());
   async function discover() {
     if (busy()) return;
-    busy.set(true);
+    busy.set("discover");
     const result = await host.action(() =>
       host.call<{ models: ProviderSummary["models"] }>(
         "providers",
@@ -50,7 +50,7 @@ export function ProviderEditor(props: {
         },
       ),
     );
-    busy.set(false);
+    busy.set("");
     if (result) {
       discovered.set(result.models);
       models.set(result.models.map((model) => model.id).join(", "));
@@ -58,7 +58,7 @@ export function ProviderEditor(props: {
   }
   async function save() {
     if (!valid() || busy()) return;
-    busy.set(true);
+    busy.set("save");
     const id =
       item?.id ??
       name()
@@ -94,7 +94,7 @@ export function ProviderEditor(props: {
         },
       }),
     );
-    busy.set(false);
+    busy.set("");
     if (result) props.onClose();
   }
   return (
@@ -134,13 +134,15 @@ export function ProviderEditor(props: {
         <View style={{ ...row, gap: space[8], justifyContent: "flex-end" }}>
           <Button
             label={uiText("discoverModels")}
-            disabled={!url().trim() || busy()}
+            disabled={!url().trim() || busy() === "save"}
+            busy={busy() === "discover"}
             onPress={() => void discover()}
           />
           <Button
             label={uiText("saveSource")}
             tone="primary"
-            disabled={!valid() || busy()}
+            disabled={!valid() || busy() === "discover"}
+            busy={busy() === "save"}
             onPress={() => void save()}
           />
         </View>

@@ -474,7 +474,7 @@ export function ArtifactPreview(props: {
               <Button
                 label={uiText("sharePublicly")}
                 tone="primary"
-                disabled={busy()}
+                busy={busy()}
                 onPress={() => void share()}
               />
             </View>

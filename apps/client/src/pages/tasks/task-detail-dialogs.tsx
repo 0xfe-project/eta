@@ -334,7 +334,7 @@ export function TaskDetailDialogs(props: {
                     label={archiveLabel()}
                     size={control.md}
                     tone="primary"
-                    disabled={submitting()}
+                    busy={submitting()}
                     onPress={archiveTask}
                   />
                 </View>
@@ -545,10 +545,9 @@ function EditTask(props: {
     text: untracked(() => editDescription()),
     onSubmit: () => save(),
   });
-  const ready = () =>
-    !submitting() && !!editTitle().trim() && !description.tooLong();
+  const canSave = () => !!editTitle().trim() && !description.tooLong();
   function save() {
-    if (!ready()) return;
+    if (!canSave() || submitting()) return;
     void mutate(async () => {
       await host.call("tasks", "update", {
         taskId: props.id,
@@ -576,7 +575,8 @@ function EditTask(props: {
           label={uiText("saveTask")}
           tone="primary"
           shortcut={props.phone ? undefined : sendShortcut}
-          disabled={!ready()}
+          disabled={!canSave()}
+          busy={submitting()}
           onPress={save}
         />
       </View>

@@ -159,11 +159,8 @@ function InsertBody(props: {
     targets()
       .map((id) => host.agent(id)?.name ?? id)
       .join(", ");
-  const ready = () =>
-    !out.state().blank &&
-    !limits.tooLong() &&
-    !sending() &&
-    host.state().status === "open";
+  const canSend = () =>
+    !out.state().blank && !limits.tooLong() && host.state().status === "open";
   return (
     <View style={{ width: popoverWidth }}>
       <View style={{ padding: space[8], gap: space[4] }}>
@@ -215,9 +212,10 @@ function InsertBody(props: {
         <Button
           label={uiText("insert")}
           size={control.sm}
-          labelTone={ready() ? "ink" : "faint"}
+          labelTone={canSend() ? "ink" : "faint"}
           dimDisabled={false}
-          disabled={!ready()}
+          disabled={!canSend()}
+          busy={sending()}
           onPress={() => void send()}
         />
       </View>

@@ -9,6 +9,7 @@ import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
+  Button,
   colors,
   DetailSkeleton,
   grow,
@@ -20,14 +21,7 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { settled } from "../../components/pending";
 import { StatusDot } from "../../components/status-dot";
-import {
-  avatar,
-  border,
-  control,
-  icon,
-  space,
-  weight,
-} from "../../components/tokens";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
@@ -291,24 +285,19 @@ export function PanelTask(props: {
                       {uiText("executionLog")}
                     </Label>
                   </View>
-                  <View
-                    role="button"
+                  <Button
+                    label={uiText("stop")}
                     accessibilityLabel={`${uiText("stop")} · ${runName(line().run)}`}
+                    icon="stop"
+                    tone="ghost"
+                    size={space[20]}
+                    iconSize={icon.sm}
+                    labelVariant="caption"
+                    labelWeight={weight.strong}
+                    busy={state.submitting()}
+                    style={{ paddingHorizontal: space[4], gap: space[4] }}
                     onPress={() => state.stop(line().run)}
-                    style={{ ...row, gap: space[4], cursor: "pointer" }}
-                  >
-                    <View
-                      style={{
-                        width: space[8],
-                        height: space[8],
-                        borderWidth: border.hair,
-                        borderColor: c().ink,
-                      }}
-                    />
-                    <Label variant="caption" weight={weight.strong}>
-                      {uiText("stop")}
-                    </Label>
-                  </View>
+                  />
                 </View>
               )}
             </Each>

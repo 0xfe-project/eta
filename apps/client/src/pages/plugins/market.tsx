@@ -696,6 +696,8 @@ export function Market(props: {
           <Button
             label={uiText("refreshPlugins")}
             icon="refresh"
+            spinIcon
+            busy={loading()}
             iconOnly
             iconSize={icon.md}
             size={control.sm}
@@ -1080,7 +1082,7 @@ export function Market(props: {
                     label={uiText("composioAdd")}
                     tone="primary"
                     size={phone() ? control.touch : control.md}
-                    disabled={busy()}
+                    busy={busy()}
                     onPress={() => void add(currentToolkit()!)}
                   />
                 }
@@ -1089,7 +1091,7 @@ export function Market(props: {
                   label={uiText("composioRemove")}
                   tone="plain"
                   size={phone() ? control.touch : control.md}
-                  disabled={busy()}
+                  busy={busy()}
                   onPress={() => void removeAdded(currentToolkit()!)}
                 />
               </If>
@@ -1107,15 +1109,13 @@ export function Market(props: {
                 </If>
                 <Button
                   label={
-                    busy()
-                      ? uiText("composioConnecting")
-                      : isConnected(currentToolkit()!.slug)
-                        ? uiText("composioReconnect")
-                        : uiText("composioConnect")
+                    isConnected(currentToolkit()!.slug)
+                      ? uiText("composioReconnect")
+                      : uiText("composioConnect")
                   }
                   tone="primary"
                   size={phone() ? control.touch : control.md}
-                  disabled={busy()}
+                  busy={busy()}
                   onPress={() => void connect(currentToolkit()!)}
                 />
               </View>

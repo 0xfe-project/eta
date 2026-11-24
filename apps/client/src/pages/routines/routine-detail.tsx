@@ -34,6 +34,7 @@ export function RoutineDetail(props: {
   layout: Layout;
   runs: RunView[];
   canRun: boolean;
+  starting?: boolean;
   onRun: () => void;
   onReport: (id: string) => void;
   onReadBrief: () => void;
@@ -93,6 +94,7 @@ export function RoutineDetail(props: {
                 iconOnly
                 tone="ghost"
                 disabled={!props.canRun}
+                busy={props.starting}
                 onPress={props.onRun}
               />
               <ActionMenu
@@ -223,6 +225,7 @@ export function RoutineDetail(props: {
             icon="play"
             tone="ghost"
             disabled={!props.canRun}
+            busy={props.starting}
             style={{ gap: space[4], paddingHorizontal: 0 }}
             onPress={props.onRun}
           />

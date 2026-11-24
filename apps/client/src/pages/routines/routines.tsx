@@ -100,10 +100,10 @@ export function Routines(props: {
     list().some((item) => item.unseenReports || item.unseenFailures);
   const feedback = signal("");
   const starting = signal(false);
+  const sendingFeedback = signal(false);
+  const turningCaptainOn = signal(false);
   const canRun = () =>
-    !!status()?.captainOn &&
-    !starting() &&
-    !runs().some((run) => run.status === "running");
+    !!status()?.captainOn && !runs().some((run) => run.status === "running");
   function toggle(item: RoutineInfo) {
     void host.action(() =>
       host.call("routines", "update", {
@@ -125,7 +125,7 @@ export function Routines(props: {
   }
 
   async function retry(routineId: string) {
-    if (!canRun()) return;
+    if (!canRun() || starting()) return;
     starting.set(true);
     const result = await host.action(() =>
       host.call<{ run: { id: string } }>("routines", "run", { routineId }),
@@ -335,14 +335,19 @@ export function Routines(props: {
               label={uiText("turnCaptainOn")}
               size={phone() ? control.touch : control.md}
               style={{ paddingHorizontal: phone() ? space[16] : space[12] }}
-              onPress={() =>
-                void host.action(() =>
-                  host.call("captain", "setSetting", {
-                    key: "supervisorEnabled",
-                    value: true,
-                  }),
-                )
-              }
+              busy={turningCaptainOn()}
+              onPress={() => {
+                if (turningCaptainOn()) return;
+                turningCaptainOn.set(true);
+                void host
+                  .action(() =>
+                    host.call("captain", "setSetting", {
+                      key: "supervisorEnabled",
+                      value: true,
+                    }),
+                  )
+                  .finally(() => turningCaptainOn.set(false));
+              }}
             />
           </View>
         </If>
@@ -586,6 +591,7 @@ export function Routines(props: {
                         firstBrief={briefs().at(-1)}
                         runs={runs()}
                         canRun={canRun()}
+                        starting={starting()}
                         onRun={() => void retry(item().id)}
                         onReport={openReport}
                         onReadBrief={() => readingBrief.set(true)}
@@ -609,6 +615,8 @@ export function Routines(props: {
                         if (run) openReport(run.id);
                       }}
                       canRetry={canRun()}
+                      starting={starting()}
+                      sendingFeedback={sendingFeedback()}
                       onRetry={() => void retry(item().id)}
                       onToggle={() => toggle(item())}
                       onEdit={() => {
@@ -617,16 +625,20 @@ export function Routines(props: {
                       }}
                       feedback={feedback()}
                       onFeedback={feedback.set}
-                      onSend={() =>
-                        void host.action(async () => {
-                          await host.call("routines", "feedback", {
-                            routineId: item().id,
-                            runId: report(),
-                            text: feedback().trim(),
-                          });
-                          feedback.set("");
-                        })
-                      }
+                      onSend={() => {
+                        if (sendingFeedback() || !feedback().trim()) return;
+                        sendingFeedback.set(true);
+                        void host
+                          .action(async () => {
+                            await host.call("routines", "feedback", {
+                              routineId: item().id,
+                              runId: report(),
+                              text: feedback().trim(),
+                            });
+                            feedback.set("");
+                          })
+                          .finally(() => sendingFeedback.set(false));
+                      }}
                     />
                   </If>
                 )}

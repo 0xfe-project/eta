@@ -492,33 +492,25 @@ export function AddSource(props: {
           </If>
           <If when={step() === 1 && !connector()}>
             <Button
-              label={
-                connecting()
-                  ? uiText("addSourceConnecting")
-                  : uiText("addSourceConnect")
-              }
+              label={uiText("addSourceConnect")}
               tone="primary"
               size={props.phone ? control.lg : undefined}
               style={{ paddingHorizontal: props.phone ? space[16] : space[12] }}
               disabled={
-                connecting() ||
                 (keyRequired() && apiKey().trim().length === 0) ||
                 baseUrl().trim().length === 0
               }
+              busy={connecting()}
               onPress={() => void connect()}
             />
           </If>
           <If when={step() === 1 && connector()?.flow === "api_key"}>
             <Button
-              label={
-                connecting()
-                  ? uiText("addSourceConnecting")
-                  : uiText("addSourceConnect")
-              }
+              label={uiText("addSourceConnect")}
               tone="primary"
               size={props.phone ? control.lg : undefined}
               style={{ paddingHorizontal: props.phone ? space[16] : space[12] }}
-              disabled={connecting()}
+              busy={connecting()}
               onPress={() => gatewaySubmit?.()}
             />
           </If>
@@ -919,7 +911,7 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
             <Alert text={text()} />
             <Button
               label={uiText("addSourceRetry")}
-              disabled={starting()}
+              busy={starting()}
               onPress={() => void start()}
             />
           </View>

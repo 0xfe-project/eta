@@ -168,11 +168,14 @@ export function SkillDetail(props: {
     const content = file();
     return content?.kind === "text" ? content.preview : undefined;
   };
+  const reloading = () => !failure() && (reading() || !handle());
   const refresh = () => retry.update((count) => count + 1);
   const reload = () => (
     <Button
       label={uiText("skillReloadReader")}
       icon="refresh"
+      spinIcon
+      busy={reloading()}
       iconOnly
       iconSize={icon.md}
       tone={tablet() ? "plain" : "ghost"}

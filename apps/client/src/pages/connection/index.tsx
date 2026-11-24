@@ -419,11 +419,7 @@ export function Connection(props: {
                 <If when={remote() || !desktop()}>
                   <Button
                     label={
-                      connecting()
-                        ? uiText("connecting")
-                        : remoteFailure()
-                          ? uiText("retry")
-                          : uiText("connect")
+                      remoteFailure() ? uiText("retry") : uiText("connect")
                     }
                     tone="primary"
                     size={tablet() ? control.touch : undefined}
@@ -432,11 +428,14 @@ export function Connection(props: {
                         ? {
                             paddingHorizontal: space[24],
                             opacity:
-                              !draft().trim() || busy() ? opacity.disabled : 1,
+                              !draft().trim() || localBusy()
+                                ? opacity.disabled
+                                : 1,
                           }
                         : { paddingHorizontal: space[12] }
                     }
-                    disabled={!draft().trim() || busy()}
+                    disabled={!draft().trim() || localBusy()}
+                    busy={connecting()}
                     onPress={connect}
                   />
                 </If>
