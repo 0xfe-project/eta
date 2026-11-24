@@ -37,6 +37,8 @@ const UNORDERED = [
   "plugins.marketPreview",
   // Only reads the sources and the proxy the host keeps; no write of the connection has to come before it.
   "plugins.marketSettings",
+  // Only says whether a key is set and whether the source is on; both are the host's own state.
+  "plugins.composioStatus",
 ];
 
 /** Each of these writes something, or needs an earlier call of the connection to have landed. */
