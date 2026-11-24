@@ -33,11 +33,14 @@ export function TabletRail(props: Navigation) {
       <View
         role="button"
         accessibilityLabel={text("captain")}
+        accessibilityState={{ selected: props.page === "captain" }}
         onPress={() => props.onNavigate("captain")}
         hoverStyle={{ backgroundColor: c().selected }}
         focusVisibleStyle={focusRing(c())}
         style={{
           height: captainHeight,
+          backgroundColor:
+            props.page === "captain" ? c().selected : "transparent",
           alignItems: "center",
           justifyContent: "center",
           cursor: "pointer",
@@ -50,11 +53,7 @@ export function TabletRail(props: Navigation) {
           <NavItem
             item={item()}
             layout="tablet"
-            // Captain is a conversation: the Chat page stays the one selected.
-            selected={
-              props.page === item()[0] ||
-              (props.page === "captain" && item()[0] === "chat")
-            }
+            selected={props.page === item()[0]}
             count={item()[0] === "tasks" ? check() : 0}
             onPress={() => props.onNavigate(item()[0])}
           />

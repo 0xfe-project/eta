@@ -1,13 +1,14 @@
 import { View } from "nsh";
 import { colors, focusRing, Label, row } from "../components";
 import { AgentFace } from "../components/agent-face";
-import { avatar, space, weight } from "../components/tokens";
+import { avatar, space } from "../components/tokens";
 import { uiText, useText } from "../i18n";
 import { messageTime } from "../pages/chat/message-time";
 import { useHost } from "../services/host";
 import { CaptainContextRing } from "./captain-context-ring";
 
-const cardHeight = 56;
+/** A group row's height (chat-list-rows `groupRowHeight.regular`). */
+const cardHeight = 52;
 /** Captain atop the tablet rail: its face and its name. */
 const railCaptainHeight = 80;
 
@@ -16,49 +17,51 @@ export function CaptainFace(props: { size: number }) {
   return <AgentFace id={host.captain()?.id ?? "Captain"} size={props.size} />;
 }
 
-export function CaptainCard(props: { onPress: () => void }) {
+export function CaptainCard(props: {
+  selected?: boolean;
+  onPress: () => void;
+}) {
   const text = useText();
   const host = useHost();
   const c = colors();
   const lastReply = () => host.captainConversation()?.lastMessageAt;
+  // Flush under the header, one block with a divider: the same row as a group's below it.
   return (
-    <View style={{ flexShrink: 0, padding: space[16] }}>
-      <View
-        role="button"
-        accessibilityLabel={text("captain")}
-        onPress={() => props.onPress()}
-        hoverStyle={{ backgroundColor: c().selected }}
-        focusVisibleStyle={focusRing(c())}
-        style={{
-          ...row,
-          alignItems: "flex-start",
-          gap: space[12],
-          minHeight: cardHeight,
-          paddingVertical: space[8],
-          paddingHorizontal: space[16],
-          borderWidth: 1,
-          borderColor: c().border,
-          backgroundColor: c().canvas,
-          cursor: "pointer",
-        }}
-      >
-        <CaptainFace size={avatar.md} />
-        <View style={{ flex: 1, gap: 1 }}>
-          <View style={{ ...row, gap: space[8] }}>
-            <Label weight={weight.regular}>{text("captain")}</Label>
-            <Label variant="caption" tone="muted">
-              {text(host.captain()?.status === "working" ? "working" : "idle")}
-            </Label>
-          </View>
-          <Label variant="caption" tone="muted" lines={1}>
-            {lastReply()
-              ? uiText("captainLastReply", {
-                  time: messageTime(lastReply()!, false),
-                })
-              : text("captainNoConversation")}
-          </Label>
-        </View>
+    <View
+      role="button"
+      accessibilityLabel={text("captain")}
+      accessibilityState={{ selected: props.selected }}
+      onPress={() => props.onPress()}
+      hoverStyle={{ backgroundColor: c().selected }}
+      focusVisibleStyle={focusRing(c())}
+      style={{
+        minHeight: cardHeight,
+        flexShrink: 0,
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
+        gap: space[2],
+        borderBottomWidth: 1,
+        borderColor: c().border,
+        backgroundColor: props.selected ? c().selected : "transparent",
+        cursor: "pointer",
+      }}
+    >
+      <View style={{ ...row, gap: space[4] }}>
+        <CaptainFace size={avatar.sm} />
+        <Label variant="subtitle" lines={1} style={{ flex: 1 }}>
+          {text("captain")}
+        </Label>
+        <Label variant="caption" tone="muted">
+          {text(host.captain()?.status === "working" ? "working" : "idle")}
+        </Label>
       </View>
+      <Label variant="caption" tone="muted" lines={1}>
+        {lastReply()
+          ? uiText("captainLastReply", {
+              time: messageTime(lastReply()!, false),
+            })
+          : text("captainNoConversation")}
+      </Label>
     </View>
   );
 }

@@ -26,6 +26,8 @@ import { sections } from "./routes";
  * tab bar's height inside its top border). */
 const itemHeight = {
   wide: 28,
+  /** A section edge to edge in the sidebar, as tall as its header. */
+  flush: space[40],
   rail: 48,
   phone: sizes.phoneNav - border.hair,
 } as const;
@@ -42,6 +44,9 @@ export function NavItem(props: {
   selected: boolean;
   layout: Layout;
   count?: number;
+  /** Edge to edge with a divider on that side: the sidebar's sections
+   * (under them, like the rows below) and Settings (over it, at the foot). */
+  flush?: "top" | "bottom";
   onPress: () => void;
 }) {
   const c = colors();
@@ -64,13 +69,20 @@ export function NavItem(props: {
       style={{
         ...(wide() ? row : { alignItems: "center", justifyContent: "center" }),
         height: wide()
-          ? itemHeight.wide
+          ? props.flush
+            ? itemHeight.flush
+            : itemHeight.wide
           : phone()
             ? itemHeight.phone
             : itemHeight.rail,
         width: phone() ? phoneItemWidth : "100%",
         flexShrink: 0,
-        paddingHorizontal: wide() ? space[8] : 0,
+        paddingHorizontal: wide() ? (props.flush ? space[16] : space[8]) : 0,
+        ...(props.flush === "bottom"
+          ? { borderBottomWidth: 1, borderColor: c().border }
+          : props.flush === "top"
+            ? { borderTopWidth: 1, borderColor: c().border }
+            : {}),
         gap: wide() ? space[8] : space[4],
         backgroundColor:
           props.selected && !phone() ? c().selected : "transparent",
@@ -183,7 +195,12 @@ export function DesktopSidebar(
       </View>
       <If
         when={props.collapsed}
-        else={<CaptainCard onPress={() => props.onNavigate("captain")} />}
+        else={
+          <CaptainCard
+            selected={props.page === "captain"}
+            onPress={() => props.onNavigate("captain")}
+          />
+        }
       >
         <RailCaptain
           selected={props.page === "captain"}
@@ -194,11 +211,14 @@ export function DesktopSidebar(
         web={{ element: "nav" }}
         style={{
           flexShrink: 0,
-          borderBottomWidth: 1,
-          borderColor: c().border,
           ...(props.collapsed
-            ? { alignItems: "center", paddingVertical: space[8] }
-            : { paddingHorizontal: space[8], paddingBottom: space[4], gap: 1 }),
+            ? {
+                alignItems: "center",
+                paddingVertical: space[8],
+                borderBottomWidth: 1,
+                borderColor: c().border,
+              }
+            : {}),
         }}
       >
         <If when={props.collapsed}>
@@ -219,11 +239,8 @@ export function DesktopSidebar(
                 <NavItem
                   item={item()}
                   layout="desktop"
-                  // Captain is a conversation: the Chat page stays the one selected.
-                  selected={
-                    props.page === item()[0] ||
-                    (props.page === "captain" && item()[0] === "chat")
-                  }
+                  flush="bottom"
+                  selected={props.page === item()[0]}
                   count={item()[0] === "tasks" ? check() : 0}
                   onPress={() => props.onNavigate(item()[0])}
                 />
@@ -248,31 +265,27 @@ export function DesktopSidebar(
         onCreate={props.onCreate}
         onArchived={props.onArchived}
       />
-      <View
-        style={{
-          paddingHorizontal: space[8],
-          height: footerHeight,
-          justifyContent: "center",
-          flexShrink: 0,
-          ...(props.collapsed
-            ? {
-                alignItems: "center",
-                borderTopWidth: 1,
-                borderColor: c().border,
-              }
-            : {}),
-        }}
+      <If
+        when={props.collapsed}
+        else={
+          <NavItem
+            item={["settings", "settings", "settings"]}
+            layout="desktop"
+            flush="top"
+            selected={props.page === "settings"}
+            onPress={() => props.onNavigate("settings")}
+          />
+        }
       >
-        <If
-          when={props.collapsed}
-          else={
-            <NavItem
-              item={["settings", "settings", "settings"]}
-              layout="desktop"
-              selected={props.page === "settings"}
-              onPress={() => props.onNavigate("settings")}
-            />
-          }
+        <View
+          style={{
+            height: footerHeight,
+            justifyContent: "center",
+            alignItems: "center",
+            flexShrink: 0,
+            borderTopWidth: 1,
+            borderColor: c().border,
+          }}
         >
           <RailButton
             label={text("settings")}
@@ -280,8 +293,8 @@ export function DesktopSidebar(
             selected={props.page === "settings"}
             onPress={() => props.onNavigate("settings")}
           />
-        </If>
-      </View>
+        </View>
+      </If>
       <If when={!props.collapsed}>
         <PaneHandle pane="sidebar" />
       </If>
