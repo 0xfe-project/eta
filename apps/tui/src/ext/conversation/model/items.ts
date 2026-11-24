@@ -96,7 +96,62 @@ export function transcriptItems(input: ItemsInput): TranscriptItem[] {
     input,
     t: translatorFor(feedMessages, input.locale),
   };
-  return input.rows.flatMap((row) => rowItems(context, row));
+  const { rows, additions } = indexInserts(input.rows);
+  return rows.flatMap((row) => {
+    const own = rowItems(context, row);
+    const added = additions.get(row.id);
+    return added === undefined
+      ? own
+      : [
+          ...own,
+          ...added.flatMap((addition) => insertedItems(context, addition)),
+        ];
+  });
+}
+
+/**
+ * A user message put into another one's turns (`data.into`) is drawn in that message, under it,
+ * not where it was written — as the client draws it. One whose message is not among the rows is
+ * drawn where it is.
+ */
+function indexInserts(all: readonly MessageView[]): {
+  rows: MessageView[];
+  additions: Map<string, MessageView[]>;
+} {
+  const prompts = new Set(
+    all.filter((row) => row.author === "user").map((row) => row.id),
+  );
+  const additions = new Map<string, MessageView[]>();
+  const rows = all.filter((row) => {
+    const { into } = row.data;
+    if (
+      row.author !== "user" ||
+      typeof into !== "string" ||
+      into === row.id ||
+      !prompts.has(into)
+    )
+      return true;
+    const list = additions.get(into) ?? [];
+    list.push(row);
+    additions.set(into, list);
+    return false;
+  });
+  return { rows, additions };
+}
+
+/** `Inserted · 14:02`, then the words, as the client's insert block. */
+function insertedItems(context: Context, row: MessageView): TranscriptItem[] {
+  const at = new Date(row.createdAt);
+  const two = (n: number) => String(n).padStart(2, "0");
+  return [
+    notice(
+      `${row.id}:inserted`,
+      context.t("inserted", {
+        clock: `${two(at.getHours())}:${two(at.getMinutes())}`,
+      }),
+    ),
+    userItem(row),
+  ];
 }
 
 function rowItems(context: Context, row: MessageView): TranscriptItem[] {
@@ -125,17 +180,21 @@ function notice(
   return { kind: "notice", key, tone, text };
 }
 
+function userItem(row: MessageView): TranscriptItem {
+  return {
+    kind: "user",
+    key: row.id,
+    text: row.text,
+    pastes: pasteBlocksOf(row.data, row.text) ?? [],
+    attachments: attachmentsOf(row.data),
+    images: [],
+  };
+}
+
 function userItems(context: Context, row: MessageView): TranscriptItem[] {
-  const items: TranscriptItem[] = [
-    {
-      kind: "user",
-      key: row.id,
-      text: row.text,
-      pastes: pasteBlocksOf(row.data, row.text) ?? [],
-      attachments: attachmentsOf(row.data),
-      images: [],
-    },
-  ];
+  // A steer written before steers were drawn in the message they joined: its own row, saying whose
+  // turn it went into.
+  const items: TranscriptItem[] = [userItem(row)];
   const joined = Array.isArray(row.data.joined)
     ? row.data.joined.filter((id): id is string => typeof id === "string")
     : [];
@@ -228,7 +287,7 @@ function sessionOf(
 
 function finishedItems(row: MessageView): TranscriptItem[] {
   // What it thought, said and did on the way, in the order the run showed it. Where it took a steer
-  // is not drawn: the words are the user's row, with the notice of whose turn they joined.
+  // is not drawn: the words are the user's row, drawn in the message whose turn they joined.
   const items = savedSteps(row)
     .filter((block) => block.type !== "steer")
     .map(
