@@ -167,3 +167,31 @@ test("once the host has answered with no sources, the page says so", async () =>
   await app.waitFor("text:No plugin sources");
   expect(app.count(PROXY_FIELD)).toBe(1);
 });
+
+// The source is listed before the host has said whether it holds a key; until it does, the page knows nothing about the key either.
+test("before the host has said whether a key is set, the page does not say one is needed, and the switch is not held off for it", async () => {
+  const app = await open("./fixtures/plugin-settings-composio-held.tsx", OPEN);
+  await app.waitFor("label:Use Composio");
+  expect(app.shows("Enter an API key first.")).toBe(false);
+  expect(app.shows("No key is set")).toBe(false);
+  expect(app.shows("A key is set")).toBe(false);
+  expect(app.enabled("label:Use Composio")).toBe(true);
+});
+
+test("once the host says no key is set, the page asks for one and the switch is held off", async () => {
+  const app = await open("./fixtures/plugin-settings-composio-held.tsx", OPEN);
+  await app.waitFor("label:Use Composio");
+  await app.press("label:answer with no key");
+  await app.waitFor("text:No key is set");
+  expect(app.shows("Enter an API key first.")).toBe(true);
+  expect(app.enabled("label:Use Composio")).toBe(false);
+});
+
+test("once the host says a key is set, the page says so and the switch can be used", async () => {
+  const app = await open("./fixtures/plugin-settings-composio-held.tsx", OPEN);
+  await app.waitFor("label:Use Composio");
+  await app.press("label:answer with a key");
+  await app.waitFor("text:A key is set");
+  expect(app.shows("Enter an API key first.")).toBe(false);
+  expect(app.enabled("label:Use Composio")).toBe(true);
+});
