@@ -1,6 +1,10 @@
 import { expect, test } from "nsh/test";
 import { createLanguagePreference } from "../src/i18n";
-import { clockDistance, runAgo } from "../src/pages/routines/schedule";
+import {
+  clockDistance,
+  runAgo,
+  timeZones,
+} from "../src/pages/routines/schedule";
 
 // The native runtime has no `Intl.RelativeTimeFormat` or `Intl.supportedValuesOf`. A routines page
 // that calls them throws while it renders, and the host's read loop reads that as a lost
@@ -75,4 +79,17 @@ test("a time already gone reads as this minute, not a negative one", () => {
   language.set("en");
   expect(future(-5 * MINUTE)).toBe("this minute");
   expect(past(-5 * MINUTE)).toBe("this minute");
+});
+
+test("the time zone list falls back to the routine's own zone without Intl.supportedValuesOf", () => {
+  expect(
+    without("supportedValuesOf", () => timeZones("Asia/Shanghai")),
+  ).toEqual(["Asia/Shanghai"]);
+});
+
+test("the time zone list keeps the routine's zone in front when the runtime does not list it", () => {
+  const zones = timeZones("Mars/Olympus");
+  expect(zones[0]).toBe("Mars/Olympus");
+  if (typeof Intl.supportedValuesOf === "function")
+    expect(zones.length).toBe(Intl.supportedValuesOf("timeZone").length + 1);
 });

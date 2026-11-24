@@ -43,7 +43,7 @@ import {
 } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { upcomingTimes, weekday } from "./schedule";
+import { timeZones, upcomingTimes, weekday } from "./schedule";
 
 interface ScheduleOption {
   label: string;
@@ -354,10 +354,7 @@ export function RoutineEditor(props: {
       props.onSave(result.routine.id);
     }
   }
-  const zones = () => {
-    const all = Intl.supportedValuesOf("timeZone");
-    return all.includes(timezone()) ? all : [timezone(), ...all];
-  };
+  const zones = () => timeZones(timezone());
   // The phone sheet: 36px controls with 14px text, a footer bar under the fields.
   const sheet = () => props.phone && !props.inline;
   // The tablet form uses 32px controls with a 10px inset; the desktop one 28px and 8px.
