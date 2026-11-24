@@ -594,6 +594,121 @@ describe("the link", () => {
     ).toBe("ac_new");
   });
 
+  describe("the auth config's switch for the tool router", () => {
+    const managed = (id: string, flag?: boolean, extra: object = {}) => ({
+      id,
+      is_composio_managed: true,
+      status: "ENABLED",
+      ...(flag === undefined ? {} : { is_enabled_for_tool_router: flag }),
+      ...extra,
+    });
+    const listing = (items: unknown[], patch?: () => Response) =>
+      link((url, body) => {
+        if (url.pathname === "/api/v3/auth_configs" && body === "")
+          return json({ items });
+        if (url.pathname === "/api/v3/auth_configs" && body !== "")
+          return json({
+            toolkit: { slug: "github" },
+            auth_config: { id: "ac_new", is_composio_managed: true },
+          });
+        if (url.pathname.startsWith("/api/v3/auth_configs/"))
+          return patch?.() ?? json({ success: true });
+        return undefined;
+      });
+    const patches = () => requests.filter((r) => r.method === "PATCH");
+    const linkedTo = () =>
+      (
+        JSON.parse(requests.find((r) => r.path.includes("/link"))!.body) as {
+          auth_config_id: string;
+        }
+      ).auth_config_id;
+
+    it.fails("switches a config it just made on for the tool router, before the link is asked for", async () => {
+      const { composio } = open();
+      composio.setKey(KEY);
+      handler = listing([]);
+      await composio.link("github");
+      expect(
+        requests.map((r) => `${r.method} ${r.path.split("?")[0]}`),
+      ).toEqual([
+        "GET /api/v3/auth_configs",
+        "POST /api/v3/auth_configs",
+        "PATCH /api/v3/auth_configs/ac_new",
+        "POST /api/v3/connected_accounts/link",
+      ]);
+      expect(JSON.parse(patches()[0]!.body)).toEqual({
+        type: "default",
+        is_enabled_for_tool_router: true,
+      });
+      expect(linkedTo()).toBe("ac_new");
+    });
+
+    it.fails("switches an existing managed config on when it is off, once, and not again for the same toolkit", async () => {
+      const { composio } = open();
+      composio.setKey(KEY);
+      handler = listing([managed("ac_old", false)]);
+      await composio.link("github");
+      expect(patches()).toHaveLength(1);
+      expect(patches()[0]!.path).toBe("/api/v3/auth_configs/ac_old");
+      expect(JSON.parse(patches()[0]!.body)).toEqual({
+        type: "default",
+        is_enabled_for_tool_router: true,
+      });
+      expect(linkedTo()).toBe("ac_old");
+      await composio.link("github");
+      expect(patches()).toHaveLength(1);
+    });
+
+    it("sends no PATCH for a config that is on, or whose list does not say", async () => {
+      for (const flag of [true, undefined]) {
+        requests.length = 0;
+        const { composio } = open();
+        composio.setKey(KEY);
+        handler = listing([managed("ac_x", flag)]);
+        await composio.link("github");
+        expect(patches()).toHaveLength(0);
+      }
+    });
+
+    it.fails("takes the one that is already on when there are two, and patches nothing", async () => {
+      const { composio } = open();
+      composio.setKey(KEY);
+      handler = listing([managed("ac_early", false), managed("ac_late", true)]);
+      await composio.link("github");
+      expect(patches()).toHaveLength(0);
+      expect(linkedTo()).toBe("ac_late");
+    });
+
+    it.fails("still returns the address when the PATCH of an existing config fails, says so in the log, and no key is in any output", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { composio } = open();
+      composio.setKey(KEY);
+      handler = listing([managed("ac_old", false)], () =>
+        json({ message: `no ${KEY}` }, 500),
+      );
+      expect(await composio.link("github")).toBe(
+        "https://connect.composio.dev/link/abc",
+      );
+      expect(linkedTo()).toBe("ac_old");
+      expect(warn).toHaveBeenCalled();
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(KEY);
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("SECRET_0123");
+    });
+
+    it.fails("fails with a clear message when the PATCH of a config it just made fails, and asks for no link", async () => {
+      const { composio } = open();
+      composio.setKey(KEY);
+      handler = listing([], () => json({ message: `no ${KEY}` }, 403));
+      const error = await composio.link("github").then(
+        () => undefined,
+        (caught: unknown) => String(caught),
+      );
+      expect(error).toContain("tool router");
+      expect(error).not.toContain("SECRET_0123");
+      expect(requests.some((r) => r.path.includes("/link"))).toBe(false);
+    });
+  });
+
   it("refuses an address that is not https, or has no address", async () => {
     const { composio } = open();
     composio.setKey(KEY);

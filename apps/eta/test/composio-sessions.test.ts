@@ -43,6 +43,10 @@ let counter: number;
 /** What the fake puts in "config" of an answer; the default echoes the request. */
 let echo: (body: Record<string, any>) => unknown;
 let create: (body: Record<string, any>) => Response | undefined;
+/** What the fake lists at GET /api/v3/auth_configs; none listed means the route is not there. */
+let configs: Record<string, any>[] | undefined;
+/** How the fake answers a PATCH of an auth config: undefined for success. */
+let patchAnswer: () => Response | undefined;
 let server: ReturnType<typeof Bun.serve>;
 const base = () => `http://127.0.0.1:${server.port}`;
 
@@ -72,6 +76,8 @@ beforeEach(() => {
     workbench: { enable: body.workbench?.enable },
   });
   create = () => undefined;
+  configs = undefined;
+  patchAnswer = () => undefined;
   server = Bun.serve({
     port: 0,
     fetch: async (request) => {
@@ -85,6 +91,20 @@ beforeEach(() => {
       });
       if (request.method === "GET" && url.pathname === "/api/v3/toolkits")
         return json({ items: toolkits, next_cursor: null });
+      if (
+        request.method === "GET" &&
+        url.pathname === "/api/v3/auth_configs" &&
+        configs !== undefined
+      )
+        return json({ items: configs, next_cursor: null });
+      if (
+        request.method === "PATCH" &&
+        url.pathname.startsWith("/api/v3/auth_configs/")
+      ) {
+        const refused = patchAnswer();
+        if (refused !== undefined) return refused;
+        return json({ success: true });
+      }
       if (url.pathname === "/api/v3/connected_accounts")
         return json({
           items: accounts.map((slug, index) => ({
@@ -156,6 +176,7 @@ const posts = () =>
     (one) =>
       one.method === "POST" && one.path === "/api/v3.1/tool_router/session",
   );
+const patches = () => seen.filter((one) => one.method === "PATCH");
 const gets = () =>
   seen.filter(
     (one) =>
@@ -721,5 +742,81 @@ describe("adding a toolkit that needs no sign-in", () => {
         settings.get("plugins.composioAdded"),
       ]),
     ).not.toContain(KEY);
+  });
+});
+
+describe("the tool router switch of a toolkit's managed auth config", () => {
+  const managed = (id: string, flag?: boolean, extra: object = {}) => ({
+    id,
+    is_composio_managed: true,
+    status: "ENABLED",
+    ...(flag === undefined ? {} : { is_enabled_for_tool_router: flag }),
+    ...extra,
+  });
+
+  it.fails("is switched on for every managed, enabled config that is off, before the session is made; others are left alone", async () => {
+    const { composio } = open();
+    configs = [
+      managed("ac_late", true),
+      managed("ac_off", false),
+      managed("ac_off_too", false),
+      managed("ac_unknown"),
+      managed("ac_custom", false, { is_composio_managed: false }),
+      managed("ac_disabled", false, { status: "DISABLED" }),
+    ];
+    await composio.sync(["gmail"]);
+    expect(patches().map((one) => one.path)).toEqual([
+      "/api/v3/auth_configs/ac_off",
+      "/api/v3/auth_configs/ac_off_too",
+    ]);
+    for (const one of patches())
+      expect(JSON.parse(one.body)).toEqual({
+        type: "default",
+        is_enabled_for_tool_router: true,
+      });
+    const asked = seen.find((one) =>
+      one.path.startsWith("/api/v3/auth_configs?"),
+    )!;
+    expect(asked.path).toContain("toolkit_slug=gmail");
+    expect(asked.path).toContain("is_composio_managed=true");
+    expect(seen.indexOf(patches()[0]!)).toBeLessThan(seen.indexOf(posts()[0]!));
+    expect(composio.has("@composio/gmail")).toBe(true);
+    // Nothing is deleted on Composio.
+    expect(seen.some((one) => one.method === "DELETE")).toBe(false);
+  });
+
+  it("sends no PATCH when every config is on or does not say", async () => {
+    const { composio } = open();
+    configs = [managed("ac_a", true), managed("ac_b")];
+    await composio.sync(["gmail"]);
+    expect(patches()).toHaveLength(0);
+    expect(posts()).toHaveLength(1);
+  });
+
+  it.fails("is checked once for a toolkit, not again when its session is already there", async () => {
+    const { composio } = open();
+    configs = [managed("ac_off", false)];
+    await composio.sync(["gmail"]);
+    await composio.sync(["gmail"]);
+    expect(patches()).toHaveLength(1);
+    expect(
+      seen.filter((one) => one.path.startsWith("/api/v3/auth_configs?")),
+    ).toHaveLength(1);
+  });
+
+  it.fails("does not hold the session back when the list or the PATCH fails: it is made, the log says so, and no key is in it", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { composio } = open();
+    configs = [managed("ac_off", false)];
+    patchAnswer = () => json({ message: `no ${KEY}` }, 500);
+    await composio.sync(["gmail"]);
+    expect(composio.has("@composio/gmail")).toBe(true);
+    expect(warn).toHaveBeenCalled();
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("SECRET_0123");
+    configs = undefined;
+    warn.mockClear();
+    await composio.sync(["gmail", "notion"]);
+    expect(composio.has("@composio/notion")).toBe(true);
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("SECRET_0123");
   });
 });
