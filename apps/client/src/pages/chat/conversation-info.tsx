@@ -16,6 +16,7 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { BackButton, CloseButton } from "../../components/navigation-buttons";
+import { StatusDot } from "../../components/status-dot";
 import {
   avatar,
   control,
@@ -26,11 +27,13 @@ import {
 } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { TaskGlyph } from "../tasks/status";
+import { statusName, TaskGlyph } from "../tasks/status";
 import { ArtifactBrowser } from "./artifacts/conversation-artifacts";
 import { RECENT, recentArtifacts } from "./artifacts/filter";
 import { memberStatus } from "./member-status";
 import { messageTime } from "./message-time";
+import { SubtaskProgress, SubtaskToggle } from "./panel-tasks";
+import { needingYou, setParentOpen, taskRoots, treeRows } from "./panel-tree";
 import { ViewAll } from "./section-heading";
 
 /**
@@ -57,8 +60,19 @@ export function PhoneConversationInfo(props: {
   const tasks = () =>
     host
       .tasks()
-      .filter((task) => task.conversationId === props.id && !task.archivedAt)
-      .sort((a, b) => a.number - b.number);
+      .filter((task) => task.conversationId === props.id && !task.archivedAt);
+  // Parents folded over their subtasks, as the Context tab lists them.
+  const tree = () => {
+    const { roots, revealed } = taskRoots(tasks(), host.tasks());
+    return {
+      count: roots.length,
+      rows: treeRows(
+        roots.sort((a, b) => a.number - b.number),
+        revealed,
+        host.tasks(),
+      ),
+    };
+  };
   const artifacts = () =>
     host.artifacts().filter((artifact) => artifact.conversationId === props.id);
   return (
@@ -105,15 +119,43 @@ export function PhoneConversationInfo(props: {
               />
             )}
           </Each>
-          <Section label={uiText("tasks2")} count={tasks().length} />
-          <Each of={tasks()} key={(task) => task.id}>
-            {(task) => (
+          <Section label={uiText("tasks2")} count={tree().count} />
+          <Each of={tree().rows} key={(entry) => entry.task.id}>
+            {(entry) => (
               <InfoRow
                 height={rowHeight.task}
-                title={`#${task().number} ${task().title}`}
-                onPress={() => props.onTask(task().id)}
+                // Under the parent's title: its mark and the row's gap, a step per level.
+                indent={entry().depth * (icon.md + space[12])}
+                title={`#${entry().task.number} ${entry().task.title}`}
+                detail={
+                  entry().depth ? statusName(entry().task.status) : undefined
+                }
+                onPress={() => props.onTask(entry().task.id)}
+                trailing={
+                  entry().parent ? (
+                    <>
+                      <If
+                        when={
+                          !entry().open &&
+                          needingYou(entry().task, host.tasks())
+                        }
+                      >
+                        <StatusDot color={c().warning} />
+                      </If>
+                      <SubtaskProgress task={entry().task} />
+                      <SubtaskToggle
+                        task={entry().task}
+                        open={entry().open}
+                        size={control.touch}
+                        onToggle={() =>
+                          setParentOpen(entry().task.id, !entry().open)
+                        }
+                      />
+                    </>
+                  ) : undefined
+                }
               >
-                <TaskGlyph status={task().status} size={icon.md} />
+                <TaskGlyph status={entry().task.status} size={icon.md} />
               </InfoRow>
             )}
           </Each>
@@ -295,6 +337,10 @@ function InfoRow(props: {
   detail?: string;
   children: JSX.Element;
   onPress?: () => void;
+  /** How far in it starts, for a subtask under its parent. */
+  indent?: number;
+  /** In place of the chevron. */
+  trailing?: JSX.Element | undefined;
 }) {
   const c = colors();
   return (
@@ -307,7 +353,7 @@ function InfoRow(props: {
         ...row,
         height: props.height,
         gap: space[12],
-        paddingLeft: space[16],
+        paddingLeft: space[16] + (props.indent ?? 0),
         paddingRight: space[12],
         flexShrink: 0,
         borderBottomWidth: 1,
@@ -326,9 +372,18 @@ function InfoRow(props: {
           </Label>
         </If>
       </View>
-      <View style={{ opacity: opacity.disabled }}>
-        <Icon name="right" size={icon.md} />
-      </View>
+      <If
+        when={props.trailing}
+        else={
+          <View style={{ opacity: opacity.disabled }}>
+            <Icon name="right" size={icon.md} />
+          </View>
+        }
+      >
+        <View style={{ ...row, gap: space[8], flexShrink: 0 }}>
+          {props.trailing}
+        </View>
+      </If>
     </View>
   );
 }
