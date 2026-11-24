@@ -1,5 +1,4 @@
 import { readFile, stat } from "fs/promises";
-import { fileURLToPath } from "url";
 
 // A local file a file manager copied or dragged in reaches the editor as a `file:` URL, without
 // its bytes. NSH's `fetch` answers only `http(s):`, `data:`, `blob:` and `asset:` URLs (a `file:`
@@ -39,6 +38,20 @@ function typeByName(name: string): string {
   return dot < 0 ? "" : (TYPES[name.slice(dot + 1).toLowerCase()] ?? "");
 }
 
+/**
+ * The path of a `file:` URL. Not `url`'s `fileURLToPath`: NSH's keeps the slash before a Windows
+ * drive (`file:///C:/a` → `/C:/a`, a path no grant covers).
+ */
+function pathOfUri(uri: string): string {
+  const url = new URL(uri);
+  if (url.protocol !== "file:") throw new TypeError(`not a file: URL: ${uri}`);
+  const path = decodeURIComponent(url.pathname);
+  // A share (`file://server/share/a`): `\\server\share\a`.
+  if (url.hostname && url.hostname !== "localhost")
+    return `\\\\${url.hostname}${path.replaceAll("/", "\\")}`;
+  return /^\/[a-z]:/i.test(path) ? path.slice(1) : path;
+}
+
 /** The file's name, from its URL's last segment. */
 export function nameOfUri(uri: string): string {
   const last = uri.split(/[/\\]/).pop() || "file";
@@ -58,7 +71,7 @@ export async function readUri(
   limit: number,
 ): Promise<{ kind: "file"; file: File } | { kind: "folder" | "tooLarge" }> {
   const name = nameOfUri(uri);
-  const path = fileURLToPath(uri);
+  const path = pathOfUri(uri);
   const info = await stat(path);
   if (info.isDirectory()) return { kind: "folder" };
   if (info.size > limit) return { kind: "tooLarge" };
