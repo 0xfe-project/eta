@@ -51,7 +51,7 @@ export function Segmented<T extends string>(props: {
                 paddingHorizontal: props.paddingHorizontal ?? space[8],
                 backgroundColor: active()
                   ? props.subtle
-                    ? c().strong
+                    ? c().canvas
                     : c().button
                   : undefined,
                 cursor: "pointer",
