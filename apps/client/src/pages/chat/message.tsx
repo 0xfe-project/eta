@@ -35,6 +35,7 @@ import {
   shownFiles,
   shownMentions,
 } from "../../components/eta-editor";
+import { shadow, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
 import { subtasksOf, TaskSummary } from "../tasks/status";
@@ -316,7 +317,7 @@ export function Message(props: {
                   borderWidth: 1,
                   borderColor: c().border,
                   backgroundColor: c().canvas,
-                  boxShadow: [{ x: 0, y: 4, blur: 16, color: "#0a0a0a14" }],
+                  boxShadow: [shadow.float],
                 }}
                 trigger={
                   <View
@@ -420,7 +421,7 @@ export function Message(props: {
               </Label>
               <Label
                 variant="small"
-                weight={500}
+                weight={weight.regular}
                 lines={1}
                 style={{ flex: 1, minWidth: props.phone ? 200 : 0 }}
               >
@@ -514,7 +515,7 @@ export function Message(props: {
               id={item().agentId}
               size={props.phone ? (active() ? 18 : 16) : 14}
             />
-            <Label variant="small" weight={600}>
+            <Label variant="small" weight={weight.strong}>
               {host.agent(item().agentId)?.name ??
                 (item().author === "captain" ? "Captain" : uiText("agent"))}
             </Label>
@@ -596,7 +597,7 @@ export function Message(props: {
                 label={uiText("stop")}
                 size={18}
                 labelVariant="caption"
-                labelWeight={600}
+                labelWeight={weight.strong}
                 style={{ paddingHorizontal: 7 }}
                 disabled={item().status === "stopping"}
                 onPress={() =>

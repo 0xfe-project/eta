@@ -11,6 +11,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 import { pluginText as text } from "./labels";
@@ -114,7 +115,7 @@ export function PluginWarningsDialog(props: {
           paddingTop: 16,
         }}
       >
-        <Label weight={500} lines={1} style={{ flexShrink: 1 }}>
+        <Label weight={weight.regular} lines={1} style={{ flexShrink: 1 }}>
           {uiText("warningsFor", { name: props.item.name })}
         </Label>
         <CloseButton
@@ -142,7 +143,7 @@ export function PluginWarningsDialog(props: {
           label={text("ok")}
           tone="primary"
           size={28}
-          labelWeight={500}
+          labelWeight={weight.regular}
           style={{ paddingHorizontal: 14 }}
           onPress={props.onClose}
         />
@@ -179,7 +180,7 @@ export function PluginWarnings(props: {
         }}
       >
         <Icon name="warning" size={14} />
-        <Label weight={600} variant="small">
+        <Label weight={weight.strong} variant="small">
           {uiText("warningsFor", { name: props.item.name })}
         </Label>
       </View>

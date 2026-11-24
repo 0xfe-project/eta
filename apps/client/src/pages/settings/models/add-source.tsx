@@ -36,6 +36,7 @@ import {
 } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
 import { CloseButton } from "../../../components/navigation-buttons";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EntityRow, LetterBox, SectionHeader } from "../section";
@@ -244,7 +245,7 @@ export function AddSource(props: {
       onClose={props.onClose}
     >
       <If when={!props.phone}>
-        {/* The design's dialog header: 16/500/24 title at 16, a bare 16px X ending 12 from the edge. */}
+        {/* The design's dialog header: 16/400/24 title at 16, a bare 16px X ending 12 from the edge. */}
         <Header title={title()} layout="desktop" dialog inset={16} end={12}>
           <View style={grow} />
           <CloseButton
@@ -539,7 +540,7 @@ function SourceSteps(props: { step: number }) {
           >
             <Label
               variant="small"
-              weight={index() === props.step ? 600 : 400}
+              weight={index() === props.step ? weight.strong : weight.regular}
               tone={index() === props.step ? "ink" : "mutedInk"}
             >
               {index() < props.step
@@ -823,7 +824,7 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
             >
               <Label
                 variant="subtitle"
-                weight={600}
+                weight={weight.strong}
                 style={{
                   fontFamily: monoFontFamily(Fonts()()),
                   letterSpacing: 2,

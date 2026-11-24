@@ -12,6 +12,7 @@ import {
   touchRow,
   touchScreen,
 } from "../../components/menu";
+import { weight } from "../../components/tokens";
 import { statusHint, statusName, TaskGlyph } from "./status";
 
 /**
@@ -195,7 +196,7 @@ export function FilterTrigger(props: {
     >
       <Label
         variant="small"
-        weight={props.tablet ? 500 : 400}
+        weight={weight.regular}
         tone={props.active ? "ink" : "muted"}
       >
         {props.label}

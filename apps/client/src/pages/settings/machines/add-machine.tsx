@@ -16,6 +16,7 @@ import {
   textStyle,
 } from "../../../components";
 import { ToggleSwitch } from "../../../components/toggle-switch";
+import { weight } from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { PaneBack } from "../section";
@@ -350,7 +351,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
           >
             <View style={{ ...row, gap: 10, height: 22 }}>
               <PaneBack label={uiText("machineBack")} onPress={props.onClose} />
-              <Label weight={600}>{title()}</Label>
+              <Label weight={weight.strong}>{title()}</Label>
             </View>
             <Label variant="small" tone="muted">
               {warning()}
@@ -439,7 +440,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
               >
                 <Label
                   variant="small"
-                  weight={mode() === item() ? 600 : 400}
+                  weight={mode() === item() ? weight.strong : weight.regular}
                   tone={mode() === item() ? "ink" : "mutedInk"}
                 >
                   {uiText(

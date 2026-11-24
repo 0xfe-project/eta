@@ -13,6 +13,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { AddPlugin, ConfigurePlugin, sheetEdge } from "./configure";
@@ -338,7 +339,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
           plainSheetHeader={phone()}
           panelStyle={phone() ? sheetEdge : undefined}
           compact={!phone()}
-          titleWeight={500}
+          titleWeight={weight.regular}
           width={480}
           overPhoneNavigation={phone()}
           onClose={() => remove.set("")}
@@ -375,7 +376,7 @@ export function Plugins(props: { layout: Layout; onBack?: () => void }) {
                 label={uiText("remove2")}
                 tone="primary"
                 size={phone() ? 44 : 28}
-                labelWeight={phone() ? 500 : undefined}
+                labelWeight={phone() ? weight.regular : undefined}
                 style={phone() ? { flex: 1 } : undefined}
                 onPress={() =>
                   void host.action(async () => {
@@ -429,7 +430,7 @@ function PluginCard(props: {
           <Icon name="plugins" size={20} tone="muted" />
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-          <Label weight={500} lines={1}>
+          <Label weight={weight.regular} lines={1}>
             {props.item.name}
           </Label>
           <View style={{ ...row, height: 20, gap: 8 }}>

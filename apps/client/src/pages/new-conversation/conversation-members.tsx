@@ -3,6 +3,7 @@ import { View } from "nsh";
 import { Button, colors, grow, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { CheckControl } from "../../components/check-control";
+import { weight } from "../../components/tokens";
 import { localizedText, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -108,7 +109,7 @@ export function ConversationMembers(props: {
                     label={uiText(steward() ? "steward2" : "makeSteward")}
                     tone={steward() ? "primary" : "ghost"}
                     selected={steward()}
-                    labelWeight={400}
+                    labelWeight={weight.regular}
                     size={props.phone ? 28 : 24}
                     style={{ paddingHorizontal: 10 }}
                     onPress={() =>

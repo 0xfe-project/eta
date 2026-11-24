@@ -4,6 +4,7 @@ import { Image, View } from "nsh";
 import { colors, Label, row, sizes } from "../components";
 import { pickerTarget } from "../components/element-picker";
 import { phoneTabPaths } from "../components/icons";
+import { weight } from "../components/tokens";
 import { useText } from "../i18n";
 import { taskNeedsAttention } from "../pages/tasks/status";
 import { useHost } from "../services/host";
@@ -75,7 +76,7 @@ export function PhoneTabItem(props: {
         />
         <Label
           variant="caption"
-          weight={props.selected ? 600 : 400}
+          weight={props.selected ? weight.strong : weight.regular}
           tone={props.selected ? "ink" : "muted"}
         >
           {text(props.tab[1])}

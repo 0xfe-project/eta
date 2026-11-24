@@ -8,6 +8,7 @@ import type {
 import { View } from "nsh";
 import { Button, Caption, colors, Icon, Label, row } from "../../components";
 import { canHover } from "../../components/menu";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { isWaiting, runningFor, stepOf, taskDay, taskHint } from "./facts";
@@ -169,7 +170,7 @@ export function Prerequisites(props: {
                 alignSelf: "stretch",
               }}
             >
-              <Label variant="small" weight={600}>
+              <Label variant="small" weight={weight.strong}>
                 {cancelled()
                   ? uiText("thisTaskIsStuckAndNeeds")
                   : uiText("waitingForPrerequisites")}
@@ -235,7 +236,7 @@ export function Prerequisites(props: {
           >
             <View style={{ ...row, gap: props.tablet ? 6 : 8 }}>
               <Icon name="warning" size={props.tablet ? 14 : 16} />
-              <Label variant="small" weight={600}>
+              <Label variant="small" weight={weight.strong}>
                 {uiText("thisTaskIsStuckAndNeeds")}
               </Label>
             </View>
@@ -309,7 +310,7 @@ function StuckAction(props: {
     >
       <Label
         variant="caption"
-        weight={props.tablet && props.bare ? 400 : 600}
+        weight={props.tablet && props.bare ? weight.regular : weight.strong}
         tone={props.tablet && props.bare ? "mutedInk" : "ink"}
       >
         {props.label}
@@ -346,7 +347,7 @@ function StripCard(props: {
             cursor: "pointer",
           }}
         >
-          <Label variant="caption" weight={600} style={{ flex: 1 }}>
+          <Label variant="caption" weight={weight.strong} style={{ flex: 1 }}>
             {props.task.title}
           </Label>
           <Label variant="caption" tone="muted" style={{ flexShrink: 0 }}>
@@ -373,7 +374,7 @@ function StripCard(props: {
       >
         <View style={{ ...row, alignItems: "flex-start", gap: 5, flex: 1 }}>
           <TaskGlyph status={props.task.status} size={12} />
-          <Label variant="caption" weight={600} style={{ flex: 1 }}>
+          <Label variant="caption" weight={weight.strong} style={{ flex: 1 }}>
             {props.task.title}
           </Label>
         </View>
@@ -449,7 +450,7 @@ export function NeighbourStrip(props: {
                 borderColor: c().ink,
               }}
             >
-              <Label variant="caption" weight={600}>
+              <Label variant="caption" weight={weight.strong}>
                 {uiText("thisTask")}
               </Label>
               <Label
@@ -527,7 +528,7 @@ export function NeighbourStrip(props: {
             >
               <View style={{ ...row, gap: 5 }}>
                 <TaskGlyph status={props.item.status} size={12} />
-                <Label variant="caption" weight={600}>
+                <Label variant="caption" weight={weight.strong}>
                   {uiText("thisTask")}
                 </Label>
               </View>
@@ -684,7 +685,10 @@ export function Subtasks(props: {
             </Each>
           </View>
           <View>
-            <Label weight={600} style={{ paddingBottom: props.tablet ? 4 : 8 }}>
+            <Label
+              weight={weight.strong}
+              style={{ paddingBottom: props.tablet ? 4 : 8 }}
+            >
               {`${uiText("subtasks")} ${props.item.subtasks?.done ?? 0}/${props.item.subtasks?.total ?? 0}`}
             </Label>
             <Each of={children()} key={(child) => child.taskId}>
@@ -739,7 +743,7 @@ export function Subtasks(props: {
       <View style={{ gap: 8 }}>
         <Label
           variant="caption"
-          weight={600}
+          weight={weight.strong}
           tone="mutedInk"
           style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
         >

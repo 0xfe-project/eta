@@ -21,6 +21,7 @@ import {
 import { AgentFace } from "../../../components/agent-face";
 import { CloseButton } from "../../../components/navigation-buttons";
 import { StatusDot } from "../../../components/status-dot";
+import { weight } from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { clock, followSession, useHost } from "../../../services/host";
 import { activeReply } from "../member-status";
@@ -281,7 +282,7 @@ export function MemberRun(props: {
       >
         <View style={{ ...row, height: props.phone ? 24 : 28, gap: 8 }}>
           <AgentFace id={props.agentId} size={18} />
-          <Label variant="small" weight={props.phone ? 400 : 500} lines={1}>
+          <Label variant="small" weight={weight.regular} lines={1}>
             {props.executorName ??
               host.agent(props.agentId)?.name ??
               uiText("agent")}
@@ -465,7 +466,7 @@ export function MemberRun(props: {
                           <Label variant="caption" tone="muted">
                             {uiText(runKinds[kind()].label)}
                           </Label>
-                          <Label variant="caption" weight={500}>
+                          <Label variant="caption" weight={weight.regular}>
                             {runDuration(duration())}
                           </Label>
                         </View>

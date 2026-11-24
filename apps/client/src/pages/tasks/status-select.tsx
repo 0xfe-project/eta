@@ -2,6 +2,7 @@ import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { TaskDetailState } from "./task-detail-state";
 import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { StatusOptions, TaskMenu } from "./menu";
 import { statusName, TaskGlyph, tones } from "./status";
@@ -75,7 +76,7 @@ export function StatusSelect(props: {
         </If>
         <Label
           variant={plain() ? "caption" : "small"}
-          weight={plain() ? 600 : 400}
+          weight={plain() ? weight.strong : weight.regular}
           tone={ink()}
           lines={1}
           style={plain() ? undefined : { flex: 1, minWidth: 0 }}

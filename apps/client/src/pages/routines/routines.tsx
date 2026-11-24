@@ -23,6 +23,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { chatText, shownMentions } from "../../components/eta-editor";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { follow, useHost } from "../../services/host";
@@ -276,7 +277,9 @@ export function Routines(props: {
             ...(props.layout === "desktop" ? { flex: 1, minWidth: 0 } : {}),
           }}
         >
-          <Label weight={props.layout === "desktop" ? 500 : 600}>
+          <Label
+            weight={props.layout === "desktop" ? weight.regular : weight.strong}
+          >
             {uiText("captainIsOffSoRoutinesAre")}
           </Label>
           <Label
@@ -373,7 +376,7 @@ export function Routines(props: {
                   iconSize={24}
                   iconTone="ink"
                   titleVariant="body"
-                  titleWeight={tablet() ? 400 : 500}
+                  titleWeight={weight.regular}
                   descriptionVariant="small"
                   descriptionWidth={400}
                   // The list's empty state sits at the top of the column.
@@ -470,7 +473,7 @@ export function Routines(props: {
                           icon="routines"
                           iconSize={selected() ? undefined : 24}
                           iconTone={selected() ? undefined : "ink"}
-                          titleWeight={tablet() ? 400 : undefined}
+                          titleWeight={tablet() ? weight.regular : undefined}
                           // Two lines on the desktop; tablet runs it across the pane.
                           descriptionWidth={tablet() ? 560 : 230}
                           style={
@@ -492,7 +495,7 @@ export function Routines(props: {
                       icon="routines"
                       iconSize={24}
                       iconTone="ink"
-                      titleWeight={tablet() ? 400 : undefined}
+                      titleWeight={tablet() ? weight.regular : undefined}
                       // Where "Select a routine" stands, which the back button leads to.
                       style={{
                         justifyContent: "flex-start",

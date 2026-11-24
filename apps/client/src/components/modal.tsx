@@ -7,6 +7,7 @@ import { screenInsets } from "./safe-area";
 import { Label } from "./text";
 import { colors, fill, row } from "./theme";
 import { ToastLayer } from "./toast";
+import { shadow, weight } from "./tokens";
 
 const modalStack: (() => void)[] = [];
 
@@ -72,9 +73,7 @@ export function Modal(props: {
     borderLeftWidth: props.phonePage ? 0 : 1,
     borderColor: color().strong,
     overflow: "hidden",
-    boxShadow: centred()
-      ? [{ x: 0, y: 8, blur: 24, color: "#0000001f" }]
-      : undefined,
+    boxShadow: centred() ? [shadow.popover] : undefined,
     ...(props.compact ? { padding: 14 } : {}),
     ...props.panelStyle,
   });
@@ -122,7 +121,10 @@ export function Modal(props: {
         </If>
         <If when={!props.hideHeader && props.compact}>
           <View style={{ ...row, gap: 12, flexShrink: 0 }}>
-            <Label weight={props.titleWeight ?? 600} style={{ flex: 1 }}>
+            <Label
+              weight={props.titleWeight ?? weight.strong}
+              style={{ flex: 1 }}
+            >
               {props.title}
             </Label>
             {props.headerActions}
@@ -166,7 +168,9 @@ export function Modal(props: {
               sheetChrome() || sideDrawer() || stepHeader() ? "body" : undefined
             }
             titleWeight={
-              sheetChrome() || sideDrawer() || stepHeader() ? 600 : undefined
+              sheetChrome() || sideDrawer() || stepHeader()
+                ? weight.strong
+                : undefined
             }
             dialog={!props.phonePage}
             onBack={props.phonePage ? close : undefined}

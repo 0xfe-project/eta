@@ -17,6 +17,7 @@ import {
   MessagesSkeleton,
 } from "../../components";
 import { wheelScroll } from "../../components/scroll-follow";
+import { shadow, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { Message } from "./message";
@@ -212,7 +213,7 @@ export function ConversationTimeline(props: {
             icon="linkBreak"
             iconSize={28}
             iconTone="ink"
-            titleWeight={600}
+            titleWeight={weight.strong}
           >
             <Button
               label={uiText("retry")}
@@ -351,7 +352,7 @@ export function ConversationTimeline(props: {
                   backgroundColor: c().canvas,
                   borderWidth: 1,
                   borderColor: c().border,
-                  boxShadow: [{ x: 0, y: 4, blur: 16, color: "#0a0a0a14" }],
+                  boxShadow: [shadow.float],
                 }}
                 onPress={quote}
               />

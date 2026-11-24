@@ -19,6 +19,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
@@ -217,7 +218,7 @@ function PlanGraph(props: {
                 justifyContent: "space-between",
               }}
             >
-              <Label variant="caption" weight={600}>
+              <Label variant="caption" weight={weight.strong}>
                 {uiText("step", { value1: index() + 1 })}
               </Label>
               <Label variant="caption" tone="muted">
@@ -409,7 +410,9 @@ function PlanCard(props: {
         />
         <Label
           variant={size().titleVariant}
-          weight={size().titleVariant === "caption" ? 600 : 400}
+          weight={
+            size().titleVariant === "caption" ? weight.strong : weight.regular
+          }
           lines={isTablet(props.variant) ? 2 : 1}
           style={{ flex: 1, minWidth: 0 }}
         >
@@ -759,7 +762,7 @@ export function TaskPlanBoard(props: {
                 onPress={() => props.onOpen(parent().id)}
                 style={{ cursor: "pointer" }}
               >
-                <Label weight={600}>{parent().title}</Label>
+                <Label weight={weight.strong}>{parent().title}</Label>
               </View>
               <Label variant="caption" tone="muted" style={{ flex: 1 }}>
                 {stepsCaption(parent().number, childrenOf(parent()))}

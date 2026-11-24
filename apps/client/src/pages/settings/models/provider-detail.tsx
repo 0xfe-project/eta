@@ -22,6 +22,7 @@ import {
 } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
 import { ToggleSwitch } from "../../../components/toggle-switch";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { LetterBox, PaneBack, SectionHeader, WarningLine } from "../section";
@@ -259,7 +260,13 @@ export function ProviderDetail(props: {
               }}
             >
               <Label
-                weight={tab() === item() ? (props.phone ? 600 : 500) : 400}
+                weight={
+                  tab() === item()
+                    ? props.phone
+                      ? weight.strong
+                      : weight.regular
+                    : weight.regular
+                }
                 tone={
                   tab() === item() ? "ink" : props.phone ? "mutedInk" : "muted"
                 }
@@ -454,7 +461,7 @@ export function ProviderDetail(props: {
               >
                 <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                   <Label
-                    weight={500}
+                    weight={weight.regular}
                     tone={configured(model().id) ? "ink" : "muted"}
                   >
                     {model().name ?? model().id}

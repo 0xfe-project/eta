@@ -9,6 +9,7 @@ import {
   row,
 } from "../../components";
 import { canHover, inSheet, MenuFrame, MenuRow } from "../../components/menu";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { setUsageShown, usageShown } from "./usage";
 
@@ -45,7 +46,7 @@ export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
             borderColor: c().border,
           }}
         >
-          <Label weight={600} lines={1} style={grow}>
+          <Label weight={weight.strong} lines={1} style={grow}>
             {uiText("usageView")}
           </Label>
           <Button
@@ -82,7 +83,7 @@ export function ViewMenu(props: { phone?: boolean; tablet?: boolean }) {
               <Icon name="sliders" size={12} tone={open() ? "ink" : "muted"} />
               <Label
                 variant="small"
-                weight={props.tablet ? 500 : 400}
+                weight={weight.regular}
                 tone={open() ? "ink" : "muted"}
               >
                 {uiText("usageView")}

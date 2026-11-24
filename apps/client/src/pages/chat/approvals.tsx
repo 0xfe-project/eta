@@ -18,6 +18,7 @@ import {
   textFaces,
   textStyle,
 } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 
@@ -203,7 +204,7 @@ function SheetQuestion(props: {
           label={props.sheet ? uiText("sendAnswer") : uiText("answer")}
           tone="primary"
           size={props.sheet ? 36 : undefined}
-          labelWeight={props.sheet ? 600 : undefined}
+          labelWeight={props.sheet ? weight.strong : undefined}
           style={props.sheet ? { paddingHorizontal: 16 } : undefined}
           disabled={busy() || (!selected().length && !reply().trim())}
           onPress={() => void submit()}
@@ -312,7 +313,7 @@ function SheetProposal(props: {
             label={uiText("proposalCreate")}
             tone="primary"
             size={36}
-            labelWeight={600}
+            labelWeight={weight.strong}
             style={{ paddingHorizontal: 20 }}
             disabled={working()}
             onPress={() => void decide("approve")}
@@ -486,7 +487,7 @@ function QuestionCard(props: { item: InteractionView }) {
           gap: 8,
           paddingVertical: 4,
           paddingHorizontal: 10,
-          backgroundColor: `${c().ink}08`,
+          backgroundColor: c().overlay,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
@@ -718,7 +719,12 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
         >
           {kindName(op().kind)}
         </Label>
-        <Label variant="small" weight={600} lines={1} style={{ flex: 1 }}>
+        <Label
+          variant="small"
+          weight={weight.strong}
+          lines={1}
+          style={{ flex: 1 }}
+        >
           {title()}
         </Label>
         <View

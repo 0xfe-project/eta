@@ -9,6 +9,7 @@ import {
   Icon,
   SmoothScroll,
 } from "../../../components";
+import { weight } from "../../../components/tokens";
 import { uiText, useText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -75,7 +76,7 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
                 icon="plug"
                 iconSize={24}
                 title={uiText("mcpEmptyTitle")}
-                titleWeight={500}
+                titleWeight={weight.regular}
                 description={uiText("mcpEmptyHint")}
                 descriptionWidth={320}
                 style={emptyStyle}

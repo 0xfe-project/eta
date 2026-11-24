@@ -13,6 +13,7 @@ import {
   monoFontFamily,
   textFaces,
 } from "./theme";
+import { weight } from "./tokens";
 
 export function Label(props: {
   children?: JSX.Element | string | number;
@@ -34,7 +35,7 @@ export function Label(props: {
         fontFamily: fontFamily(fonts().interface),
         fontSize: face().size,
         lineHeight: face().line,
-        fontWeight: props.weight ?? 400,
+        fontWeight: props.weight ?? weight.regular,
         color: color()[props.tone ?? "ink"],
         numberOfLines: props.lines,
         ...props.style,
@@ -98,7 +99,7 @@ export function Markdown(props: {
   const type = textFaces();
   const code = () => ({ fontFamily: monoFontFamily(fonts()) });
   const base = props.dense
-    ? { weight: 600, space: 0, after: 0 }
+    ? { weight: weight.strong, space: 0, after: 0 }
     : { weight: undefined, space: 16, after: 6 };
   const body = () => type(props.variant ?? (props.dense ? "small" : "body"));
   const heading = () => {

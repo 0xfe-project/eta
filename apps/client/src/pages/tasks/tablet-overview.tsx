@@ -10,6 +10,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "./activity";
@@ -100,7 +101,7 @@ export function TabletOverview(props: {
               title={item().title}
               state={props.state}
               variant="subtitle"
-              weight={600}
+              weight={weight.strong}
             />
             <If
               when={!parent()}
@@ -156,7 +157,7 @@ export function TabletOverview(props: {
                   (parent() || !/^\s*#/.test(item().description))
                 }
               >
-                <Label variant="small" weight={600}>
+                <Label variant="small" weight={weight.strong}>
                   {parent() ? uiText("description") : uiText("goal")}
                 </Label>
               </If>
@@ -166,7 +167,7 @@ export function TabletOverview(props: {
                   dense
                   heading={{
                     variant: "small",
-                    weight: 600,
+                    weight: weight.strong,
                     space: 0,
                     after: -8,
                   }}
@@ -316,7 +317,7 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
                   >
                     <Label
                       variant="caption"
-                      weight={600}
+                      weight={weight.strong}
                       style={{ flex: 1, minWidth: 0 }}
                     >
                       {field()[1]}
@@ -347,7 +348,7 @@ function Properties(props: { item: BoardTaskDetail; state: TaskDetailState }) {
                         }}
                       >
                         <Icon name="refresh" size={11} />
-                        <Label variant="caption" weight={600}>
+                        <Label variant="caption" weight={weight.strong}>
                           {uiText("rerun")}
                         </Label>
                       </View>

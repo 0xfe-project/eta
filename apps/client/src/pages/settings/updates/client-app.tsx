@@ -17,6 +17,7 @@ import {
 } from "../../../components";
 import { DownloadProgressBar } from "../../../components/download-progress";
 import { LayoutSelect } from "../../../components/select";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import {
   clientPlatform,
@@ -85,7 +86,7 @@ export function ClientUpdateConfirm(props: { onClose: () => void }) {
       onClose={props.onClose}
     >
       <View style={{ ...grow, padding: 20, gap: 10 }}>
-        <Label weight={500}>
+        <Label weight={weight.regular}>
           {uiText("updateTheDesktopAppTo", { version: version() })}
         </Label>
         <SmoothScroll style={grow}>
@@ -215,7 +216,7 @@ export function ClientAppUpdate(props: { phone: boolean }) {
       }}
     >
       <View style={{ ...row, gap: 8 }}>
-        <Label weight={600} style={{ flex: 1 }}>
+        <Label weight={weight.strong} style={{ flex: 1 }}>
           {clientPlatform === "android"
             ? uiText("androidApp")
             : uiText("desktopApp")}

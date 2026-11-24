@@ -23,6 +23,7 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { CloseButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
 import { follow, relativeTime, useHost } from "../../services/host";
@@ -60,7 +61,7 @@ export function QuestionDialog(props: {
         }}
       >
         <AgentFace id={props.item.agentId} size={20} />
-        <Label weight={600} style={{ flex: 1 }}>
+        <Label weight={weight.strong} style={{ flex: 1 }}>
           {uiText("questionFromWithCount", { value1: name() })}
         </Label>
         <CloseButton size={32} iconSize={16} onPress={props.onClose} />
@@ -163,7 +164,10 @@ export function Pending(props: {
           </If>
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Label weight={props.strong ? 600 : 400} lines={1}>
+          <Label
+            weight={props.strong ? weight.strong : weight.regular}
+            lines={1}
+          >
             {props.title}
           </Label>
           <Label variant="caption" tone="muted" lines={1}>
@@ -670,7 +674,7 @@ export function Pending(props: {
               }}
             >
               <CaptainFace size={20} />
-              <Label weight={600} style={{ flex: 1 }}>
+              <Label weight={weight.strong} style={{ flex: 1 }}>
                 {uiText("proposalFromCaptain")}
               </Label>
               <CloseButton

@@ -11,6 +11,7 @@ import {
   Screen,
 } from "../../components";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { taskTime } from "../tasks/facts";
@@ -183,7 +184,7 @@ export function TasksTab(props: {
     >
       <Label
         variant="small"
-        weight={selected ? 600 : 400}
+        weight={selected ? weight.strong : weight.regular}
         tone={selected ? "ink" : "muted"}
         lines={1}
       >
@@ -203,7 +204,7 @@ export function TasksTab(props: {
           paddingHorizontal: inset,
         }}
       >
-        <Label weight={600} style={{ flexShrink: 0 }}>
+        <Label weight={weight.strong} style={{ flexShrink: 0 }}>
           {uiText("tasks2")}
         </Label>
         {/* The /tasks list's "Group: …" menu, on the title's line so the scopes keep their row. */}

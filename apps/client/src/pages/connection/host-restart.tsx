@@ -7,6 +7,7 @@ import { Button, colors, fill, Label, row } from "../../components";
 import { screenInsets } from "../../components/safe-area";
 import { StatusDot } from "../../components/status-dot";
 import { showToast } from "../../components/toast";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { megabytes, resultNotice } from "../settings/updates/progress";
@@ -271,7 +272,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
               <>
                 <If when={running()}>
                   <View style={{ gap: 4 }}>
-                    <Label variant="subtitle" weight={500}>
+                    <Label variant="subtitle" weight={weight.regular}>
                       {current().to
                         ? uiText("updateScreenTitle", { version: current().to })
                         : uiText("updatingTheHost")}
@@ -313,7 +314,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                           <StatusDot color={c().warning} />
                         </View>
                         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                          <Label variant="small" weight={500}>
+                          <Label variant="small" weight={weight.regular}>
                             {uiText("updateSlowTitle")}
                           </Label>
                           <Label variant="small" tone="mutedInk">
@@ -337,7 +338,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                 </If>
                 <If when={current().state === "done"}>
                   <View style={{ gap: 4 }}>
-                    <Label variant="subtitle" weight={500}>
+                    <Label variant="subtitle" weight={weight.regular}>
                       {uiText("updateDoneTitle", {
                         version: current().to ?? "",
                       })}
@@ -353,7 +354,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                 </If>
                 <If when={current().state === "rolled-back"}>
                   <View style={{ gap: 4 }}>
-                    <Label variant="subtitle" weight={500}>
+                    <Label variant="subtitle" weight={weight.regular}>
                       {uiText("updateRolledBackScreenTitle", {
                         version: current().to ?? "",
                       })}
@@ -401,7 +402,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
                 </If>
                 <If when={current().state === "broken"}>
                   <View style={{ gap: 4 }}>
-                    <Label variant="subtitle" weight={500}>
+                    <Label variant="subtitle" weight={weight.regular}>
                       {uiText("updateBrokenTitle")}
                     </Label>
                     <Label tone="mutedInk">

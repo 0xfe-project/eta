@@ -4,6 +4,7 @@ import { View } from "nsh";
 import { ActionItem, colors, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { useModels } from "../../components/model-select";
+import { weight } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { EntityRow, WarningLine } from "./section";
@@ -42,7 +43,7 @@ export function SettingRow(props: {
     >
       <Icon name={props.icon} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Label weight={500}>{props.title}</Label>
+        <Label weight={weight.regular}>{props.title}</Label>
         <Label variant="small" tone="muted" lines={2}>
           {props.detail}
         </Label>

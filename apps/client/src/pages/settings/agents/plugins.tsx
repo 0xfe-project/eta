@@ -3,6 +3,7 @@ import type { AgentForm } from "./form";
 import { View } from "nsh";
 import { colors, Empty, Label, row } from "../../../components";
 import { CheckControl } from "../../../components/check-control";
+import { weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
@@ -113,7 +114,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   else={
                     <>
                       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                        <Label weight={500}>{item().name}</Label>
+                        <Label weight={weight.regular}>{item().name}</Label>
                         <If
                           when={checked() && !ready()}
                           else={
@@ -135,7 +136,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   }
                 >
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                    <Label weight={500}>{item().name}</Label>
+                    <Label weight={weight.regular}>{item().name}</Label>
                     <StatusLine status={status(item())} />
                     <Label variant="small" tone="muted">
                       {counts(item())}

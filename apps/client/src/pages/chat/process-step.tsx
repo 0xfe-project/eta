@@ -11,6 +11,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { ToolOutput } from "./run/tool-code";
 
@@ -104,7 +105,7 @@ export function ProcessStep(props: { value: RunBlock }) {
                       paddingHorizontal: 8,
                       paddingVertical: 2,
                       letterSpacing: 1,
-                      fontWeight: 600,
+                      fontWeight: weight.strong,
                     }
                   : { letterSpacing: 1, color: c().faint }
               }
@@ -169,7 +170,12 @@ function TextStep(props: {
             <Markdown
               value={props.text}
               dense
-              heading={{ variant: "small", weight: 600, space: 4, after: 2 }}
+              heading={{
+                variant: "small",
+                weight: weight.strong,
+                space: 4,
+                after: 2,
+              }}
               streaming
             />
           </If>

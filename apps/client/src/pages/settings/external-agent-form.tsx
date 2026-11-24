@@ -29,6 +29,7 @@ import {
 } from "../../components";
 import { BackButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { acpStatus } from "./external-agent";
@@ -243,7 +244,7 @@ export function ExternalAgentForm(props: {
         : undefined;
     return (
       <View style={{ gap: 6 }}>
-        <Label variant="small" weight={500}>
+        <Label variant="small" weight={weight.regular}>
           {p.title}
         </Label>
         <Field
@@ -348,7 +349,7 @@ export function ExternalAgentForm(props: {
       : uiText("acpAddTitle");
   const machineField = () => (
     <View style={{ gap: 6 }}>
-      <Label variant="small" weight={500}>
+      <Label variant="small" weight={weight.regular}>
         {uiText("externalAgentMachine")}
       </Label>
       <If
@@ -481,7 +482,7 @@ export function ExternalAgentForm(props: {
             disabled={saving()}
             onPress={props.onClose}
           />
-          <Label weight={600} lines={1} style={{ flex: 1 }}>
+          <Label weight={weight.strong} lines={1} style={{ flex: 1 }}>
             {title()}
           </Label>
         </View>

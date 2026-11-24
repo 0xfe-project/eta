@@ -1,6 +1,7 @@
 import { Image, View } from "nsh";
 import photo from "../../../assets/onboard.jpg";
 import { fill, Label, row } from "../../components";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export function WelcomeStep(props: { phone: boolean }) {
@@ -31,7 +32,7 @@ export function WelcomeStep(props: { phone: boolean }) {
             position: "absolute",
             right: 12,
             bottom: 10,
-            color: "#ffffffb3",
+            color: "#ffffffb3", // design-value: text over the photograph, which is the same in either theme
           }}
         >
           Photo: Barnabas Davoti / Unsplash
@@ -39,7 +40,11 @@ export function WelcomeStep(props: { phone: boolean }) {
       </View>
       <View style={{ paddingHorizontal: 16, paddingVertical: 24, gap: 16 }}>
         <View style={{ gap: 6 }}>
-          <Label variant="title" weight={600} style={{ letterSpacing: -0.2 }}>
+          <Label
+            variant="title"
+            weight={weight.strong}
+            style={{ letterSpacing: -0.2 }}
+          >
             {uiText("welcomeToEta")}
           </Label>
           <Label tone="mutedInk">{uiText("twoShortStepsThenYourAgents")}</Label>

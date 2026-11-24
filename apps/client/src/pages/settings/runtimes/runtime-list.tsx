@@ -9,6 +9,7 @@ import type { RuntimeListing } from "./listing";
 import { signal, View } from "nsh";
 import { Button, colors, Label, row } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { localTime, percentText } from "../models/quota";
@@ -36,7 +37,7 @@ const custom = (runtime: AgentRuntimeInfo) => runtime.id.startsWith("acp.");
 function Part(props: { title: string; children?: JSX.Element }) {
   return (
     <View style={{ gap: 2 }}>
-      <Label variant="small" weight={500}>
+      <Label variant="small" weight={weight.regular}>
         {props.title}
       </Label>
       {props.children}

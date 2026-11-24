@@ -33,6 +33,7 @@ import {
   serialize,
   submitKeys,
 } from "../../components/eta-editor";
+import { weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { OutboxRows } from "./composer-delivery";
@@ -496,7 +497,7 @@ function ComposerBody(
               size={props.phone ? 32 : 28}
               iconSize={props.phone ? 16 : undefined}
               labelVariant="caption"
-              labelWeight={500}
+              labelWeight={weight.regular}
               style={
                 props.phone ? undefined : { paddingHorizontal: 10, gap: 8 }
               }

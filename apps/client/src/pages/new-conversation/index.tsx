@@ -14,6 +14,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { weight } from "../../components/tokens";
 import { localizedText, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ConversationMembers } from "./conversation-members";
@@ -194,7 +195,7 @@ export function NewConversation(props: {
             >
               {directory() ? "2/2" : "1/2"}
             </Label>
-            <Label variant="small" weight={600}>
+            <Label variant="small" weight={weight.strong}>
               {directory() ? uiText("members") : uiText("directory")}
             </Label>
           </View>

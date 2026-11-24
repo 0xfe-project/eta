@@ -21,6 +21,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { weight } from "../../components/tokens";
 import { formatLocale, uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { messageTime } from "../chat/message-time";
@@ -208,7 +209,7 @@ export function ArchiveSettings(props: { phone?: boolean }) {
               icon="archive"
               iconSize={24}
               title={uiText("archivedTasksEmpty")}
-              titleWeight={500}
+              titleWeight={weight.regular}
               description={uiText("archivedTasksEmptyHint")}
               descriptionWidth={360}
               style={emptyStyle}

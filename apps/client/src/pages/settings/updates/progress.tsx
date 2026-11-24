@@ -7,6 +7,7 @@ import type { light } from "../../../components/theme";
 import { View } from "nsh";
 import { colors, Label, row } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
+import { weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
 // What Settings › Update and the restart screen say about an upgrade: the steps it goes through,
@@ -229,7 +230,7 @@ export function UpdateNotice(props: {
         <StatusDot color={c()[props.tone as keyof typeof light]} />
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Label variant="small" weight={500}>
+        <Label variant="small" weight={weight.regular}>
           {props.title}
         </Label>
         <If when={props.body}>

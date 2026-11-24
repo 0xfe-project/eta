@@ -34,7 +34,14 @@ export function Scanner(props: {
     })
     .catch(unavailable);
   return (
-    <View style={{ ...fill, zIndex: 10, backgroundColor: "#0a0b0c" }}>
+    <View
+      style={{
+        ...fill,
+        zIndex: 10,
+        // design-value: the camera's backdrop is dark in either theme
+        backgroundColor: "#0a0b0c",
+      }}
+    >
       <If when={html()}>
         <WebView
           baseUrl={cameraOrigin}
