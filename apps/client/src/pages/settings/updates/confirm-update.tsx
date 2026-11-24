@@ -1,6 +1,6 @@
 import type { HostUpdate } from "./host-update";
 import { View } from "nsh";
-import { Button, Label, Modal, row } from "../../../components";
+import { Button, dialogWidth, Label, Modal, row } from "../../../components";
 import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { BusyList } from "./busy-list";
@@ -16,7 +16,7 @@ export function ConfirmHostUpdate(props: {
       <Modal
         title={uiText("updateTheHostTo", { value1: check()?.latest ?? "" })}
         phone={props.phone}
-        width={448}
+        width={dialogWidth.md}
         blurBackdrop={false}
         overPhoneNavigation
         dismissible={!pending()}

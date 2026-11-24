@@ -1,7 +1,7 @@
 import type { TextTheme } from "../look";
 import type { TextPlugin } from "../plugin";
 import { markdown, StarterKit } from "nsh/base";
-import { border, space, weight } from "../../tokens";
+import { border, icon, space, weight } from "../../tokens";
 
 /**
  * Formatted text, written as Markdown is: `# ` a heading, `- ` / `1. ` / `[ ] ` a list, `> ` a
@@ -119,8 +119,8 @@ function proseEditor(theme: TextTheme) {
     },
     listMarker: { color: theme.colors.muted },
     taskCheckbox: {
-      width: 14,
-      height: 14,
+      width: icon.md,
+      height: icon.md,
       borderWidth: 1,
       borderColor: theme.colors.strong,
     },
@@ -141,8 +141,8 @@ function proseView(theme: TextTheme) {
     listItemContent: { gap: 0 },
     listMarker: { color: theme.colors.muted },
     taskMarker: {
-      width: 14,
-      height: 14,
+      width: icon.md,
+      height: icon.md,
       borderWidth: 1,
       borderRadius: 0,
       borderColor: theme.colors.strong,

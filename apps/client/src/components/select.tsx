@@ -13,7 +13,12 @@ import {
 } from "./menu";
 import { Icon, Label } from "./text";
 import { colors, row, Screen } from "./theme";
-import { icon, space } from "./tokens";
+import { control, icon, space } from "./tokens";
+
+/** The menu of a select on a desktop, unless its caller says. */
+const menuWidth = 220;
+/** A choice's row in a phone sheet. */
+const sheetRowHeight = 52;
 
 /**
  * NSH's `Select`, shown as the layout says (`menuPresentation`): a sheet at
@@ -46,7 +51,7 @@ export function LayoutSelect(
           align={props.align === "end" ? "end" : "start"}
           offset={props.offset}
           popupStyle={{
-            width: props.menuWidth ?? 220,
+            width: props.menuWidth ?? menuWidth,
             ...(props.popupStyle as ViewStyle | undefined),
           }}
           trigger={
@@ -74,10 +79,10 @@ export function LayoutSelect(
                     ...row,
                     gap: space[8],
                     minHeight: inSheet()
-                      ? 52
+                      ? sheetRowHeight
                       : touchScreen
                         ? touchRow
-                        : (itemStyle().minHeight ?? 28),
+                        : (itemStyle().minHeight ?? control.md),
                     paddingHorizontal: inSheet()
                       ? space[16]
                       : (itemStyle().paddingHorizontal ?? space[8]),

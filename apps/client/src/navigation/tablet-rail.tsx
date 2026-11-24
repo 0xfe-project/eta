@@ -8,6 +8,8 @@ import { CaptainFace } from "./captain";
 import { sections } from "./routes";
 import { NavItem } from "./sidebar";
 
+const captainHeight = 56;
+
 export function TabletRail(props: Navigation) {
   const text = useText();
   const c = colors();
@@ -35,7 +37,7 @@ export function TabletRail(props: Navigation) {
         hoverStyle={{ backgroundColor: c().selected }}
         focusVisibleStyle={focusRing(c())}
         style={{
-          height: 56,
+          height: captainHeight,
           alignItems: "center",
           justifyContent: "center",
           cursor: "pointer",

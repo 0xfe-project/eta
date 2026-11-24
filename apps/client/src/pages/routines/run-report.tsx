@@ -7,6 +7,7 @@ import {
   Caption,
   colors,
   Field,
+  focusRing,
   grow,
   Icon,
   Label,
@@ -212,10 +213,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
                   accessibilityLabel={run().title ?? uiText("report")}
                   onPress={() => props.onMove(previousIndex() - props.index)}
                   hoverStyle={{ backgroundColor: c().selected }}
-                  focusVisibleStyle={{
-                    outlineWidth: 1,
-                    outlineColor: c().blue,
-                  }}
+                  focusVisibleStyle={focusRing(c(), "inset")}
                   style={{
                     ...row,
                     minHeight: 56,
@@ -310,7 +308,7 @@ export function RoutineReport(props: RoutineReportProps) {
       onPress={() => {
         if (enabled) props.onMove(by);
       }}
-      focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+      focusVisibleStyle={focusRing(c(), "inset")}
       style={{ cursor: enabled ? "pointer" : "default" }}
     >
       <Label
@@ -349,7 +347,7 @@ export function RoutineReport(props: RoutineReportProps) {
               role="button"
               accessibilityLabel={props.routine.name}
               onPress={props.onBack}
-              focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+              focusVisibleStyle={focusRing(c(), "inset")}
               style={{ ...row, gap: space[8], minWidth: 0, cursor: "pointer" }}
             >
               <Icon name="arrowLeft" size={icon.sm} />

@@ -14,13 +14,28 @@ import {
   sizes,
 } from "../components";
 import { pickerTarget } from "../components/element-picker";
-import { control, icon, space, weight } from "../components/tokens";
+import { border, control, icon, space, weight } from "../components/tokens";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 import { CaptainCard, RailCaptain } from "./captain";
 import { ChatList } from "./chat-list";
 import { RailButton } from "./rail-controls";
 import { sections } from "./routes";
+
+/** A destination: a row in the wide sidebar, a cell in the tablet rail, a tab on a phone (the
+ * tab bar's height inside its top border). */
+const itemHeight = {
+  wide: 28,
+  rail: 48,
+  phone: sizes.phoneNav - border.hair,
+} as const;
+/** Five tabs across a phone. */
+const phoneItemWidth = "20%";
+/** An unread count over a rail or tab icon. */
+const badgeHeight = 16;
+/** The collapse toggle beside the wordmark. */
+const toggleWidth = 16;
+const footerHeight = 36;
 
 export function NavItem(props: {
   item: Destination;
@@ -48,8 +63,12 @@ export function NavItem(props: {
       focusVisibleStyle={focusRing(c())}
       style={{
         ...(wide() ? row : { alignItems: "center", justifyContent: "center" }),
-        height: wide() ? 28 : phone() ? 63 : 48,
-        width: phone() ? "20%" : "100%",
+        height: wide()
+          ? itemHeight.wide
+          : phone()
+            ? itemHeight.phone
+            : itemHeight.rail,
+        width: phone() ? phoneItemWidth : "100%",
         flexShrink: 0,
         paddingHorizontal: wide() ? space[8] : 0,
         gap: wide() ? space[8] : space[4],
@@ -80,8 +99,8 @@ export function NavItem(props: {
               ? {}
               : {
                   position: "absolute",
-                  height: 14,
-                  minWidth: 14,
+                  height: badgeHeight,
+                  minWidth: badgeHeight,
                   textAlign: "center",
                   top: phone() ? 8 : 4,
                   left: phone() ? "56%" : "62%",
@@ -154,7 +173,7 @@ export function DesktopSidebar(
             label={text("collapseSidebar")}
             icon="sidebar"
             size={control.sm}
-            width={16}
+            width={toggleWidth}
             iconSize={icon.sm}
             expanded
             attach={attachToggle}
@@ -186,7 +205,7 @@ export function DesktopSidebar(
           <RailButton
             label={text("expandSidebar")}
             icon="sidebar"
-            size={22}
+            size={control.sm}
             expanded={false}
             attach={attachToggle}
             onPress={toggleSidebar}
@@ -232,7 +251,7 @@ export function DesktopSidebar(
       <View
         style={{
           paddingHorizontal: space[8],
-          height: 37,
+          height: footerHeight,
           justifyContent: "center",
           flexShrink: 0,
           ...(props.collapsed

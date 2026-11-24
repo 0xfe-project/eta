@@ -98,7 +98,7 @@ export function Header(props: {
       <If when={back()}>
         <BackButton
           icon={props.backIcon}
-          size={phone() ? 40 : undefined}
+          size={phone() ? control.touch : undefined}
           iconSize={
             props.backIconSize ??
             (phone() ? (props.compact ? icon.md : icon.lg) : undefined)

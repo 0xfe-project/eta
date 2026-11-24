@@ -5,6 +5,7 @@ import {
   ActionItem,
   colors,
   Empty,
+  emptyWidth,
   grow,
   Icon,
   SmoothScroll,
@@ -78,7 +79,7 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
                 title={uiText("mcpEmptyTitle")}
                 titleWeight={weight.regular}
                 description={uiText("mcpEmptyHint")}
-                descriptionWidth={320}
+                descriptionWidth={emptyWidth.narrow}
                 style={emptyStyle}
               />
             }

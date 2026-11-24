@@ -52,6 +52,7 @@ export function UserFace(props: { size?: number }) {
     top: size() * 0.4,
     width: Math.max(1, Math.round(size() * 0.12)),
     height: Math.max(1, Math.round(size() * 0.2)),
+    // design-value: the drawn face's own ink, the same in both themes
     backgroundColor: "#2b2b2b",
   });
   return (
@@ -61,6 +62,7 @@ export function UserFace(props: { size?: number }) {
         width: size(),
         height: size(),
         borderRadius: size() / 2,
+        // design-value: the drawn face's own skin, the same in both themes
         backgroundColor: "#b8b8b8",
         flexShrink: 0,
       }}

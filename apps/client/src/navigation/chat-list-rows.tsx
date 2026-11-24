@@ -10,6 +10,10 @@ import { avatar, control, space } from "../components/tokens";
 import { relativeTime, useHost } from "../services/host";
 import { RailEntry } from "./rail-controls";
 
+const groupRowHeight = { phone: 64, regular: 52 } as const;
+/** A phone's group row: its members' faces, overlapped. */
+const facesWidth = 36;
+
 export function GroupRow(props: {
   group: ConversationSummary;
   selected: boolean;
@@ -48,7 +52,7 @@ export function GroupRow(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       focusVisibleStyle={focusRing(c())}
       style={{
-        minHeight: phone() ? 64 : 53,
+        minHeight: phone() ? groupRowHeight.phone : groupRowHeight.regular,
         flexShrink: 0,
         paddingLeft: space[16],
         paddingRight: phone() ? space[12] : space[16],
@@ -64,7 +68,12 @@ export function GroupRow(props: {
     >
       <If when={phone()}>
         <View
-          style={{ ...row, width: 36, paddingLeft: space[2], flexShrink: 0 }}
+          style={{
+            ...row,
+            width: facesWidth,
+            paddingLeft: space[2],
+            flexShrink: 0,
+          }}
         >
           <Each of={people()}>
             {(person, index) => (
@@ -124,7 +133,7 @@ export function GroupRow(props: {
           )}
           onPress={props.onPress}
         >
-          <View style={{ ...row, height: 14 }}>
+          <View style={{ ...row, height: avatar.sm }}>
             <Each of={people()} key={(person) => person.agentId}>
               {(person, index) => (
                 <View style={{ marginLeft: index() ? -space[4] : 0 }}>

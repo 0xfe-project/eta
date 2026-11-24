@@ -12,6 +12,7 @@ import { cleanup, computed, effect, signal, View } from "nsh";
 import {
   Button,
   colors,
+  focusRing,
   grow,
   Icon,
   Label,
@@ -356,11 +357,7 @@ export function MemberRun(props: {
                 expanded() ? "collapseDetails" : "expandDetails",
               )}
               onPress={toggleAll}
-              focusVisibleStyle={{
-                outlineWidth: 1,
-                outlineColor: c().blue,
-                outlineOffset: 1,
-              }}
+              focusVisibleStyle={focusRing(c())}
               style={{
                 ...row,
                 gap: space[4],
@@ -410,10 +407,7 @@ export function MemberRun(props: {
                         selected: segment().blocks.includes(selected()),
                       }}
                       onPress={() => select(segment().blocks)}
-                      focusVisibleStyle={{
-                        outlineWidth: 1,
-                        outlineColor: c().ink,
-                      }}
+                      focusVisibleStyle={focusRing(c(), "inset")}
                       style={{
                         position: "absolute",
                         top: 0,
@@ -454,10 +448,7 @@ export function MemberRun(props: {
                           onPress={() =>
                             selectKind(trail().blocksByKind.get(kind()) ?? [])
                           }
-                          focusVisibleStyle={{
-                            outlineColor: c().ink,
-                            outlineWidth: 1,
-                          }}
+                          focusVisibleStyle={focusRing(c(), "inset")}
                           style={{
                             ...row,
                             gap: space[4],

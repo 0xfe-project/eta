@@ -7,6 +7,11 @@ import { SmoothScroll } from "./smooth-scroll";
 import { colors, Screen } from "./theme";
 import { space } from "./tokens";
 
+/** The grabber atop a phone sheet. */
+const grabberWidth = 36;
+/** How much of the screen a phone's menu sheet may take. */
+const sheetMaxHeight = "80%";
+
 /** How a menu shows: a sheet at the bottom of the screen, or a popup at its trigger. */
 export type MenuPresentation = "sheet" | "popup";
 
@@ -94,7 +99,11 @@ function Grabber() {
       }}
     >
       <View
-        style={{ width: 36, height: space[4], backgroundColor: c().strong }}
+        style={{
+          width: grabberWidth,
+          height: space[4],
+          backgroundColor: c().strong,
+        }}
       />
     </View>
   );
@@ -204,7 +213,7 @@ export function MenuFrame(props: {
         side="bottom"
         open={opened()}
         onOpenChange={(event) => change(event.open)}
-        popupStyle={{ ...sheetStyle(), maxHeight: "80%" }}
+        popupStyle={{ ...sheetStyle(), maxHeight: sheetMaxHeight }}
         backdropStyle={{ backgroundColor: c().sheetScrim }}
       >
         <SmoothScroll role="menu" style={{ flexShrink: 1 }} scrollbar={false}>

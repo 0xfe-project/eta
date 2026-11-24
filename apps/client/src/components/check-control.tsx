@@ -1,7 +1,7 @@
 import type { JSX, ViewStyle } from "nsh";
 import { Checkbox } from "nsh/base";
 import { Icon } from "./text";
-import { colors } from "./theme";
+import { colors, focusRing } from "./theme";
 import { icon } from "./tokens";
 
 export function CheckControl(props: {
@@ -28,11 +28,7 @@ export function CheckControl(props: {
       onChange={({ checked }) => props.onChange(checked)}
       style={props.style}
       hoverStyle={props.hoverStyle}
-      focusVisibleStyle={{
-        outlineWidth: 1,
-        outlineColor: c().blue,
-        outlineOffset: -1,
-      }}
+      focusVisibleStyle={focusRing(c(), "inset")}
       indicatorStyle={{
         width: props.size,
         height: props.size,

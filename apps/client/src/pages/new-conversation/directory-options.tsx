@@ -14,6 +14,7 @@ import { Input } from "nsh/base";
 import {
   Button,
   colors,
+  focusRing,
   grow,
   Icon,
   Label,
@@ -255,11 +256,7 @@ export function DirectoryOptions(props: {
               selected: selected() === index(),
             }}
             onPress={() => select(entry())}
-            focusVisibleStyle={{
-              outlineWidth: 1,
-              outlineColor: c().blue,
-              outlineOffset: -1,
-            }}
+            focusVisibleStyle={focusRing(c(), "inset")}
             hoverStyle={{ backgroundColor: c().selected }}
             style={{
               ...row,

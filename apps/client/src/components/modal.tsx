@@ -8,9 +8,19 @@ import { screenInsets } from "./safe-area";
 import { Label } from "./text";
 import { colors, fill, row } from "./theme";
 import { ToastLayer } from "./toast";
-import { control, icon, shadow, space, weight } from "./tokens";
+import { control, icon, layer, shadow, space, weight } from "./tokens";
 
 const modalStack: (() => void)[] = [];
+
+/** A centred dialog's width: `sm` a confirmation, `md` a short form (the default), `lg` a form
+ * with rows, `xl` a dialog with its own layout. Not tokens: only a dialog takes them. */
+export const dialogWidth = { sm: 360, md: 448, lg: 560, xl: 640 } as const;
+
+/** The grabber atop a phone sheet. */
+const grabberWidth = 36;
+
+/** The header bar: a phone sheet's (44 with no divider under it), a stepped dialog's. */
+const headerHeight = { sheet: 40, plainSheet: 44, step: 48 } as const;
 
 function closeTopModal() {
   modalStack.at(-1)?.();
@@ -65,7 +75,7 @@ export function Modal(props: {
   const centred = () => !props.phone && !props.side;
   const stepHeader = () => Boolean(props.stepHeader) && centred();
   const popupStyle = (): ViewStyle => ({
-    width: props.phone ? "100%" : (props.width ?? 480),
+    width: props.phone ? "100%" : (props.width ?? dialogWidth.md),
     maxWidth: "100%",
     maxHeight: "100%",
     height: props.height,
@@ -118,7 +128,7 @@ export function Modal(props: {
           >
             <View
               style={{
-                width: 36,
+                width: grabberWidth,
                 height: space[4],
                 backgroundColor: color().strong,
               }}
@@ -162,10 +172,10 @@ export function Modal(props: {
             height={
               sheetChrome()
                 ? props.plainSheetHeader
-                  ? 44
-                  : 40
+                  ? headerHeight.plainSheet
+                  : headerHeight.sheet
                 : stepHeader()
-                  ? 48
+                  ? headerHeight.step
                   : undefined
             }
             divider={!(sheetChrome() && props.plainSheetHeader)}
@@ -224,7 +234,7 @@ export function Modal(props: {
         paddingBottom: overlay ? insets().bottom : 0,
         paddingLeft: overlay ? insets().left : 0,
         paddingRight: overlay ? insets().right : 0,
-        zIndex: 100,
+        zIndex: layer.modal,
         alignItems: props.side ? "flex-end" : "center",
         justifyContent: props.phone ? "flex-end" : "center",
       }}

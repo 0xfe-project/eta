@@ -14,6 +14,7 @@ import {
   Button,
   colors,
   Field,
+  focusRing,
   fontFamily,
   Fonts,
   grow,
@@ -85,7 +86,7 @@ function PhoneSelect(props: {
         <View
           accessibilityLabel={props.label}
           hoverStyle={canHover ? { backgroundColor: c().selected } : undefined}
-          focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+          focusVisibleStyle={focusRing(c(), "inset")}
           style={{
             ...row,
             height: 36,
@@ -181,7 +182,7 @@ function ScheduleSelect(props: {
             hoverStyle={
               canHover ? { backgroundColor: c().selected } : undefined
             }
-            focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+            focusVisibleStyle={focusRing(c(), "inset")}
             style={{
               ...row,
               justifyContent: "space-between",
@@ -462,7 +463,7 @@ export function RoutineEditor(props: {
             role="button"
             accessibilityLabel={props.item?.name ?? uiText("routines2")}
             onPress={props.onClose}
-            focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+            focusVisibleStyle={focusRing(c(), "inset")}
             style={{
               ...row,
               height: props.tablet ? undefined : controlHeight.md,
@@ -581,10 +582,7 @@ export function RoutineEditor(props: {
                             : [...previous, day()],
                         )
                       }
-                      focusVisibleStyle={{
-                        outlineWidth: 1,
-                        outlineColor: c().blue,
-                      }}
+                      focusVisibleStyle={focusRing(c(), "inset")}
                       style={{
                         ...(props.tablet
                           ? { paddingHorizontal: space[8] }

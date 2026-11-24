@@ -1,6 +1,8 @@
 import { Switch } from "nsh/base";
-import { colors, row } from "./theme";
+import { colors, focusRing, row } from "./theme";
 import { opacity, space } from "./tokens";
+
+const trackWidth = { compact: 28, regular: 36 } as const;
 
 export function ToggleSwitch(props: {
   label: string;
@@ -19,14 +21,10 @@ export function ToggleSwitch(props: {
       onChange={({ checked }) => props.onChange(checked)}
       style={{ flexShrink: 0, cursor: props.disabled ? "default" : "pointer" }}
       disabledStyle={{ opacity: opacity.disabled }}
-      focusVisibleStyle={{
-        outlineWidth: 1,
-        outlineColor: c().blue,
-        outlineOffset: 1,
-      }}
+      focusVisibleStyle={focusRing(c())}
       trackStyle={{
         ...row,
-        width: props.compact ? 28 : 36,
+        width: props.compact ? trackWidth.compact : trackWidth.regular,
         height: props.compact ? space[16] : space[20],
         paddingHorizontal: space[2],
         justifyContent: props.checked ? "flex-end" : "flex-start",

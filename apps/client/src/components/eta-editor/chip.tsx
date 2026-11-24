@@ -14,6 +14,10 @@ import {
 import { icon, opacity, space } from "../tokens";
 import { LineRoom } from "./room";
 
+const chipMaxWidth = 280;
+/** A pasted text's preview beside its chip. */
+const previewMaxWidth = 420;
+
 /**
  * An inline block in the editor's text: a folded paste, a file, a picture. One line high, so it
  * sits in a line of text (Paper "Eta · Text", Components › Inline chips): its icon or thumbnail,
@@ -74,7 +78,9 @@ export function Chip(props: {
       style={{
         ...row,
         gap: space[4],
-        maxWidth: room() ? Math.min(280, room() - 16) : 280,
+        maxWidth: room()
+          ? Math.min(chipMaxWidth, room() - space[16])
+          : chipMaxWidth,
         overflow: "hidden",
         height: type("small").line + 4,
         paddingLeft: props.thumbnail ? space[2] : space[4],
@@ -165,7 +171,7 @@ export function PastePreview(props: { text: string }) {
   const type = textFaces();
   const lines = () => props.text.split("\n");
   return (
-    <View style={{ maxWidth: 420, padding: space[8] }}>
+    <View style={{ maxWidth: previewMaxWidth, padding: space[8] }}>
       <Text
         style={{
           fontFamily: monoFontFamily(fonts()),

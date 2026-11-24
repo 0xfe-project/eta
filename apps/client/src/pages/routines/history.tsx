@@ -1,6 +1,6 @@
 import type { RoutineSummary, RunView } from "@eta/client-contracts";
 import { View } from "nsh";
-import { colors, Icon, Label, row } from "../../components";
+import { colors, focusRing, Icon, Label, row } from "../../components";
 import { chatText, shownMentions } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
 import { control, icon, space, weight } from "../../components/tokens";
@@ -65,7 +65,7 @@ export function PhoneRoutineRow(props: {
       accessibilityDescription={`${scheduleLabel(props.item.schedule)} · ${status()}`}
       onPress={props.onOpen}
       hoverStyle={{ backgroundColor: c().selected }}
-      focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+      focusVisibleStyle={focusRing(c(), "inset")}
       style={{
         ...row,
         paddingVertical: space[12],
@@ -186,7 +186,7 @@ export function LatestReportCard(props: {
           role="button"
           accessibilityLabel={uiText("readReport")}
           onPress={props.onOpen}
-          focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+          focusVisibleStyle={focusRing(c(), "inset")}
           style={{ ...row, gap: space[4], cursor: "pointer" }}
         >
           <Label variant="small" weight={weight.strong}>
@@ -243,7 +243,7 @@ export function EarlierReportCard(props: {
       accessibilityLabel={runTitle(props.run)}
       onPress={props.onOpen}
       hoverStyle={{ backgroundColor: c().surface }}
-      focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+      focusVisibleStyle={focusRing(c(), "inset")}
       style={{
         flex: 1,
         minWidth: 0,

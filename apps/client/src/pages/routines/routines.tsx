@@ -13,6 +13,7 @@ import {
   Button,
   colors,
   Empty,
+  focusRing,
   grow,
   Header,
   Icon,
@@ -207,7 +208,7 @@ export function Routines(props: {
           accessibilityLabel="Captain"
           onPress={props.onCaptain}
           hoverStyle={{ backgroundColor: c().selected }}
-          focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+          focusVisibleStyle={focusRing(c(), "inset")}
           style={{
             ...row,
             flexShrink: 0,

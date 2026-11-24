@@ -1,6 +1,6 @@
 import type { StoredTask, TaskStatus } from "@eta/client-contracts";
 import { View } from "nsh";
-import { Button, colors, Label, row } from "../../components";
+import { Button, colors, focusRing, Label, row } from "../../components";
 import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
@@ -32,7 +32,7 @@ export function MemberStepsToggle(props: {
       role="button"
       accessibilityState={{ expanded: props.open }}
       onPress={props.onToggle}
-      focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+      focusVisibleStyle={focusRing(c(), "inset")}
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,

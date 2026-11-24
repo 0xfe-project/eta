@@ -6,6 +6,7 @@ import {
   ActionMenu,
   Button,
   colors,
+  focusRing,
   grow,
   Label,
   row,
@@ -137,7 +138,7 @@ export function RoutineDetail(props: {
               role="button"
               accessibilityLabel={uiText("readBrief")}
               onPress={props.onReadBrief}
-              focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+              focusVisibleStyle={focusRing(c(), "inset")}
               style={{ flexShrink: 0, cursor: "pointer" }}
             >
               <Label

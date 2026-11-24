@@ -4,6 +4,7 @@ import {
   Button,
   Caption,
   colors,
+  focusRing,
   grow,
   Header,
   Icon,
@@ -287,7 +288,7 @@ export function PluginDetail(props: DetailProps) {
                     copied.set(value);
                   });
                 }}
-                focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+                focusVisibleStyle={focusRing(c(), "inset")}
                 style={{
                   // The hit area stays 24px while the drawn glyph is 14px, like the design.
                   width: space[24],

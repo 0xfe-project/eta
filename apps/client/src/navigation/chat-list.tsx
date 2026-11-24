@@ -14,12 +14,15 @@ import {
   sizes,
   SmoothScroll,
 } from "../components";
-import { icon, space } from "../components/tokens";
+import { control, icon, space } from "../components/tokens";
 import { useText } from "../i18n";
 import { useHost } from "../services/host";
 import { GroupRow } from "./chat-list-rows";
 import { ArchiveGroup, GroupMenu, RenameGroup } from "./group-actions";
 import { RailButton } from "./rail-controls";
+
+/** A phone's section heading over the list ("Groups"). */
+const sectionHeight = 36;
 
 export interface ChatListProps {
   layout: Layout;
@@ -97,7 +100,7 @@ export function ChatList(
                 icon="search"
                 iconOnly
                 tone="ghost"
-                size={40}
+                size={control.touch}
                 iconSize={icon.md}
                 style={{ marginRight: -space[8] }}
                 onPress={() => searching.set(!searching())}
@@ -108,7 +111,7 @@ export function ChatList(
               icon="plus"
               iconOnly
               tone={phone() ? "ghost" : "plain"}
-              size={phone() ? 40 : undefined}
+              size={phone() ? control.touch : undefined}
               iconSize={phone() ? icon.md : undefined}
               onPress={() => props.onCreate()}
             />
@@ -141,7 +144,7 @@ export function ChatList(
                     icon="plus"
                     iconOnly
                     tone="ghost"
-                    size={22}
+                    size={control.sm}
                     onPress={() => props.onCreate()}
                     style={{ backgroundColor: "transparent" }}
                   />
@@ -160,7 +163,7 @@ export function ChatList(
           <If when={phone()}>
             <View
               style={{
-                height: 36,
+                height: sectionHeight,
                 borderBottomWidth: 1,
                 borderColor: c().border,
                 paddingHorizontal: space[16],

@@ -5,7 +5,7 @@ import { context } from "nsh";
 import dwg from "../../assets/AKRDWGSCNFM-Regular.woff2";
 import inter from "../../assets/InterVariable.woff2";
 import { catppuccin, shared } from "./palettes";
-import { densities } from "./tokens";
+import { densities, focus } from "./tokens";
 // One family, three real faces: an imported font registers under the family name and the weight
 // inside its file, so these add Light (300) and Bold (700) to the Regular above, and a `fontWeight`
 // of 600 or 700 draws Bold instead of a bold the platform synthesizes (THIRD_PARTY_NOTICES.md).
@@ -106,10 +106,17 @@ export function colors() {
   return Palette();
 }
 
-/** The design's keyboard focus: a 2px ring in `ring`, 2px outside the view.
+/** The design's keyboard focus, in `ring`: 2px outside the view, or `inset` 1px inside it for a
+ * row against an edge that would cut a ring outside it off (tokens.ts `focus`).
  * Only keyboard focus shows it (`focusVisibleStyle`); a press shows none. */
-export function focusRing(c: typeof light): ViewStyle {
-  return { outlineWidth: 2, outlineColor: c.ring, outlineOffset: 2 };
+export function focusRing(
+  c: typeof light,
+  kind: "ring" | "inset" = "ring",
+): ViewStyle {
+  return {
+    ...(kind === "inset" ? focus.ringInset : focus.ring),
+    outlineColor: c.ring,
+  };
 }
 
 export const row: ViewStyle = { flexDirection: "row", alignItems: "center" };
