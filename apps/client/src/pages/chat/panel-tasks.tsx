@@ -423,6 +423,10 @@ function TaskRow(props: {
         gap: space[8],
         flexShrink: 0,
         paddingHorizontal: inset,
+        // A line under every row, as the Context tab's rows: the row reaches both edges, so the
+        // line and the hover do too. A group's heading has none, so its first row has one line.
+        borderBottomWidth: 1,
+        borderColor: c().border,
         cursor: "pointer",
       }}
     >
