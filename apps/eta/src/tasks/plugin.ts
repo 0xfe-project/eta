@@ -15,6 +15,7 @@ import type {
  * `create`, whose call is the user pressing "Create" (`TaskBoard.make`).
  */
 import type { CallFrame } from "@eta/client-wire-proto";
+import type { AttachmentStore } from "../conversations/attachments";
 import type { SettingStore } from "../settings/store";
 import type {
   DependencyInput,
@@ -46,6 +47,8 @@ export interface TasksDeps {
   settings: Pick<SettingStore, "get" | "set">;
   /** The settings changed: a shorter wait may have made tasks due now. */
   settingsChanged?: () => void;
+  /** Files attached to comments (`attach`, `unattach`, `attachment`). */
+  attachments?: AttachmentStore;
 }
 
 /** `archived` as a call sends it: absent is the board without the archived tasks. */
@@ -135,6 +138,17 @@ function newTasksOf(call: CallFrame): NewTaskInput[] {
 
 export function tasksPlugin(deps: TasksDeps, applied: () => void) {
   const { board, runner, workspaceFor, settings, usage, steps } = deps;
+  const attachmentsOf = (): AttachmentStore => {
+    if (deps.attachments === undefined)
+      throw new Error("this host takes no files with a comment");
+    return deps.attachments;
+  };
+  /** The task's id, once it is known to exist: a file is only ever a real task's. */
+  const taskOf = (taskId: string): string => {
+    const task = board.find(taskId);
+    if (task === undefined) throw new Error(`no such task: ${taskId}`);
+    return task.id;
+  };
   // The board's tasks with their usage in brief, read in one pass for the whole list.
   const listed = (tasks: BoardTaskView[]): BoardTaskView[] => {
     if (usage === undefined) return tasks;
@@ -280,12 +294,52 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           return {
             result: board.comment(
               args.string("taskId"),
-              args.string("body"),
+              args.optionalString("body") ?? "",
               USER,
               {
                 clientId: args.optionalString("clientId"),
                 mentions: args.strings("mentions"),
+                attachments: args.strings("attachments"),
               },
+            ),
+          };
+        }),
+
+        // A comment's files, as a message's: uploaded first, claimed by the comment that carries them.
+        wire.handle("tasks", "attach", async (call) => {
+          const args = new Args(call);
+          const taskId = args.string("taskId");
+          const attachment = await attachmentsOf().receive({
+            owner: { taskId: taskOf(taskId) },
+            uploadId: args.string("uploadId"),
+            name: args.string("name"),
+            contentType:
+              args.optionalString("contentType") || "application/octet-stream",
+            index: args.integer("index"),
+            last: args.optionalBoolean("last") ?? false,
+            data: args.optionalString("data") ?? "",
+          });
+          return { result: { attachment } };
+        }),
+
+        wire.handle("tasks", "unattach", async (call) => {
+          const args = new Args(call);
+          return {
+            result: {
+              removed: await attachmentsOf().remove(
+                { taskId: taskOf(args.string("taskId")) },
+                args.string("attachmentId"),
+              ),
+            },
+          };
+        }),
+
+        wire.handle("tasks", "attachment", async (call) => {
+          const args = new Args(call);
+          return {
+            result: await attachmentsOf().picture(
+              { taskId: taskOf(args.string("taskId")) },
+              args.string("attachmentId"),
             ),
           };
         }),

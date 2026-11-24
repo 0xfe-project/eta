@@ -1,12 +1,13 @@
 /**
- * Files a person attaches to a message.
+ * Files a person attaches to a message, or to a task's comment.
  *
  * An attachment is uploaded before the message exists, in chunks over the same wire the browser
  * already has (so it passes through the same access gate and needs no second route), and waits as
- * a file under the data directory, per conversation: `attachments/<conversation>/<id>-<name>`.
- * The row in `attachment` says whose it is and whether a message has claimed it. Sending claims
- * the files; an agent is handed each as a file it can open (`deliver`): a path on this machine for
- * a session here, a copy written on the daemon's machine through the link for a session there.
+ * a file under the data directory, per owner: `attachments/<conversation>/<id>-<name>` for a
+ * conversation's, `attachments/task-<task>/<id>-<name>` for a task's. The row in `attachment` says
+ * whose it is and whether a message (or comment) has claimed it. Sending claims the files; an agent
+ * is handed each as a file it can open (`deliver`): a path on this machine for a session here, a
+ * copy written on the daemon's machine through the link for a session there.
  */
 import type { AttachmentView } from "@eta/client-contracts";
 import type { SshTransport } from "@eta/ssh";
@@ -33,7 +34,9 @@ import { fitImage } from "../images/fit";
 
 interface Row {
   id: string;
-  conversation_id: string;
+  conversation_id: string | null;
+  /** Absent on a database from before task attachments (a test's own table). */
+  task_id?: string | null;
   name: string;
   content_type: string;
   size: number;
@@ -42,13 +45,34 @@ interface Row {
 }
 
 export interface AttachmentRecord extends AttachmentView {
-  conversationId: string;
+  /** The conversation it was attached in; null for a task's. */
+  conversationId: string | null;
+  /** The task whose comment it came with; null (or absent) for a conversation's. */
+  taskId?: string | null;
   messageId: string | null;
 }
+
+/** Whose an attachment is: a conversation's (a message's) or a task's (a comment's). */
+export type AttachmentOwner = { conversationId: string } | { taskId: string };
+
+const ownerKey = (owner: AttachmentOwner): string =>
+  "taskId" in owner ? `task-${owner.taskId}` : owner.conversationId;
+
+/** The directory an attachment's file is in, under `attachments/` (and `~/.eta/uploads/`). */
+const folderOf = (record: AttachmentRecord): string =>
+  record.taskId == null
+    ? (record.conversationId ?? "")
+    : ownerKey({ taskId: record.taskId });
+
+const owns = (owner: AttachmentOwner, record: AttachmentRecord): boolean =>
+  "taskId" in owner
+    ? record.taskId === owner.taskId
+    : record.taskId == null && record.conversationId === owner.conversationId;
 
 const recordOf = (row: Row): AttachmentRecord => ({
   id: row.id,
   conversationId: row.conversation_id,
+  taskId: row.task_id ?? null,
   name: row.name,
   contentType: row.content_type,
   size: row.size,
@@ -98,7 +122,8 @@ const IMAGE_TYPES = new Set([
 const DELIVER_CHUNK_BYTES = 3 * 1024 * 1024;
 
 interface Upload {
-  conversationId: string;
+  /** `ownerKey` of whose it is. */
+  owner: string;
   name: string;
   contentType: string;
   /** The next chunk expected. */
@@ -139,11 +164,7 @@ export class AttachmentStore {
   }
 
   pathOf(record: AttachmentRecord): string {
-    return join(
-      this.#root,
-      record.conversationId,
-      `${record.id}-${record.name}`,
-    );
+    return join(this.#root, folderOf(record), `${record.id}-${record.name}`);
   }
 
   get(id: string): AttachmentRecord | undefined {
@@ -158,7 +179,7 @@ export class AttachmentStore {
    * which is how a retry begins); the file lands, with its row, when the last one has.
    */
   async receive(input: {
-    conversationId: string;
+    owner: AttachmentOwner;
     uploadId: string;
     name: string;
     contentType: string;
@@ -171,21 +192,22 @@ export class AttachmentStore {
     const existing = this.get(input.uploadId);
     if (existing !== undefined) {
       // The same upload again: its last chunk was resent after the reply was lost.
-      if (existing.conversationId !== input.conversationId)
+      if (!owns(input.owner, existing))
         throw new Error(`uploadId ${input.uploadId} is taken`);
       return viewOf(existing);
     }
     const chunk = Buffer.from(input.data, "base64");
     if (chunk.byteLength > ATTACH_CHUNK_BYTES)
       throw new Error(`a chunk is at most ${ATTACH_CHUNK_BYTES} bytes`);
-    const directory = join(this.#root, input.conversationId);
+    const owner = ownerKey(input.owner);
+    const directory = join(this.#root, owner);
     const partial = join(directory, `.up-${input.uploadId}`);
     let upload = this.#uploads.get(input.uploadId);
     if (input.index === 0) {
       await mkdir(directory, { recursive: true });
       await writeFile(partial, chunk);
       upload = {
-        conversationId: input.conversationId,
+        owner,
         name: safeName(input.name),
         contentType: input.contentType,
         next: 1,
@@ -195,7 +217,7 @@ export class AttachmentStore {
     } else {
       if (
         upload === undefined ||
-        upload.conversationId !== input.conversationId ||
+        upload.owner !== owner ||
         upload.next !== input.index
       )
         throw new Error(
@@ -221,7 +243,9 @@ export class AttachmentStore {
     }
     const record: AttachmentRecord = {
       id: input.uploadId,
-      conversationId: input.conversationId,
+      conversationId:
+        "conversationId" in input.owner ? input.owner.conversationId : null,
+      taskId: "taskId" in input.owner ? input.owner.taskId : null,
       name: upload!.name,
       contentType: upload!.contentType,
       size: upload!.bytes,
@@ -230,12 +254,15 @@ export class AttachmentStore {
     await rename(partial, this.pathOf(record));
     this.#db
       .query(
-        `INSERT INTO attachment (id, conversation_id, name, content_type, size, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        record.taskId == null
+          ? `INSERT INTO attachment (id, conversation_id, name, content_type, size, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`
+          : `INSERT INTO attachment (id, task_id, name, content_type, size, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.id,
-        record.conversationId,
+        record.taskId ?? record.conversationId,
         record.name,
         record.contentType,
         record.size,
@@ -244,12 +271,20 @@ export class AttachmentStore {
     return viewOf(record);
   }
 
+  /** A deleted task's files: its rows went with it, and the files go now. */
+  async dropTask(taskId: string): Promise<void> {
+    await rm(join(this.#root, ownerKey({ taskId })), {
+      recursive: true,
+      force: true,
+    });
+  }
+
   /** Take back a file that was never sent. */
-  async remove(conversationId: string, id: string): Promise<boolean> {
+  async remove(owner: AttachmentOwner, id: string): Promise<boolean> {
     const record = this.get(id);
     if (
       record === undefined ||
-      record.conversationId !== conversationId ||
+      !owns(owner, record) ||
       record.messageId !== null
     )
       return false;
@@ -259,18 +294,18 @@ export class AttachmentStore {
   }
 
   /**
-   * A sent image of this conversation, to be shown in its transcript. Any image type a browser
-   * draws (the Windows client pastes bmp), not only those a model takes; unsent files, other
-   * conversations' files and other kinds of file are refused.
+   * A sent image of this conversation (or task), to be shown in its transcript (or timeline). Any
+   * image type a browser draws (the Windows client pastes bmp), not only those a model takes;
+   * unsent files, other owners' files and other kinds of file are refused.
    */
   async picture(
-    conversationId: string,
+    owner: AttachmentOwner,
     id: string,
   ): Promise<{ contentType: string; data: string }> {
     const record = this.get(id);
     if (
       record === undefined ||
-      record.conversationId !== conversationId ||
+      !owns(owner, record) ||
       record.messageId === null
     )
       throw new Error(`no such attachment: ${id}`);
@@ -285,16 +320,16 @@ export class AttachmentStore {
   }
 
   /**
-   * The files a message is about to carry, checked: they exist, are this conversation's, have not
-   * gone with another message, and are not too many. Call inside the transaction that writes the
-   * message, then `claim` in it.
+   * The files a message (or comment) is about to carry, checked: they exist, are this owner's, have
+   * not gone with another message, and are not too many. Call inside the transaction that writes
+   * the message, then `claim` in it.
    */
-  check(conversationId: string, ids: readonly string[]): AttachmentRecord[] {
+  check(owner: AttachmentOwner, ids: readonly string[]): AttachmentRecord[] {
     if (ids.length > MAX_ATTACHMENTS)
       throw new Error(`a message carries at most ${MAX_ATTACHMENTS} files`);
     return [...new Set(ids)].map((id) => {
       const record = this.get(id);
-      if (record === undefined || record.conversationId !== conversationId)
+      if (record === undefined || !owns(owner, record))
         throw new Error(`no such attachment: ${id}`);
       if (record.messageId !== null)
         throw new Error(`attachment ${id} was already sent`);
@@ -375,7 +410,7 @@ export class AttachmentStore {
   /**
    * Make each file reachable by an agent whose session is on `transport`'s machine, and say where:
    * for this machine the stored file itself, for a daemon a copy under its home
-   * (`~/.eta/uploads/<conversation>/`), written through the link in pieces and skipped when a
+   * (`~/.eta/uploads/<conversation>/`, `~/.eta/uploads/task-<task>/`), written through the link in pieces and skipped when a
    * file of the same size is already there. A file that could not be delivered is left out of the
    * answer and the reason is returned beside it.
    */
@@ -407,7 +442,7 @@ export class AttachmentStore {
       await stat(local);
       return local;
     }
-    const file = `"$HOME"/.eta/uploads/${shellQuote(record.conversationId)}/${shellQuote(`${record.id}-${record.name}`)}`;
+    const file = `"$HOME"/.eta/uploads/${shellQuote(folderOf(record))}/${shellQuote(`${record.id}-${record.name}`)}`;
     const present = await transport.run(
       `f=${file}; if [ -f "$f" ] && [ "$(wc -c < "$f")" -eq ${record.size} ]; then printf '%s' "$f"; else printf ''; fi`,
     );

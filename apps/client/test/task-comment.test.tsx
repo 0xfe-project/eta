@@ -26,13 +26,18 @@ const states = [
 
 const parentHint = "Discuss here; to change a step, say so on that subtask";
 
-async function openOn(surface: string, width: number, state: string) {
+async function openOn(
+  surface: string,
+  width: number,
+  state: string,
+  host: "new" | "old" | "blind" = "new",
+) {
   const app = await open(fixture, {
     width,
     height: 900,
     locale: "en-US",
     platform: "web",
-    storage: { surface, state },
+    storage: { surface, state, host },
   });
   await app.waitFor("text:Build the login API");
   return app;
@@ -119,3 +124,60 @@ for (const [surface, width] of surfaces)
         .includes("Sent: tasks.comment t2 @Ada please look mentions=ada"),
     );
   });
+
+// Files go with a comment as they go with a chat message: a pasted picture is a block in the box
+// that uploads at once, the comment carries it, and its timeline shows it as the chat shows one.
+for (const [surface, width] of surfaces)
+  test(`${surface} at ${width}px: a pasted picture goes with the comment and shows on its timeline`, async () => {
+    const app = await openOn(surface, width, "in_review");
+    await app.type("label:Comment", "what is on this?");
+    await app.paste("label:Comment", { files: ["assets/onboard.jpg"] });
+    await app.waitFor("text:onboard.jpg");
+    await app.waitUntil(() => app.enabled("label:Send comment"));
+    await app.press("label:Send comment");
+    await app.waitUntil(() =>
+      app
+        .texts()
+        .includes("Sent: tasks.comment t2 what is on this? files=onboard.jpg"),
+    );
+    // The box is empty again, and the comment on the timeline has the picture.
+    await app.waitUntil(() => !app.enabled("label:Send comment"));
+    await app.waitFor("text:what is on this?");
+    expect(app.count("label:Files of the comment")).toBe(1);
+  });
+
+test("a picture alone is a comment", async () => {
+  const app = await openOn("page", 1440, "in_review");
+  expect(app.shows("label:Attach files")).toBe(true);
+  await app.paste("label:Comment", { files: ["assets/onboard.jpg"] });
+  await app.waitFor("text:onboard.jpg");
+  await app.waitUntil(() => app.enabled("label:Send comment"));
+  await app.press("label:Send comment");
+  await app.waitUntil(() =>
+    app.texts().includes("Sent: tasks.comment t2  files=onboard.jpg"),
+  );
+});
+
+test("a host that takes no files with a comment offers no ＋ and takes no pasted file", async () => {
+  const app = await openOn("page", 1440, "in_review", "old");
+  await app.waitFor("label:Comment");
+  expect(app.shows("label:Attach files")).toBe(false);
+  await app.paste("label:Comment", { files: ["assets/onboard.jpg"] });
+  await app.type("label:Comment", "words only");
+  await app.press("label:Send comment");
+  await app.waitUntil(() =>
+    app.texts().includes("Sent: tasks.comment t2 words only"),
+  );
+  expect(app.shows("text:onboard.jpg")).toBe(false);
+});
+
+test("a comment says so when its pictures reached the executor only as files", async () => {
+  const app = await openOn("page", 1440, "in_review", "blind");
+  await app.paste("label:Comment", { files: ["assets/onboard.jpg"] });
+  await app.waitFor("text:onboard.jpg");
+  await app.waitUntil(() => app.enabled("label:Send comment"));
+  await app.press("label:Send comment");
+  await app.waitFor(
+    "text:Ada got the pictures as files only: the model doesn't take images.",
+  );
+});

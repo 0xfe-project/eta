@@ -1,11 +1,13 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { JSX, TextStyle } from "nsh";
 import type { TaskDetailState } from "./task-detail-state";
+import { MAX_ATTACHMENTS } from "@eta/client-contracts";
 import { mentionLabel } from "@eta/client-contracts/composer-target";
-import { View } from "nsh";
+import { effect, View } from "nsh";
 import {
   Button,
   colors,
+  focusRing,
   grow,
   Icon,
   inCompact,
@@ -15,6 +17,7 @@ import {
 } from "../../components";
 import { CheckControl } from "../../components/check-control";
 import {
+  attachment,
   chatText,
   draft,
   limit,
@@ -26,9 +29,17 @@ import {
 import { touchScreen } from "../../components/menu";
 import { StatusDot } from "../../components/status-dot";
 import { densityDefaults } from "../../components/theme";
-import { avatar, control, icon, space, weight } from "../../components/tokens";
+import {
+  avatar,
+  control,
+  icon,
+  opacity,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
+import { openCommentFiles } from "./comment-files";
 import { ActorName } from "./creator";
 import { taskMoment } from "./facts";
 import { activeTaskRun, latestExecutorRun } from "./run-log";
@@ -46,6 +57,12 @@ const fieldLabelWidth = 68;
 /** The comment box's foot, under the editor: `regular` is the chat composer's (composer.tsx). */
 const footHeight = { compact: 28, regular: 32, phone: 40 } as const;
 
+/** Where a task's comment draft is kept: its document, and beside it its finished uploads. */
+const draftKey = (origin: string | undefined, taskId: string) =>
+  `eta.task-comment.v1.${JSON.stringify([origin, taskId])}`;
+const filesKey = (origin: string | undefined, taskId: string) =>
+  `eta.task-comment-files.v1.${JSON.stringify([origin, taskId])}`;
+
 /**
  * The comment box: the chat's text (`chatText`: Markdown as you type, code blocks, long pastes
  * folded) with `@` for the task's agents and a draft kept per task. Its keys are the chat's: ⏎ or
@@ -55,11 +72,18 @@ const footHeight = { compact: 28, regular: 32, phone: 40 } as const;
 function useCommentEditor(state: TaskDetailState, origin: string | undefined) {
   const host = useHost();
   const { post, posting, task } = state;
-  const store = openDocDraft(
-    `eta.task-comment.v1.${JSON.stringify([origin, state.id])}`,
-  );
+  const store = openDocDraft(draftKey(origin, state.id));
+  const files = openCommentFiles(filesKey(origin, state.id));
+  const takesFiles = () => host.can("tasks.attach");
+  const uploads = files.uploads(host, state.id);
+  const files$ = attachment({ uploads, blocked: () => !takesFiles() });
   const limits = limit();
-  const out = serialize();
+  const out = serialize(uploads);
+  // Upload states change without the document changing: re-read them for the Comment button.
+  effect(() => {
+    files.queue.states();
+    out.refresh();
+  });
   // The task's own agents first (its executor, who ran in it, who spoke on it), then the others.
   const members = () => {
     const item = task();
@@ -83,18 +107,38 @@ function useCommentEditor(state: TaskDetailState, origin: string | undefined) {
     plugins: [
       submitKeys({ onSubmit: () => void submit() }),
       mention({ members, describe: () => uiText("askForAReply") }),
+      files$,
       draft({ save: store.save }),
       limits,
       out,
     ],
   });
+  const disabled = () => {
+    const now = out.state();
+    return (
+      posting() ||
+      now.blank ||
+      now.uploading > 0 ||
+      now.failed > 0 ||
+      now.files > MAX_ATTACHMENTS ||
+      limits.tooLong()
+    );
+  };
   async function submit() {
-    if (posting() || limits.tooLong() || out.state().blank) return;
+    if (disabled()) return;
     const sent = out.read();
-    if (await post(sent.text, sent.mentions)) editor.clear();
+    if (await post(sent.text, sent.mentions, sent.attachments)) {
+      files.sent(
+        host,
+        state.id,
+        sent.attachments.map((file) => file.id),
+      );
+      editor.clear();
+    }
   }
-  const disabled = () => posting() || out.state().blank || limits.tooLong();
-  return { editor, submit, disabled, limits };
+  /** ＋: pick files from the device. */
+  const pick = () => void host.action(() => files$.pick(editor));
+  return { editor, submit, disabled, limits, pick, takesFiles };
 }
 
 export function TaskCommentBox(props: {
@@ -104,13 +148,12 @@ export function TaskCommentBox(props: {
 }) {
   const host = useHost();
   const origin = host.address()?.origin;
-  const store = openDocDraft(
-    `eta.task-comment.v1.${JSON.stringify([origin, props.state.id])}`,
-  );
+  const store = openDocDraft(draftKey(origin, props.state.id));
+  const files = openCommentFiles(filesKey(origin, props.state.id));
   const c = colors();
   const phone = () => props.state.phone();
   return (
-    <If when={store.ready()}>
+    <If when={store.ready() && files.ready()}>
       {() => (
         <View
           style={
@@ -156,10 +199,8 @@ function CommentBox(props: {
 }) {
   const c = colors();
   const type = textFaces();
-  const { editor, submit, disabled, limits } = useCommentEditor(
-    props.state,
-    props.origin,
-  );
+  const { editor, submit, disabled, limits, pick, takesFiles } =
+    useCommentEditor(props.state, props.origin);
   // In the conversation panel (compact): small text and a 28px foot; on a task's page the regular
   // body text and a 32px foot, the chat composer's. The button is 24 in both, 32 on a phone.
   const density = densityDefaults();
@@ -207,6 +248,26 @@ function CommentBox(props: {
             paddingRight: space[4],
           }}
         >
+          <If when={takesFiles()}>
+            <View
+              role="button"
+              accessibilityLabel={uiText("attachFiles")}
+              onPress={pick}
+              hoverStyle={{ opacity: opacity.muted }}
+              focusVisibleStyle={focusRing(c())}
+              style={{
+                ...row,
+                justifyContent: "center",
+                width: props.phone ? control.lg : icon.md,
+                height: props.phone ? control.lg : icon.md,
+                flexShrink: 0,
+                cursor: "pointer",
+              }}
+            >
+              <Icon name="plus" size={icon.md} tone="muted" />
+            </View>
+          </If>
+          <View style={{ flex: 1 }} />
           <If when={!props.phone && !touchScreen}>
             <Label variant="caption" tone="faint">
               {uiText("commentKeysHint")}

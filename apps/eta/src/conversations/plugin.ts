@@ -253,7 +253,7 @@ export function conversationsPlugin(
           const id = args.string("conversationId");
           existing(id);
           const attachment = await deps.attachments.receive({
-            conversationId: id,
+            owner: { conversationId: id },
             uploadId: args.string("uploadId"),
             name: args.string("name"),
             contentType:
@@ -272,7 +272,7 @@ export function conversationsPlugin(
           return {
             result: {
               removed: await deps.attachments.remove(
-                id,
+                { conversationId: id },
                 args.string("attachmentId"),
               ),
             },
@@ -285,7 +285,7 @@ export function conversationsPlugin(
           existing(id);
           return {
             result: await deps.attachments.picture(
-              id,
+              { conversationId: id },
               args.string("attachmentId"),
             ),
           };

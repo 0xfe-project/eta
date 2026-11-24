@@ -26,12 +26,14 @@ import type {
  */
 import type { Database } from "bun:sqlite";
 import type { AgentStore } from "../agents/store";
+import type { AttachmentStore } from "../conversations/attachments";
 import type { ConversationStore } from "../conversations/store";
 import type { DraftInput, TaskCards } from "./cards";
 import type { GraphEdge, GraphTask } from "./graph";
 import type { TaskRunStore } from "./runs";
 import type { TaskRecord, TaskStore } from "./store";
 import { TASK_STATUSES } from "@eta/client-contracts";
+import { viewOf as attachmentView } from "../conversations/attachments";
 import { resolveAssignee } from "./assignee";
 import { nameOf, TaskGraph } from "./graph";
 import { finished, workable } from "./status";
@@ -136,6 +138,8 @@ export interface TaskBoardDeps {
   artifactsOf: (taskId: string) => TaskArtifactRef[];
   /** These conversations' timelines moved. */
   changed: (conversationIds: readonly string[]) => void;
+  /** The files people attach to comments (the conversations' store: a file is a task's or a chat's). */
+  attachments?: AttachmentStore | undefined;
 }
 
 /** A task as the graph needs it. */
@@ -712,12 +716,16 @@ export class TaskBoard {
       deliver?: boolean;
       wake?: boolean;
       mentions?: readonly string[];
+      /** Files uploaded for this task (`tasks.attach`), by id: the comment claims them. */
+      attachments?: readonly string[];
     } = {},
   ): { task: BoardTaskDetail; activity: TaskActivityView } {
     const { clientId } = options;
     const mentions = [...new Set(options.mentions ?? [])];
     const task = this.#existing(id);
-    if (body.trim() === "") throw new Error("a comment needs some text");
+    const fileIds = options.attachments ?? [];
+    if (body.trim() === "" && fileIds.length === 0)
+      throw new Error("a comment needs some text");
     this.#checkMentions(task, mentions);
     // A retry with the same client id is the same comment: hand back the one already there.
     const earlier =
@@ -728,14 +736,27 @@ export class TaskBoard {
       return { task: this.#detailOf(this.#existing(id)), activity: earlier };
     let activity!: TaskActivityView;
     this.#commit(id, "changed", () => {
+      const store = this.#deps.attachments;
+      if (fileIds.length > 0 && store === undefined)
+        throw new Error("this host takes no files with a comment");
+      const files =
+        fileIds.length === 0 ? [] : store!.check({ taskId: id }, fileIds);
       const data = {
         ...(clientId === undefined ? {} : { clientId }),
         ...(mentions.length === 0 ? {} : { mentions }),
+        ...(files.length === 0
+          ? {}
+          : { attachments: files.map(attachmentView) }),
       };
       activity = this.#deps.tasks.record(id, "comment", actor, {
         body,
         data: Object.keys(data).length === 0 ? undefined : data,
       })!;
+      if (files.length > 0)
+        store!.claim(
+          files.map((file) => file.id),
+          activity.id,
+        );
     });
     if (options.deliver !== false)
       this.#runs?.deliver(id, activity, { wake: options.wake !== false });
@@ -802,6 +823,27 @@ export class TaskBoard {
     })();
     for (const other of awaited) this.#announce(other, "changed", []);
     this.#graphChanged();
+    void this.#deps.attachments?.dropTask(id).catch(() => undefined);
+  }
+
+  /**
+   * The images a comment carried were not shown to `agentId`: its model takes none, and it was
+   * given them as files. The comment says so from then on, for the user to see.
+   */
+  imagesUnseen(taskId: string, activityId: string, agentId: string): void {
+    const entry = this.#deps.tasks
+      .activity(taskId)
+      .find((item) => item.id === activityId);
+    if (entry === undefined) return;
+    const by = Array.isArray(entry.data.imagesUnseenBy)
+      ? (entry.data.imagesUnseenBy as string[])
+      : [];
+    if (by.includes(agentId)) return;
+    this.#commit(taskId, "changed", () => {
+      this.#deps.tasks.annotate(activityId, {
+        imagesUnseenBy: [...by, agentId],
+      });
+    });
   }
 
   /** An artifact was published for the task: it goes on the task's timeline and into its cards. */

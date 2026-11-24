@@ -11,7 +11,9 @@ import { createHost, Host } from "../../src/services/host";
 
 // One task in the state storage `state` names, opened in the conversation panel or on its page
 // (storage `surface`: "panel" or "page"). A comment the client sends is listed under "Sent:" and
-// lands on the task's timeline, as the host's answer would put it there.
+// lands on the task's timeline, as the host's answer would put it there, with its files. The host
+// takes files with a comment (`tasks.attach`) unless storage `host` is "old"; with "blind" the
+// executor's model takes no images, which the host adds to the comment once it was handed over.
 const start = Date.UTC(2026, 10, 21, 9, 0);
 
 function run(status: TaskRunView["status"]): TaskRunView {
@@ -112,13 +114,24 @@ function layoutOf(width: number): Layout {
   return width >= 1200 ? "desktop" : width >= 700 ? "tablet" : "phone";
 }
 
-function Fixture(props: { surface: string; state: string }) {
+const uploaded = new Map<
+  string,
+  { id: string; name: string; contentType: string; size: number }
+>();
+
+function Fixture(props: {
+  surface: string;
+  state: string;
+  old: boolean;
+  blind: boolean;
+}) {
   const host = createHost();
   const sent = signal<string[]>([]);
   const task = taskIn(props.state);
   host.state.update((state) => ({
     ...state,
     status: "open",
+    ops: props.old ? [] : ["tasks.attach"],
     targets: {
       ...state.targets,
       agents: {
@@ -140,25 +153,48 @@ function Fixture(props: { surface: string; state: string }) {
     },
   }));
   host.call = (async (target: string, action: string, args: unknown) => {
-    const { taskId, body, mentions } = args as {
+    const { taskId, body, mentions, attachments } = args as {
       taskId?: string;
       body?: string;
       mentions?: string[];
+      attachments?: string[];
     };
+    if (action === "attach") {
+      // One chunk is the whole file here: the upload is done at once.
+      const chunk = args as {
+        uploadId: string;
+        name: string;
+        contentType?: string;
+        data: string;
+        last?: boolean;
+      };
+      const file = {
+        id: chunk.uploadId,
+        name: chunk.name,
+        contentType: chunk.contentType ?? "application/octet-stream",
+        size: Buffer.from(chunk.data, "base64").byteLength,
+      };
+      uploaded.set(file.id, file);
+      return { attachment: chunk.last ? file : null };
+    }
+    const files = (attachments ?? []).flatMap((id) => {
+      const file = uploaded.get(id);
+      return file ? [file] : [];
+    });
     sent.set([
       ...sent(),
       `${target}.${action} ${taskId ?? ""} ${body ?? ""}${
         mentions?.length ? ` mentions=${mentions.join("+")}` : ""
-      }`,
+      }${files.length ? ` files=${files.map((file) => file.name).join("+")}` : ""}`,
     ]);
-    if (action !== "comment" || !body) return undefined;
+    if (action !== "comment" || (!body && !files.length)) return undefined;
     const entry: TaskActivityView = {
       id: `c${sent().length}`,
       kind: "comment",
       runId: null,
       actor: { kind: "user", agentId: null },
-      body,
-      data: {},
+      body: body ?? "",
+      data: files.length ? { attachments: files } : {},
       createdAt: start + 180_000,
     };
     host.state.update((state) => {
@@ -180,6 +216,30 @@ function Fixture(props: { surface: string; state: string }) {
         },
       };
     });
+    // The executor's model takes no images: a moment later the host says so on the comment.
+    if (files.length && props.blind)
+      setTimeout(() => {
+        host.state.update((state) => {
+          const current = state.targets["tasks.t2"]!;
+          const activity = (
+            current.sections.activity as TaskActivityView[]
+          ).map((item) =>
+            item.id === entry.id
+              ? { ...item, data: { ...item.data, imagesUnseenBy: ["ada"] } }
+              : item,
+          );
+          return {
+            ...state,
+            targets: {
+              ...state.targets,
+              "tasks.t2": {
+                ...current,
+                sections: { ...current.sections, activity },
+              },
+            },
+          };
+        });
+      }, 50);
     return { task, activity: entry };
   }) as typeof host.call;
   const noop = () => {};
@@ -216,9 +276,17 @@ function Fixture(props: { surface: string; state: string }) {
   );
 }
 
-void Promise.all([Storage.getItem("surface"), Storage.getItem("state")]).then(
-  ([surface, state]) =>
-    mount(() => (
-      <Fixture surface={surface ?? "panel"} state={state ?? "in_review"} />
-    )),
+void Promise.all([
+  Storage.getItem("surface"),
+  Storage.getItem("state"),
+  Storage.getItem("host"),
+]).then(([surface, state, old]) =>
+  mount(() => (
+    <Fixture
+      surface={surface ?? "panel"}
+      state={state ?? "in_review"}
+      old={old === "old"}
+      blind={old === "blind"}
+    />
+  )),
 );
