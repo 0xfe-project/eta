@@ -35,7 +35,7 @@ export function captainPlugin(deps: CaptainPluginDeps, applied: () => void) {
           wire,
           "captain",
           {
-            identity: () => service.identity() ?? null,
+            identity: () => service.published() ?? null,
             assignments: () => service.store.assignments(),
             operations: () => service.store.operations(),
             // Captain raises no alerts any more. Clients from before that read this section and

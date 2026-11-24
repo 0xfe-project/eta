@@ -119,8 +119,7 @@ export function Conversation(props: {
   follow(target);
   const reloadArtifacts = follow(() => "artifacts");
   const info = () => host.section<ConversationInfo>(target(), "info");
-  const summary = () =>
-    host.conversations().find((item) => item.id === props.id);
+  const summary = () => host.conversation(props.id);
   const members = () =>
     host.section<MemberView[]>(target(), "members") ??
     summary()?.participants ??
