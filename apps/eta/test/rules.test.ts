@@ -152,11 +152,16 @@ describe("briefing", () => {
       rows,
       trigger: rows.find((r) => r.seq === triggerSeq)!,
       nameOf,
+      agentName: (agentId) => names[agentId] ?? "another agent",
     });
+  const BACKGROUND =
+    "(The above is background: handled already, or not for you. Answer only the message below, unless it asks you to take up something above.)";
 
   it("is only the message when there is nothing since the agent last looked", () => {
     const told = tell([row(1, { text: "hello" })], 1);
     expect(told.text).toBe("[conversation: plans]\nthe user says:\nhello");
+    expect(told.text).not.toContain("Since you last looked");
+    expect(told.text).not.toContain(BACKGROUND);
     expect(told.seen).toBe(1);
   });
 
@@ -175,12 +180,137 @@ describe("briefing", () => {
         "Since you last looked:",
         "- the user: first",
         "- Bob: second",
+        BACKGROUND,
         "",
         "the user says:",
         "now",
       ].join("\n"),
     );
     expect(told.seen).toBe(3);
+  });
+
+  it("says who an earlier message went to and that they replied, so it is not taken up again", () => {
+    // The incident: the user asked the steward a question, the steward answered, then Captain
+    // named Ada. Ada must see the question as Bob's, already answered.
+    const told = tell(
+      [
+        row(1, {
+          text: "is PR #879 a hack?",
+          data: { woke: ["b"], joined: [] },
+        }),
+        row(2, {
+          text: "no, it is fine",
+          author: "agent",
+          agentId: "b",
+          replyToId: "m1",
+        }),
+        row(3, {
+          text: "Ada, send the evidence for #366",
+          author: "captain",
+          agentId: "c",
+          mentions: ["a"],
+          data: { woke: ["a"], joined: [] },
+        }),
+      ],
+      3,
+    );
+    expect(told.text).toBe(
+      [
+        "[conversation: plans]",
+        "Since you last looked:",
+        "- the user: is PR #879 a hack? (to Bob; Bob replied)",
+        "- Bob: no, it is fine",
+        BACKGROUND,
+        "",
+        "another agent says:",
+        "Ada, send the evidence for #366",
+      ].join("\n"),
+    );
+  });
+
+  it("marks a message sent to the agent itself, and one still being answered", () => {
+    const told = tell(
+      [
+        row(1, { text: "both of you", data: { woke: ["a", "b"], joined: [] } }),
+        row(2, {
+          text: "",
+          author: "agent",
+          agentId: "a",
+          replyToId: "m1",
+          status: "working",
+        }),
+        row(3, {
+          text: "",
+          author: "agent",
+          agentId: "b",
+          replyToId: "m1",
+          status: "working",
+        }),
+        row(4, {
+          text: "Ada, look",
+          author: "agent",
+          agentId: "b",
+          kind: "mention",
+          mentions: ["a"],
+        }),
+      ],
+      4,
+    );
+    expect(told.text).toContain(
+      "- the user: both of you (to Ada — you, Bob; you, Bob still answering)",
+    );
+  });
+
+  it("says nothing of another agent answering the same message", () => {
+    const told = tell(
+      [
+        row(1, { text: "both of you", data: { woke: ["a", "b"], joined: [] } }),
+        row(2, {
+          text: "",
+          author: "agent",
+          agentId: "b",
+          replyToId: "m1",
+          status: "working",
+        }),
+      ],
+      1,
+    );
+    expect(told.text).toBe(
+      "[conversation: plans]\nthe user says:\nboth of you",
+    );
+    expect(told.seen).toBe(1);
+  });
+
+  it("leaves rows that went to nobody unmarked, and a mention says whom it named", () => {
+    const told = tell(
+      [
+        row(1, {
+          text: "Bob is now the steward.",
+          author: "system",
+          kind: "system",
+        }),
+        row(2, {
+          text: "Bob, check",
+          author: "agent",
+          agentId: "a",
+          kind: "mention",
+          mentions: ["b"],
+        }),
+        row(3, {
+          text: "checked",
+          author: "agent",
+          agentId: "b",
+          replyToId: "m2",
+        }),
+        row(4, { text: "now" }),
+      ],
+      4,
+      0,
+      "x",
+    );
+    expect(told.text).toContain("- system: Bob is now the steward.\n");
+    expect(told.text).toContain("- Ada: Bob, check (to Bob; Bob replied)\n");
+    expect(told.text).toContain("- Bob: checked\n");
   });
 
   it("does not repeat the agent's own replies, and moves past them", () => {
@@ -207,6 +337,47 @@ describe("briefing", () => {
       3,
     );
     expect(told.text).toContain("- the user: q");
+    expect(told.seen).toBe(1);
+  });
+
+  it("puts a line where a reply is still being written, naming what it answers, and does not move past it", () => {
+    // The incident as it happened: Bob was still writing his answer when Captain named Ada.
+    const told = tell(
+      [
+        row(1, {
+          text: "is PR #879 a hack?",
+          data: { woke: ["b"], joined: [] },
+        }),
+        row(2, {
+          text: "Looking",
+          author: "agent",
+          agentId: "b",
+          replyToId: "m1",
+          status: "working",
+        }),
+        row(3, {
+          text: "Ada, send the evidence for #366",
+          author: "captain",
+          agentId: "c",
+          mentions: ["a"],
+          data: { woke: ["a"], joined: [] },
+        }),
+      ],
+      3,
+    );
+    expect(told.text).toBe(
+      [
+        "[conversation: plans]",
+        "Since you last looked:",
+        "- the user: is PR #879 a hack? (to Bob; Bob still answering)",
+        "- Bob is still writing a reply to the user's message above",
+        BACKGROUND,
+        "",
+        "another agent says:",
+        "Ada, send the evidence for #366",
+      ].join("\n"),
+    );
+    expect(told.text).not.toContain("Looking");
     expect(told.seen).toBe(1);
   });
 
