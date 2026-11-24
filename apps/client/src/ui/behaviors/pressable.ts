@@ -48,22 +48,32 @@ export function createPressable(options: PressableOptions) {
     return bg ? { backgroundColor: bg } : undefined;
   };
 
+  const focusVisibleStyle = () =>
+    focusRing(c(), options.focusRingKind ?? "ring");
+  const onMouseEnter = () => hovered.set(canHover && !disabled());
+  const onMouseLeave = () => hovered.set(false);
+
   return {
     hovered: () => hovered(),
     disabled,
     busy,
     interactive,
     press,
+    accessibilityState,
+    hoverStyle,
+    focusVisibleStyle,
+    onMouseEnter,
+    onMouseLeave,
     viewProps: () => ({
       role: options.role ?? ("button" as AccessibilityRole),
       accessibilityLabel: options.label?.(),
       accessibilityDescription: options.description?.(),
       accessibilityState: accessibilityState(),
-      onMouseEnter: () => hovered.set(canHover && !disabled()),
-      onMouseLeave: () => hovered.set(false),
+      onMouseEnter,
+      onMouseLeave,
       onPress: press,
       hoverStyle: hoverStyle(),
-      focusVisibleStyle: focusRing(c(), options.focusRingKind ?? "ring"),
+      focusVisibleStyle: focusVisibleStyle(),
     }),
   };
 }
