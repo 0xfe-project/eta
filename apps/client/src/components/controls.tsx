@@ -1,9 +1,9 @@
-import type { InputRef, JSX, TextStyle, ViewRef, ViewStyle } from "nsh";
-import type { IconName } from "./icons";
-import type { light, TextVariant } from "./theme";
+import type { InputRef, JSX, TextStyle, ViewStyle } from "nsh";
+import type { light } from "./theme";
 import { signal, View } from "nsh";
 import { Input } from "nsh/base";
 import { useText } from "../i18n";
+import { Button } from "../ui/button";
 import { pickerTarget } from "./element-picker";
 import {
   canHover,
@@ -14,13 +14,9 @@ import {
   touchRow,
   touchScreen,
 } from "./menu";
-import { shownWhile } from "./pending";
-import { Spinner, SpinningIcon } from "./spinner";
 import { Icon, Label } from "./text";
 import {
   colors,
-  densityDefaults,
-  focusRing,
   fontFamily,
   Fonts,
   grow,
@@ -29,215 +25,15 @@ import {
   textFaces,
   textStyle,
 } from "./theme";
-import { control, icon, opacity, shadow, space, weight } from "./tokens";
+import { control, icon, shadow, space, weight } from "./tokens";
+
+export { Button, hint } from "../ui/button";
 
 /** A menu's width, unless its caller says. */
 const menuWidth = 172;
 /** A choice's row in a phone sheet, and in a menu. */
 const sheetRowHeight = 52;
 const checkRowHeight = 32;
-
-export function Button(props: {
-  label: string;
-  /** What a screen reader says when the label alone is ambiguous; `label` by default. */
-  accessibilityLabel?: string;
-  controlRef?: (node: ViewRef) => void;
-  icon?: IconName;
-  end?: IconName;
-  iconOnly?: boolean;
-  iconSize?: number;
-  tone?: "primary" | "plain" | "ghost" | "danger";
-  selected?: boolean;
-  disabled?: boolean;
-  /** Its action is under way: presses do nothing, nothing dims, and after `motion.reveal` a
-   * spinner takes the icon's place (or sits over the label, which keeps the button's width). */
-  busy?: boolean;
-  /** The icon stands for the action (refresh, check again): it turns itself while `busy`, from
-   * the press on, and stops on a whole turn. */
-  spinIcon?: boolean;
-  size?: number;
-  /** The label's role; `small` by default. */
-  labelVariant?: TextVariant;
-  labelWeight?: number;
-  /** The colour of the label and icon of a plain or ghost button, such as
-   * "muted" for a filter trigger that reads as secondary. */
-  labelTone?: keyof typeof light;
-  dimDisabled?: boolean;
-  /** The colour the label and icon take while the pointer is over the button,
-   * such as "ink" for a muted ghost icon that darkens on hover. */
-  hoverTone?: keyof typeof light;
-  /** Said as a dark hint on hover; an icon-only button's way of naming itself. */
-  tooltip?: string;
-  /** Whether what the button opens is open, for a screen reader. */
-  expanded?: boolean;
-  /** The key that does the same, after the label (`⌘⏎` on a form's button). */
-  shortcut?: string;
-  style?: ViewStyle;
-  onPress: () => void;
-}) {
-  const color = colors();
-  const density = densityDefaults();
-  const size = () => props.size ?? density().button;
-  const picker = pickerTarget(
-    "Button",
-    "apps/client/src/components/controls.tsx",
-  );
-  const primary = () => props.tone === "primary";
-  const ghost = () => props.tone === "ghost";
-  const hovered = signal(false);
-  const waiting = shownWhile(() => !!props.busy && !props.spinIcon);
-  const iconSize = () => props.iconSize ?? density().buttonIcon;
-  const textTone = () =>
-    primary()
-      ? "buttonInk"
-      : props.tone === "danger"
-        ? "red"
-        : hovered() && props.hoverTone
-          ? props.hoverTone
-          : (props.labelTone ?? "ink");
-  return (
-    <View
-      {...picker}
-      ref={(node) => {
-        picker.ref(node);
-        props.controlRef?.(node);
-      }}
-      role="button"
-      accessibilityLabel={props.accessibilityLabel ?? props.label}
-      accessibilityState={{
-        disabled: props.disabled ?? false,
-        busy: props.busy ?? false,
-        selected: props.selected,
-        expanded: props.expanded,
-      }}
-      tooltip={hint(props.tooltip, color)}
-      onMouseEnter={() => hovered.set(canHover)}
-      onMouseLeave={() => hovered.set(false)}
-      onPress={() => {
-        if (!props.disabled && !props.busy) props.onPress();
-      }}
-      hoverStyle={{
-        backgroundColor: primary() ? color().ink : color().selected,
-      }}
-      focusVisibleStyle={focusRing(color())}
-      style={{
-        ...row,
-        justifyContent: "center",
-        gap: space[4],
-        flexShrink: 0,
-        height: size(),
-        minWidth: size(),
-        paddingHorizontal: props.iconOnly ? space[4] : space[8],
-        borderWidth: ghost() ? 0 : 1,
-        borderColor: props.selected
-          ? color().ink
-          : primary()
-            ? color().button
-            : color().strong,
-        // A ghost button is bare text on whatever it sits on.
-        backgroundColor: primary()
-          ? color().button
-          : props.selected
-            ? color().selected
-            : ghost()
-              ? undefined
-              : color().canvas,
-        opacity:
-          props.disabled && props.dimDisabled !== false ? opacity.disabled : 1,
-        cursor: props.disabled ? "default" : "pointer",
-        ...props.style,
-      }}
-    >
-      <If when={props.icon !== undefined}>
-        <If
-          when={props.spinIcon}
-          else={
-            <If
-              when={waiting()}
-              else={
-                <Icon name={props.icon!} tone={textTone()} size={iconSize()} />
-              }
-            >
-              <Spinner tone={textTone()} size={iconSize()} />
-            </If>
-          }
-        >
-          <SpinningIcon
-            name={props.icon!}
-            running={!!props.busy}
-            tone={textTone()}
-            size={iconSize()}
-          />
-        </If>
-      </If>
-      <If when={!props.iconOnly}>
-        <Label
-          variant={props.labelVariant ?? "small"}
-          weight={
-            props.labelWeight ??
-            (props.selected ? weight.strong : weight.regular)
-          }
-          tone={textTone()}
-          style={{
-            opacity: waiting() && props.icon === undefined ? 0 : 1,
-          }}
-        >
-          {props.label}
-        </Label>
-      </If>
-      <If when={waiting() && props.icon === undefined}>
-        {/* No icon to take the place of: the spinner sits over the label, which keeps its
-         * room so the button's width does not change. */}
-        <View
-          style={{
-            position: "absolute",
-            top: 0,
-            bottom: 0,
-            left: 0,
-            right: 0,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Spinner tone={textTone()} size={iconSize()} />
-        </View>
-      </If>
-      <If when={props.shortcut}>
-        <Label
-          variant="caption"
-          tone={textTone()}
-          style={{ opacity: opacity.disabled, marginLeft: space[4] }}
-        >
-          {props.shortcut}
-        </Label>
-      </If>
-      <If when={props.end !== undefined}>
-        <Icon
-          name={props.end!}
-          tone={primary() ? "buttonInk" : "muted"}
-          size={icon.sm}
-        />
-      </If>
-    </View>
-  );
-}
-
-/** A hover hint drawn as a small dark label (a bare string tooltip draws nothing on the web). */
-export function hint(text: string | undefined, c: ReturnType<typeof colors>) {
-  return text ? (
-    <View
-      style={{
-        paddingHorizontal: space[8],
-        paddingVertical: space[4],
-        backgroundColor: c().ink,
-      }}
-    >
-      <Label variant="small" tone="canvas">
-        {text}
-      </Label>
-    </View>
-  ) : undefined;
-}
 
 type FieldInputProps = Pick<
   Parameters<typeof Input>[0],
