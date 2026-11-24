@@ -248,3 +248,52 @@ test("on a phone an added toolkit is a row with the Added mark and Remove", asyn
   expect(app.count("label:Remove")).toBe(1);
   expect(app.count("label:Disconnect")).toBe(2);
 });
+
+// The group is taken away and brought back as the tab changes or the window crosses a width; the host
+// is asked again each time, and until it answers the group must not be empty.
+const REMOUNT = "./fixtures/plugins-composio-remount.tsx";
+
+test("a group that is shown again has its cards and its switches in the first frame, before the host answers", async () => {
+  const app = await open(REMOUNT, DESKTOP);
+  await app.waitFor("text:Gmail");
+  await app.waitFor("id:composio-plugin-switch");
+  await app.press("label:mode held");
+  await app.press("label:hide group");
+  expect(app.count("id:composio-connected-group")).toBe(0);
+  await app.press("label:show group");
+  expect(app.shows("Gmail")).toBe(true);
+  expect(app.shows("Hacker News")).toBe(true);
+  expect(app.count("id:composio-plugin-switch")).toBe(1);
+});
+
+test("a group that is shown again keeps its cards when the host cannot be asked", async () => {
+  const app = await open(REMOUNT, DESKTOP);
+  await app.waitFor("text:Gmail");
+  await app.press("label:mode fails");
+  await app.press("label:hide group");
+  await app.press("label:show group");
+  await app.waitFor("text:answers:2");
+  expect(app.shows("Gmail")).toBe(true);
+});
+
+test("a group that is shown again loses the connected toolkits when there is no key any more", async () => {
+  const app = await open(REMOUNT, DESKTOP);
+  await app.waitFor("text:Gmail");
+  await app.press("label:mode needs key");
+  await app.press("label:hide group");
+  await app.press("label:show group");
+  await app.waitFor("text:toolkits:2");
+  expect(app.shows("Gmail")).toBe(false);
+});
+
+test("an added toolkit that was removed is not brought back by the cards kept", async () => {
+  const app = await open(REMOUNT, DESKTOP);
+  await app.waitFor("text:Hacker News");
+  await app.press("label:Remove");
+  expect(app.shows("Hacker News")).toBe(false);
+  await app.press("label:mode held");
+  await app.press("label:hide group");
+  await app.press("label:show group");
+  expect(app.shows("Hacker News")).toBe(false);
+  expect(app.shows("Gmail")).toBe(true);
+});
