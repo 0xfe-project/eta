@@ -6,8 +6,8 @@ const regular = (): DensityName => "regular";
 
 /**
  * A part of the app drawn compact (tokens.ts `densities`): the side panels, board cards, menus
- * and popovers, the sidebar's lists and Settings' left column. Its `Label`s, `Button`s, `Icon`s,
- * avatars, editors and Markdown take the compact defaults. With `when` false it keeps the
+ * and popovers, the sidebar's lists. Its `Label`s, `Button`s, `Icon`s, avatars, editors and
+ * Markdown take the compact defaults. With `when` false it keeps the
  * density around it (a list that is a sidebar on a computer and the page on a phone).
  */
 export function Compact(props: { when?: boolean; children?: JSX.Element }) {
