@@ -58,7 +58,7 @@ const composio = (
  */
 export function openMarket(
   catalog: MarketCatalog,
-  link: "ok" | "fail" = "ok",
+  link: "ok" | "fail" | "no-managed" = "ok",
   options: {
     connected?: "after-link" | "never" | "already";
     leavable?: boolean;
@@ -118,6 +118,8 @@ export function openMarket(
           linked = true;
           log.update((all) => [...all, "called:" + method + ":" + args.slug]);
           if (link === "fail") throw new Error("Composio refused the link");
+          if (link === "no-managed")
+            throw new Error("composio_no_managed_login: no managed sign-in");
           return { redirectUrl: "https://connect.composio.test/" + args.slug };
         }
         return {};

@@ -279,3 +279,35 @@ test("Remove in the detail of an added toolkit asks Composio for nothing and tak
   await app.waitFor("id:composio-added", { state: "gone" });
   expect(app.shows("label:Add")).toBe(true);
 });
+
+const NO_MANAGED =
+  "Composio has no managed sign-in for this service. Create your own auth config for it in the Composio dashboard (you bring your own OAuth app's client ID and secret), then come back and press Connect.";
+const DASHBOARD = "https://dashboard.composio.dev/~/project/auth-configs";
+
+test("a toolkit with no managed sign-in and no key or registration scheme says so beside Connect, with the dashboard link", async () => {
+  const app = await open("./fixtures/composio-no-managed.tsx", OPEN);
+  await app.press("label:Twitter");
+  expect(app.shows(NO_MANAGED)).toBe(true);
+  // Connect is still there: the user may have made the config already.
+  expect(app.shows("label:Connect")).toBe(true);
+  await app.press("label:Open Composio dashboard");
+  await app.waitFor("text:opened:" + DASHBOARD);
+});
+
+test("the no-managed-sign-in hint is not shown for a toolkit that has a managed sign-in, a key scheme or dynamic registration", async () => {
+  for (const name of ["Gmail", "Railway", "Cloudflare MCP"]) {
+    const app = await open("./fixtures/composio-no-managed.tsx", OPEN);
+    await app.press("label:" + name);
+    expect(app.shows(NO_MANAGED)).toBe(false);
+    expect(app.shows("label:Open Composio dashboard")).toBe(false);
+  }
+});
+
+test("a link refused for want of a managed sign-in shows the sentence, not the host's marker", async () => {
+  const app = await open("./fixtures/composio-no-managed-link.tsx", OPEN);
+  await app.press("label:Gmail");
+  expect(app.shows(NO_MANAGED)).toBe(false);
+  await app.press("label:Connect");
+  await app.waitFor("text:" + NO_MANAGED);
+  expect(app.shows("composio_no_managed_login")).toBe(false);
+});
