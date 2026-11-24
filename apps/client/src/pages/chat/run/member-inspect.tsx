@@ -3,6 +3,13 @@ import { signal, View } from "nsh";
 import { colors, grow, Label, row } from "../../../components";
 import { AgentFace } from "../../../components/agent-face";
 import { CloseButton } from "../../../components/navigation-buttons";
+import {
+  avatar,
+  control,
+  icon,
+  space,
+  weight,
+} from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { Segmented } from "../../tasks/segmented";
@@ -35,8 +42,8 @@ export function MemberInspect(props: {
           { value: "context", label: uiText("inspectContext") },
         ]}
         value={tab()}
-        height={props.phone ? 32 : 24}
-        paddingHorizontal={props.phone ? 16 : 9}
+        height={props.phone ? control.touch : control.sm}
+        paddingHorizontal={props.phone ? space[16] : space[8]}
         onChange={tab.set}
       />
     </View>
@@ -48,8 +55,8 @@ export function MemberInspect(props: {
         <View
           style={{
             ...row,
-            paddingHorizontal: 16,
-            paddingTop: 12,
+            paddingHorizontal: space[16],
+            paddingTop: space[12],
             flexShrink: 0,
           }}
         >
@@ -73,23 +80,28 @@ export function MemberInspect(props: {
           <View
             style={{
               ...row,
-              height: 28,
-              gap: 8,
-              marginTop: 10,
-              marginBottom: 8,
-              paddingHorizontal: 12,
+              height: control.md,
+              gap: space[8],
+              marginTop: space[12],
+              marginBottom: space[8],
+              paddingHorizontal: space[12],
               flexShrink: 0,
             }}
           >
-            <AgentFace id={props.agentId} size={18} />
-            <Label variant="small" weight={500} lines={1} style={grow}>
+            <AgentFace id={props.agentId} size={avatar.sm} />
+            <Label
+              variant="small"
+              weight={weight.regular}
+              lines={1}
+              style={grow}
+            >
               {host.agent(props.agentId)?.name ?? uiText("agent")}
             </Label>
             {tabs()}
             <CloseButton
-              size={24}
-              iconSize={16}
-              style={{ marginRight: -4 }}
+              size={control.sm}
+              iconSize={icon.md}
+              style={{ marginRight: -space[4] }}
               onPress={props.onClose}
             />
           </View>

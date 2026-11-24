@@ -7,6 +7,7 @@ import { Clipboard, signal, View } from "nsh";
 import {
   Caption,
   colors,
+  focusRing,
   grow,
   Icon,
   Label,
@@ -14,9 +15,13 @@ import {
   SmoothScroll,
 } from "../../../components";
 import { useContextUsage } from "../../../components/context-ring";
+import { control, icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, followSession, useHost } from "../../../services/host";
 import { ToolOutput } from "./tool-code";
+
+/** A prompt block's or a tool's row, folded. */
+const foldRowHeight = { phone: 40, desktop: 32 } as const;
 
 /** The names the settings screen gives the external runtimes; an ACP agent goes by its id. */
 const RUNTIME_NAMES: Record<string, string> = {
@@ -190,17 +195,21 @@ export function MemberContext(props: {
             }))
           }
           hoverStyle={{ backgroundColor: c().selected }}
-          focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+          focusVisibleStyle={focusRing(c(), "inset")}
           style={{
             ...row,
-            height: props.phone ? 40 : 31,
-            paddingHorizontal: 10,
-            gap: 6,
+            height: props.phone ? foldRowHeight.phone : foldRowHeight.desktop,
+            paddingHorizontal: space[12],
+            gap: space[4],
             cursor: "pointer",
             backgroundColor: c().canvas,
           }}
         >
-          <Icon name={opened() ? "down" : "right"} size={12} tone="muted" />
+          <Icon
+            name={opened() ? "down" : "right"}
+            size={icon.sm}
+            tone="muted"
+          />
           <Label variant="small" lines={1} style={{ flexShrink: 0 }}>
             {item().name}
           </Label>
@@ -221,9 +230,9 @@ export function MemberContext(props: {
         <If when={opened()}>
           <View
             style={{
-              padding: 10,
-              paddingTop: 6,
-              gap: 4,
+              padding: space[12],
+              paddingTop: space[8],
+              gap: space[4],
               backgroundColor: c().surface,
             }}
           >
@@ -241,12 +250,17 @@ export function MemberContext(props: {
                     }, 2500);
                   });
                 }}
-                focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
-                style={{ ...row, gap: 4, height: 20, cursor: "pointer" }}
+                focusVisibleStyle={focusRing(c())}
+                style={{
+                  ...row,
+                  gap: space[4],
+                  height: control.sm,
+                  cursor: "pointer",
+                }}
               >
                 <Icon
                   name={copied() === item().key ? "check" : "copy"}
-                  size={12}
+                  size={icon.sm}
                   tone="muted"
                 />
                 <Label variant="caption" tone="muted">
@@ -277,9 +291,9 @@ export function MemberContext(props: {
     empty: string;
   }) {
     return (
-      <View style={{ gap: 6 }}>
-        <View style={{ ...row, gap: 8 }}>
-          <Caption text={group.title} phone={props.phone} />
+      <View style={{ gap: space[4] }}>
+        <View style={{ ...row, gap: space[8] }}>
+          <Caption text={group.title} />
           <Label variant="caption" tone="muted" lines={1} style={grow}>
             {group.caption}
           </Label>
@@ -302,10 +316,10 @@ export function MemberContext(props: {
     );
   }
 
-  const inset = props.phone ? 16 : 12;
+  const inset = props.phone ? space[16] : space[12];
   return (
     <SmoothScroll style={grow} scrollbar={false}>
-      <View style={{ padding: inset, gap: 18 }}>
+      <View style={{ padding: inset, gap: space[16] }}>
         <If
           when={!notice()}
           else={
