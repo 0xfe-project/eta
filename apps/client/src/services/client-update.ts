@@ -14,6 +14,8 @@ import {
   runningPackage,
   shellInfo,
 } from "nsh/updater";
+import { startProgress } from "../components/progress-notification";
+import { uiText } from "../i18n";
 
 /** The update channels a release build names in `nsh.json`'s
  * `updater.channels` (scripts/nsh-client.ts): an rc build is only on `rc`, a
@@ -141,12 +143,38 @@ function createClientUpdate() {
       return;
     }
     downloading.set(true);
+    const note = startProgress({
+      id: "client-update",
+      icon: "download",
+      title: uiText("downloadUpdate"),
+      detail: current.version,
+    });
+    const onProgress = (next: UpdateProgress) => {
+      progress.set(next);
+      note.update({
+        progress: next.total ? next.received / next.total : undefined,
+      });
+    };
     try {
-      if (current.kind === "package") await downloadPackage(progress.set);
-      else await downloadUpdate(progress.set);
+      if (current.kind === "package") await downloadPackage(onProgress);
+      else await downloadUpdate(onProgress);
       ready.set(true);
+      note.complete({
+        title: uiText("appUpdateReady", { version: current.version }),
+        detail:
+          current.kind === "package"
+            ? uiText("reopenEtaToUse", { version: current.version })
+            : uiText("restartToUpdate"),
+        showWhenQuick: true,
+      });
     } catch (error) {
-      failure.set(describe(error));
+      const message = describe(error);
+      failure.set(message);
+      note.fail({
+        title: uiText("downloadUpdate"),
+        detail: message,
+        onRetry: () => void download(),
+      });
     } finally {
       progress.set(undefined);
       downloading.set(false);

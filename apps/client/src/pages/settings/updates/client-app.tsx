@@ -16,7 +16,6 @@ import {
   SmoothScroll,
   textFaces,
 } from "../../../components";
-import { DownloadProgressBar } from "../../../components/download-progress";
 import { LayoutSelect } from "../../../components/select";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
@@ -279,15 +278,6 @@ export function ClientAppUpdate(props: { phone: boolean }) {
                 />
               </If>
             </View>
-            <If
-              when={
-                update.downloading() && update.percentage() !== undefined
-                  ? update.percentage()
-                  : undefined
-              }
-            >
-              {(value) => <DownloadProgressBar value={value()} />}
-            </If>
             <If when={update.ready() && offer().kind === "package"}>
               <Label variant="small" tone="muted">
                 {uiText("reopenEtaToUse", { version: offer().version })}

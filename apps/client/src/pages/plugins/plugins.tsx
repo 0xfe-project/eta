@@ -14,6 +14,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { startProgress } from "../../components/progress-notification";
 import {
   avatar,
   control,
@@ -85,6 +86,8 @@ export function Plugins(props: {
   const refreshing = signal(false);
   /** The plugin being removed. */
   const removing = signal(false);
+  /** Plugins currently running a git update. */
+  const updating = signal<string[]>([]);
   async function refreshPlugins() {
     if (refreshing()) return;
     refreshing.set(true);
@@ -92,11 +95,30 @@ export function Plugins(props: {
     refreshing.set(false);
   }
   async function update(name: string) {
-    return (
-      (await host.action(() =>
-        host.call<PluginResults["update"]>("plugins", "update", { name }),
-      )) !== undefined
-    );
+    if (updating().includes(name)) return false;
+    updating.update((all) => [...all, name]);
+    const progress = startProgress({
+      id: `plugin-update-${name}`,
+      icon: "plugins",
+      title: uiText("update"),
+      detail: name,
+    });
+    try {
+      await host.call<PluginResults["update"]>("plugins", "update", { name });
+      progress.complete({ title: name, detail: uiText("completed") });
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      host.error.set(message);
+      progress.fail({
+        title: name,
+        detail: message,
+        onRetry: () => void update(name),
+      });
+      return false;
+    } finally {
+      updating.update((all) => all.filter((item) => item !== name));
+    }
   }
   follow(() => "plugins");
 
@@ -218,6 +240,7 @@ export function Plugins(props: {
             {(item) => (
               <PluginCard
                 item={item()}
+                updating={updating().includes(item().name)}
                 onWarnings={() => warnings.set(item().name)}
                 onSource={() => source.set(item().name)}
                 onUpdate={() => void update(item().name)}
@@ -482,6 +505,7 @@ export function Plugins(props: {
 
 function PluginCard(props: {
   item: PluginView;
+  updating?: boolean;
   onWarnings: () => void;
   onSource: () => void;
   onUpdate: () => void;
@@ -648,6 +672,7 @@ function PluginCard(props: {
           <Button
             label={uiText("update")}
             tone="ghost"
+            busy={props.updating}
             onPress={props.onUpdate}
           />
           <Button
