@@ -3,6 +3,7 @@ export { BackButton, Button, CloseButton } from "./button";
 export { Callout, WarningLine } from "./callout";
 export { Chip } from "./chip";
 export { CopyButton } from "./copy-button";
+export { dialogWidth, Modal } from "./dialog";
 export { Disclosure } from "./disclosure";
 export { Field, FormField } from "./input";
 export { ListRow, SectionHeader } from "./list-row";
