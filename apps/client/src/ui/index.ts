@@ -4,6 +4,7 @@ export { Callout, WarningLine } from "./callout";
 export { CopyButton } from "./copy-button";
 export { Field, FormField } from "./input";
 export { SearchField } from "./search-field";
+export { CheckControl, ToggleSwitch } from "./selection-controls";
 export { Card, Separator } from "./surface";
 export { Caption, Icon, Label, RowChevron } from "./text";
 export { TimeField } from "./time-field";
