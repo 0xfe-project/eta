@@ -168,7 +168,10 @@ export function ModelSourceList(props: {
                           ...row,
                           gap: space[4],
                           maxWidth: "100%",
-                          opacity: value().previousAt === undefined ? 1 : opacity.muted,
+                          opacity:
+                            value().previousAt === undefined
+                              ? 1
+                              : opacity.muted,
                         }}
                       >
                         <View
@@ -202,7 +205,9 @@ export function ModelSourceList(props: {
                       tone="muted"
                       style={{
                         opacity:
-                          quota(item())?.previousAt === undefined ? 1 : opacity.muted,
+                          quota(item())?.previousAt === undefined
+                            ? 1
+                            : opacity.muted,
                       }}
                     >
                       {uiText("modelQuotaResetsAt", {
@@ -298,7 +303,10 @@ export function ModelSourceList(props: {
                           flexWrap: "wrap",
                           columnGap: space[8],
                           rowGap: narrow() ? space[4] : space[2],
-                          opacity: value().previousAt === undefined ? 1 : opacity.muted,
+                          opacity:
+                            value().previousAt === undefined
+                              ? 1
+                              : opacity.muted,
                         }}
                       >
                         <Each of={value().amounts}>
