@@ -11,7 +11,7 @@ import type { BoardTaskDetail, TaskStepView } from "@eta/client-contracts";
 import type { Request } from "./support/models";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   executorSessionOf,
   stepsOfJournal,
@@ -170,6 +170,28 @@ describe("taskSteps", () => {
     off();
     steps.changed("s1");
     expect(told).toEqual(["k1"]);
+  });
+
+  it("tells a moment later, and not at all once stopped", async () => {
+    vi.useFakeTimers();
+    try {
+      const steps = new TaskSteps({
+        dataDir: await tempDir(),
+        taskOfSession: () => "k1",
+      });
+      const told: string[] = [];
+      steps.onChange((taskId) => told.push(taskId));
+      steps.changedSoon("s1", 100);
+      expect(told).toEqual([]);
+      vi.advanceTimersByTime(100);
+      expect(told).toEqual(["k1"]);
+      steps.changedSoon("s1", 100);
+      steps.stop();
+      vi.advanceTimersByTime(1000);
+      expect(told).toEqual(["k1"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

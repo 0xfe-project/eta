@@ -920,7 +920,7 @@ export function createProduct(options: {
       // after the event, so the page reads it a moment later.
       sessionAttach: ({ meta, session }) => {
         const on = kernelOn(session.kernel.ctx);
-        const moved = () => setTimeout(() => taskSteps.changed(meta.id), 100);
+        const moved = () => taskSteps.changedSoon(meta.id, 100);
         on("task:created", moved);
         on("task:updated", moved);
         on("task:removed", moved);
@@ -1027,6 +1027,7 @@ export function createProduct(options: {
       archiver.stop();
       draftExpirer.stop();
       captainSupervisor.stop();
+      taskSteps.stop();
       await taskRunner.detach();
       hub.close();
       mirrors.detach();

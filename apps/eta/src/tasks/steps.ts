@@ -76,6 +76,7 @@ export interface TaskStepsOptions {
 export class TaskSteps {
   readonly #options: TaskStepsOptions;
   readonly #listeners = new Set<(taskId: string) => void>();
+  readonly #timers = new Set<ReturnType<typeof setTimeout>>();
 
   constructor(options: TaskStepsOptions) {
     this.#options = options;
@@ -92,6 +93,24 @@ export class TaskSteps {
     const taskId = this.#options.taskOfSession(sessionId);
     if (taskId === undefined) return;
     for (const listener of this.#listeners) listener(taskId);
+  }
+
+  /**
+   * A session's plan moved, but its journal takes the ledger a moment after the event: tell the
+   * task once `delayMs` have passed. `stop` drops what is still waiting.
+   */
+  changedSoon(sessionId: string, delayMs: number): void {
+    const timer = setTimeout(() => {
+      this.#timers.delete(timer);
+      this.changed(sessionId);
+    }, delayMs);
+    this.#timers.add(timer);
+  }
+
+  /** The host is closing: nothing waiting may fire into what it closed. */
+  stop(): void {
+    for (const timer of this.#timers) clearTimeout(timer);
+    this.#timers.clear();
   }
 
   /** The plan of the executor's latest run; none when its journal is not on this machine. */
