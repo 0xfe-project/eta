@@ -517,7 +517,8 @@ export function MemberRun(props: {
           />
         </View>
       </If>
-      <SmoothScroll style={grow} scrollbar={false}>
+      {/* A task's execution log shows its bar; a reply's process and a member's inspect do not. */}
+      <SmoothScroll style={grow} scrollbar={!!props.taskRun}>
         <View style={{ padding: inset }}>
           <Each of={visible()} key={(block) => block.id}>
             {(block, index) => (
