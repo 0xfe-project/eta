@@ -352,8 +352,8 @@ export const pluginsMessages = {
     "OAuth 型:会跳到该应用的授权页,登录并允许访问。",
   ],
   composioAuthNoneHelp: [
-    "This toolkit needs no sign-in, so there is nothing to authorize. Connect still opens Composio's page for it.",
-    "这个 toolkit 不需要认证,没有要授权的内容。点「连接」仍会打开 Composio 的页面。",
+    "This toolkit needs no sign-in, so there is nothing to authorize. Add it to make it a plugin of your agents.",
+    "这个 toolkit 不需要认证,没有要授权的内容。添加后它会成为你的智能体可用的插件。",
   ],
   composioAuthUnknownHelp: [
     "eta does not know this sign-in method. Composio's page shows what it asks for.",
@@ -368,10 +368,14 @@ export const pluginsMessages = {
     "「连接」会在浏览器里打开 Composio 的页面。「已连接」只表示账户已在 Composio 上连上,eta 的智能体暂时还用不上。",
   ],
   composioConnected: ["Connected", "已连接"],
-  composioConnectedGroup: [
-    "Connected on Composio ({{count}})",
-    "已在 Composio 连接({{count}})",
+  composioAdd: ["Add", "添加"],
+  composioAdded: ["Added", "已添加"],
+  composioRemove: ["Remove", "移除"],
+  composioAddFailed: [
+    "Could not add it. Try again later.",
+    "没能添加,请稍后再试。",
   ],
+  composioGroup: ["In Composio ({{count}})", "Composio 中({{count}})"],
   composioPluginSwitch: ["Enabled: {{name}}", "已启用:{{name}}"],
   composioUnavailable: ["Unavailable", "不可用"],
   composioPluginError: [

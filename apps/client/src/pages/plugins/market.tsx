@@ -194,6 +194,15 @@ export function Market(props: {
     if (answer.status === "ready") connected.set(answer.slugs);
     else if (answer.status !== "error") connected.set([]);
   }
+  /** The toolkits that need no sign-in and were added. A mark only, like the connected ones. */
+  const added = signal<string[]>([]);
+  const isAdded = (slug: string) => added().includes(slug);
+  async function refreshAdded(): Promise<void> {
+    const answer = await host
+      .call<PluginResults["composioAdded"]>("plugins", "composioAdded", {})
+      .catch(() => undefined);
+    if (answer && Array.isArray(answer.slugs)) added.set(answer.slugs);
+  }
   /** The toolkit being waited for after Connect opened the browser; empty when nothing is. */
   const waiting = signal("");
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -237,11 +246,15 @@ export function Market(props: {
       if (asked) return;
       asked = true;
       void refreshConnected();
+      void refreshAdded();
     });
   });
   effect(() => {
     if (!detail().startsWith("composio\n")) return;
-    untracked(() => void refreshConnected());
+    untracked(() => {
+      void refreshConnected();
+      void refreshAdded();
+    });
   });
   const messageOf = (error: unknown) =>
     error instanceof Error && error.message !== ""
@@ -270,6 +283,53 @@ export function Market(props: {
     connected.update((all) => all.filter((one) => one !== slug));
     disconnecting.set(undefined);
     void refreshConnected();
+  }
+  /** Adding a toolkit that needs no sign-in: no link and no browser, the host makes it a plugin. */
+  async function add(toolkit: ComposioToolkit) {
+    if (busy()) return;
+    busy.set(true);
+    installError.set("");
+    try {
+      const done = await host.call<PluginResults["composioAdd"]>(
+        "plugins",
+        "composioAdd",
+        { slug: toolkit.slug },
+      );
+      if (done.status === "ready")
+        added.update((all) =>
+          all.includes(toolkit.slug) ? all : [...all, toolkit.slug],
+        );
+      else
+        installError.set(
+          done.status === "needs_key"
+            ? uiText("composioNeedsKey")
+            : done.status === "key_rejected"
+              ? uiText("composioKeyRejected")
+              : uiText("composioAddFailed"),
+        );
+    } catch (error) {
+      installError.set(messageOf(error));
+    } finally {
+      busy.set(false);
+    }
+  }
+  /** Taking an added toolkit away asks nothing of Composio, so there is nothing to confirm. */
+  async function removeAdded(toolkit: ComposioToolkit) {
+    if (busy()) return;
+    busy.set(true);
+    installError.set("");
+    try {
+      await host.call<PluginResults["composioRemove"]>(
+        "plugins",
+        "composioRemove",
+        { slug: toolkit.slug },
+      );
+      added.update((all) => all.filter((one) => one !== toolkit.slug));
+    } catch (error) {
+      installError.set(messageOf(error));
+    } finally {
+      busy.set(false);
+    }
   }
   async function clearCache() {
     await host.action(() => host.call("plugins", "marketClearCache", {}));
@@ -746,6 +806,16 @@ export function Market(props: {
                           </Label>
                         </View>
                       </If>
+                      <If when={isAdded(item().slug)}>
+                        <View
+                          testID="composio-added"
+                          style={{ flexShrink: 1, minWidth: 0 }}
+                        >
+                          <Label variant="small" lines={1}>
+                            {uiText("composioAdded")}
+                          </Label>
+                        </View>
+                      </If>
                     </View>
                   </View>
                 )}
@@ -907,9 +977,16 @@ export function Market(props: {
                   <Label variant="small">{uiText("composioConnected")}</Label>
                 </View>
               </If>
-              <Label variant="small" tone="muted">
-                {uiText("composioConnectNote")}
-              </Label>
+              <If when={isAdded(currentToolkit()!.slug)}>
+                <View testID="composio-added">
+                  <Label variant="small">{uiText("composioAdded")}</Label>
+                </View>
+              </If>
+              <If when={currentToolkit()!.auth !== "none"}>
+                <Label variant="small" tone="muted">
+                  {uiText("composioConnectNote")}
+                </Label>
+              </If>
               <If when={installError()}>
                 <Label
                   variant="small"
@@ -931,28 +1008,54 @@ export function Market(props: {
               ...inset(),
             }}
           >
-            <If when={isConnected(currentToolkit()!.slug)}>
-              <Button
-                label={uiText("composioDisconnect")}
-                tone="plain"
-                size={phone() ? 44 : 28}
-                disabled={busy()}
-                onPress={() => disconnecting.set(currentToolkit())}
-              />
+            <If when={currentToolkit()!.auth === "none"}>
+              <If
+                when={isAdded(currentToolkit()!.slug)}
+                else={
+                  <Button
+                    label={uiText("composioAdd")}
+                    tone="primary"
+                    size={phone() ? control.touch : control.md}
+                    disabled={busy()}
+                    onPress={() => void add(currentToolkit()!)}
+                  />
+                }
+              >
+                <Button
+                  label={uiText("composioRemove")}
+                  tone="plain"
+                  size={phone() ? control.touch : control.md}
+                  disabled={busy()}
+                  onPress={() => void removeAdded(currentToolkit()!)}
+                />
+              </If>
             </If>
-            <Button
-              label={
-                busy()
-                  ? uiText("composioConnecting")
-                  : isConnected(currentToolkit()!.slug)
-                    ? uiText("composioReconnect")
-                    : uiText("composioConnect")
-              }
-              tone="primary"
-              size={phone() ? 44 : 28}
-              disabled={busy()}
-              onPress={() => void connect(currentToolkit()!)}
-            />
+            <If when={currentToolkit()!.auth !== "none"}>
+              <View style={{ ...row, gap: space[8] }}>
+                <If when={isConnected(currentToolkit()!.slug)}>
+                  <Button
+                    label={uiText("composioDisconnect")}
+                    tone="plain"
+                    size={phone() ? control.touch : control.md}
+                    disabled={busy()}
+                    onPress={() => disconnecting.set(currentToolkit())}
+                  />
+                </If>
+                <Button
+                  label={
+                    busy()
+                      ? uiText("composioConnecting")
+                      : isConnected(currentToolkit()!.slug)
+                        ? uiText("composioReconnect")
+                        : uiText("composioConnect")
+                  }
+                  tone="primary"
+                  size={phone() ? control.touch : control.md}
+                  disabled={busy()}
+                  onPress={() => void connect(currentToolkit()!)}
+                />
+              </View>
+            </If>
           </View>
         </Modal>
       </If>

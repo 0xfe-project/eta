@@ -3,6 +3,7 @@ import type { Layout } from "../../components";
 import { effect, openUrl, signal, untracked, View } from "nsh";
 import { Button, colors, Label, row } from "../../components";
 import { hint } from "../../components/controls";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
@@ -15,6 +16,8 @@ interface Connected {
   slug: string;
   name: string;
   description: string;
+  /** A toolkit that needs no sign-in and was added: no account, only Remove. */
+  added?: boolean;
 }
 
 /**
@@ -25,7 +28,8 @@ interface Connected {
  * toolkit that is not in it is shown by its slug. When Composio cannot be asked (no key, a refused
  * key, no answer) the group is not there, and nothing says why. Each item can be signed in again or
  * disconnected on Composio (the same two operations the market's detail has) while the key is set and
- * the source is on.
+ * the source is on. A toolkit that needs no sign-in and was added is in the group too, with the Added
+ * mark and one Remove, which asks nothing of Composio.
  */
 export function ComposioConnected(props: {
   layout: Layout;
@@ -57,6 +61,20 @@ export function ComposioConnected(props: {
     void read();
     void plugins.read();
   }
+  async function remove(slug: string) {
+    error.set("");
+    try {
+      await host.call<PluginResults["composioRemove"]>(
+        "plugins",
+        "composioRemove",
+        { slug },
+      );
+      shown.update((all) => all.filter((one) => one.slug !== slug));
+      void plugins.read();
+    } catch (cause) {
+      error.set(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
   async function read() {
     const answer = await host
       .call<PluginResults["composioConnected"]>(
@@ -65,19 +83,24 @@ export function ComposioConnected(props: {
         {},
       )
       .catch(() => undefined);
-    if (
-      answer?.status !== "ready" ||
-      !Array.isArray(answer.slugs) ||
-      answer.slugs.length === 0
-    )
-      return;
+    const connected =
+      answer?.status === "ready" && Array.isArray(answer.slugs)
+        ? answer.slugs
+        : [];
+    const addedAnswer = await host
+      .call<PluginResults["composioAdded"]>("plugins", "composioAdded", {})
+      .catch(() => undefined);
+    const added = (
+      Array.isArray(addedAnswer?.slugs) ? addedAnswer.slugs : []
+    ).filter((slug) => !connected.includes(slug));
+    if (connected.length + added.length === 0) return;
     const status = await host
       .call<PluginResults["composioStatus"]>("plugins", "composioStatus", {})
       .catch(() => undefined);
     manage.set(status?.enabled === true);
     const kept = await host
       .call<PluginResults["composioToolkits"]>("plugins", "composioToolkits", {
-        slugs: answer.slugs,
+        slugs: [...connected, ...added],
       })
       .catch(() => undefined);
     const known = new Map(
@@ -87,10 +110,11 @@ export function ComposioConnected(props: {
       ]),
     );
     shown.set(
-      answer.slugs.map((slug) => ({
+      [...connected, ...added].map((slug) => ({
         slug,
         name: known.get(slug)?.name ?? slug,
         description: known.get(slug)?.description ?? "",
+        ...(added.includes(slug) ? { added: true } : {}),
       })),
     );
   }
@@ -99,21 +123,35 @@ export function ComposioConnected(props: {
   });
   const rows = () => props.layout !== "desktop";
   const actions = (item: Connected) => (
-    <If when={manage()}>
-      <View style={{ ...row, flexShrink: 0, gap: 4 }}>
-        <Button
-          label={uiText("composioReconnect")}
-          tone="ghost"
-          size={rows() ? 32 : undefined}
-          onPress={() => void reauth(item.slug)}
-        />
-        <Button
-          label={uiText("composioDisconnect")}
-          tone="ghost"
-          size={rows() ? 32 : undefined}
-          onPress={() => disconnecting.set(item)}
-        />
-      </View>
+    <If
+      when={item.added !== true}
+      else={
+        <View style={{ ...row, flexShrink: 0, gap: space[4] }}>
+          <Button
+            label={uiText("composioRemove")}
+            tone="ghost"
+            size={rows() ? control.lg : undefined}
+            onPress={() => void remove(item.slug)}
+          />
+        </View>
+      }
+    >
+      <If when={manage()}>
+        <View style={{ ...row, flexShrink: 0, gap: space[4] }}>
+          <Button
+            label={uiText("composioReconnect")}
+            tone="ghost"
+            size={rows() ? control.lg : undefined}
+            onPress={() => void reauth(item.slug)}
+          />
+          <Button
+            label={uiText("composioDisconnect")}
+            tone="ghost"
+            size={rows() ? control.lg : undefined}
+            onPress={() => disconnecting.set(item)}
+          />
+        </View>
+      </If>
     </If>
   );
   const inset = () => (props.layout === "tablet" ? 14 : 16);
@@ -161,7 +199,13 @@ export function ComposioConnected(props: {
     const look = () => authStyle(failed() ? "expired" : "signed_in");
     return (
       <View
-        testID={failed() ? "composio-plugin-error" : "composio-connected"}
+        testID={
+          failed()
+            ? "composio-plugin-error"
+            : item.added === true
+              ? "composio-added"
+              : "composio-connected"
+        }
         tooltip={failed() ? hint(uiText("composioPluginError"), c) : undefined}
         style={{
           flexShrink: 0,
@@ -173,7 +217,9 @@ export function ComposioConnected(props: {
         <Label variant="caption" tone={look().tone} lines={1}>
           {failed()
             ? uiText("composioUnavailable")
-            : uiText("composioConnected")}
+            : item.added === true
+              ? uiText("composioAdded")
+              : uiText("composioConnected")}
         </Label>
       </View>
     );
@@ -196,7 +242,7 @@ export function ComposioConnected(props: {
           }}
         >
           <Label variant="small">
-            {uiText("composioConnectedGroup", { count: shown().length })}
+            {uiText("composioGroup", { count: shown().length })}
           </Label>
           <If when={error()}>
             <Label variant="small" tone="red" style={{ userSelect: "text" }}>

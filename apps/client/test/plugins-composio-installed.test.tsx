@@ -218,7 +218,9 @@ test("an added toolkit is in the same group: the Added mark and one Remove, with
   await app.waitFor("id:composio-connected-item");
   expect(app.count("id:composio-connected-item")).toBe(3);
   expect(app.count("id:composio-added")).toBe(1);
-  expect(app.count("id:composio-connected")).toBe(2);
+  // The two connected ones: gmail is Connected, ghost's session did not check out.
+  expect(app.count("id:composio-connected")).toBe(1);
+  expect(app.count("id:composio-plugin-error")).toBe(1);
   expect(app.count("label:Remove")).toBe(1);
   // Only the two connected ones have the sign-in buttons.
   expect(app.count("label:Re-authenticate")).toBe(2);
