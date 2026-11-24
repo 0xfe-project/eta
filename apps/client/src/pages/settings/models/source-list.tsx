@@ -13,7 +13,7 @@ import type { DisplayedSourceSummary } from "./source-summaries";
 import { keyMissing, providerLabel } from "@eta/client-contracts";
 import { View, windowSize } from "nsh";
 import { ActionItem, colors, Label, row } from "../../../components";
-import { space } from "../../../components/tokens";
+import { opacity, space } from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EntityRow, LetterBox } from "../section";
@@ -168,7 +168,7 @@ export function ModelSourceList(props: {
                           ...row,
                           gap: space[4],
                           maxWidth: "100%",
-                          opacity: value().previousAt === undefined ? 1 : 0.55,
+                          opacity: value().previousAt === undefined ? 1 : opacity.muted,
                         }}
                       >
                         <View
@@ -202,7 +202,7 @@ export function ModelSourceList(props: {
                       tone="muted"
                       style={{
                         opacity:
-                          quota(item())?.previousAt === undefined ? 1 : 0.55,
+                          quota(item())?.previousAt === undefined ? 1 : opacity.muted,
                       }}
                     >
                       {uiText("modelQuotaResetsAt", {
@@ -298,7 +298,7 @@ export function ModelSourceList(props: {
                           flexWrap: "wrap",
                           columnGap: space[8],
                           rowGap: narrow() ? space[4] : space[2],
-                          opacity: value().previousAt === undefined ? 1 : 0.55,
+                          opacity: value().previousAt === undefined ? 1 : opacity.muted,
                         }}
                       >
                         <Each of={value().amounts}>
