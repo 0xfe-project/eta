@@ -14,6 +14,8 @@ export function Segmented<T extends string>(props: {
   boldActive?: boolean;
   paddingHorizontal?: number;
   bordered?: boolean;
+  /** A lighter chosen state: the selected fill instead of the solid button colour. */
+  subtle?: boolean;
   /** The darker outline the tablet header draws. */
   strong?: boolean;
   onChange: (value: T) => void;
@@ -47,7 +49,11 @@ export function Segmented<T extends string>(props: {
               style={{
                 ...row,
                 paddingHorizontal: props.paddingHorizontal ?? space[8],
-                backgroundColor: active() ? c().button : undefined,
+                backgroundColor: active()
+                  ? props.subtle
+                    ? c().canvas
+                    : c().button
+                  : undefined,
                 cursor: "pointer",
               }}
             >
@@ -56,7 +62,7 @@ export function Segmented<T extends string>(props: {
                 weight={
                   active() && props.boldActive ? weight.strong : weight.regular
                 }
-                tone={active() ? "buttonInk" : "muted"}
+                tone={active() ? (props.subtle ? "ink" : "buttonInk") : "muted"}
               >
                 {option().label}
               </Label>

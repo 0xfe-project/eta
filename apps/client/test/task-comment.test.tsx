@@ -44,7 +44,7 @@ for (const [surface, width] of surfaces)
       const app = await openOn(surface, width, state);
       const body = `A note on the ${state} task`;
       await app.type("label:Comment", body);
-      await app.keyboard.press("mod+enter");
+      await app.keyboard.press("enter");
       await app.waitUntil(() =>
         app.texts().includes(`Sent: tasks.comment t2 ${body}`),
       );
@@ -74,11 +74,12 @@ test("the send button posts the comment too, on a task in review", async () => {
   );
 });
 
-test("a comment is kept as the Markdown typed; ⏎ is a new line, ⌘⏎ posts", async () => {
+test("a comment is kept as the Markdown typed; ⇧⏎ is a new line, ⏎ is a list's own, ⏎ posts", async () => {
   const app = await openOn("page", 1440, "in_review");
   await app.type("label:Comment", "Checked on **all** sizes:");
-  await app.keyboard.press("enter");
+  await app.keyboard.press("shift+enter");
   await app.type("label:Comment", "- desktop");
+  // In a list ⏎ is a new item, and on an empty item it leaves the list: nothing is posted.
   await app.keyboard.press("enter");
   await app.type("label:Comment", "phone");
   await app.keyboard.press("enter");
@@ -87,7 +88,7 @@ test("a comment is kept as the Markdown typed; ⏎ is a new line, ⌘⏎ posts",
   expect(app.texts().some((text) => text.includes("tasks.comment"))).toBe(
     false,
   );
-  await app.keyboard.press("mod+enter");
+  await app.keyboard.press("enter");
   await app.waitUntil(() =>
     app
       .texts()
@@ -95,6 +96,11 @@ test("a comment is kept as the Markdown typed; ⏎ is a new line, ⌘⏎ posts",
         "Sent: tasks.comment t2 Checked on **all** sizes:\n\n- desktop\n- phone\n\nRun `bun test` again",
       ),
   );
+});
+
+test("the line under the box says what ⏎ and ⇧⏎ do", async () => {
+  const app = await openOn("page", 1440, "in_review");
+  await app.waitFor("text:⏎ send · ⇧⏎ new line");
 });
 
 for (const [surface, width] of surfaces)

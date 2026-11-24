@@ -77,6 +77,7 @@ export const sizes = {
   rail: 64,
   panel: 400,
   header: 40,
+  sectionHeader: 36,
   phoneNav: 64,
 };
 

@@ -11,10 +11,11 @@ import {
   Screen,
 } from "../../components";
 import { dotSize, StatusDot } from "../../components/status-dot";
-import { control, icon, space, weight } from "../../components/tokens";
+import { control, icon, sizes, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { taskTime } from "../tasks/facts";
+import { Segmented } from "../tasks/segmented";
 import {
   statusName,
   SubtaskSegments,
@@ -229,7 +230,6 @@ const sortNames = {
  */
 export function TasksTab(props: {
   conversationId: string;
-  conversationName: string;
   onTask: (id: string) => void;
 }) {
   const host = useHost();
@@ -264,50 +264,33 @@ export function TasksTab(props: {
       onTask={props.onTask}
     />
   );
-  const scope = (label: string, selected: boolean, onPress: () => void) => (
-    <View
-      role="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      hoverStyle={{ backgroundColor: c().selected }}
-      style={{
-        paddingVertical: space[2],
-        paddingHorizontal: space[8],
-        borderWidth: 1,
-        borderColor: selected ? c().ink : c().border,
-        cursor: "pointer",
-      }}
-    >
-      <Label
-        variant="small"
-        weight={selected ? weight.strong : weight.regular}
-        tone={selected ? "ink" : "muted"}
-        lines={1}
-      >
-        {label}
-      </Label>
-    </View>
-  );
   return (
     // No side padding here: each part carries its own, so the rows can reach both edges.
-    <View style={{ paddingTop: space[12] }}>
+    <View>
       <View
         style={{
           ...row,
           justifyContent: "space-between",
+          height: sizes.sectionHeader,
           gap: space[8],
-          paddingBottom: space[8],
           paddingHorizontal: inset,
+          borderBottomWidth: 1,
+          borderColor: c().border,
         }}
       >
-        <Label weight={weight.strong} style={{ flexShrink: 0 }}>
-          {uiText("tasks2")}
-        </Label>
-        {/* The /tasks list's "Group: …" menu, on the title's line so the scopes keep their row. */}
+        <Segmented
+          options={[
+            { value: "this", label: uiText("thisGroup") },
+            { value: "all", label: uiText("allGroups") },
+          ]}
+          value={everywhere() ? "all" : "this"}
+          subtle
+          onChange={(value) => everywhere.set(value === "all")}
+        />
         <ActionMenu
           label={uiText("tasksSortBy")}
           sheetTitle={uiText("tasksSortBy")}
+          leading={<Icon name="sort" size={icon.sm} tone="muted" />}
           value={uiText("tasksSorting", {
             name: uiText(sortNames[taskPanelSort()]),
           })}
@@ -334,19 +317,6 @@ export function TasksTab(props: {
             )}
           </Each>
         </ActionMenu>
-      </View>
-      <View
-        style={{
-          ...row,
-          gap: space[4],
-          paddingBottom: space[12],
-          paddingHorizontal: inset,
-        }}
-      >
-        {scope(props.conversationName, !everywhere(), () =>
-          everywhere.set(false),
-        )}
-        {scope(uiText("allGroups"), everywhere(), () => everywhere.set(true))}
       </View>
       <If when={taskPanelSort() === "updated"}>
         <View style={{ height: space[2] }} />

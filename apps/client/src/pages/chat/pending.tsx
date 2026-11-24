@@ -29,6 +29,7 @@ import { CaptainFace } from "../../navigation/captain";
 import { follow, relativeTime, useHost } from "../../services/host";
 import { TaskGlyph, taskNeedsAttention } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
+import { SectionHeading } from "./section-heading";
 
 /** The dialog a question is answered in, wherever the question was opened from. */
 /** The question dialog, and Captain's proposal as a phone sheet. */
@@ -230,26 +231,6 @@ export function Pending(props: {
       </View>
     );
   }
-  function SectionHeader(props: { label: string; count: number }) {
-    return (
-      <View
-        style={{
-          ...row,
-          height: control.md,
-          gap: space[8],
-          paddingHorizontal: space[12],
-          flexShrink: 0,
-          borderBottomWidth: 1,
-          borderColor: c().border,
-        }}
-      >
-        <Caption text={props.label} />
-        <Label variant="caption" tone="muted">
-          {props.count}
-        </Label>
-      </View>
-    );
-  }
   function PanelRow(props: {
     title: string;
     detail: string;
@@ -326,22 +307,10 @@ export function Pending(props: {
       >
         <SmoothScroll style={grow} scrollbar={false}>
           <If when={asks()}>
-            <View
-              style={{
-                ...row,
-                gap: space[4],
-                paddingTop: space[16],
-                paddingBottom: space[12],
-                paddingHorizontal: space[12],
-                borderBottomWidth: 1,
-                borderColor: c().border,
-              }}
-            >
-              <Caption text={uiText("waitingForYouCaption")} />
-              <Label variant="caption" tone="muted">
-                {asks()}
-              </Label>
-            </View>
+            <SectionHeading
+              label={uiText("waitingForYouCaption")}
+              count={asks()}
+            />
             <Each of={items()} key={(entry) => entry.id}>
               {(entry) => (
                 <AskRow
@@ -368,7 +337,7 @@ export function Pending(props: {
             </Each>
           </If>
           <If when={reviews().length}>
-            <SectionHeader
+            <SectionHeading
               label={uiText("tasksToCheckCaption")}
               count={reviews().length}
             />
@@ -399,7 +368,7 @@ export function Pending(props: {
             </Each>
           </If>
           <If when={props.onRoutines && reports().length}>
-            <SectionHeader
+            <SectionHeading
               label={uiText("routines2")}
               count={reports().length}
             />
@@ -472,7 +441,13 @@ export function Pending(props: {
     );
   }
   return (
-    <View style={{ ...grow, backgroundColor: c().canvas }}>
+    <View
+      style={{
+        ...grow,
+        // Standalone page keeps the canvas; inside the conversation panel it inherits the panel surface.
+        ...(props.conversationId ? {} : { backgroundColor: c().canvas }),
+      }}
+    >
       <If when={!props.conversationId}>
         <Header title={uiText("pending")} layout={props.layout}>
           <Label variant="caption" tone="muted">
