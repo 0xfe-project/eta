@@ -598,6 +598,10 @@ function archiveAhead(host: ReturnType<typeof useHost>, taskId: string) {
       title: uiText("taskArchiveFailed"),
       body: problem instanceof Error ? problem.message : String(problem),
       tone: "red",
+      action: {
+        label: uiText("retry"),
+        onPress: () => archiveAhead(host, taskId),
+      },
     }),
   );
   showToast({

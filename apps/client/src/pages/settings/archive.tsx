@@ -22,6 +22,10 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import {
+  createOptimisticStatus,
+  OptimisticStatus,
+} from "../../components/optimistic-status";
 import { control, icon, space, weight } from "../../components/tokens";
 import { formatLocale, uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -55,18 +59,71 @@ export function ArchiveSettings(props: { phone?: boolean }) {
     );
     saving.set(false);
   }
+  const restoredConversations = signal<string[]>([]);
+  const restoredTasks = signal<string[]>([]);
+  const restoreStatus = createOptimisticStatus();
+  let lastRestore: (() => void) | undefined;
   const conversations = () =>
-    host.conversations().filter((item) => item.archived);
-  const tasks = () => host.list<BoardTaskView>("tasks", "archived");
-  const restoreConversation = (id: string) =>
-    void host.action(() =>
-      host.call("conversations", "update", {
-        conversationId: id,
-        archived: false,
-      }),
+    host
+      .conversations()
+      .filter(
+        (item) => item.archived && !restoredConversations().includes(item.id),
+      );
+  const tasks = () =>
+    host
+      .list<BoardTaskView>("tasks", "archived")
+      .filter((item) => !restoredTasks().includes(item.id));
+  const restoreConversation = (id: string) => {
+    lastRestore = () => restoreConversation(id);
+    restoredConversations.update((all) =>
+      all.includes(id) ? all : [...all, id],
     );
-  const restoreTask = (id: string) =>
-    void host.action(() => host.call("tasks", "unarchive", { taskId: id }));
+    restoreStatus.saving();
+    void host
+      .optimistic(id, { archived: false }, () =>
+        host.call("conversations", "update", {
+          conversationId: id,
+          archived: false,
+        }),
+      )
+      .then(() => {
+        restoreStatus.saved();
+        setTimeout(() => {
+          restoredConversations.update((all) =>
+            all.filter((item) => item !== id),
+          );
+        }, 1500);
+      })
+      .catch((problem: unknown) => {
+        restoredConversations.update((all) =>
+          all.filter((item) => item !== id),
+        );
+        restoreStatus.fail(
+          problem instanceof Error ? problem.message : String(problem),
+        );
+      });
+  };
+  const restoreTask = (id: string) => {
+    lastRestore = () => restoreTask(id);
+    restoredTasks.update((all) => (all.includes(id) ? all : [...all, id]));
+    restoreStatus.saving();
+    void host
+      .optimistic(id, { archivedAt: null }, () =>
+        host.call("tasks", "unarchive", { taskId: id }),
+      )
+      .then(() => {
+        restoreStatus.saved();
+        setTimeout(() => {
+          restoredTasks.update((all) => all.filter((item) => item !== id));
+        }, 1500);
+      })
+      .catch((problem: unknown) => {
+        restoredTasks.update((all) => all.filter((item) => item !== id));
+        restoreStatus.fail(
+          problem instanceof Error ? problem.message : String(problem),
+        );
+      });
+  };
   const quietPeriod = (style: ViewStyle) => (
     <ActionMenu
       label={uiText("autoArchiveQuietPeriod")}
@@ -135,6 +192,21 @@ export function ArchiveSettings(props: { phone?: boolean }) {
         </If>
       </If>
       <SmoothScroll style={grow} scrollbar={false}>
+        <If when={restoreStatus.state().status !== "idle"}>
+          <View
+            style={{
+              paddingHorizontal: space[16],
+              paddingVertical: space[4],
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <OptimisticStatus
+              state={restoreStatus.state()}
+              onRetry={() => lastRestore?.()}
+            />
+          </View>
+        </If>
         <SectionHeader
           title={text("archived")}
           count={conversations().length || undefined}

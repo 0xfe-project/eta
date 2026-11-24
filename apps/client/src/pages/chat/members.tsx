@@ -27,6 +27,10 @@ import {
 } from "../../components/menu";
 import { CloseButton } from "../../components/navigation-buttons";
 import {
+  createOptimisticStatus,
+  OptimisticStatus,
+} from "../../components/optimistic-status";
+import {
   avatar,
   control,
   icon,
@@ -55,14 +59,39 @@ export function StewardMenu(props: {
 }) {
   const host = useHost();
   const c = colors();
-  async function choose(agentId: string | null) {
-    if (agentId === (props.current ?? null)) return;
-    await host.action(() =>
-      host.call("conversations", "setSteward", {
-        conversationId: props.conversationId,
-        agentId,
-      }),
-    );
+  const pending = signal<string | null | undefined>(undefined);
+  const status = createOptimisticStatus();
+  let lastTarget: string | null | undefined;
+  let turn = 0;
+  const activeSteward = () =>
+    pending() !== undefined ? pending() : (props.current ?? null);
+  function choose(agentId: string | null) {
+    if (agentId === activeSteward()) return;
+    const currentTurn = ++turn;
+    lastTarget = agentId;
+    pending.set(agentId);
+    status.saving();
+    void host
+      .optimistic(props.conversationId, { stewardId: agentId }, () =>
+        host.call("conversations", "setSteward", {
+          conversationId: props.conversationId,
+          agentId,
+        }),
+      )
+      .then(() => {
+        if (turn !== currentTurn) return;
+        status.saved();
+        setTimeout(() => {
+          if (turn === currentTurn) pending.set(undefined);
+        }, 1500);
+      })
+      .catch((problem: unknown) => {
+        if (turn !== currentTurn) return;
+        pending.set(undefined);
+        status.fail(
+          problem instanceof Error ? problem.message : String(problem),
+        );
+      });
   }
   const itemStyle = () => ({
     ...row,
@@ -76,73 +105,83 @@ export function StewardMenu(props: {
   });
   const hover = canHover ? { backgroundColor: c().selected } : undefined;
   return (
-    <MenuFrame
-      popupStyle={{
-        width: menuWidth,
-        borderWidth: 1,
-        borderColor: c().strong,
-        backgroundColor: c().canvas,
-      }}
-      trigger={
-        <View
-          accessibilityLabel={uiText("steward2")}
-          hitSlop={touchScreen ? (control.touch - control.sm) / 2 : undefined}
-          hoverStyle={hover}
-          style={{
-            ...row,
-            height: control.sm,
-            gap: space[4],
-            paddingHorizontal: space[8],
-            borderWidth: 1,
-            borderColor: c().border,
-            cursor: "pointer",
-          }}
-        >
-          <If when={props.current}>
-            <AgentFace id={props.current} size={avatar.sm} />
-          </If>
-          <Label variant="small" tone="muted">
-            {host.agent(props.current)?.name ?? uiText("steward2")}
-          </Label>
-          <Icon name="down" size={icon.sm} tone="muted" />
-        </View>
-      }
-    >
-      <Each of={props.members} key={(member) => member.agentId}>
-        {(member) => (
-          <MenuRow
-            role="menuitemradio"
-            checked={member().agentId === props.current}
-            label={host.agent(member().agentId)?.name ?? uiText("agent")}
-            style={itemStyle()}
-            onSelect={() => void choose(member().agentId)}
+    <View style={{ ...row, gap: space[8] }}>
+      <MenuFrame
+        popupStyle={{
+          width: menuWidth,
+          borderWidth: 1,
+          borderColor: c().strong,
+          backgroundColor: c().canvas,
+        }}
+        trigger={
+          <View
+            accessibilityLabel={uiText("steward2")}
+            hitSlop={touchScreen ? (control.touch - control.sm) / 2 : undefined}
+            hoverStyle={hover}
+            style={{
+              ...row,
+              height: control.sm,
+              gap: space[4],
+              paddingHorizontal: space[8],
+              borderWidth: 1,
+              borderColor: c().border,
+              cursor: "pointer",
+            }}
           >
-            <AgentFace id={member().agentId} size={avatar.sm} />
-            <Label variant="caption" style={{ flex: 1 }}>
-              {host.agent(member().agentId)?.name ?? uiText("agent")}
-            </Label>
-            <If when={member().agentId === props.current}>
-              <Icon name="check" size={icon.sm} />
+            <If when={activeSteward()}>
+              <AgentFace id={activeSteward()} size={avatar.sm} />
             </If>
-          </MenuRow>
-        )}
-      </Each>
-      <MenuRule style={{ height: 1, backgroundColor: c().border }} />
-      <MenuRow
-        role="menuitemradio"
-        checked={!props.current}
-        label={uiText("noSteward")}
-        style={itemStyle()}
-        onSelect={() => void choose(null)}
+            <Label variant="small" tone="muted">
+              {host.agent(activeSteward())?.name ?? uiText("steward2")}
+            </Label>
+            <Icon name="down" size={icon.sm} tone="muted" />
+          </View>
+        }
       >
-        <Label variant="caption" style={{ flex: 1 }}>
-          {uiText("noSteward")}
-        </Label>
-        <If when={!props.current}>
-          <Icon name="check" size={icon.sm} />
-        </If>
-      </MenuRow>
-    </MenuFrame>
+        <Each of={props.members} key={(member) => member.agentId}>
+          {(member) => (
+            <MenuRow
+              role="menuitemradio"
+              checked={member().agentId === activeSteward()}
+              label={host.agent(member().agentId)?.name ?? uiText("agent")}
+              style={itemStyle()}
+              onSelect={() => choose(member().agentId)}
+            >
+              <AgentFace id={member().agentId} size={avatar.sm} />
+              <Label variant="caption" style={{ flex: 1 }}>
+                {host.agent(member().agentId)?.name ?? uiText("agent")}
+              </Label>
+              <If when={member().agentId === activeSteward()}>
+                <Icon name="check" size={icon.sm} />
+              </If>
+            </MenuRow>
+          )}
+        </Each>
+        <MenuRule style={{ height: 1, backgroundColor: c().border }} />
+        <MenuRow
+          role="menuitemradio"
+          checked={!activeSteward()}
+          label={uiText("noSteward")}
+          style={itemStyle()}
+          onSelect={() => choose(null)}
+        >
+          <Label variant="caption" style={{ flex: 1 }}>
+            {uiText("noSteward")}
+          </Label>
+          <If when={!activeSteward()}>
+            <Icon name="check" size={icon.sm} />
+          </If>
+        </MenuRow>
+      </MenuFrame>
+      <If when={status.state().status !== "idle"}>
+        <OptimisticStatus
+          state={status.state()}
+          onRetry={
+            lastTarget !== undefined ? () => choose(lastTarget!) : undefined
+          }
+        />
+      </If>
+    </View>
   );
 }
 

@@ -43,6 +43,7 @@ export const commonMessages = {
     "连接已断开，正在重连… 此处显示的信息可能不是最新的。",
   ],
   conversation: ["Conversation", "对话"],
+  copy: ["Copy", "复制"],
   copied: ["Copied", "已复制"],
   createAConversationOrSelectAn: [
     "Create a conversation or select an agent.",
