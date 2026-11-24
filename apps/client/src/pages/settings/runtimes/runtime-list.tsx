@@ -412,17 +412,14 @@ function MachineRuntimes(props: {
       >
         <If when={online()}>
           <Button
-            label={
-              props.listing.probing(props.machine)
-                ? uiText("runtimeRetrying")
-                : uiText("runtimesCheckAgain")
-            }
+            label={uiText("runtimesCheckAgain")}
             tone="ghost"
             size={props.phone ? control.md : control.sm}
             labelTone="mutedInk"
             icon="refresh"
+            spinIcon
             iconSize={icon.sm}
-            disabled={props.listing.probing(props.machine)}
+            busy={props.listing.probing(props.machine)}
             style={{ paddingHorizontal: 0 }}
             onPress={() => void props.listing.refresh(props.machine)}
           />

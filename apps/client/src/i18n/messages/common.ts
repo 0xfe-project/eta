@@ -118,7 +118,6 @@ export const commonMessages = {
   question: ["Question", "问题"],
   queued: ["Queued", "排队中"],
   readOnlyExecutionLog: ["Read-only execution log.", "只读执行日志。"],
-  refreshing: ["Refreshing…", "刷新中…"],
   remove: ["Remove {{memberName}}", "移除 {{memberName}}"],
   remove2: ["Remove", "删除"],
   restore: ["Restore", "恢复"],

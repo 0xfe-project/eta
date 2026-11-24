@@ -2,6 +2,8 @@ import type { ConversationResults, MemberView } from "@eta/client-contracts";
 import { Scroll, signal, View } from "nsh";
 import { Button, colors, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { shownWhile } from "../../components/pending";
+import { Spinner } from "../../components/spinner";
 import { StatusDot } from "../../components/status-dot";
 import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -15,6 +17,7 @@ function StopMemberReply(props: {
   const host = useHost();
   const c = colors();
   const pending = signal(false);
+  const waiting = shownWhile(pending);
   // This component is keyed by the reply. A late press belongs to that same row.
   const target = {
     conversationId: props.conversationId,
@@ -32,7 +35,7 @@ function StopMemberReply(props: {
     <View
       role="button"
       accessibilityLabel={uiText("stopMember", { name: props.name })}
-      accessibilityState={{ disabled: pending() }}
+      accessibilityState={{ disabled: pending(), busy: pending() }}
       onPress={() => void stop()}
       hoverStyle={{ backgroundColor: c().selected }}
       style={{
@@ -46,7 +49,9 @@ function StopMemberReply(props: {
         cursor: "pointer",
       }}
     >
-      <Icon name="stop" size={icon.sm} />
+      <If when={waiting()} else={<Icon name="stop" size={icon.sm} />}>
+        <Spinner size={icon.sm} />
+      </If>
     </View>
   );
 }

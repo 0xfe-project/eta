@@ -12,10 +12,10 @@ import {
   Button,
   Caption,
   colors,
+  dialogWidth,
   Field,
   grow,
   Label,
-  dialogWidth,
   Modal,
   row,
   SmoothScroll,
@@ -357,7 +357,8 @@ export function TaskDraftDetail(props: {
             }
             tone="primary"
             shortcut={props.phone ? undefined : sendShortcut}
-            disabled={!canConfirm()}
+            disabled={!canConfirm() && !busy()}
+            busy={busy()}
             onPress={() => void confirm()}
           />
         </If>

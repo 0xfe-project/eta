@@ -584,7 +584,8 @@ function createPlanEditing(owner: () => string | undefined) {
                 <Button
                   label={uiText("addTask")}
                   tone="primary"
-                  disabled={!stepTitle().trim() || saving()}
+                  disabled={!stepTitle().trim()}
+                  busy={saving()}
                   onPress={() => void create()}
                 />
               </View>
@@ -647,7 +648,8 @@ function createPlanEditing(owner: () => string | undefined) {
                 <Button
                   label={uiText("addDependency")}
                   tone="primary"
-                  disabled={saving() || !prerequisite() || !dependent()}
+                  disabled={!prerequisite() || !dependent()}
+                  busy={saving()}
                   onPress={() => void connect(prerequisite(), dependent())}
                 />
               </View>

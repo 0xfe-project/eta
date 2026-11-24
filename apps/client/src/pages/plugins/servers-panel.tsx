@@ -16,6 +16,7 @@ import {
   textFaces,
 } from "../../components";
 import { hint } from "../../components/controls";
+import { control, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { EnvEditor } from "./env-editor";
@@ -23,7 +24,6 @@ import { HeadersEditor } from "./headers-editor";
 import { pluginText as text } from "./labels";
 import { MissingValues } from "./missing-values";
 import { authStyle } from "./plugin-status";
-import { control, space, weight } from "../../components/tokens";
 
 /** Whether the host sends the fields the servers panel reads (an older host does not). */
 const hostKnowsHeaders = (item: PluginView): boolean =>
@@ -147,11 +147,11 @@ type Test = ReturnType<typeof createTest>;
 function TestButton(props: { test: Test }) {
   return (
     <Button
-      label={props.test.busy() ? uiText("testing") : uiText("testConnection")}
+      label={uiText("testConnection")}
       tone="plain"
       labelVariant="body"
       size={control.md}
-      disabled={props.test.busy()}
+      busy={props.test.busy()}
       onPress={props.test.run}
     />
   );

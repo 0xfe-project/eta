@@ -535,7 +535,8 @@ export function AddSource(props: {
               tone="primary"
               size={props.phone ? control.lg : undefined}
               style={{ paddingHorizontal: props.phone ? space[16] : space[12] }}
-              disabled={!connector() && (saving() || selected().size === 0)}
+              disabled={!connector() && selected().size === 0}
+              busy={!connector() && saving()}
               onPress={() => (connector() ? props.onClose() : void finish())}
             />
           </If>

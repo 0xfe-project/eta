@@ -31,7 +31,6 @@ export function DeleteRoutine(props: {
   }
   const title = () =>
     uiText("deleteRoutineTitle", { name: props.routine.name });
-  const blocked = () => busy() || props.running;
   const body = () => (
     <>
       <Label variant="small" tone="muted">
@@ -80,7 +79,8 @@ export function DeleteRoutine(props: {
                 label={uiText("delete")}
                 tone="danger"
                 size={control.md}
-                disabled={blocked()}
+                disabled={props.running}
+                busy={busy()}
                 onPress={() => void remove()}
               />
             </View>
@@ -107,7 +107,8 @@ export function DeleteRoutine(props: {
             label={uiText("delete")}
             tone="danger"
             size={control.touch}
-            disabled={blocked()}
+            disabled={props.running}
+            busy={busy()}
             onPress={() => void remove()}
           />
           <Button

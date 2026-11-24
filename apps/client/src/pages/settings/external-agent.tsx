@@ -268,10 +268,10 @@ export function ExternalAgentDetail(props: {
             }}
           >
             <Button
-              label={testing() ? uiText("testing") : uiText("test")}
+              label={uiText("test")}
               tone="primary"
               size={props.phone ? control.touch : control.lg}
-              disabled={testing()}
+              busy={testing()}
               style={{ width: "100%", justifyContent: "center" }}
               onPress={() => void test()}
             />

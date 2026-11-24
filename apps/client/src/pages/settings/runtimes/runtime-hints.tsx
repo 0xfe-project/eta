@@ -107,13 +107,11 @@ export function RuntimeHints(props: {
           </If>
           <View style={{ flex: 1 }} />
           <Button
-            label={
-              props.probing ? uiText("runtimeRetrying") : uiText("runtimeRetry")
-            }
+            label={uiText("runtimeRetry")}
             tone="ghost"
             size={control.sm}
             labelTone="mutedInk"
-            disabled={props.probing}
+            busy={props.probing}
             style={{ paddingHorizontal: 0 }}
             onPress={props.onRetry}
           />

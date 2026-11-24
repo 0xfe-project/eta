@@ -237,7 +237,7 @@ export function TaskDetailDialogs(props: {
             <Button
               label={uiText("cancelTask")}
               tone="danger"
-              disabled={submitting()}
+              busy={submitting()}
               onPress={() => change("cancelled")}
             />
           </View>
@@ -385,7 +385,7 @@ export function TaskDetailDialogs(props: {
                 size={control.lg}
                 labelVariant="small"
                 style={{ paddingHorizontal: space[16] }}
-                disabled={submitting()}
+                busy={submitting()}
                 onPress={archiveTask}
               />
             </View>

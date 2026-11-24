@@ -42,14 +42,13 @@ export function UpdateSettings(props: {
           </If>
           <Button
             label={
-              pending() === "check"
-                ? uiText("checking")
-                : checkedAt()
-                  ? uiText("checkAgain")
-                  : uiText("checkForUpdates")
+              checkedAt() ? uiText("checkAgain") : uiText("checkForUpdates")
             }
             size={phone() ? control.md : control.sm}
-            disabled={!canRead() || !!pending() || active()}
+            disabled={
+              !canRead() || (!!pending() && pending() !== "check") || active()
+            }
+            busy={pending() === "check"}
             onPress={() => void refresh()}
           />
         </View>

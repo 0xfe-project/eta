@@ -99,7 +99,8 @@ export function FieldDialog(props: {
                 tone="primary"
                 size={control.md}
                 style={{ paddingHorizontal: space[8] }}
-                disabled={props.busy || !props.valid}
+                disabled={!props.valid}
+                busy={props.busy}
                 onPress={props.onSave}
               />
             </View>
@@ -122,7 +123,8 @@ export function FieldDialog(props: {
             label={props.saveLabel ?? uiText("save")}
             tone="primary"
             size={control.touch}
-            disabled={props.busy || !props.valid}
+            disabled={!props.valid}
+            busy={props.busy}
             onPress={props.onSave}
           />
           <Button

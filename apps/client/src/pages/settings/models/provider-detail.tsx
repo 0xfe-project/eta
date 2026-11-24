@@ -231,8 +231,9 @@ export function ProviderDetail(props: {
           </View>
         </If>
         <Button
-          label={busy() === "check" ? uiText("checking") : uiText("check")}
-          disabled={!!busy()}
+          label={uiText("check")}
+          disabled={!!busy() && busy() !== "check"}
+          busy={busy() === "check"}
           style={{ paddingHorizontal: space[12] }}
           onPress={() => void test()}
         />
@@ -448,13 +449,11 @@ export function ProviderDetail(props: {
             <View style={grow} />
           </If>
           <Button
-            label={
-              busy() === "refresh"
-                ? uiText("refreshing")
-                : uiText("refreshList")
-            }
+            label={uiText("refreshList")}
             icon="refresh"
-            disabled={!!busy()}
+            spinIcon
+            disabled={!!busy() && busy() !== "refresh"}
+            busy={busy() === "refresh"}
             style={{ gap: space[4], paddingHorizontal: space[12] }}
             onPress={() => void refresh()}
           />
