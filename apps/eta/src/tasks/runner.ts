@@ -2,6 +2,7 @@ import type {
   BoardTaskDetail,
   BoardTaskStatus,
   MessageView,
+  PromptImage,
   RunFailureView,
   TaskActivityView,
   TaskActor,
@@ -52,6 +53,10 @@ import type { SshTransport } from "@eta/ssh";
  * a comment continues, `tasks.rerun` forgets.
  */
 import type { AgentStore } from "../agents/store";
+import type {
+  AttachmentRecord,
+  AttachmentStore,
+} from "../conversations/attachments";
 import type { RunHooks, RunInfo } from "../conversations/engine";
 import type { SessionHandle } from "../conversations/places";
 import type { ConversationStore } from "../conversations/store";
@@ -117,12 +122,28 @@ export interface TaskRunnerDeps {
       /** The machine the task's project is on, when the session is made on another one. */
       awayFrom?: MachineRecord | undefined;
     }) => Promise<SessionHandle>;
+    /**
+     * Files that came with a comment, as a session takes them: where it can open them (a line for
+     * each), the images among them as image input when its model takes them, and whether there
+     * were images it was not shown (`Engine.filesFor`).
+     */
+    filesFor?: (
+      files: readonly AttachmentRecord[],
+      handle: SessionHandle,
+      machine: MachineRecord,
+    ) => Promise<{
+      lines: Map<string, string>;
+      images: PromptImage[];
+      unseen: boolean;
+    }>;
     /** The machine an agent works on in a project: its own when it is pinned, else the project's. */
     machineFor: (
       agent: NonNullable<ReturnType<AgentStore["get"]>>,
       projectMachineId: string,
     ) => MachineRecord | undefined;
   };
+  /** The files people attach to comments, which a comment's `data.attachments` names. */
+  attachments?: Pick<AttachmentStore, "carried"> | undefined;
   /** A way to run a script on a machine: this process's shell, or the daemon over the link. */
   transport: (machine: MachineRecord) => SshTransport;
   dataDir: string;
@@ -146,13 +167,29 @@ export interface Submission {
   status: Extract<BoardTaskStatus, "in_review" | "blocked">;
 }
 
+/**
+ * Something said to a run: a comment's words, and the files that came with it (which the run is
+ * handed as files, its images as images when its model takes them). `activityId` is the comment's,
+ * which says so when its images could not be shown.
+ */
+interface Said {
+  text: string;
+  files?: AttachmentRecord[] | undefined;
+  activityId?: string | undefined;
+}
+
 /** A run that is going, as far as this process knows. */
 interface Live {
   handle?: SessionHandle | undefined;
+  /** The machine its session is on, and the agent it is, once it has one: where files go. */
+  machine?: MachineRecord | undefined;
+  agentId?: string | undefined;
   /** Whether a turn of the session is in flight, which a comment can join. */
   inFlight: boolean;
   /** Comments that arrived when no turn was in flight; they go in with the next. */
-  pending: string[];
+  pending: Said[];
+  /** The steers handed to the turn in flight, one after another, so they arrive in order. */
+  steering: Promise<void>;
   /** The run has been told what was said on the task; anything said later waits for it or for the next. */
   read: boolean;
   /** The executor called `finish_task`; a mentioned agent answered in the thread. */
@@ -260,7 +297,7 @@ export class TaskRunner implements TaskRuns {
   readonly #deps: TaskRunnerDeps;
   readonly #live = new Map<string, Live>();
   /** Comments waiting for the next run of a lane to read, oldest first, by `laneKey`. */
-  readonly #waiting = new Map<string, { lane: Lane; texts: string[] }>();
+  readonly #waiting = new Map<string, { lane: Lane; texts: Said[] }>();
   readonly #work = new Set<Promise<void>>();
   #attached = false;
   #closing = false;
@@ -398,7 +435,11 @@ export class TaskRunner implements TaskRuns {
         ? "the user"
         : (this.#deps.agents.get(activity.actor.agentId ?? "")?.name ??
           "another agent");
-    const text = `A comment from ${who} on task #${task.number}:\n\n${activity.body}`;
+    const said: Said = {
+      text: `A comment from ${who} on task #${task.number}:\n\n${activity.body}`,
+      files: this.#deps.attachments?.carried(activity.data) ?? [],
+      activityId: activity.id,
+    };
     const executor = this.#executorOf(task);
     // Only the user calls agents in: agents mentioning each other could wake one another forever.
     const mentions = activity.actor.kind === "user" ? mentionsOf(activity) : [];
@@ -410,7 +451,7 @@ export class TaskRunner implements TaskRuns {
         );
         continue;
       }
-      this.#hand({ taskId, agentId }, text, true);
+      this.#hand({ taskId, agentId }, said, true);
     }
     const forExecutor =
       options.wake !== false &&
@@ -421,7 +462,7 @@ export class TaskRunner implements TaskRuns {
     // splitting its task) still reads them, but nothing wakes one.
     this.#hand(
       { taskId, agentId: null },
-      text,
+      said,
       forExecutor &&
         workable(task.status) &&
         !this.#deps.board.isParent(task.id),
@@ -432,23 +473,31 @@ export class TaskRunner implements TaskRuns {
    * Hand words to a lane: into its run that is going (steering the turn in flight, or with the
    * next), or — when `wake` — left for its next run, which this asks for if none is waiting.
    */
-  #hand(lane: Lane, text: string, wake: boolean): void {
+  #hand(lane: Lane, said: Said, wake: boolean): void {
     const going = this.#openIn(lane).find(
       (run) => run.status === "starting" || run.status === "running",
     );
     const live = going === undefined ? undefined : this.#live.get(going.id);
     if (going !== undefined && live !== undefined) {
-      const handle = live.handle;
-      if (live.inFlight && handle !== undefined) {
-        handle.steer(text).catch((error: unknown) => {
-          // It could not join the turn (the turn ended under it): it goes in with the next.
-          this.#deps.warn(
-            `[eta] could not steer run ${going.id}: ${messageOf(error)}`,
-          );
-          live.pending.push(text);
+      if (live.inFlight && live.handle !== undefined) {
+        const handle = live.handle;
+        // In order: a comment with files is ready a moment later than one without.
+        live.steering = live.steering.then(async () => {
+          try {
+            // The turn ended while an earlier one was put in: this one goes in with the next.
+            if (!live.inFlight) throw new Error("the turn ended");
+            const told = await this.#told(going.taskId, [said], live);
+            await handle.steer(told.text, told.images);
+          } catch (error) {
+            // It could not join the turn (the turn ended under it): it goes in with the next.
+            this.#deps.warn(
+              `[eta] could not steer run ${going.id}: ${messageOf(error)}`,
+            );
+            live.pending.push(said);
+          }
         });
       } else {
-        live.pending.push(text);
+        live.pending.push(said);
       }
       return;
     }
@@ -458,8 +507,51 @@ export class TaskRunner implements TaskRuns {
     // continuation, not a restart: the task's session holds what it did, and the comment usually
     // reads as an answer to it. It waits its turn like any run (offline machine, a full machine)
     // and the comment waits with it. `pump` is where a parked comment turns into a run.
-    this.#park(lane, text);
+    this.#park(lane, said);
     this.pump();
+  }
+
+  /**
+   * What a run is told of things said to it: their words, each followed by its files (where the
+   * session can open them), and the images among the files when its model takes them. A comment
+   * whose images it was not shown says so on the task's timeline.
+   */
+  async #told(
+    taskId: string,
+    said: readonly Said[],
+    live: Live,
+  ): Promise<{ text: string; images: PromptImage[] | undefined }> {
+    const files = said.flatMap((item) => item.files ?? []);
+    const { engine } = this.#deps;
+    const handed =
+      files.length === 0 ||
+      engine.filesFor === undefined ||
+      live.handle === undefined ||
+      live.machine === undefined
+        ? undefined
+        : await engine.filesFor(files, live.handle, live.machine);
+    if (handed?.unseen === true && live.agentId !== undefined)
+      for (const item of said)
+        if (
+          item.activityId !== undefined &&
+          (item.files ?? []).some((file) =>
+            file.contentType.startsWith("image/"),
+          )
+        )
+          this.#deps.board.imagesUnseen(taskId, item.activityId, live.agentId);
+    const text = said
+      .map((item) =>
+        [
+          item.text,
+          ...(item.files ?? []).map(
+            (file) =>
+              handed?.lines.get(file.id) ?? `[attachment: ${file.name}]`,
+          ),
+        ].join("\n"),
+      )
+      .join("\n\n");
+    const images = handed?.images ?? [];
+    return { text, images: images.length > 0 ? images : undefined };
   }
 
   /**
@@ -467,7 +559,7 @@ export class TaskRunner implements TaskRuns {
    * woken in a session of its own on the task and reads `text`.
    */
   consult(taskId: string, agentId: string, text: string): void {
-    this.#hand({ taskId, agentId }, text, true);
+    this.#hand({ taskId, agentId }, { text }, true);
   }
 
   /** The lane's runs that have not ended. */
@@ -519,12 +611,12 @@ export class TaskRunner implements TaskRuns {
   }
 
   /** Leave a comment for the next run of the lane to be told. */
-  #park(lane: Lane, text: string): void {
-    this.#parkAll(lane, [text]);
+  #park(lane: Lane, said: Said): void {
+    this.#parkAll(lane, [said]);
   }
 
   /** Leave several, in order, for the next run of the lane to be told. Nothing to tell is nothing to leave. */
-  #parkAll(lane: Lane, texts: string[]): void {
+  #parkAll(lane: Lane, texts: Said[]): void {
     if (texts.length === 0) return;
     const key = laneKey(lane);
     const waiting = [...(this.#waiting.get(key)?.texts ?? []), ...texts];
@@ -532,7 +624,7 @@ export class TaskRunner implements TaskRuns {
   }
 
   /** The comments a run takes over as it starts. */
-  #unpark(lane: Lane): string[] {
+  #unpark(lane: Lane): Said[] {
     const key = laneKey(lane);
     const waiting = this.#waiting.get(key);
     this.#waiting.delete(key);
@@ -859,6 +951,7 @@ export class TaskRunner implements TaskRuns {
     const live: Live = {
       inFlight: false,
       pending: [],
+      steering: Promise.resolve(),
       read: false,
       reported: false,
       stopped: undefined,
@@ -1018,6 +1111,8 @@ export class TaskRunner implements TaskRuns {
       awayFrom,
     });
     runs.setSession(run.id, handle.id, cwd, key);
+    live.machine = machine;
+    live.agentId = agent.id;
     // Whether there is something to carry on from: a session whose journal was lost comes back as a
     // new one, and a run with nothing above it is told the whole brief again.
     const carriesOn = reused !== undefined && handle.id === reused.sessionId;
@@ -1084,7 +1179,12 @@ export class TaskRunner implements TaskRuns {
     };
     const extra = await this.#before(info);
     let prompt = extra === undefined ? told : `${extra}\n\n${told}`;
-    if (words.length > 0) prompt = `${prompt}\n\n${words.join("\n\n")}`;
+    let images: PromptImage[] | undefined;
+    if (words.length > 0) {
+      const said = await this.#told(task.id, words, live);
+      prompt = `${prompt}\n\n${said.text}`;
+      images = said.images;
+    }
 
     for (;;) {
       if (live.stopped !== undefined)
@@ -1093,11 +1193,13 @@ export class TaskRunner implements TaskRuns {
       const stopActivity = this.#watchActivity(run.id, handle);
       let result;
       try {
-        result = await handle.run(prompt, () => !this.#closing);
+        result = await handle.run(prompt, () => !this.#closing, images);
       } finally {
         stopActivity();
         live.inFlight = false;
       }
+      // A steer still being put together lands in `pending` now, for the next turn.
+      await live.steering;
       // Before the run can end: it ends with these counted, and its end is what tells the clients.
       if (result.usage !== undefined) {
         try {
@@ -1125,7 +1227,11 @@ export class TaskRunner implements TaskRuns {
         };
       // Comments that came while the turn was ending go in with the next.
       if (live.pending.length > 0) {
-        prompt = live.pending.splice(0).join("\n\n");
+        ({ text: prompt, images } = await this.#told(
+          task.id,
+          live.pending.splice(0),
+          live,
+        ));
         continue;
       }
       if (mentioned) {
@@ -1145,6 +1251,7 @@ export class TaskRunner implements TaskRuns {
         runs.nudged(run.id);
         board.runEvent(task.id, { kind: "run_nudged", runId: run.id });
         prompt = NUDGE;
+        images = undefined;
         continue;
       }
       return {

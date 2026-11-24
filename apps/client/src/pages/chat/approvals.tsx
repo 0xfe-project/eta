@@ -43,15 +43,16 @@ function SheetQuestion(props: {
   const c = colors();
   const selected = signal<string[]>([]);
   const reply = signal("");
-  const busy = signal(false);
+  /** Which answer is on its way: skipping, or the answer. */
+  const busy = signal<"" | "skip" | "answer">("");
   const conversation = () => host.conversation(props.item.conversationId);
   async function answer(response: InboxResponse) {
     if (busy()) return;
-    busy.set(true);
+    busy.set(response.kind === "none" ? "skip" : "answer");
     const result = await host.action(() =>
       host.call("inbox", "answer", { id: props.item.id, response }),
     );
-    busy.set(false);
+    busy.set("");
     if (result) props.onDone?.();
   }
   function toggle(option: string) {
@@ -210,7 +211,8 @@ function SheetQuestion(props: {
         <If when={!props.sheet}>
           <Button
             label={uiText("skip")}
-            disabled={busy()}
+            disabled={busy() === "answer"}
+            busy={busy() === "skip"}
             onPress={() => void answer({ kind: "none" })}
           />
         </If>
@@ -220,7 +222,10 @@ function SheetQuestion(props: {
           size={props.sheet ? control.touch : undefined}
           labelWeight={props.sheet ? weight.strong : undefined}
           style={props.sheet ? { paddingHorizontal: space[16] } : undefined}
-          disabled={busy() || (!selected().length && !reply().trim())}
+          disabled={
+            busy() === "skip" || (!selected().length && !reply().trim())
+          }
+          busy={busy() === "answer"}
           onPress={() => void submit()}
         />
       </View>
@@ -235,7 +240,8 @@ function SheetProposal(props: {
 }) {
   const host = useHost();
   const c = colors();
-  const working = signal(false);
+  /** The decision on its way. */
+  const working = signal<false | "approve" | "reject">(false);
   const op = () => props.operation;
   const pending = () => op().requiresApproval && op().status === "pending";
   const title = () =>
@@ -244,7 +250,7 @@ function SheetProposal(props: {
     host.conversation(op().payload.originConversationId as string | undefined);
   async function decide(decision: "approve" | "reject") {
     if (working()) return;
-    working.set(true);
+    working.set(decision);
     await host.action(() =>
       host.call("captain", "decideOperation", {
         operationId: op().id,
@@ -322,7 +328,8 @@ function SheetProposal(props: {
             label={uiText("reject")}
             size={control.touch}
             style={{ paddingHorizontal: space[16] }}
-            disabled={working()}
+            disabled={working() === "approve"}
+            busy={working() === "reject"}
             onPress={() => void decide("reject")}
           />
           <View style={{ flex: 1 }} />
@@ -332,7 +339,8 @@ function SheetProposal(props: {
             size={control.touch}
             labelWeight={weight.strong}
             style={{ paddingHorizontal: space[20] }}
-            disabled={working()}
+            disabled={working() === "reject"}
+            busy={working() === "approve"}
             onPress={() => void decide("approve")}
           />
         </View>
@@ -682,7 +690,7 @@ export function Proposal(props: {
 function ProposalCard(props: { operation: CaptainOperationView }) {
   const host = useHost();
   const c = colors();
-  const working = signal(false);
+  const working = signal<false | "approve" | "reject">(false);
   const op = () => props.operation;
   const pending = () => op().requiresApproval && op().status === "pending";
   const open = signal<boolean | undefined>(undefined);
@@ -720,7 +728,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
         : "";
   async function decide(decision: "approve" | "reject") {
     if (working()) return;
-    working.set(true);
+    working.set(decision);
     await host.action(() =>
       host.call("captain", "decideOperation", {
         operationId: op().id,
@@ -815,7 +823,8 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
               size={control.sm}
               labelVariant="caption"
               style={{ paddingHorizontal: space[12] }}
-              disabled={working()}
+              disabled={working() === "reject"}
+              busy={working() === "approve"}
               onPress={() => void decide("approve")}
             />
             <View

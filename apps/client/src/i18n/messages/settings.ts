@@ -249,7 +249,6 @@ export const settingsMessages = {
   runtimeAvailable: ["Available", "可用"],
   runtimeDetails: ["Details", "详情"],
   runtimeRetry: ["Retry", "重试"],
-  runtimeRetrying: ["Checking again…", "正在重新探测…"],
   runtimeUnreachable: [
     "Can't ask this machine which runtimes it has right now.",
     "现在问不到这台机器有哪些运行方式。",
@@ -378,7 +377,6 @@ export const settingsMessages = {
   acpEnv: ["Environment variables", "环境变量"],
   acpEnvHint: ["One KEY=VALUE per line.", "一行一个 KEY=VALUE。"],
   acpAdd: ["Add", "添加"],
-  acpSaving: ["Saving…", "正在保存…"],
   acpTestingOn: ["Testing on {{machine}}…", "正在 {{machine}} 上测试…"],
   acpTestOk: ["{{label}} answered: {{agent}}", "{{label}} 有响应：{{agent}}"],
   acpTestFailed: ["{{label}}: {{status}}", "{{label}}：{{status}}"],

@@ -14,6 +14,8 @@ import {
   touchRow,
   touchScreen,
 } from "./menu";
+import { shownWhile } from "./pending";
+import { Spinner, SpinningIcon } from "./spinner";
 import { Icon, Label } from "./text";
 import {
   colors,
@@ -47,6 +49,12 @@ export function Button(props: {
   tone?: "primary" | "plain" | "ghost" | "danger";
   selected?: boolean;
   disabled?: boolean;
+  /** Its action is under way: presses do nothing, nothing dims, and after `motion.reveal` a
+   * spinner takes the icon's place (or sits over the label, which keeps the button's width). */
+  busy?: boolean;
+  /** The icon stands for the action (refresh, check again): it turns itself while `busy`, from
+   * the press on, and stops on a whole turn. */
+  spinIcon?: boolean;
   size?: number;
   /** The label's role; `small` by default. */
   labelVariant?: TextVariant;
@@ -77,6 +85,8 @@ export function Button(props: {
   const primary = () => props.tone === "primary";
   const ghost = () => props.tone === "ghost";
   const hovered = signal(false);
+  const waiting = shownWhile(() => !!props.busy && !props.spinIcon);
+  const iconSize = () => props.iconSize ?? density().buttonIcon;
   const textTone = () =>
     primary()
       ? "buttonInk"
@@ -96,6 +106,7 @@ export function Button(props: {
       accessibilityLabel={props.accessibilityLabel ?? props.label}
       accessibilityState={{
         disabled: props.disabled ?? false,
+        busy: props.busy ?? false,
         selected: props.selected,
         expanded: props.expanded,
       }}
@@ -103,7 +114,7 @@ export function Button(props: {
       onMouseEnter={() => hovered.set(canHover)}
       onMouseLeave={() => hovered.set(false)}
       onPress={() => {
-        if (!props.disabled) props.onPress();
+        if (!props.disabled && !props.busy) props.onPress();
       }}
       hoverStyle={{
         backgroundColor: primary() ? color().ink : color().selected,
@@ -138,11 +149,26 @@ export function Button(props: {
       }}
     >
       <If when={props.icon !== undefined}>
-        <Icon
-          name={props.icon!}
-          tone={textTone()}
-          size={props.iconSize ?? density().buttonIcon}
-        />
+        <If
+          when={props.spinIcon}
+          else={
+            <If
+              when={waiting()}
+              else={
+                <Icon name={props.icon!} tone={textTone()} size={iconSize()} />
+              }
+            >
+              <Spinner tone={textTone()} size={iconSize()} />
+            </If>
+          }
+        >
+          <SpinningIcon
+            name={props.icon!}
+            running={!!props.busy}
+            tone={textTone()}
+            size={iconSize()}
+          />
+        </If>
       </If>
       <If when={!props.iconOnly}>
         <Label
@@ -152,9 +178,29 @@ export function Button(props: {
             (props.selected ? weight.strong : weight.regular)
           }
           tone={textTone()}
+          style={{
+            opacity: waiting() && props.icon === undefined ? 0 : 1,
+          }}
         >
           {props.label}
         </Label>
+      </If>
+      <If when={waiting() && props.icon === undefined}>
+        {/* No icon to take the place of: the spinner sits over the label, which keeps its
+         * room so the button's width does not change. */}
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Spinner tone={textTone()} size={iconSize()} />
+        </View>
       </If>
       <If when={props.shortcut}>
         <Label

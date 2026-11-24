@@ -1248,10 +1248,10 @@ export function Market(props: {
               else={<Label variant="small">{marker(current()!)}</Label>}
             >
               <Button
-                label={busy() ? uiText("adding") : uiText("marketInstall")}
+                label={uiText("marketInstall")}
                 tone="primary"
                 size={phone() ? control.touch : control.md}
-                disabled={busy()}
+                busy={busy()}
                 onPress={() => void install(current()!)}
               />
             </If>

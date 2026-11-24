@@ -40,6 +40,9 @@ export interface HostAddress {
   local?: boolean;
 }
 
+/** How long a change shown ahead of the host stays after the host took it, for its copy to land. */
+const optimisticHold = 2000;
+
 export function addressFrom(value: string): string {
   const trimmed = value.trim();
   const withScheme = trimmed.includes("://") ? trimmed : `http://${trimmed}`;
@@ -255,8 +258,67 @@ export function createHost(options: HostOptions = {}) {
     subscriptionWire.set(wire);
   }
 
+  /**
+   * What the screen shows ahead of the host (#380): fields of a row (a task, a conversation) by
+   * its id, set the moment a change is made and dropped once the host's own copy says the same,
+   * or when the change failed (`optimistic`).
+   */
+  const ahead = signal<Record<string, Record<string, unknown>>>({});
+
+  function withAhead(value: unknown): unknown {
+    const rows = ahead();
+    if (!Object.keys(rows).length || !value || typeof value !== "object")
+      return value;
+    const patch = (item: unknown) => {
+      const id = (item as { id?: unknown } | null)?.id;
+      const fields = typeof id === "string" ? rows[id] : undefined;
+      return fields ? { ...(item as object), ...fields } : item;
+    };
+    if (!Array.isArray(value)) return patch(value);
+    return value.some((item) => patch(item) !== item)
+      ? value.map(patch)
+      : value;
+  }
+
   function section<T>(target: string, key: string): T | undefined {
-    return state().targets[target]?.sections[key] as T | undefined;
+    return withAhead(state().targets[target]?.sections[key]) as T | undefined;
+  }
+
+  /** Each change ahead of the host by row, so an older one's answer does not undo a newer one. */
+  let aheadTurn = 0;
+  const aheadTurns = new Map<string, number>();
+  function dropAhead(id: string, turn: number) {
+    if (aheadTurns.get(id) !== turn) return;
+    aheadTurns.delete(id);
+    ahead.update((rows) => {
+      const { [id]: _, ...rest } = rows;
+      return rest;
+    });
+  }
+
+  /**
+   * Shows `fields` on the row `id` everywhere at once, then does `work`: on success the row keeps
+   * them until the host's copy has them (it usually sends it before it answers), on failure they
+   * go and the error is the caller's to say where the change was made. Rows only: what the change
+   * started on the host (a run, a notice) comes from the host as before.
+   */
+  async function optimistic<T>(
+    id: string,
+    fields: Record<string, unknown>,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const turn = ++aheadTurn;
+    aheadTurns.set(id, turn);
+    ahead.update((rows) => ({ ...rows, [id]: { ...rows[id], ...fields } }));
+    try {
+      const result = await work();
+      // The host's copy is in by now, or is a moment away.
+      setTimeout(dropAhead, optimisticHold, id, turn);
+      return result;
+    } catch (problem) {
+      dropAhead(id, turn);
+      throw problem;
+    }
   }
 
   function list<T>(target: string, key = "list"): T[] {
@@ -311,6 +373,7 @@ export function createHost(options: HostOptions = {}) {
     list,
     call,
     action,
+    optimistic,
     upgrade: upgrades.status,
     upgradeUnreachable: upgrades.unreachable,
     upgradeCheck,
@@ -342,7 +405,11 @@ export function createHost(options: HostOptions = {}) {
             ? captainConversation()
             : undefined))
         : undefined,
-    tasks: () => list<BoardTaskView>("tasks"),
+    /** The tasks, less one archived ahead of the host (`optimistic`), as the host will send them. */
+    tasks: () =>
+      list<BoardTaskView>("tasks").filter(
+        (task) => !(task.archivedAt && ahead()[task.id]?.archivedAt),
+      ),
     pending: () =>
       list<InteractionView>("inbox").filter(
         (item) => item.status === "pending",
@@ -360,22 +427,68 @@ export function useHost() {
   return host;
 }
 
+/** How many conversations read lately stay followed after their page leaves them (#380). */
+const keptConversations = 4;
+/** Per connection, the conversations left lately: the release of each, oldest first. */
+const keptReleases = new WeakMap<Wire, Map<string, () => void>>();
+const conversationTarget = /^conversations\.[^.]+$/;
+
+/**
+ * Lets go of a target. A conversation's messages are kept a while instead (still followed, so
+ * still current): going back to one shows them at once rather than its skeleton, and only the
+ * `keptConversations` left last are kept.
+ */
+function release(
+  wire: Wire | undefined,
+  name: string | undefined,
+  unsubscribe: () => void,
+) {
+  if (!wire || !name || !conversationTarget.test(name)) {
+    unsubscribe();
+    return;
+  }
+  let kept = keptReleases.get(wire);
+  if (!kept) keptReleases.set(wire, (kept = new Map()));
+  kept.get(name)?.();
+  kept.delete(name);
+  kept.set(name, unsubscribe);
+  for (const [oldest, drop] of kept) {
+    if (kept.size <= keptConversations) break;
+    kept.delete(oldest);
+    drop();
+  }
+}
+
+/** Follows `name` again, taking back a kept hold on it (`release`) once the new one is in place. */
+function resubscribe(wire: Wire, name: string) {
+  const unsubscribe = wire.subscribe(name);
+  const kept = keptReleases.get(wire);
+  const held = kept?.get(name);
+  if (held) {
+    kept!.delete(name);
+    held();
+  }
+  return unsubscribe;
+}
+
 export function follow(target: () => string | undefined) {
   const host = useHost();
   let currentName: string | undefined;
   let currentWire: Wire | undefined;
   let unsubscribe: (() => void) | undefined;
-  cleanup(() => unsubscribe?.());
+  cleanup(() => {
+    if (unsubscribe) release(currentWire, currentName, unsubscribe);
+  });
   effect(() => {
     const name = target();
     const wire = host.subscriptionWire();
     // A selector can read the whole host snapshot. Patches for the same target
     // must keep its subscription and its in-flight data intact.
     if (name === currentName && wire === currentWire) return;
+    if (unsubscribe) release(currentWire, currentName, unsubscribe);
     currentName = name;
     currentWire = wire;
-    unsubscribe?.();
-    unsubscribe = name ? wire?.subscribe(name) : undefined;
+    unsubscribe = name && wire ? resubscribe(wire, name) : undefined;
   });
   return () => {
     unsubscribe?.();

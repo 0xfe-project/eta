@@ -18,6 +18,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { settled } from "../../components/pending";
 import { StatusDot } from "../../components/status-dot";
 import {
   avatar,
@@ -77,8 +78,13 @@ export function PanelTask(props: {
     opened = true;
     setTimeout(() => node.reveal({ vertical: "end", animated: false }), 0);
   };
+  // The skeleton, once it appeared, stays its least time before the task (#380).
+  const shown = settled(() => !!task());
   return (
-    <If when={task()} else={<DetailSkeleton label={uiText("loadingTask")} />}>
+    <If
+      when={shown() ? task() : undefined}
+      else={<DetailSkeleton label={uiText("loadingTask")} />}
+    >
       {(item) => {
         // What is going on the task: one line per run that has not ended, each its own agent's.
         const lines = () =>
@@ -135,7 +141,11 @@ export function PanelTask(props: {
                   onSelect={() => {
                     if (item().archivedAt)
                       void host.action(() =>
-                        host.call("tasks", "unarchive", { taskId: props.id }),
+                        host.optimistic(props.id, { archivedAt: null }, () =>
+                          host.call("tasks", "unarchive", {
+                            taskId: props.id,
+                          }),
+                        ),
                       );
                     else state.archive.set(true);
                   }}

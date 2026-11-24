@@ -184,7 +184,6 @@ export const pluginsMessages = {
   marketReports: ["Problems found in the plugin", "在插件中发现的问题"],
   marketNone: ["None", "无"],
   addFromGit: ["Add from git", "从 git 添加"],
-  adding: ["Adding…", "正在添加…"],
   addPluginTitle: ["Add a plugin from git", "从 git 添加插件"],
   addPluginDescription: [
     "It is resolved to one commit and stays there until you update it.",

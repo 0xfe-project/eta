@@ -1,6 +1,6 @@
 import type { PluginView } from "@eta/client-contracts";
 import type { JSX } from "nsh";
-import { View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -32,6 +32,7 @@ export function PluginTablet(props: {
   extra?: JSX.Element;
 }) {
   const c = colors();
+  const refreshing = signal(false);
   return (
     <View style={{ ...row, ...grow, alignItems: "stretch" }}>
       <View
@@ -53,8 +54,13 @@ export function PluginTablet(props: {
           <Button
             label={uiText("refreshPlugins")}
             icon="refresh"
+            spinIcon
+            busy={refreshing()}
             iconOnly
-            onPress={() => void props.onRefresh()}
+            onPress={() => {
+              refreshing.set(true);
+              void props.onRefresh().finally(() => refreshing.set(false));
+            }}
           />
           <Button
             label={uiText("addFromGit")}

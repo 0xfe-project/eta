@@ -23,6 +23,7 @@ import {
   textStyle,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { settled } from "../../components/pending";
 import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
@@ -59,11 +60,18 @@ export function Tasks(props: {
   const c = colors();
   const type = textFaces();
   follow(() => "tasks");
+  // Whether the tasks came (or could not): the skeleton, once it appeared, stays its least time.
+  const tasksShown = settled(
+    () => !!(host.state().missing.tasks || host.state().targets.tasks),
+  );
   const boardDrag = taskDropZones<BoardTaskStatus>((id, status) => {
     const task = host.tasks().find((item) => item.id === id);
     if (task && !task.subtasks && task.status !== status) {
+      // The card lands in its column at once (#380); a refused move puts it back.
       void host.action(() =>
-        host.call("tasks", "update", { taskId: id, status }),
+        host.optimistic(id, { status }, () =>
+          host.call("tasks", "update", { taskId: id, status }),
+        ),
       );
     }
   });
@@ -367,12 +375,10 @@ export function Tasks(props: {
         else={
           <>
             <If
-              when={filtered().length}
+              when={filtered().length && tasksShown()}
               else={
                 <If
-                  when={
-                    host.state().missing.tasks || host.state().targets.tasks
-                  }
+                  when={tasksShown()}
                   else={<TaskListSkeleton label={uiText("loadingTasks")} />}
                 >
                   <Empty

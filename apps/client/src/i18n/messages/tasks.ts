@@ -375,6 +375,11 @@ export const tasksMessages = {
     "日志只读。请在任务中回复，给 {{executor}} 补充指令。",
   ],
   commentKeysHint: ["⏎ send · ⇧⏎ new line", "⏎ 发送 · ⇧⏎ 换行"],
+  commentFiles: ["Files of the comment", "评论附带的文件"],
+  commentImagesUnseen: [
+    "{{names}} got the pictures as files only: the model doesn't take images.",
+    "{{names}} 的模型不支持图片，只收到了图片文件。",
+  ],
   commentPlaceholder: [
     "Comment, @ an agent in this task…",
     "评论，@ 任务里的 agent…",
@@ -531,4 +536,6 @@ export const tasksMessages = {
     "This turn failed: {{reason}}",
     "这一轮失败了：{{reason}}",
   ],
+  taskArchivedToast: ["Task archived", "任务已归档"],
+  taskArchiveFailed: ["Could not archive the task", "没能归档这个任务"],
 } as const;

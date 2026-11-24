@@ -203,9 +203,10 @@ export function PluginWarnings(props: {
       >
         <WarningsText item={props.item} inline />
         <Button
-          label={checking() ? uiText("checking") : uiText("checkAgain")}
-          disabled={checking()}
+          label={uiText("checkAgain")}
+          busy={checking()}
           icon="refresh"
+          spinIcon
           size={props.phone ? control.md : undefined}
           labelVariant="caption"
           style={

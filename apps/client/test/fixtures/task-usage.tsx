@@ -153,11 +153,7 @@ function Fixture() {
           <ViewMenu />
         </View>
         <View style={{ width: 420 }}>
-          <TasksTab
-            conversationId="group"
-            conversationName="Website redesign"
-            onTask={() => {}}
-          />
+          <TasksTab conversationId="group" onTask={() => {}} />
         </View>
         <View style={{ padding: 16 }}>
           <TaskUsageSection item={detail} layout="desktop" />

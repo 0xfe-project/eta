@@ -1,5 +1,6 @@
 import type {
   ArtifactView,
+  AttachmentView,
   BoardTaskDetail,
   BoardTaskStatus,
   BoardTaskView,
@@ -84,19 +85,28 @@ export function createTaskDetailState(props: {
   const phone = () => props.layout === "phone";
   const side = () => props.layout === "desktop" && !props.docked;
   /** The last comment tried, with its id: a retry of the same words is the same comment. */
-  let attempt: { body: string; id: string } | undefined;
-  /** Posts a comment; whether the host took it (the box empties then). */
-  async function post(text: string, mentions: string[] = []): Promise<boolean> {
+  let attempt: { key: string; id: string } | undefined;
+  /** Posts a comment (words, files, or both); whether the host took it (the box empties then). */
+  async function post(
+    text: string,
+    mentions: string[] = [],
+    attachments: readonly AttachmentView[] = [],
+  ): Promise<boolean> {
     const body = text.trim();
-    if (!body || posting()) return false;
+    if ((!body && !attachments.length) || posting()) return false;
     posting.set(true);
-    if (attempt?.body !== body) attempt = { body, id: crypto.randomUUID() };
+    // The same words with the same files: a retry of the same comment.
+    const key = JSON.stringify([body, attachments.map((file) => file.id)]);
+    if (attempt?.key !== key) attempt = { key, id: crypto.randomUUID() };
     const result = await host.action(() =>
       host.call("tasks", "comment", {
         taskId: props.id,
         body,
         clientId: attempt!.id,
         mentions: mentions.length ? mentions : undefined,
+        attachments: attachments.length
+          ? attachments.map((file) => file.id)
+          : undefined,
       }),
     );
     posting.set(false);
@@ -130,6 +140,12 @@ export function createTaskDetailState(props: {
       describing.set(false);
     });
   }
+  /**
+   * Changes the status ahead of the host (#380): every place that shows the task shows the new
+   * status at once, and the menu, the sheet or the dialog that asked closes. If the host refuses
+   * it, the old status comes back and why is said under the status, where it was changed (not in
+   * the app's error strip too).
+   */
   function change(next: BoardTaskStatus) {
     if (submitting()) return;
     // The current status again changes nothing: no call, as on the web.
@@ -139,24 +155,24 @@ export function createTaskDetailState(props: {
     }
     statusError.set("");
     changing.set(next);
-    void mutate(async () => {
-      try {
-        await host.call("tasks", "update", { taskId: props.id, status: next });
-      } catch (problem) {
+    status.set(false);
+    cancelling.set(false);
+    review.set(undefined);
+    void host
+      .optimistic(props.id, { status: next }, () =>
+        host.call("tasks", "update", { taskId: props.id, status: next }),
+      )
+      .catch((problem: unknown) => {
         statusError.set(
           uiText("statusChangeFailed", {
             message:
               problem instanceof Error ? problem.message : String(problem),
           }),
         );
-        throw problem;
-      } finally {
-        changing.set(undefined);
-      }
-      status.set(false);
-      cancelling.set(false);
-      review.set(undefined);
-    });
+      })
+      .finally(() => {
+        if (changing() === next) changing.set(undefined);
+      });
   }
   function submitReview(next: "done" | "todo") {
     if (next === "done") {

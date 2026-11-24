@@ -214,7 +214,7 @@ describe("the tasks target", () => {
     ).rejects.toThrow(/no such task/);
     await expect(
       w.client.call("tasks", "comment", { taskId: made.id, body: " " }),
-    ).rejects.toThrow(/needs body/);
+    ).rejects.toThrow(/needs some text/);
     await expect(
       w.client.call("tasks", "delete", { taskId: "nope" }),
     ).rejects.toThrow(/no such task/);

@@ -244,7 +244,8 @@ export function NewTask(props: {
             label={uiText("newTaskCreate")}
             tone="primary"
             shortcut={props.phone ? undefined : sendShortcut}
-            disabled={!ready()}
+            disabled={!ready() && !busy()}
+            busy={busy()}
             onPress={() => void save()}
           />
         </View>

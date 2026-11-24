@@ -83,6 +83,32 @@ test("a pasted file is a block where the caret is, kept with its chat, sent as a
   expect(screen(app)).toContain('sent ["alpha","see  please","queue",[');
 });
 
+test("files a file manager copied or dropped are read from their file: URLs and sent", async () => {
+  const app = await fixture();
+  // The test's own directory, as a file manager names it (`import.meta.url` is `asset:` here).
+  const uri = (path: string) =>
+    `file://${new URL(path, import.meta.url).pathname}`;
+  await app.paste(input, { uris: [uri("fixtures/pixel.png")] });
+  await app.waitFor("label:View picture pixel.png · 0.0 KB");
+  await app.dropFiles(input, [uri("composer-fixture.tsx")]);
+  await app.waitFor("label:File composer-fixture.tsx");
+  expect(screen(app)).not.toContain("can't attach");
+  await app.keyboard.press("enter");
+  await app.waitFor("text:attachments pixel.png,composer-fixture.tsx");
+});
+
+test("a copied folder is refused, and its block says why", async () => {
+  const app = await fixture();
+  // As Finder copies a folder: its URL ends with a slash.
+  const folder = `file://${new URL("fixtures/", import.meta.url).pathname}`;
+  await app.paste(input, { uris: [folder] });
+  const why = "fixtures is a folder. Attach the files in it instead.";
+  const block = `label:Can't attach fixtures: ${why}`;
+  await app.waitFor(block);
+  await app.press(block);
+  await app.waitFor(`text:${why}`);
+});
+
 test("the text of a spreadsheet or Word copy wins over the picture beside it", async () => {
   const app = await fixture(720, { clipboard: "office text" });
   await app.paste(input, {

@@ -17,6 +17,7 @@ import {
 } from "../../components";
 import { sendShortcut } from "../../components/eta-editor";
 import { CloseButton } from "../../components/navigation-buttons";
+import { showToast } from "../../components/toast";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -86,10 +87,17 @@ export function TaskDetailDialogs(props: {
       : uiText("archive");
   function archiveTask() {
     const stopRuns = activeArchiveTargets().length > 0;
-    void mutate(async () => {
-      await host.call("tasks", "archive", { taskId: props.id, stopRuns });
-      props.onClose();
-    });
+    // Stopping runs cannot be taken back quietly: that archive waits for the host.
+    if (stopRuns) {
+      void mutate(async () => {
+        await host.call("tasks", "archive", { taskId: props.id, stopRuns });
+        props.onClose();
+      });
+      return;
+    }
+    archiveAhead(host, props.id);
+    archive.set(false);
+    props.onClose();
   }
   return (
     <>
@@ -237,7 +245,7 @@ export function TaskDetailDialogs(props: {
             <Button
               label={uiText("cancelTask")}
               tone="danger"
-              disabled={submitting()}
+              busy={submitting()}
               onPress={() => change("cancelled")}
             />
           </View>
@@ -385,7 +393,7 @@ export function TaskDetailDialogs(props: {
                 size={control.lg}
                 labelVariant="small"
                 style={{ paddingHorizontal: space[16] }}
-                disabled={submitting()}
+                busy={submitting()}
                 onPress={archiveTask}
               />
             </View>
@@ -574,4 +582,36 @@ function EditTask(props: {
       </View>
     </View>
   );
+}
+
+/**
+ * Archives a task ahead of the host (#380): it leaves every list at once and a toast offers to
+ * take it back. A refused archive brings it back and says why in a toast, the dialog that asked
+ * being gone by then.
+ */
+function archiveAhead(host: ReturnType<typeof useHost>, taskId: string) {
+  const archived = host.optimistic(taskId, { archivedAt: Date.now() }, () =>
+    host.call("tasks", "archive", { taskId, stopRuns: false }),
+  );
+  archived.catch((problem: unknown) =>
+    showToast({
+      title: uiText("taskArchiveFailed"),
+      body: problem instanceof Error ? problem.message : String(problem),
+      tone: "red",
+    }),
+  );
+  showToast({
+    title: uiText("taskArchivedToast"),
+    action: {
+      label: uiText("undo"),
+      onPress: () =>
+        void archived
+          .then(() =>
+            host.optimistic(taskId, { archivedAt: null }, () =>
+              host.call("tasks", "unarchive", { taskId }),
+            ),
+          )
+          .catch(() => {}),
+    },
+  });
 }

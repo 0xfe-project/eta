@@ -2,7 +2,7 @@ import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { TaskDetailState } from "./task-detail-state";
 import { View } from "nsh";
 import { colors, Icon, inCompact, Label, row } from "../../components";
-import { control, icon, opacity, space, weight } from "../../components/tokens";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { StatusOptions, TaskMenu } from "./menu";
 import { statusName, TaskGlyph, tones } from "./status";
@@ -45,6 +45,7 @@ export function StatusSelect(props: {
       | undefined;
   const plain = () => !!props.compact && !tint();
   const ink = () => (tint() ? tones[props.item.status] : "ink");
+  /** A change on its way: the trigger already shows it (`change`), only a second one waits. */
   const busy = () => changing() !== undefined;
   /** In the conversation panel: a 24px trigger with 12px glyphs. */
   const dense = inCompact();
@@ -73,7 +74,6 @@ export function StatusSelect(props: {
           borderWidth: 1,
           borderColor: tint() ? c()[tones[props.item.status]] : c().strong,
           backgroundColor: tint() ? c()[tint()!] : c().canvas,
-          opacity: busy() ? opacity.muted : 1,
           cursor: busy() ? "default" : "pointer",
         }}
       >

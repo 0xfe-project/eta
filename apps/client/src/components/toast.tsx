@@ -3,7 +3,7 @@ import { uiText } from "../i18n";
 import { screenInsets } from "./safe-area";
 import { StatusDot } from "./status-dot";
 import { Label } from "./text";
-import { colors, row, Screen } from "./theme";
+import { colors, focusRing, row, Screen } from "./theme";
 import { layer, shadow, space, weight } from "./tokens";
 
 const toastWidth = 356;
@@ -18,6 +18,8 @@ export interface ToastNote {
   title: string;
   body?: string;
   tone?: ToastTone;
+  /** One thing to do about it, after the text ("Undo"); pressing it also dismisses the toast. */
+  action?: { label: string; onPress: () => void };
 }
 
 interface Shown extends ToastNote {
@@ -107,6 +109,30 @@ export function ToastLayer(props: { phone?: boolean }) {
                   )}
                 </If>
               </View>
+              <If when={toast().action}>
+                {(action) => (
+                  <View
+                    role="button"
+                    accessibilityLabel={action().label}
+                    onPress={() => {
+                      dismiss(toast().id);
+                      action().onPress();
+                    }}
+                    hoverStyle={{ backgroundColor: c().selected }}
+                    focusVisibleStyle={focusRing(c())}
+                    style={{
+                      alignSelf: "center",
+                      paddingHorizontal: space[8],
+                      paddingVertical: space[4],
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Label variant="small" weight={weight.strong}>
+                      {action().label}
+                    </Label>
+                  </View>
+                )}
+              </If>
             </View>
           )}
         </Each>

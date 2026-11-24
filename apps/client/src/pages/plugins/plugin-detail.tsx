@@ -133,8 +133,8 @@ export function PluginDetail(props: DetailProps) {
             {enabledSwitch()}
             <If when={git()}>
               <Button
-                label={updating() ? uiText("updating") : uiText("update")}
-                disabled={updating()}
+                label={uiText("update")}
+                busy={updating()}
                 tone="ghost"
                 labelVariant="caption"
                 style={ghostFrame}

@@ -461,12 +461,7 @@ export function ExternalAgentForm(props: {
       {status()}
     </View>
   );
-  const saveLabel = () =>
-    saving()
-      ? uiText("acpSaving")
-      : editing
-        ? uiText("save")
-        : uiText("acpAdd");
+  const saveLabel = () => (editing ? uiText("save") : uiText("acpAdd"));
   return (
     <Modal
       title={title()}
@@ -525,10 +520,11 @@ export function ExternalAgentForm(props: {
       >
         <If when={host.can("acp.test")}>
           <Button
-            label={testing() ? uiText("testing") : uiText("test")}
+            label={uiText("test")}
             size={props.phone ? control.lg : control.md}
             style={{ paddingHorizontal: props.phone ? space[16] : space[8] }}
-            disabled={testing() || saving() || !usable()}
+            disabled={saving() || !usable()}
+            busy={testing()}
             onPress={() => void test()}
           />
         </If>
@@ -551,7 +547,8 @@ export function ExternalAgentForm(props: {
               ? { flex: 1, justifyContent: "center" }
               : { paddingHorizontal: space[8] }
           }
-          disabled={saving() || !usable()}
+          disabled={!usable()}
+          busy={saving()}
           onPress={() => void save()}
         />
       </View>

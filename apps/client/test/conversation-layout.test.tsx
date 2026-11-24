@@ -1,4 +1,5 @@
 import { expect, open, test } from "nsh/test";
+import { motion } from "../src/components/motion";
 
 // The conversation page is three blocks: the header, the message area and the
 // composer. Whatever the message area holds (the loading skeleton, the empty
@@ -32,6 +33,8 @@ for (const [name, width, height] of sizes)
         locale: "en-US",
         urlScheme: `eta://fixture/${scenario}`,
       });
+      // A skeleton is drawn only once its wait has lasted `motion.reveal`.
+      if (scenario === "loading") await app.wait(motion.reveal + 50);
       expect(app.shows(`${messages} >> ${content}`)).toBe(true);
       expect(app.shows(composer)).toBe(true);
       expect(app.shows(`${messages} >> ${composer}`)).toBe(false);

@@ -52,7 +52,8 @@ export function RemoveMember(props: {
         </Label>
         <Button
           label={uiText("removeMember")}
-          disabled={busy() || props.members.length <= 1}
+          disabled={props.members.length <= 1}
+          busy={busy()}
           onPress={() => void remove()}
         />
         <If when={error()}>
