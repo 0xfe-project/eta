@@ -28,6 +28,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { chatText, shownMentions } from "../../components/eta-editor";
+import { createOptimisticStatus } from "../../components/optimistic-status";
 import { settled } from "../../components/pending";
 import { dotSize } from "../../components/status-dot";
 import { control, icon, space, weight } from "../../components/tokens";
@@ -107,15 +108,29 @@ export function Routines(props: {
   const starting = signal(false);
   const sendingFeedback = signal(false);
   const turningCaptainOn = signal(false);
+  const toggleStatus = createOptimisticStatus();
+  let lastToggle: { id: string; enabled: boolean } | undefined;
   const canRun = () =>
     !!status()?.captainOn && !runs().some((run) => run.status === "running");
+  function applyToggle(routineId: string, enabled: boolean) {
+    lastToggle = { id: routineId, enabled };
+    toggleStatus.saving();
+    void host
+      .optimistic(routineId, { enabled }, () =>
+        host.call("routines", "update", { routineId, enabled }),
+      )
+      .then(() => toggleStatus.saved())
+      .catch((problem: unknown) =>
+        toggleStatus.fail(
+          problem instanceof Error ? problem.message : String(problem),
+        ),
+      );
+  }
   function toggle(item: RoutineInfo) {
-    void host.action(() =>
-      host.call("routines", "update", {
-        routineId: item.id,
-        enabled: !item.enabled,
-      }),
-    );
+    applyToggle(item.id, !item.enabled);
+  }
+  function retryToggle() {
+    if (lastToggle) applyToggle(lastToggle.id, lastToggle.enabled);
   }
   function select(id: string) {
     selected.set(id);
@@ -596,6 +611,8 @@ export function Routines(props: {
                         canDelete={canDelete()}
                         onDelete={() => deleting.set(item())}
                         onToggle={() => toggle(item())}
+                        toggleState={toggleStatus.state()}
+                        onRetryToggle={retryToggle}
                       />
                     }
                   >

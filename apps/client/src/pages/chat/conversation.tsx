@@ -401,6 +401,29 @@ export function Conversation(props: {
     // Nowhere to take the user (no loaded reply, no task matched yet): it is answered right here.
     questionId.set(item.id);
   }
+  function retryReply(reply: MessageView) {
+    const rows = indexed().rows;
+    const replyIndex = rows.findIndex((entry) => entry.id === reply.id);
+    const source =
+      rows.find(
+        (entry) =>
+          entry.author === "user" &&
+          (entry.id === reply.replyToId || entry.id === reply.rootMessageId),
+      ) ??
+      rows
+        .slice(0, replyIndex >= 0 ? replyIndex : rows.length)
+        .findLast((entry) => entry.author === "user");
+    if (!source?.text.trim()) return;
+    void host.action(() =>
+      host.call("conversations", "send", {
+        conversationId: props.id,
+        clientId: crypto.randomUUID(),
+        text: source.text,
+        mode: "queue",
+        mentions: reply.agentId ? [reply.agentId] : source.mentions,
+      }),
+    );
+  }
   function closeDrawer() {
     drawer.set(false);
     member.set(undefined);
@@ -688,6 +711,9 @@ export function Conversation(props: {
               }
               onQuote={(conversationId, text) =>
                 quote.set({ conversationId, text })
+              }
+              onRetryReply={
+                host.state().status === "open" ? retryReply : undefined
               }
             />
           </View>

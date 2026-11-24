@@ -27,6 +27,7 @@ import {
   submitKeys,
 } from "../../components/eta-editor";
 import { touchScreen } from "../../components/menu";
+import { OptimisticStatus } from "../../components/optimistic-status";
 import { Spinner } from "../../components/spinner";
 import { StatusDot } from "../../components/status-dot";
 import { densityDefaults } from "../../components/theme";
@@ -286,6 +287,12 @@ function CommentBox(props: {
           />
         </View>
       </View>
+      <If when={props.state.commentStatus.state().status !== "idle"}>
+        <OptimisticStatus
+          state={props.state.commentStatus.state()}
+          onRetry={() => void submit()}
+        />
+      </If>
     </>
   );
 }

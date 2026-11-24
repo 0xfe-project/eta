@@ -1,7 +1,11 @@
 import type { PluginView } from "@eta/client-contracts";
-import { View } from "nsh";
+import { effect, signal, View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { hint } from "../../components/controls";
+import {
+  createOptimisticStatus,
+  OptimisticStatus,
+} from "../../components/optimistic-status";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -23,8 +27,42 @@ export function PluginName(props: { name: string }) {
 export function PluginEnabled(props: { item: PluginView; compact?: boolean }) {
   const host = useHost();
   const c = colors();
+  const pending = signal<boolean | undefined>(undefined);
+  const status = createOptimisticStatus();
+  let lastTarget: boolean | undefined;
+  let turn = 0;
+  effect(() => {
+    if (pending() !== undefined && props.item.enabled === pending())
+      pending.set(undefined);
+  });
+  const checked = () => pending() ?? props.item.enabled;
   const words = () =>
-    props.item.enabled ? uiText("pluginSwitch") : uiText("pluginOffForAll");
+    checked() ? uiText("pluginSwitch") : uiText("pluginOffForAll");
+  function apply(enabled: boolean) {
+    const currentTurn = ++turn;
+    lastTarget = enabled;
+    pending.set(enabled);
+    status.saving();
+    void host
+      .call("plugins", "setEnabled", {
+        name: props.item.name,
+        enabled,
+      })
+      .then(() => {
+        if (turn !== currentTurn) return;
+        status.saved();
+        setTimeout(() => {
+          if (turn === currentTurn) pending.set(undefined);
+        }, 1500);
+      })
+      .catch((problem: unknown) => {
+        if (turn !== currentTurn) return;
+        pending.set(undefined);
+        status.fail(
+          problem instanceof Error ? problem.message : String(problem),
+        );
+      });
+  }
   return (
     <View
       tooltip={props.compact ? hint(words(), c) : undefined}
@@ -32,20 +70,21 @@ export function PluginEnabled(props: { item: PluginView; compact?: boolean }) {
     >
       <ToggleSwitch
         label={uiText("pluginSwitch")}
-        checked={props.item.enabled}
-        onChange={(enabled) =>
-          void host.action(() =>
-            host.call("plugins", "setEnabled", {
-              name: props.item.name,
-              enabled,
-            }),
-          )
-        }
+        checked={checked()}
+        onChange={apply}
       />
-      <If when={!props.compact}>
+      <If when={!props.compact && status.state().status === "idle"}>
         <Label variant="caption" tone="muted" lines={1}>
           {words()}
         </Label>
+      </If>
+      <If when={status.state().status !== "idle"}>
+        <OptimisticStatus
+          state={status.state()}
+          onRetry={
+            lastTarget !== undefined ? () => apply(lastTarget!) : undefined
+          }
+        />
       </If>
     </View>
   );

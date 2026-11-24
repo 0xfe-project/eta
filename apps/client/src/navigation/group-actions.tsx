@@ -297,6 +297,10 @@ function archiveGroupAhead(host: ReturnType<typeof useHost>, id: string) {
       title: uiText("groupArchiveFailed"),
       body: problem instanceof Error ? problem.message : String(problem),
       tone: "red",
+      action: {
+        label: uiText("retry"),
+        onPress: () => archiveGroupAhead(host, id),
+      },
     }),
   );
   showToast({

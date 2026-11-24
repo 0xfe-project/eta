@@ -19,7 +19,15 @@ import {
 } from "@eta/client-contracts";
 import { pasteBlocksOf } from "@eta/client-contracts/composer-draft";
 import { mentionLabel } from "@eta/client-contracts/composer-target";
-import { effect, signal, View } from "nsh";
+import {
+  cleanup,
+  Clipboard,
+  createMotion,
+  effect,
+  reduceMotion,
+  signal,
+  View,
+} from "nsh";
 import {
   Button,
   Caption,
@@ -36,6 +44,7 @@ import {
   shownFiles,
   shownMentions,
 } from "../../components/eta-editor";
+import { showToast } from "../../components/toast";
 import {
   avatar,
   control,
@@ -67,6 +76,40 @@ const replyBlockGap = 8;
 
 /** A reply at work keeps this height, however much it writes. */
 const processWindowHeight = 176;
+/** Streaming caret blink period. */
+const CARET_BLINK_MS = 900;
+
+/** 2px accent caret shown at the end of a streaming AI answer (steady under reduced motion). */
+function StreamingCaret() {
+  const c = colors();
+  const blink = createMotion();
+  effect(() => {
+    if (reduceMotion()) {
+      blink.stop();
+      blink.reset();
+      return;
+    }
+    void blink.play({
+      keyframes: { opacity: [1, 0.2, 1] },
+      duration: CARET_BLINK_MS,
+      easing: "easeInOut",
+      iterations: "infinite",
+    });
+  });
+  cleanup(() => blink.stop());
+  return (
+    <View
+      testID="streaming-caret"
+      style={{
+        width: space[2],
+        height: space[16],
+        backgroundColor: c().blue,
+        marginTop: space[2],
+        ...(reduceMotion() ? {} : blink.style),
+      }}
+    />
+  );
+}
 
 /** How wide your message's bubble runs, and on phones the least room a task draft's title keeps. A
  * draft's card has no width of its own: like a task's card it fills the column, whose width is
@@ -115,6 +158,8 @@ export function Message(props: {
   onMember?: (agentId: string) => void;
   onTask: (id: string) => void;
   onPending?: () => void;
+  /** Re-send the prompt that triggered a completed or failed reply. */
+  onRetry?: () => void;
   onReadDraft: (item: MessageView) => void;
   registerAction: (id: string, focus: () => void) => () => void;
 }) {
@@ -122,6 +167,10 @@ export function Message(props: {
   const c = colors();
   /** The reply's whole run is open in the run panel. */
   const process = signal(false);
+  /** The live process window above the streaming answer can be collapsed by the reader. */
+  const processCollapsed = signal(false);
+  /** Downward-only minimum height reservation while the answer streams so height never jumps up. */
+  const minAnswerHeight = signal(0);
   const item = () => props.item;
   let action: ViewRef | undefined;
   let reply: ViewRef | undefined;
@@ -137,7 +186,11 @@ export function Message(props: {
   let previousId: string | undefined;
   effect(() => {
     const id = item().id;
-    if (id !== previousId) process.set(false);
+    if (id !== previousId) {
+      process.set(false);
+      processCollapsed.set(false);
+      minAnswerHeight.set(0);
+    }
     previousId = id;
   });
   const active = () => activeReply(item().status);
@@ -161,15 +214,23 @@ export function Message(props: {
       runFromOf(item().data),
     );
   };
+  /** While streaming, the trailing assistant text block renders directly in the answer area. */
+  const streamingBlock = () => {
+    if (!active()) return undefined;
+    const last = steps().at(-1);
+    return last?.type === "text" && last.text ? last : undefined;
+  };
+  const processSteps = () =>
+    streamingBlock() ? steps().slice(0, -1) : steps();
   /** The steps a count says: a trace of an insert is not one. */
   const stepCount = () =>
-    steps().filter((step) => step.type !== "steer").length;
-  /** The text after the last thought or call, once the run is over (`savedSteps`
-   * keeps the process without it); a failed reply says why instead. */
-  const answer = () =>
-    active() || item().status === "failed" || !item().text
-      ? undefined
-      : item().text;
+    processSteps().filter((step) => step.type !== "steer").length;
+  /** The answer text: streams live as it arrives, or shows the final saved reply text. */
+  const answer = () => {
+    if (item().status === "failed") return undefined;
+    if (active()) return streamingBlock()?.text;
+    return item().text || undefined;
+  };
   const attached = () =>
     Array.isArray(item().data.attachments)
       ? (item().data.attachments as AttachmentView[])
@@ -610,11 +671,7 @@ export function Message(props: {
             </If>
           }
         >
-          {/* A reply at work is one window of a fixed height: everything it
-           * thought, said and did, in order, scrolling inside itself and
-           * following the newest step unless the reader scrolled up. Nothing
-           * is drawn outside it, so replies written at once never push each
-           * other; the answer comes out when the run is over. */}
+          {/* Collapsible live steps window above the streaming answer, preserving per-member Stop. */}
           <View
             testID="process-window"
             style={{ borderWidth: 1, borderColor: c().border }}
@@ -626,21 +683,51 @@ export function Message(props: {
                 paddingLeft: space[12],
                 paddingRight: space[4],
                 justifyContent: "space-between",
-                borderBottomWidth: 1,
+                borderBottomWidth:
+                  processSteps().length > 0 && !processCollapsed() ? 1 : 0,
                 borderColor: c().border,
               }}
             >
-              <Label variant="caption" tone="muted">
-                {stepCount()
-                  ? stepCount() === 1
-                    ? uiText("processOneStep")
-                    : uiText("processSteps", { length: stepCount() })
-                  : item().status === "queued"
-                    ? uiText("queued")
-                    : item().status === "stopping"
-                      ? uiText("stopping")
-                      : uiText("working")}
-              </Label>
+              <View
+                role={processSteps().length > 0 ? "button" : undefined}
+                accessibilityLabel={uiText("thinkingProcess")}
+                accessibilityState={
+                  processSteps().length > 0
+                    ? { expanded: !processCollapsed() }
+                    : undefined
+                }
+                onPress={
+                  processSteps().length > 0
+                    ? () => processCollapsed.set(!processCollapsed())
+                    : undefined
+                }
+                style={{
+                  ...row,
+                  gap: space[4],
+                  flex: 1,
+                  minWidth: 0,
+                  cursor: processSteps().length > 0 ? "pointer" : "default",
+                }}
+              >
+                <If when={processSteps().length > 0}>
+                  <Icon
+                    name={processCollapsed() ? "right" : "down"}
+                    size={icon.sm}
+                    tone="muted"
+                  />
+                </If>
+                <Label variant="caption" tone="muted" lines={1}>
+                  {stepCount()
+                    ? stepCount() === 1
+                      ? uiText("processOneStep")
+                      : uiText("processSteps", { length: stepCount() })
+                    : item().status === "queued"
+                      ? uiText("queued")
+                      : item().status === "stopping"
+                        ? uiText("stopping")
+                        : uiText("working")}
+                </Label>
+              </View>
               <Button
                 label={uiText("stop")}
                 size={control.sm}
@@ -664,11 +751,13 @@ export function Message(props: {
                 }}
               />
             </View>
-            <ProcessWindow height={processWindowHeight}>
-              <Each of={steps()} key={(step) => step.id}>
-                {(step) => <ProcessStep value={step()} />}
-              </Each>
-            </ProcessWindow>
+            <If when={processSteps().length > 0 && !processCollapsed()}>
+              <ProcessWindow height={processWindowHeight}>
+                <Each of={processSteps()} key={(step) => step.id}>
+                  {(step) => <ProcessStep value={step()} />}
+                </Each>
+              </ProcessWindow>
+            </If>
           </View>
           {/* The whole run, in the panel a task run is read in. Before the
            * first step there is nothing more to see: kept, so the first step
@@ -696,7 +785,7 @@ export function Message(props: {
           </View>
         </If>
         <If when={item().status === "failed" && !review()}>
-          {/* A failed reply is its time, then why, as a warning line. */}
+          {/* A failed reply is its time, then why, as a warning line, plus Retry when available. */}
           <View style={{ gap: space[8] }}>
             <Label
               tracking="caps"
@@ -707,6 +796,19 @@ export function Message(props: {
               {messageTime(item().createdAt, false)}
             </Label>
             <Label tone="warning">{`⚠ ${failure()}`}</Label>
+            <If when={props.onRetry}>
+              <View style={row}>
+                <Button
+                  label={uiText("retry")}
+                  icon="refresh"
+                  size={control.sm}
+                  iconSize={icon.sm}
+                  labelVariant="caption"
+                  style={{ gap: space[4], paddingHorizontal: space[8] }}
+                  onPress={() => props.onRetry?.()}
+                />
+              </View>
+            </If>
           </View>
         </If>
         <If
@@ -719,7 +821,20 @@ export function Message(props: {
                   ref={(node) => {
                     reply = node;
                   }}
-                  style={{ paddingHorizontal: space[2] }}
+                  onLayout={(event) => {
+                    if (
+                      active() &&
+                      event.bounds.size.height > minAnswerHeight()
+                    )
+                      minAnswerHeight.set(event.bounds.size.height);
+                  }}
+                  style={{
+                    paddingHorizontal: space[2],
+                    minHeight:
+                      active() && minAnswerHeight() > 0
+                        ? minAnswerHeight()
+                        : undefined,
+                  }}
                 >
                   <chatText.View
                     text={{ text: text(), mentions: mentionRefs() }}
@@ -732,6 +847,9 @@ export function Message(props: {
                       props.onSelectionChange?.(event, reply)
                     }
                   />
+                  <If when={active()}>
+                    <StreamingCaret />
+                  </If>
                 </View>
               )}
             </If>
@@ -768,16 +886,51 @@ export function Message(props: {
         </Each>
         <If when={question()}>{(entry) => <Question item={entry()} />}</If>
         <If when={!review() && item().status !== "failed"}>
-          <Label
-            variant="caption"
-            tone={props.phone ? "muted" : "faint"}
-            tracking={props.phone ? undefined : "caps"}
-            style={{
-              textTransform: props.phone ? "none" : "uppercase",
-            }}
-          >
-            {stamp()}
-          </Label>
+          <View style={{ ...row, gap: space[8] }}>
+            <Label
+              variant="caption"
+              tone={props.phone ? "muted" : "faint"}
+              tracking={props.phone ? undefined : "caps"}
+              style={{
+                textTransform: props.phone ? "none" : "uppercase",
+              }}
+            >
+              {stamp()}
+            </Label>
+            <If when={!active() && answer()}>
+              <Button
+                label={uiText("copy")}
+                icon="copy"
+                tone="ghost"
+                size={control.sm}
+                iconSize={icon.sm}
+                labelVariant="caption"
+                labelTone="muted"
+                style={{ gap: space[4], paddingHorizontal: space[4] }}
+                onPress={() =>
+                  void host.action(async () => {
+                    const value = answer();
+                    if (!value) return;
+                    await Clipboard.writeText(value);
+                    showToast({ title: uiText("copied") });
+                  })
+                }
+              />
+            </If>
+            <If when={!active() && props.onRetry}>
+              <Button
+                label={uiText("retry")}
+                icon="refresh"
+                tone="ghost"
+                size={control.sm}
+                iconSize={icon.sm}
+                labelVariant="caption"
+                labelTone="muted"
+                style={{ gap: space[4], paddingHorizontal: space[4] }}
+                onPress={() => props.onRetry?.()}
+              />
+            </If>
+          </View>
         </If>
       </If>
       <If when={process()}>

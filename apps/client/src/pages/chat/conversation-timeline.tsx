@@ -80,6 +80,8 @@ export function ConversationTimeline(props: {
   onVisibleRows?: (ids: ReadonlySet<string>) => void;
   /** Quote what the reader selected in a reply into the composer. */
   onQuote: (conversationId: string, text: string) => void;
+  /** Re-send the prompt that triggered a completed or failed reply. */
+  onRetryReply?: (reply: MessageView) => void;
   /** A mention's press in a message: its member, by agent id. */
   onMember?: (agentId: string) => void;
 }) {
@@ -370,6 +372,11 @@ export function ConversationTimeline(props: {
                   }
                   onSelectionChange={(event, reply) =>
                     select(message(), event, reply)
+                  }
+                  onRetry={
+                    props.onRetryReply
+                      ? () => props.onRetryReply?.(message())
+                      : undefined
                   }
                   onMember={props.onMember}
                 />
