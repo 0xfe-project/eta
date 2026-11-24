@@ -66,3 +66,49 @@ test("the list follows a search only once the typing pauses", async () => {
   await app.clock!.runFor(400);
   expect(cards(app)).toBe(1);
 });
+
+// Scrolling: the list draws the next batch when the view comes near its end.
+test("scrolling to the end of the list draws the next batch, one batch and no more", async () => {
+  const app = await open("./fixtures/market-batches.tsx", OPEN);
+  await app.waitFor("text:Toolkit 0000");
+  expect(cards(app)).toBe(48);
+  await app.scroll("text:Toolkit 0000", 100000);
+  expect(cards(app)).toBe(96);
+  expect(app.shows("Toolkit 0048")).toBe(true);
+});
+
+test("a list scrolled only a little draws no more", async () => {
+  const app = await open("./fixtures/market-batches.tsx", OPEN);
+  await app.waitFor("text:Toolkit 0000");
+  await app.scroll("text:Toolkit 0000", 100);
+  expect(cards(app)).toBe(48);
+});
+
+test("the end of the list reached again, with the content grown, draws the last batch, and Show more goes with it", async () => {
+  const app = await open("./fixtures/market-batches.tsx", OPEN);
+  await app.waitFor("text:Toolkit 0000");
+  await app.scroll("text:Toolkit 0000", 100000);
+  expect(cards(app)).toBe(96);
+  await app.scroll("text:Toolkit 0000", 100000);
+  expect(cards(app)).toBe(130);
+  expect(app.count("label:Show more")).toBe(0);
+});
+
+test("Show more still draws a batch after a batch was drawn by scrolling", async () => {
+  const app = await open("./fixtures/market-batches.tsx", OPEN);
+  await app.waitFor("text:Toolkit 0000");
+  await app.scroll("text:Toolkit 0000", 100000);
+  expect(cards(app)).toBe(96);
+  await app.press("label:Show more");
+  expect(cards(app)).toBe(130);
+});
+
+test("a search after a scroll draws the first batch again", async () => {
+  const app = await open("./fixtures/market-batches.tsx", SEARCH);
+  await app.waitFor("text:Toolkit 0000");
+  await app.scroll("text:Toolkit 0000", 100000);
+  expect(cards(app)).toBe(96);
+  await app.type("label:Search plugins", "toolkit 00");
+  await app.clock!.runFor(400);
+  expect(cards(app)).toBe(48);
+});
