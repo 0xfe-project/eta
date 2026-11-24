@@ -1,4 +1,4 @@
-import type { Easing, MotionSpec, ViewStyle } from "nsh";
+import type { Easing, KeyframeValue, MotionSpec, ViewStyle } from "nsh";
 import { createMotion, LayoutAnimation, reduceMotion, signal } from "nsh";
 import { space } from "./tokens";
 
@@ -153,8 +153,21 @@ export function passing() {
   let runs = 0;
   return {
     style: (): ViewStyle => (playing() ? moving.style : {}),
-    async play(spec: MotionSpec) {
+    async play(spec: MotionSpec, afterMount = false) {
       const run = ++runs;
+      if (afterMount && !reduceMotion()) {
+        // What comes in with a page that mounts (a conversation, a task) waits at its first
+        // frame until the mount is done: a heavy mount would otherwise take the first part of
+        // the motion before a frame of it is drawn.
+        for (const [channel, frames] of Object.entries(spec.keyframes)) {
+          const first = (frames as KeyframeValue[])[0];
+          if (typeof first === "number")
+            moving[channel as "opacity"].set(first);
+        }
+        playing.set(true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        if (run !== runs) return { finished: false };
+      }
       playing.set(true);
       const result = await moving.play(spec);
       if (run === runs) playing.set(false);
@@ -192,7 +205,7 @@ export function pushed() {
       const run = ++runs;
       leaving.set(false);
       under.set(true);
-      await moving.play(fadeIn("end", motion.pageIn));
+      await moving.play(fadeIn("end", motion.pageIn), true);
       if (run === runs) under.set(false);
     },
     /** It goes back off the page under it. */
@@ -217,7 +230,7 @@ export function pushed() {
       ++runs;
       under.set(false);
       leaving.set(false);
-      void moving.play(fadeIn(from, motion.pageIn));
+      void moving.play(fadeIn(from, motion.pageIn), true);
     },
     settle() {
       ++runs;

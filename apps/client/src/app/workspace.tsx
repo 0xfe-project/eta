@@ -98,7 +98,7 @@ export function Workspace(props: {
   // change at once, as before.
   const pane = passing();
   function step(from: MotionFrom) {
-    if (phone()) void pane.play(fadeIn(from, motion.pageIn));
+    if (phone()) void pane.play(fadeIn(from, motion.pageIn), true);
   }
   const chatPush = pushed();
   const taskPush = pushed();
