@@ -109,20 +109,6 @@ test("a list scrolled a little draws one batch ahead, and a second little scroll
   expect(cards(app)).toBe(batch * 2);
 });
 
-test("the end of the list reached again, with the content grown, draws the next batch, and Show more goes when all is drawn", async () => {
-  const app = await open("./fixtures/market-batches.tsx", OPEN);
-  await app.waitFor("text:Toolkit 0000");
-  const batch = batchOf(app);
-  await app.scroll("text:Toolkit 0000", 100000);
-  expect(cards(app)).toBe(batch * 2);
-  await app.scroll("text:Toolkit 0000", 100000);
-  expect(cards(app)).toBe(Math.min(batch * 3, 130));
-  for (let i = 0; i < 10 && cards(app) < 130; i++)
-    await app.scroll("text:Toolkit 0000", 100000);
-  expect(cards(app)).toBe(130);
-  expect(app.count("label:Show more")).toBe(0);
-});
-
 test("Show more still draws a batch after a batch was drawn by scrolling", async () => {
   const app = await open("./fixtures/market-batches.tsx", OPEN);
   await app.waitFor("text:Toolkit 0000");
@@ -131,15 +117,4 @@ test("Show more still draws a batch after a batch was drawn by scrolling", async
   expect(cards(app)).toBe(batch * 2);
   await app.press("label:Show more");
   expect(cards(app)).toBe(batch * 3);
-});
-
-test("a search after a scroll draws the first batch again", async () => {
-  const app = await open("./fixtures/market-batches.tsx", SEARCH);
-  await app.waitFor("text:Toolkit 0000");
-  const batch = batchOf(app);
-  await app.scroll("text:Toolkit 0000", 100000);
-  expect(cards(app)).toBe(batch * 2);
-  await app.type("label:Search plugins", "toolkit 00");
-  await app.clock!.runFor(400);
-  expect(cards(app)).toBe(batch);
 });

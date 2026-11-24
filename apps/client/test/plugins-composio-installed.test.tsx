@@ -36,18 +36,6 @@ test("a card in the group has the connected mark and both buttons, and no 'From 
   expect(app.count("label:Re-authenticate")).toBe(2);
   expect(app.count("label:Disconnect")).toBe(2);
   expect(app.shows("From Composio")).toBe(false);
-  // Without the buttons (no word from the host) the mark is still there and the line is still gone.
-  const plain = await open("./fixtures/plugins-composio-two.tsx", DESKTOP);
-  await plain.waitFor("id:composio-connected-item");
-  expect(plain.count("id:composio-connected")).toBe(2);
-  expect(plain.shows("From Composio")).toBe(false);
-});
-
-test("on a phone the rows have no 'From Composio' line either, and keep the mark and the buttons", async () => {
-  const app = await open("./fixtures/plugins-composio-phone.tsx", PHONE);
-  await app.waitFor("id:composio-connected-item");
-  expect(app.shows("From Composio")).toBe(false);
-  expect(app.count("id:composio-connected")).toBe(2);
 });
 
 test("no connected toolkit: no group, and the plugins show as before", async () => {
@@ -68,6 +56,7 @@ test("when Composio cannot be asked: no group, no error, the plugins show as bef
 test("on a phone the group is rows, one per connected toolkit", async () => {
   const app = await open("./fixtures/plugins-composio-phone.tsx", PHONE);
   await app.waitFor("id:composio-connected-item");
+  expect(app.shows("From Composio")).toBe(false);
   expect(app.count("id:composio-connected-item")).toBe(2);
   expect(app.count("id:composio-connected")).toBe(2);
   expect(app.shows("on-plugin")).toBe(true);

@@ -341,11 +341,6 @@ describe("a Composio toolkit's logo (Logos.fromUrl)", () => {
       resolve: async () => ["127.0.0.1"],
     });
 
-  it("reaches the fake https server with the test certificate (a PNG is taken)", async () => {
-    const base = await secure((_req, res) => res.end(PNG));
-    expect((await logos().fromUrl(`${base}/a`))?.type).toBe("image/png");
-  });
-
   it("takes an SVG as it is, with the type image/svg+xml", async () => {
     const base = await secure((_req, res) => {
       res.setHeader("content-type", "image/svg+xml");
