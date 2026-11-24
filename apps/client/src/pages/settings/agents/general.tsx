@@ -77,7 +77,7 @@ export function AgentGeneral(props: {
           when={!creating}
           else={
             // The creator's hint is one 10px line: the muted reason, then the link in ink.
-            <View style={{ ...row, flexWrap: "wrap", columnGap: 6 }}>
+            <View style={{ ...row, flexWrap: "wrap", columnGap: space[4] }}>
               <Label variant="caption" tone="muted">
                 {missingModel()
                   ? localizedText(
@@ -160,7 +160,7 @@ export function AgentGeneral(props: {
         creating
           ? {
               paddingVertical: space[16],
-              paddingHorizontal: 14,
+              paddingHorizontal: space[16],
               gap: space[16],
             }
           : undefined

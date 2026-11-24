@@ -182,7 +182,7 @@ export function ProviderDetail(props: {
       <Button
         label={uiText("remove2")}
         icon="trash"
-        style={{ gap: 6, paddingHorizontal: 10 }}
+        style={{ gap: space[4], paddingHorizontal: space[12] }}
         onPress={() => removing.set(true)}
       />
     </View>
@@ -206,7 +206,7 @@ export function ProviderDetail(props: {
         phone={props.phone}
       >
         <If when={check()}>
-          <View style={{ ...row, gap: 6 }}>
+          <View style={{ ...row, gap: space[4] }}>
             <StatusDot
               color={check()?.state === "ok" ? c().green : c().warning}
             />
@@ -222,7 +222,7 @@ export function ProviderDetail(props: {
         <Button
           label={busy() === "check" ? uiText("checking") : uiText("check")}
           disabled={!!busy()}
-          style={{ paddingHorizontal: 10 }}
+          style={{ paddingHorizontal: space[12] }}
           onPress={() => void test()}
         />
       </SectionHeader>
@@ -252,7 +252,7 @@ export function ProviderDetail(props: {
               onPress={() => tab.set(item())}
               style={{
                 ...row,
-                gap: 6,
+                gap: space[4],
                 ...(props.phone ? { flex: 1, justifyContent: "center" } : {}),
                 borderBottomWidth: border.thick,
                 borderColor: tab() === item() ? c().ink : "transparent",
@@ -319,8 +319,8 @@ export function ProviderDetail(props: {
                     width: props.phone ? 160 : 200,
                     height: space[24],
                     ...textStyle(type("small")),
-                    paddingHorizontal: 10,
-                    paddingVertical: 3,
+                    paddingHorizontal: space[12],
+                    paddingVertical: space[4],
                     borderColor: c().strong,
                   }}
                 />
@@ -336,7 +336,7 @@ export function ProviderDetail(props: {
                 </View>
                 <Button
                   label={uiText("settingsChange")}
-                  style={{ paddingHorizontal: 10 }}
+                  style={{ paddingHorizontal: space[12] }}
                   onPress={() => connection.set(true)}
                 />
               </View>
@@ -382,7 +382,7 @@ export function ProviderDetail(props: {
                   </Label>
                   <Button
                     label={uiText("settingsChange")}
-                    style={{ paddingHorizontal: 10 }}
+                    style={{ paddingHorizontal: space[12] }}
                     onPress={() => connection.set(true)}
                   />
                 </View>
@@ -409,7 +409,7 @@ export function ProviderDetail(props: {
               ...row,
               height: space[24],
               gap: space[8],
-              paddingHorizontal: 10,
+              paddingHorizontal: space[12],
               borderWidth: 1,
               borderColor: c().strong,
               ...(props.phone ? { flex: 1, minWidth: 0 } : { width: 240 }),
@@ -425,7 +425,7 @@ export function ProviderDetail(props: {
                 flex: 1,
                 height: 22,
                 paddingHorizontal: 0,
-                paddingVertical: 3,
+                paddingVertical: space[4],
                 borderWidth: 0,
                 ...textStyle(type("small")),
               }}
@@ -442,7 +442,7 @@ export function ProviderDetail(props: {
             }
             icon="refresh"
             disabled={!!busy()}
-            style={{ gap: 6, paddingHorizontal: 10 }}
+            style={{ gap: space[4], paddingHorizontal: space[12] }}
             onPress={() => void refresh()}
           />
         </View>
@@ -452,7 +452,7 @@ export function ProviderDetail(props: {
               <View
                 style={{
                   ...row,
-                  gap: 10,
+                  gap: space[8],
                   paddingHorizontal: space[16],
                   paddingVertical: space[8],
                   borderBottomWidth: 1,

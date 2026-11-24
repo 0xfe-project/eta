@@ -4,7 +4,7 @@ import { View } from "nsh";
 import { ActionItem, colors, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { useModels } from "../../components/model-select";
-import { avatar, space, weight } from "../../components/tokens";
+import { avatar, icon, space, weight } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { EntityRow, WarningLine } from "./section";
@@ -34,9 +34,9 @@ export function SettingRow(props: {
       style={{
         ...row,
         minHeight: 55,
-        gap: 10,
+        gap: space[8],
         paddingHorizontal: space[16],
-        paddingVertical: 7,
+        paddingVertical: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -49,7 +49,7 @@ export function SettingRow(props: {
         </Label>
       </View>
       <If when={props.onPress}>
-        <Icon name="right" size={10} tone="muted" />
+        <Icon name="right" size={icon.sm} tone="muted" />
       </If>
     </View>
   );

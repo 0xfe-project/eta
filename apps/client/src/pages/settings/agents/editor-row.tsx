@@ -15,7 +15,7 @@ export function EditorRow(props: {
   return (
     <View
       style={{
-        ...(props.stack ? { gap: props.phone ? 8 : 6 } : row),
+        ...(props.stack ? { gap: props.phone ? space[8] : space[4] } : row),
         minHeight: props.stack ? undefined : space[40],
         paddingHorizontal: props.stack && !props.phone ? 0 : space[16],
         paddingVertical: props.stack && !props.phone ? 0 : space[8],

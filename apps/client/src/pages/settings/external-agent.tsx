@@ -108,7 +108,7 @@ export function ExternalAgentDetail(props: {
             <Button
               label={uiText("settingsEdit")}
               size={control.md}
-              style={{ paddingHorizontal: 10, flexShrink: 0 }}
+              style={{ paddingHorizontal: space[12], flexShrink: 0 }}
               disabled={testing() || removing()}
               onPress={() => props.onEdit?.()}
             />
@@ -124,7 +124,7 @@ export function ExternalAgentDetail(props: {
             paddingVertical: space[8],
             borderBottomWidth: 1,
             borderColor: c().border,
-            gap: 6,
+            gap: space[4],
           }}
         >
           <StatusDot
@@ -217,7 +217,7 @@ export function ExternalAgentDetail(props: {
             <Label style={{ flex: 1 }}>{uiText("acpEditAgent")}</Label>
             <Button
               label={uiText("settingsEdit")}
-              style={{ gap: 6, paddingHorizontal: 10 }}
+              style={{ gap: space[4], paddingHorizontal: space[12] }}
               disabled={testing() || removing()}
               onPress={() => props.onEdit?.()}
             />
@@ -239,7 +239,7 @@ export function ExternalAgentDetail(props: {
             <Button
               label={uiText("remove2")}
               icon="archive"
-              style={{ gap: 6, paddingHorizontal: 10 }}
+              style={{ gap: space[4], paddingHorizontal: space[12] }}
               disabled={testing()}
               onPress={() => confirm.set(true)}
             />
@@ -272,7 +272,7 @@ export function ExternalAgentDetail(props: {
           phone={props.phone}
           onClose={() => confirm.set(false)}
         >
-          <View style={{ padding: space[16], gap: 10 }}>
+          <View style={{ padding: space[16], gap: space[8] }}>
             <Label>
               {uiText("removeFromWithCount", {
                 label: props.agent.label,

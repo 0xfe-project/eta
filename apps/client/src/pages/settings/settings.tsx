@@ -127,7 +127,7 @@ export function Settings(
   const tall = () => phone() || props.layout === "tablet";
   const actionSize = () => (tall() ? 28 : undefined);
   const actionStyle = () =>
-    tall() ? { paddingHorizontal: 10, gap: 6 } : undefined;
+    tall() ? { paddingHorizontal: space[12], gap: space[4] } : undefined;
   const actions = (name: SettingsSection) => (
     <>
       <If when={name === "Agents"}>
@@ -231,7 +231,7 @@ export function Settings(
                           title={uiText("noModelSources")}
                           description={uiText("noModelSourcesHint")}
                           icon="powerPlug"
-                          iconSize={24}
+                          iconSize={icon.lg}
                           descriptionWidth={320}
                           style={emptyStyle}
                         >
@@ -239,7 +239,7 @@ export function Settings(
                             label={uiText("addEtaTokenPlan")}
                             style={{
                               marginTop: space[8],
-                              paddingHorizontal: 10,
+                              paddingHorizontal: space[12],
                             }}
                             onPress={() => sources.set("eta")}
                           />
@@ -305,7 +305,7 @@ export function Settings(
                       title={uiText("settingsNoExternalAgents")}
                       description={uiText("settingsNoExternalAgentsHint")}
                       icon="terminal"
-                      iconSize={24}
+                      iconSize={icon.lg}
                       descriptionWidth={320}
                       style={emptyStyle}
                     />
@@ -470,7 +470,7 @@ export function Settings(
                 icon="arrowLeft"
                 iconOnly
                 tone="ghost"
-                iconSize={14}
+                iconSize={icon.md}
                 size={14}
                 style={{ paddingHorizontal: 0 }}
                 onPress={props.onClose}

@@ -327,7 +327,7 @@ export function AddSource(props: {
               <View
                 style={{
                   paddingHorizontal: space[16],
-                  paddingVertical: 14,
+                  paddingVertical: space[16],
                   gap: space[12],
                 }}
               >
@@ -470,7 +470,7 @@ export function AddSource(props: {
             <Button
               label={uiText("addSourceBack")}
               size={props.phone ? control.lg : undefined}
-              style={{ paddingHorizontal: props.phone ? 14 : 12 }}
+              style={{ paddingHorizontal: props.phone ? space[16] : space[12] }}
               disabled={busy()}
               onPress={back}
             />
@@ -484,7 +484,7 @@ export function AddSource(props: {
               }
               tone="primary"
               size={props.phone ? control.lg : undefined}
-              style={{ paddingHorizontal: props.phone ? 14 : 12 }}
+              style={{ paddingHorizontal: props.phone ? space[16] : space[12] }}
               disabled={
                 connecting() ||
                 (keyRequired() && apiKey().trim().length === 0) ||
@@ -502,7 +502,7 @@ export function AddSource(props: {
               }
               tone="primary"
               size={props.phone ? control.lg : undefined}
-              style={{ paddingHorizontal: props.phone ? 14 : 12 }}
+              style={{ paddingHorizontal: props.phone ? space[16] : space[12] }}
               disabled={connecting()}
               onPress={() => gatewaySubmit?.()}
             />
@@ -512,7 +512,7 @@ export function AddSource(props: {
               label={uiText("addSourceDone")}
               tone="primary"
               size={props.phone ? control.lg : undefined}
-              style={{ paddingHorizontal: props.phone ? 14 : 12 }}
+              style={{ paddingHorizontal: props.phone ? space[16] : space[12] }}
               disabled={!connector() && (saving() || selected().size === 0)}
               onPress={() => (connector() ? props.onClose() : void finish())}
             />
@@ -665,7 +665,7 @@ function PresetList(props: {
 
 function FieldBlock(props: { label: string; children?: JSX.Element }) {
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: space[4] }}>
       <Label variant="small" tone="muted">
         {props.label}
       </Label>
@@ -697,12 +697,15 @@ function LinkText(props: { text: string; onPress: () => void }) {
 function Alert(props: { text: string }) {
   const c = colors();
   return (
-    <View role="alert" style={{ ...row, alignItems: "flex-start", gap: 6 }}>
+    <View
+      role="alert"
+      style={{ ...row, alignItems: "flex-start", gap: space[4] }}
+    >
       <View
         style={{
           width: 6,
           height: 6,
-          marginTop: 5,
+          marginTop: space[4],
           flexShrink: 0,
           backgroundColor: c().red,
         }}
@@ -817,7 +820,7 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
     <View
       style={{
         paddingHorizontal: space[16],
-        paddingVertical: 14,
+        paddingVertical: space[16],
         gap: space[12],
       }}
     >
@@ -844,11 +847,11 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
               })}
             >
               <Label
+                tracking="caps"
                 variant="subtitle"
                 weight={weight.strong}
                 style={{
                   fontFamily: monoFontFamily(Fonts()()),
-                  letterSpacing: 2,
                 }}
               >
                 {code()}
@@ -879,7 +882,7 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
             />
             <View
               android={{ accessibilityLiveRegion: "polite" }}
-              style={{ ...row, gap: 6, flexShrink: 1 }}
+              style={{ ...row, gap: space[4], flexShrink: 1 }}
             >
               <View
                 style={{ width: 6, height: 6, backgroundColor: c().blue }}
@@ -968,7 +971,7 @@ function GatewayKeyForm(props: {
     <View
       style={{
         paddingHorizontal: space[16],
-        paddingVertical: 14,
+        paddingVertical: space[16],
         gap: space[12],
       }}
     >
@@ -1006,16 +1009,16 @@ function AccountReady(props: { connector: LlmConnector }) {
     (host.section<LlmModel[]>("llm", "models") ?? []).filter(
       (model) => model.connector === props.connector.id,
     );
-  const cell = { paddingHorizontal: space[8], paddingVertical: 6 };
+  const cell = { paddingHorizontal: space[8], paddingVertical: space[8] };
   return (
     <View
       style={{
         paddingHorizontal: space[16],
-        paddingVertical: 14,
+        paddingVertical: space[16],
         gap: space[8],
       }}
     >
-      <View style={{ ...row, gap: 6 }}>
+      <View style={{ ...row, gap: space[4] }}>
         <View style={{ width: 6, height: 6, backgroundColor: c().green }} />
         <Label variant="small">
           {models().length === 1
@@ -1116,7 +1119,7 @@ function ModelPicker(props: {
     ...row,
     gap: space[8],
     paddingHorizontal: space[8],
-    paddingVertical: 6,
+    paddingVertical: space[8],
     borderBottomWidth: 1,
     borderColor: c().border,
   };
@@ -1124,7 +1127,7 @@ function ModelPicker(props: {
     <View
       style={{
         paddingHorizontal: space[16],
-        paddingVertical: 14,
+        paddingVertical: space[16],
         gap: space[8],
       }}
     >
@@ -1170,11 +1173,11 @@ function ModelPicker(props: {
               <CheckControl
                 label={model().name ?? model().id}
                 checked={props.selected.has(model().id)}
-                size={14}
+                size={icon.md}
                 onChange={(on) => props.onToggle(model().id, on)}
                 style={rowStyle}
               >
-                <View style={{ ...row, flex: 1, minWidth: 0, gap: 6 }}>
+                <View style={{ ...row, flex: 1, minWidth: 0, gap: space[4] }}>
                   <Label variant="small" lines={1} style={{ flexShrink: 1 }}>
                     {model().name ?? model().id}
                   </Label>
@@ -1225,7 +1228,7 @@ function ModelPicker(props: {
                 label={model().name ?? model().id}
                 checked={false}
                 disabled
-                size={14}
+                size={icon.md}
                 onChange={() => {}}
                 style={rowStyle}
               >

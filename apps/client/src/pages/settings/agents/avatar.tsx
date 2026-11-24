@@ -11,7 +11,13 @@ import {
 } from "nsh";
 import { Button, colors, focusRing, Label, row } from "../../../components";
 import { AgentFace } from "../../../components/agent-face";
-import { avatar, control, space } from "../../../components/tokens";
+import {
+  avatar,
+  control,
+  icon,
+  opacity,
+  space,
+} from "../../../components/tokens";
 import { localizedText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { EditorRow } from "./editor-row";
@@ -211,7 +217,7 @@ export function AvatarRow(props: {
           label={drawLabel}
           icon="dice"
           iconOnly
-          iconSize={14}
+          iconSize={icon.md}
           tone="ghost"
           size={props.phone ? control.lg : control.sm}
           onPress={draw.roll}
@@ -247,11 +253,11 @@ export function AvatarRow(props: {
                   justifyContent: "center",
                   borderWidth: 1,
                   borderColor: face() === draw.worn() ? c().ink : "transparent",
-                  opacity: face() === draw.worn() ? 1 : 0.6,
+                  opacity: face() === draw.worn() ? 1 : opacity.muted,
                   cursor: "pointer",
                 }}
               >
-                <AgentFace id={draw.agentId} seed={face()} size={18} />
+                <AgentFace id={draw.agentId} seed={face()} size={avatar.sm} />
               </View>
             )}
           </Each>

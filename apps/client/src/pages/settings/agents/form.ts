@@ -64,7 +64,7 @@ export function createAgentForm(props: AgentEditorProps) {
   const compact = () => !phoneEditor() && !creating;
   const selectStyle = () => ({
     height: controlHeight(),
-    ...(compact() ? { paddingLeft: 10, paddingRight: space[8] } : {}),
+    ...(compact() ? { paddingLeft: space[12], paddingRight: space[8] } : {}),
     ...(phoneEditor() ? { paddingHorizontal: space[12] } : {}),
     // The creator's selects take the input token's border, like its fields.
     ...(creating ? { borderColor: c().border } : {}),
@@ -73,13 +73,13 @@ export function createAgentForm(props: AgentEditorProps) {
     height: controlHeight(),
     fontSize: type("small").size,
     ...(phoneEditor()
-      ? { paddingHorizontal: 10, borderColor: c().strong }
+      ? { paddingHorizontal: space[12], borderColor: c().strong }
       : {}),
     ...(compact()
       ? {
           lineHeight: type("small").line,
-          paddingHorizontal: 10,
-          paddingVertical: 3,
+          paddingHorizontal: space[12],
+          paddingVertical: space[4],
           borderColor: c().strong,
         }
       : {}),

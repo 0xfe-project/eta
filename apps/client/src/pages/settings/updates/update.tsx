@@ -34,7 +34,7 @@ export function UpdateSettings(props: {
   return (
     <View style={grow}>
       <GroupHeading title={uiText("update")} phone={phone()}>
-        <View style={{ ...row, gap: 10 }}>
+        <View style={{ ...row, gap: space[8] }}>
           <If when={checkedAt()}>
             <Label variant="small" tone="muted">
               {checkedLabel()}

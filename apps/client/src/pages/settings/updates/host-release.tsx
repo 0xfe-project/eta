@@ -149,7 +149,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
       <View
         style={{
           ...(props.phone ? {} : { alignItems: "flex-start" }),
-          gap: props.phone ? 8 : 6,
+          gap: props.phone ? space[8] : space[4],
           marginTop: props.phone ? space[8] : 0,
         }}
       >
@@ -179,7 +179,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         style={{
           ...(props.phone ? {} : row),
           alignItems: props.phone ? "stretch" : "flex-start",
-          gap: props.phone ? 4 : 10,
+          gap: props.phone ? space[4] : space[8],
           minHeight: 73,
           paddingVertical: space[8],
           paddingHorizontal: space[16],
@@ -205,7 +205,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
             <Label weight={weight.regular}>{version()}</Label>
           </View>
           <If when={props.phone}>
-            <View style={{ ...row, gap: 5 }}>
+            <View style={{ ...row, gap: space[4] }}>
               <StatusDot color={c()[statusTone()]} />
               <Label variant="small" tone="mutedInk">
                 {statusLabel()}
@@ -222,7 +222,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
               onPress={() => notes.set(!notes())}
               style={{
                 ...row,
-                gap: 5,
+                gap: space[4],
                 alignSelf: "flex-start",
                 cursor: "pointer",
               }}
@@ -241,8 +241,10 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         <If
           when={props.phone}
           else={
-            <View style={{ width: 146, alignItems: "flex-start", gap: 7 }}>
-              <View style={{ ...row, gap: 6 }}>
+            <View
+              style={{ width: 146, alignItems: "flex-start", gap: space[8] }}
+            >
+              <View style={{ ...row, gap: space[4] }}>
                 <StatusDot color={c()[statusTone()]} />
                 <Label variant="small" tone="mutedInk">
                   {statusLabel()}
@@ -288,7 +290,9 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
           style={{
             paddingTop: space[4],
             paddingBottom: space[12],
-            paddingLeft: props.phone ? 16 : 50,
+            paddingLeft: props.phone
+              ? space[16]
+              : space[16] + space[24] + space[8],
             paddingRight: space[16],
             gap: space[8],
             borderBottomWidth: 1,
@@ -326,7 +330,9 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
           <View
             style={{
               paddingBottom: space[12],
-              paddingLeft: props.phone ? 16 : 50,
+              paddingLeft: props.phone
+                ? space[16]
+                : space[16] + space[24] + space[8],
               paddingRight: space[16],
               borderBottomWidth: 1,
               borderColor: c().border,
@@ -352,7 +358,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
           style={{
             paddingHorizontal: space[16],
             paddingVertical: space[8],
-            gap: 3,
+            gap: space[2],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}

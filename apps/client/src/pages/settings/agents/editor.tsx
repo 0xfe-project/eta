@@ -76,7 +76,7 @@ export function AgentEditor(props: AgentEditorProps) {
             icon="trash"
             disabled={busy()}
             size={props.phone ? control.md : undefined}
-            style={{ gap: 6, paddingHorizontal: 10 }}
+            style={{ gap: space[4], paddingHorizontal: space[12] }}
             onPress={() => deleting.set(true)}
           />
         </View>
@@ -111,9 +111,13 @@ export function AgentEditor(props: AgentEditorProps) {
         style={{
           ...row,
           minHeight: phoneEditor() ? 48 : creating ? 46 : 40,
-          gap: phoneEditor() ? 4 : 10,
-          paddingLeft: phoneEditor() ? 8 : creating ? 10 : 11,
-          paddingRight: phoneEditor() ? 8 : creating ? 9 : 11,
+          gap: phoneEditor() ? space[4] : space[8],
+          paddingLeft: phoneEditor() ? space[8] : space[12],
+          paddingRight: phoneEditor()
+            ? space[8]
+            : creating
+              ? space[8]
+              : space[12],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
@@ -126,9 +130,7 @@ export function AgentEditor(props: AgentEditorProps) {
             onPress={close}
           />
         </If>
-        <View
-          style={{ ...row, flex: 1, minWidth: 0, gap: phoneEditor() ? 8 : 10 }}
-        >
+        <View style={{ ...row, flex: 1, minWidth: 0, gap: space[8] }}>
           <If when={!creating}>
             <AgentFace
               id={props.id}
@@ -164,7 +166,7 @@ export function AgentEditor(props: AgentEditorProps) {
           <CloseButton
             disabled={busy()}
             size={creating ? 24 : 16}
-            iconSize={creating ? 14 : 16}
+            iconSize={icon.md}
             style={creating ? undefined : { paddingHorizontal: 0 }}
             onPress={close}
           />
@@ -179,7 +181,7 @@ export function AgentEditor(props: AgentEditorProps) {
             <View
               style={{
                 flexDirection: props.phone ? "row" : "column",
-                padding: props.phone ? 0 : 6,
+                padding: props.phone ? 0 : space[8],
                 gap: props.phone ? 0 : space[2],
                 width: props.phone ? undefined : 158,
                 flexShrink: 0,
@@ -202,7 +204,7 @@ export function AgentEditor(props: AgentEditorProps) {
                         style={{
                           ...row,
                           height: 30,
-                          paddingHorizontal: 10,
+                          paddingHorizontal: space[12],
                           backgroundColor:
                             tab() === entry() ? c().selected : c().canvas,
                           cursor: "pointer",
@@ -272,16 +274,16 @@ export function AgentEditor(props: AgentEditorProps) {
             height: space[40],
             flexShrink: 0,
             gap: space[12],
-            paddingHorizontal: 14,
+            paddingHorizontal: space[16],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
         >
           <View style={{ ...row, gap: space[8] }}>
             <Label
+              tracking="caps"
               variant="caption"
               tone="muted"
-              style={{ letterSpacing: 0.8 }}
             >{`${step()}/2`}</Label>
             <Label variant="small" weight={weight.strong}>
               {step() === 1
@@ -333,7 +335,7 @@ export function AgentEditor(props: AgentEditorProps) {
       <View
         style={{
           ...row,
-          paddingHorizontal: phoneEditor() || !creating ? 16 : 14,
+          paddingHorizontal: space[16],
           paddingVertical: phoneEditor()
             ? space[8]
             : creating
@@ -353,7 +355,7 @@ export function AgentEditor(props: AgentEditorProps) {
           size={phoneEditor() ? control.lg : undefined}
           style={
             phoneEditor()
-              ? { paddingHorizontal: 14 }
+              ? { paddingHorizontal: space[16] }
               : creating
                 ? undefined
                 : { paddingHorizontal: space[12] }
@@ -367,7 +369,7 @@ export function AgentEditor(props: AgentEditorProps) {
             onPress={() => step.set(1)}
             disabled={busy()}
             size={phoneEditor() ? control.lg : undefined}
-            style={phoneEditor() ? { paddingHorizontal: 14 } : undefined}
+            style={phoneEditor() ? { paddingHorizontal: space[16] } : undefined}
           />
         </If>
         <If
@@ -382,7 +384,7 @@ export function AgentEditor(props: AgentEditorProps) {
               size={phoneEditor() ? control.lg : undefined}
               style={
                 phoneEditor()
-                  ? { paddingHorizontal: 14 }
+                  ? { paddingHorizontal: space[16] }
                   : creating
                     ? undefined
                     : { paddingHorizontal: space[12] }
@@ -396,7 +398,7 @@ export function AgentEditor(props: AgentEditorProps) {
             tone="primary"
             disabled={!name().trim()}
             size={phoneEditor() ? control.lg : undefined}
-            style={phoneEditor() ? { paddingHorizontal: 14 } : undefined}
+            style={phoneEditor() ? { paddingHorizontal: space[16] } : undefined}
             onPress={() => step.set(2)}
           />
         </If>
@@ -412,7 +414,7 @@ export function AgentEditor(props: AgentEditorProps) {
             if (!busy()) deleting.set(false);
           }}
         >
-          <View style={{ padding: space[16], gap: 14 }}>
+          <View style={{ padding: space[16], gap: space[12] }}>
             <Label>
               {localizedText(
                 `Delete ${title()}? Its direct chat will be archived. Its files stay on the host.`,

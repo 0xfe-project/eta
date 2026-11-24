@@ -221,12 +221,12 @@ export function UpdateNotice(props: {
         alignItems: "flex-start",
         gap: space[8],
         paddingVertical: space[8],
-        paddingHorizontal: 10,
+        paddingHorizontal: space[12],
         borderWidth: 1,
         borderColor: c().border,
       }}
     >
-      <View style={{ paddingTop: 5 }}>
+      <View style={{ paddingTop: space[4] }}>
         <StatusDot color={c()[props.tone as keyof typeof light]} />
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>

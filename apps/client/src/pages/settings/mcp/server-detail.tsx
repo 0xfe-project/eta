@@ -100,7 +100,7 @@ export function McpDetail(props: {
           style={{
             ...row,
             minHeight: control.touch,
-            gap: 6,
+            gap: space[4],
             paddingHorizontal: space[16],
             borderBottomWidth: 1,
             borderColor: c().border,

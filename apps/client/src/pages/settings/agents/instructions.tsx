@@ -128,7 +128,7 @@ export function AgentInstructions(props: { form: AgentForm }) {
                   style={{
                     height: 250,
                     ...textStyle(type("small"), "prose"),
-                    padding: 10,
+                    padding: space[12],
                     borderColor: c().strong,
                   }}
                   value={instructions()}
@@ -178,11 +178,11 @@ export function AgentInstructions(props: { form: AgentForm }) {
       <View
         style={{
           paddingVertical: space[16],
-          paddingHorizontal: 14,
+          paddingHorizontal: space[16],
           gap: space[16],
         }}
       >
-        <View style={{ gap: 6 }}>
+        <View style={{ gap: space[4] }}>
           <View style={{ ...row, justifyContent: "space-between" }}>
             <Label variant="caption">{uiText("instructions")}</Label>
             <If when={instructions().length}>
@@ -199,7 +199,7 @@ export function AgentInstructions(props: { form: AgentForm }) {
             style={{
               height: 192,
               ...textStyle(type("caption"), "prose"),
-              padding: 9,
+              padding: space[8],
             }}
             value={instructions()}
             onChange={instructions.set}

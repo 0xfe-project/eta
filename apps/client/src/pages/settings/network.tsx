@@ -162,9 +162,9 @@ export function NetworkSettings(props: { phone?: boolean }) {
         </If>
         <View
           style={{
-            gap: 6,
+            gap: space[4],
             paddingHorizontal: space[16],
-            paddingVertical: 10,
+            paddingVertical: space[12],
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
@@ -220,7 +220,7 @@ export function NetworkSettings(props: { phone?: boolean }) {
         </View>
         <View
           style={{
-            gap: 6,
+            gap: space[4],
             paddingHorizontal: space[16],
             paddingVertical: space[12],
           }}

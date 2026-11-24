@@ -250,7 +250,7 @@ export function SubscriptionDetail(props: {
                 onPress={() => tab.set(item())}
                 style={{
                   ...row,
-                  gap: 6,
+                  gap: space[4],
                   ...(props.phone ? { flex: 1, justifyContent: "center" } : {}),
                   borderBottomWidth: border.thick,
                   borderColor: tab() === item() ? c().ink : "transparent",

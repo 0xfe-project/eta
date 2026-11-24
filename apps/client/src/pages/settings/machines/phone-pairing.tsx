@@ -71,7 +71,7 @@ export function PhonePairing(props: {
               paddingHorizontal: space[16],
               paddingBottom: space[16],
             }
-          : { gap: space[12], padding: 14 }
+          : { gap: space[12], padding: space[16] }
       }
     >
       <If when={popover()}>
@@ -107,7 +107,7 @@ export function PhonePairing(props: {
             backgroundColor: "#ffffff", // design-value: a QR code is read black on white in either theme
             borderWidth: 1,
             borderColor: c().border,
-            padding: 10,
+            padding: space[12],
             cursor: "pointer",
           }}
         >
