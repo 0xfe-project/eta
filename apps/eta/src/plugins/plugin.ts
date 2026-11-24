@@ -360,9 +360,13 @@ export function pluginsPlugin(
             );
           return { result: { name } };
         }),
-        wire.handle("plugins", "marketSettings", async () => ({
-          result: market.settings(),
-        })),
+        // Reads only what the host keeps; it must not wait behind a slow call of the connection.
+        wire.handle(
+          "plugins",
+          "marketSettings",
+          async () => ({ result: market.settings() }),
+          { unordered: true },
+        ),
         wire.handle("plugins", "marketAddSource", async (call) => {
           const args = new Args(call);
           return {
