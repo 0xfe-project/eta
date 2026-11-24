@@ -108,7 +108,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   cursor: ready() || checked() ? "pointer" : "default",
-                  opacity: item().enabled ? 1 : opacity.disabled,
+                  opacity: item().enabled ? 1 : opacity.muted,
                 }}
               >
                 <If

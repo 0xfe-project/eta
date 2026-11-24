@@ -42,9 +42,8 @@ import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
 import { pluginWarnings, PluginWarningsDialog } from "./warnings";
 
-/** A plugin's card in the grid, and its glyph's tile. */
+/** A plugin's card in the grid. */
 const cardWidth = 268;
-const glyphWidth = 36;
 /** The card's two lines of description, and its footer of actions. */
 const descriptionHeight = 36;
 const footerHeight = 36;
@@ -481,7 +480,7 @@ function PluginCard(props: {
         borderWidth: 1,
         borderColor: c().border,
         gap: space[8],
-        opacity: props.item.enabled ? 1 : opacity.disabled,
+        opacity: props.item.enabled ? 1 : opacity.muted,
       }}
     >
       <View style={{ ...row, alignItems: "flex-start", gap: space[12] }}>
