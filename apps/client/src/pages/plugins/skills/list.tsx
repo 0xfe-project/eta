@@ -21,13 +21,28 @@ import {
   Label,
   ListSkeleton,
   row,
+  sizes,
   SmoothScroll,
   textFaces,
 } from "../../../components";
+import {
+  control,
+  icon,
+  opacity,
+  space,
+  weight,
+} from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { SkillDetail } from "./detail";
 import { SkillSelect } from "./select";
+
+/** The desktop's project select and search field. */
+const projectSelectWidth = 200;
+const searchWidth = 232;
+/** A skill: a row of the tablet list, a card of the desktop grid. */
+const tabletRowHeight = 60;
+const cardWidth = 268;
 
 export function Skills(props: {
   layout: Layout;
@@ -203,8 +218,8 @@ export function Skills(props: {
           truncateValue
           triggerStyle={{
             width,
-            height: 32,
-            paddingHorizontal: 8,
+            height: space[32],
+            paddingHorizontal: space[8],
             borderColor: c().border,
           }}
         >
@@ -236,10 +251,14 @@ export function Skills(props: {
         ...(tablet() || phone() ? {} : { ...row }),
         alignItems: tablet() || phone() ? "stretch" : "center",
         flexWrap: tablet() || phone() ? "nowrap" : "wrap",
-        gap: tablet() || phone() ? 8 : 12,
-        paddingHorizontal: tablet() ? 14 : phone() ? 16 : 24,
-        paddingTop: tablet() ? 10 : 8,
-        paddingBottom: tablet() ? 10 : phone() ? 12 : 16,
+        gap: tablet() || phone() ? space[8] : space[12],
+        paddingHorizontal: tablet()
+          ? space[16]
+          : phone()
+            ? space[16]
+            : space[24],
+        paddingTop: tablet() ? space[12] : space[8],
+        paddingBottom: tablet() ? space[12] : phone() ? space[12] : space[16],
         borderBottomWidth: tablet() ? 1 : 0,
         borderColor: c().border,
       }}
@@ -250,7 +269,7 @@ export function Skills(props: {
           ...row,
           alignSelf: "flex-start",
           backgroundColor: c().selected,
-          padding: 2,
+          padding: space[2],
         }}
       >
         <Each of={["personal", "project"] as const}>
@@ -263,8 +282,8 @@ export function Skills(props: {
               accessibilityState={{ selected: scope() === item() }}
               onPress={() => changeScope(item())}
               style={{
-                paddingHorizontal: 12,
-                paddingVertical: 5,
+                paddingHorizontal: space[12],
+                paddingVertical: space[4],
                 borderWidth: 1,
                 borderColor: scope() === item() ? c().strong : "transparent",
                 backgroundColor: scope() === item() ? c().canvas : undefined,
@@ -293,7 +312,7 @@ export function Skills(props: {
                 value: item.id,
                 title: `${item.name} · ${item.display}`,
               }))}
-              triggerStyle={{ width: tablet() ? "100%" : 200 }}
+              triggerStyle={{ width: tablet() ? "100%" : projectSelectWidth }}
               onChange={(id) => {
                 selectedPath.set("");
                 projectId.set(id);
@@ -309,7 +328,11 @@ export function Skills(props: {
                 : uiText("skillChooseProject")
             }
             truncateValue
-            triggerStyle={{ width: "100%", height: 28, paddingHorizontal: 8 }}
+            triggerStyle={{
+              width: "100%",
+              height: control.md,
+              paddingHorizontal: space[8],
+            }}
           >
             <Each of={projects()} key={(item) => item.id}>
               {(item) => (
@@ -329,7 +352,7 @@ export function Skills(props: {
       <If when={!tablet() && !phone()}>
         <View style={{ flex: 1 }} />
       </If>
-      <View style={{ width: tablet() || phone() ? "100%" : 230 }}>
+      <View style={{ width: tablet() || phone() ? "100%" : searchWidth }}>
         <Field
           label={uiText("searchLoadedSkills")}
           placeholder={uiText("searchLoadedSkills")}
@@ -337,9 +360,9 @@ export function Skills(props: {
           onChange={query.set}
           style={{
             width: "100%",
-            height: phone() ? 32 : 28,
+            height: phone() ? space[32] : control.md,
             fontSize: type("small").size,
-            paddingRight: 25,
+            paddingRight: space[24],
           }}
         />
         <View
@@ -350,7 +373,7 @@ export function Skills(props: {
             pointerEvents: "none",
           }}
         >
-          <Icon name="search" size={12} />
+          <Icon name="search" size={icon.sm} />
         </View>
       </View>
     </View>
@@ -389,7 +412,7 @@ export function Skills(props: {
   const emptyStyle = {
     flex: undefined,
     justifyContent: "flex-start",
-    paddingVertical: 40,
+    paddingVertical: space[40],
   } as const;
   const emptyWidth = () => (tablet() ? 220 : phone() ? 240 : 260);
   const emptyState = () => (
@@ -398,7 +421,13 @@ export function Skills(props: {
       else={
         <ListSkeleton
           label={uiText("loadingSkills")}
-          style={{ paddingHorizontal: tablet() ? 6 : phone() ? 8 : 16 }}
+          style={{
+            paddingHorizontal: tablet()
+              ? space[8]
+              : phone()
+                ? space[8]
+                : space[16],
+          }}
         />
       }
     >
@@ -409,8 +438,8 @@ export function Skills(props: {
             title={emptyCopy().title}
             description={emptyCopy().hint}
             icon="book"
-            iconSize={32}
-            titleWeight={500}
+            iconSize={icon.xl}
+            titleWeight={weight.regular}
             titleTone="ink"
             descriptionWidth={emptyWidth()}
             style={emptyStyle}
@@ -421,12 +450,12 @@ export function Skills(props: {
           title={uiText("unableToLoadSkills")}
           description={failure()}
           icon="warning"
-          iconSize={32}
+          iconSize={icon.xl}
           iconTone="red"
           descriptionWidth={emptyWidth()}
           style={emptyStyle}
         >
-          <Button label={uiText("retry")} size={28} onPress={refresh} />
+          <Button label={uiText("retry")} size={control.md} onPress={refresh} />
         </Empty>
       </If>
     </If>
@@ -446,8 +475,8 @@ export function Skills(props: {
                       ...row,
                       flexWrap: "wrap",
                       alignItems: "stretch",
-                      paddingHorizontal: 24,
-                      gap: 12,
+                      paddingHorizontal: space[24],
+                      gap: space[12],
                     }
             }
           >
@@ -465,20 +494,24 @@ export function Skills(props: {
                     ...(tablet()
                       ? {
                           ...row,
-                          paddingHorizontal: 14,
-                          minHeight: 60,
+                          paddingHorizontal: space[16],
+                          minHeight: tabletRowHeight,
                           borderBottomWidth: 1,
-                          gap: 10,
+                          gap: space[8],
                         }
                       : phone()
                         ? {
                             ...row,
-                            paddingHorizontal: 16,
-                            height: 64,
+                            paddingHorizontal: space[16],
+                            height: space[64],
                             borderTopWidth: 1,
-                            gap: 12,
+                            gap: space[12],
                           }
-                        : { width: 267, padding: 12, borderWidth: 1 }),
+                        : {
+                            width: cardWidth,
+                            padding: space[12],
+                            borderWidth: 1,
+                          }),
                     borderColor: c().border,
                     backgroundColor:
                       selectedPath() === entry().path
@@ -490,8 +523,8 @@ export function Skills(props: {
                   <If when={tablet() || phone()}>
                     <View
                       style={{
-                        width: phone() ? 32 : 28,
-                        height: phone() ? 32 : 28,
+                        width: phone() ? space[32] : control.md,
+                        height: phone() ? space[32] : control.md,
                         alignItems: "center",
                         justifyContent: "center",
                         borderWidth: 1,
@@ -499,12 +532,8 @@ export function Skills(props: {
                         backgroundColor: c().selected,
                       }}
                     >
-                      <View style={{ opacity: 0.6 }}>
-                        <Icon
-                          name="scroll"
-                          size={phone() ? 18 : 16}
-                          tone="mutedInk"
-                        />
+                      <View style={{ opacity: opacity.muted }}>
+                        <Icon name="scroll" size={icon.md} tone="mutedInk" />
                       </View>
                     </View>
                   </If>
@@ -512,23 +541,25 @@ export function Skills(props: {
                     style={{
                       flex: 1,
                       minWidth: 0,
-                      gap: tablet() || phone() ? 2 : 4,
+                      gap: tablet() || phone() ? space[2] : space[4],
                     }}
                   >
-                    <Label weight={tablet() || phone() ? 400 : 500} lines={1}>
+                    <Label weight={weight.regular} lines={1}>
                       {entry().name}
                     </Label>
                     <Label
                       variant="small"
                       tone="muted"
                       lines={tablet() || phone() ? 1 : 2}
-                      style={{ height: tablet() || phone() ? undefined : 32 }}
+                      style={{
+                        height: tablet() || phone() ? undefined : space[32],
+                      }}
                     >
                       {entry().description}
                     </Label>
                   </View>
                   <If when={phone()}>
-                    <Icon name="right" size={16} />
+                    <Icon name="right" size={icon.md} />
                   </If>
                 </View>
               )}
@@ -571,25 +602,29 @@ export function Skills(props: {
                 label={uiText("skillReload")}
                 icon="refresh"
                 iconOnly
-                iconSize={14}
-                size={32}
+                iconSize={icon.md}
+                size={control.lg}
                 onPress={refresh}
               />
             </Header>
             {props.tabs()}
           </If>
           <If when={!phone()}>
-            <Header title={uiText("plugins")} layout={props.layout} inset={10}>
+            <Header
+              title={uiText("plugins")}
+              layout={props.layout}
+              inset={space[12]}
+            >
               <View style={{ flex: 1 }} />
               <If when={!showing()}>
-                <View style={{ ...row, gap: 12 }}>
+                <View style={{ ...row, gap: space[12] }}>
                   {deviceMenu(160)}
                   <Button
                     label={uiText("skillReload")}
                     icon="refresh"
                     iconOnly
-                    iconSize={16}
-                    size={16}
+                    iconSize={icon.md}
+                    size={control.sm}
                     style={{ paddingHorizontal: 0 }}
                     tone="ghost"
                     onPress={refresh}
@@ -608,7 +643,7 @@ export function Skills(props: {
       <View style={{ ...row, ...grow, alignItems: "stretch" }}>
         <View
           style={{
-            width: 320,
+            width: sizes.tabletList,
             flexShrink: 0,
             borderRightWidth: 1,
             borderColor: c().border,
@@ -619,8 +654,8 @@ export function Skills(props: {
             count={entries().length}
             layout="tablet"
             background="canvas"
-            inset={14}
-            end={10}
+            inset={space[16]}
+            end={space[12]}
           >
             <View style={{ flex: 1 }} />
             <Button
@@ -643,7 +678,7 @@ export function Skills(props: {
                   // Nothing listed: the detail pane keeps only its blank header bar.
                   <View
                     style={{
-                      height: 40,
+                      height: space[40],
                       flexShrink: 0,
                       backgroundColor: c().surface,
                       borderBottomWidth: 1,

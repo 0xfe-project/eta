@@ -2,16 +2,23 @@ import type { JSX, ViewRef, ViewStyle } from "nsh";
 import { Image, View, windowSize } from "nsh";
 import { ActionMenu, Button, colors, Icon, Label, row } from "../../components";
 import { StatusDot } from "../../components/status-dot";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { tintedLogo } from "./models/logos";
+
+/** A row's status column, wide enough for its dot and word. */
+const statusLaneWidth = 100;
+
+/** The box a row's leading avatar, logo or glyph sits in when it is not the default 24. */
+export const leadingBoxWidth = 28;
 
 /** An empty pane says so right under its header, not in the middle of the pane. */
 export const emptyStyle: ViewStyle = {
   flex: 0,
   justifyContent: "flex-start",
-  gap: 4,
-  paddingVertical: 24,
-  paddingHorizontal: 16,
+  gap: space[4],
+  paddingVertical: space[24],
+  paddingHorizontal: space[16],
 };
 
 /** The header that opens a settings pane or a group inside one: title, count, actions, description. */
@@ -32,9 +39,9 @@ export function SectionHeader(props: {
     <View
       style={{
         flexShrink: 0,
-        gap: 2,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        gap: space[2],
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -42,8 +49,8 @@ export function SectionHeader(props: {
       <View
         style={{
           ...row,
-          height: props.rowHeight ?? (props.phone ? 28 : 24),
-          gap: 8,
+          height: props.rowHeight ?? (props.phone ? control.md : space[24]),
+          gap: space[8],
         }}
       >
         {props.leading}
@@ -53,10 +60,14 @@ export function SectionHeader(props: {
             alignItems: "baseline",
             flex: 1,
             minWidth: 0,
-            gap: 8,
+            gap: space[8],
           }}
         >
-          <Label weight={600} lines={1} tone={props.muted ? "muted" : "ink"}>
+          <Label
+            weight={weight.strong}
+            lines={1}
+            tone={props.muted ? "muted" : "ink"}
+          >
             {props.title}
           </Label>
           <If when={props.count !== undefined}>
@@ -66,7 +77,7 @@ export function SectionHeader(props: {
           </If>
         </View>
         <If when={props.children}>
-          <View style={{ ...row, gap: 8 }}>{props.children}</View>
+          <View style={{ ...row, gap: space[8] }}>{props.children}</View>
         </If>
       </View>
       <If when={props.description}>
@@ -89,9 +100,9 @@ export function StatusLane(props: { status?: EntityStatus; width?: number }) {
     <View
       style={{
         ...row,
-        width: props.width ?? 100,
-        height: 20,
-        gap: 6,
+        width: props.width ?? statusLaneWidth,
+        height: space[20],
+        gap: space[4],
         flexShrink: 0,
       }}
     >
@@ -112,7 +123,7 @@ export function StatusLane(props: { status?: EntityStatus; width?: number }) {
 /** The phone's status line under an entity's name: a 6px square and a short label. */
 export function StatusLine(props: { status: EntityStatus }) {
   return (
-    <View style={{ ...row, height: 16, gap: 6, flexShrink: 0 }}>
+    <View style={{ ...row, height: space[16], gap: space[4], flexShrink: 0 }}>
       <StatusDot color={props.status.color} />
       <Label variant="small" tone="mutedInk" lines={1}>
         {props.status.label}
@@ -138,9 +149,9 @@ export function PaneBack(props: {
       icon="arrowLeft"
       iconOnly
       tone="ghost"
-      iconSize={tablet() ? 14 : 16}
+      iconSize={icon.md}
       labelTone={tablet() ? "ink" : "mutedInk"}
-      size={16}
+      size={control.sm}
       disabled={props.disabled}
       style={{ paddingHorizontal: 0 }}
       onPress={props.onPress}
@@ -149,18 +160,23 @@ export function PaneBack(props: {
 }
 
 /**
- * An amber line with the design's 12px Warning mark before it: solid in list rows, the outline
+ * A warning line with the design's 12px Warning mark before it: solid in list rows, the outline
  * where the design draws one (an external agent's sign-in, the editor's missing model).
  */
 export function WarningLine(props: { text: string; outline?: boolean }) {
   return (
     <View
-      style={{ ...row, alignSelf: "stretch", gap: 6, alignItems: "flex-start" }}
+      style={{
+        ...row,
+        alignSelf: "stretch",
+        gap: space[4],
+        alignItems: "flex-start",
+      }}
     >
-      <View style={{ height: 16, justifyContent: "center" }}>
+      <View style={{ height: space[16], justifyContent: "center" }}>
         <Icon
           name={props.outline ? "warning" : "warningFill"}
-          size={12}
+          size={icon.sm}
           tone="warning"
         />
       </View>
@@ -208,9 +224,9 @@ export function EntityRow(props: {
         ...row,
         alignItems: "flex-start",
         flexShrink: 0,
-        gap: 10,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        gap: space[8],
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -229,15 +245,15 @@ export function EntityRow(props: {
           alignItems: "flex-start",
           flex: 1,
           minWidth: 0,
-          gap: 10,
+          gap: space[8],
           cursor: props.onPress ? "pointer" : undefined,
         }}
       >
         <If when={props.leading}>
           <View
             style={{
-              width: props.leadingSize ?? 24,
-              height: props.leadingSize ?? 24,
+              width: props.leadingSize ?? space[24],
+              height: props.leadingSize ?? space[24],
               flexShrink: 0,
               alignItems: "center",
               justifyContent: "center",
@@ -246,9 +262,9 @@ export function EntityRow(props: {
             {props.leading}
           </View>
         </If>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
           <Label
-            weight={500}
+            weight={weight.regular}
             tone={props.titleTone ?? "ink"}
             style={
               props.strike ? { textDecorationLine: "line-through" } : undefined
@@ -278,7 +294,7 @@ export function EntityRow(props: {
           <If when={!props.stacked || props.caret}>
             <View
               style={{
-                width: 24,
+                width: space[24],
                 height: trailingHeight(),
                 flexShrink: 0,
                 alignItems: "center",
@@ -286,7 +302,7 @@ export function EntityRow(props: {
               }}
             >
               <If when={props.caret}>
-                <Icon name="right" size={16} tone="mutedInk" />
+                <Icon name="right" size={icon.md} tone="mutedInk" />
               </If>
             </View>
           </If>
@@ -295,9 +311,9 @@ export function EntityRow(props: {
         <ActionMenu
           label={props.menuLabel ?? props.title}
           triggerStyle={{
-            minWidth: 24,
-            width: 24,
-            height: 24,
+            minWidth: space[24],
+            width: space[24],
+            height: space[24],
             paddingHorizontal: 0,
           }}
         >
@@ -334,7 +350,7 @@ export function LetterBox(props: {
       <If
         when={props.logo}
         else={
-          <Label variant="small" weight={600}>
+          <Label variant="small" weight={weight.strong}>
             {props.name.slice(0, 1).toUpperCase()}
           </Label>
         }

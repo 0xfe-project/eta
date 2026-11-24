@@ -7,6 +7,7 @@ import type { TextStyle, ViewStyle } from "nsh";
 import type { TextVariant } from "../../components";
 import { signal, Storage, View } from "nsh";
 import { colors, Label, row } from "../../components";
+import { space, weight } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { followSession, useHost } from "../../services/host";
 
@@ -139,19 +140,15 @@ export function HintBox(props: { lines: string[] }) {
   return (
     <View
       style={{
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        gap: 2,
+        paddingHorizontal: space[12],
+        paddingVertical: space[8],
+        gap: space[2],
         backgroundColor: c().ink,
       }}
     >
       <Each of={props.lines}>
-        {(line, index) => (
-          <Label
-            variant="small"
-            tone="canvas"
-            weight={index() === 0 ? 500 : 400}
-          >
+        {(line) => (
+          <Label variant="small" tone="canvas" weight={weight.regular}>
             {line()}
           </Label>
         )}
@@ -207,7 +204,7 @@ export function UsageLine(props: {
       {(current) => (
         <View
           tooltip={<HintBox lines={usageHint(current().brief)} />}
-          style={{ ...row, gap: 6, minWidth: 0, ...props.style }}
+          style={{ ...row, gap: space[4], minWidth: 0, ...props.style }}
         >
           <Label
             variant={props.variant ?? "small"}

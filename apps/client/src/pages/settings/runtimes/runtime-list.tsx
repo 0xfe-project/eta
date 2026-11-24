@@ -9,10 +9,17 @@ import type { RuntimeListing } from "./listing";
 import { signal, View } from "nsh";
 import { Button, colors, Label, row } from "../../../components";
 import { StatusDot } from "../../../components/status-dot";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { localTime, percentText } from "../models/quota";
-import { EntityRow, LetterBox, SectionHeader, WarningLine } from "../section";
+import {
+  EntityRow,
+  leadingBoxWidth,
+  LetterBox,
+  SectionHeader,
+  WarningLine,
+} from "../section";
 import { tokens } from "../setting-row";
 import { reachable } from "./listing";
 import { runtimeLogo } from "./logos";
@@ -23,6 +30,9 @@ import {
   reasonTone,
   runtimeReason,
 } from "./status";
+
+/** A runtime's status column: room for "Needs sign-in" and its dot. */
+const runtimeLaneWidth = 152;
 
 /** The CLI's own `--version` line may carry its name (`codex-cli 0.167.2`): the number alone. */
 function versionOf(runtime: AgentRuntimeInfo) {
@@ -35,8 +45,8 @@ const custom = (runtime: AgentRuntimeInfo) => runtime.id.startsWith("acp.");
 /** A small heading inside an open row. */
 function Part(props: { title: string; children?: JSX.Element }) {
   return (
-    <View style={{ gap: 2 }}>
-      <Label variant="small" weight={500}>
+    <View style={{ gap: space[2] }}>
+      <Label variant="small" weight={weight.regular}>
         {props.title}
       </Label>
       {props.children}
@@ -187,11 +197,13 @@ function RuntimeDetail(props: {
   return (
     <View
       style={{
-        gap: 10,
-        paddingLeft: props.phone ? 54 : 50,
-        paddingRight: 16,
-        paddingTop: 2,
-        paddingBottom: 12,
+        gap: space[8],
+        // Under the title: the row's inset, the icon's box and the gap after it.
+        paddingLeft:
+          space[16] + (props.phone ? control.md : space[24]) + space[8],
+        paddingRight: space[16],
+        paddingTop: space[2],
+        paddingBottom: space[12],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -266,7 +278,7 @@ function RuntimeDetail(props: {
           <Button
             label={uiText("runtimeOpenExternalAgent")}
             tone="ghost"
-            size={20}
+            size={control.sm}
             labelTone="mutedInk"
             style={{ paddingHorizontal: 0 }}
             onPress={() =>
@@ -315,11 +327,11 @@ function RuntimeRow(props: {
             logo={runtimeLogo(props.runtime.id, props.runtime.label)}
           />
         }
-        leadingSize={props.phone ? 28 : undefined}
+        leadingSize={props.phone ? leadingBoxWidth : undefined}
         meta={meta()}
         stacked={props.phone}
         caret={props.phone}
-        laneWidth={150}
+        laneWidth={runtimeLaneWidth}
         status={{
           label: uiText(reason() ? reasonText[reason()!] : "runtimeAvailable"),
           color: c()[reasonTone(reason())],
@@ -377,9 +389,9 @@ function MachineRuntimes(props: {
     <View
       style={{
         ...row,
-        gap: 10,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        gap: space[8],
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -406,10 +418,10 @@ function MachineRuntimes(props: {
                 : uiText("runtimesCheckAgain")
             }
             tone="ghost"
-            size={props.phone ? 28 : 24}
+            size={props.phone ? control.md : control.sm}
             labelTone="mutedInk"
             icon="refresh"
-            iconSize={12}
+            iconSize={icon.sm}
             disabled={props.listing.probing(props.machine)}
             style={{ paddingHorizontal: 0 }}
             onPress={() => void props.listing.refresh(props.machine)}

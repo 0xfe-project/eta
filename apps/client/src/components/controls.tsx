@@ -17,6 +17,7 @@ import {
 import { Icon, Label } from "./text";
 import {
   colors,
+  densityDefaults,
   focusRing,
   fontFamily,
   Fonts,
@@ -26,6 +27,13 @@ import {
   textFaces,
   textStyle,
 } from "./theme";
+import { control, icon, opacity, shadow, space, weight } from "./tokens";
+
+/** A menu's width, unless its caller says. */
+const menuWidth = 172;
+/** A choice's row in a phone sheet, and in a menu. */
+const sheetRowHeight = 52;
+const checkRowHeight = 32;
 
 export function Button(props: {
   label: string;
@@ -60,6 +68,8 @@ export function Button(props: {
   onPress: () => void;
 }) {
   const color = colors();
+  const density = densityDefaults();
+  const size = () => props.size ?? density().button;
   const picker = pickerTarget(
     "Button",
     "apps/client/src/components/controls.tsx",
@@ -102,11 +112,11 @@ export function Button(props: {
       style={{
         ...row,
         justifyContent: "center",
-        gap: 4,
+        gap: space[4],
         flexShrink: 0,
-        height: props.size ?? 24,
-        minWidth: props.size ?? 24,
-        paddingHorizontal: props.iconOnly ? 3 : 8,
+        height: size(),
+        minWidth: size(),
+        paddingHorizontal: props.iconOnly ? space[4] : space[8],
         borderWidth: ghost() ? 0 : 1,
         borderColor: props.selected
           ? color().ink
@@ -121,7 +131,8 @@ export function Button(props: {
             : ghost()
               ? undefined
               : color().canvas,
-        opacity: props.disabled && props.dimDisabled !== false ? 0.45 : 1,
+        opacity:
+          props.disabled && props.dimDisabled !== false ? opacity.disabled : 1,
         cursor: props.disabled ? "default" : "pointer",
         ...props.style,
       }}
@@ -130,13 +141,16 @@ export function Button(props: {
         <Icon
           name={props.icon!}
           tone={textTone()}
-          size={props.iconSize ?? 12}
+          size={props.iconSize ?? density().buttonIcon}
         />
       </If>
       <If when={!props.iconOnly}>
         <Label
           variant={props.labelVariant ?? "small"}
-          weight={props.labelWeight ?? (props.selected ? 600 : 400)}
+          weight={
+            props.labelWeight ??
+            (props.selected ? weight.strong : weight.regular)
+          }
           tone={textTone()}
         >
           {props.label}
@@ -146,7 +160,7 @@ export function Button(props: {
         <Label
           variant="caption"
           tone={textTone()}
-          style={{ opacity: 0.55, marginLeft: 4 }}
+          style={{ opacity: opacity.disabled, marginLeft: space[4] }}
         >
           {props.shortcut}
         </Label>
@@ -155,7 +169,7 @@ export function Button(props: {
         <Icon
           name={props.end!}
           tone={primary() ? "buttonInk" : "muted"}
-          size={10}
+          size={icon.sm}
         />
       </If>
     </View>
@@ -167,8 +181,8 @@ export function hint(text: string | undefined, c: ReturnType<typeof colors>) {
   return text ? (
     <View
       style={{
-        paddingHorizontal: 8,
-        paddingVertical: 4,
+        paddingHorizontal: space[8],
+        paddingVertical: space[4],
         backgroundColor: c().ink,
       }}
     >
@@ -259,9 +273,9 @@ export function Field(
         backgroundColor: color().canvas,
         fontFamily: fontFamily(fonts().interface),
         ...textStyle(type("body")),
-        height: 32,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
+        height: space[32],
+        paddingHorizontal: space[8],
+        paddingVertical: space[4],
         borderWidth: 1,
         borderColor: color().border,
         borderRadius: 0,
@@ -323,30 +337,33 @@ export function ActionMenu(props: {
       open={titled() ? open() : undefined}
       onOpenChange={(next) => open.set(next)}
       popupStyle={{
-        width: props.popupWidth ?? 172,
-        paddingVertical: props.lifted ? 4 : 0,
+        width: props.popupWidth ?? menuWidth,
+        paddingVertical: props.lifted ? space[4] : 0,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
-        boxShadow: props.lifted
-          ? [{ x: 0, y: 8, blur: 24, color: "#0000001f" }]
-          : undefined,
+        boxShadow: props.lifted ? [shadow.popover] : undefined,
       }}
       sheetHeader={
         <If when={props.sheetTitle}>
           <View
-            style={{ ...row, height: 44, paddingLeft: 16, paddingRight: 8 }}
+            style={{
+              ...row,
+              height: control.touch,
+              paddingLeft: space[16],
+              paddingRight: space[8],
+            }}
           >
-            <Label weight={600} lines={1} style={grow}>
+            <Label weight={weight.strong} lines={1} style={grow}>
               {props.sheetTitle}
             </Label>
             <Button
               label={text("close")}
               icon="close"
               iconOnly
-              iconSize={16}
+              iconSize={icon.md}
               tone="ghost"
-              size={32}
+              size={control.lg}
               onPress={() => open.set(false)}
             />
           </View>
@@ -366,10 +383,10 @@ export function ActionMenu(props: {
           style={{
             ...row,
             justifyContent: props.value ? "space-between" : "center",
-            minWidth: 32,
-            height: 30,
-            paddingHorizontal: 7,
-            gap: 7,
+            minWidth: space[32],
+            height: control.lg,
+            paddingHorizontal: space[8],
+            gap: space[8],
             cursor: "pointer",
             borderWidth: props.value ? 1 : 0,
             borderColor: c().strong,
@@ -409,9 +426,9 @@ export function ActionMenu(props: {
               size={
                 props.value
                   ? props.valueTone
-                    ? 14
-                    : 9
-                  : (props.iconSize ?? 17)
+                    ? icon.md
+                    : icon.sm
+                  : (props.iconSize ?? icon.md)
               }
               tone={props.valueTone}
             />
@@ -446,24 +463,24 @@ export function ActionItem(props: {
         inSheet()
           ? {
               ...row,
-              minHeight: 52,
-              paddingHorizontal: 16,
-              gap: 12,
+              minHeight: sheetRowHeight,
+              paddingHorizontal: space[16],
+              gap: space[12],
               borderTopWidth: 1,
               borderColor: c().border,
             }
           : props.roomy
             ? {
                 ...row,
-                minHeight: touchScreen ? touchRow : 32,
-                paddingHorizontal: 12,
-                gap: 8,
+                minHeight: touchScreen ? touchRow : space[32],
+                paddingHorizontal: space[12],
+                gap: space[8],
               }
             : {
                 ...row,
-                minHeight: touchScreen ? touchRow : 33,
-                paddingHorizontal: 9,
-                gap: 6,
+                minHeight: touchScreen ? touchRow : checkRowHeight,
+                paddingHorizontal: space[8],
+                gap: space[4],
               }
       }
       onSelect={props.onSelect}
@@ -482,7 +499,7 @@ export function ActionItem(props: {
         </Label>
       </If>
       <If when={props.checked}>
-        <Icon name="check" size={12} />
+        <Icon name="check" size={icon.sm} />
       </If>
     </MenuRow>
   );

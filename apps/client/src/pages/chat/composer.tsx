@@ -22,7 +22,7 @@ import {
   windowSize,
 } from "nsh";
 
-import { Button, colors, Icon, Label, row } from "../../components";
+import { Button, colors, focusRing, Icon, Label, row } from "../../components";
 import {
   attachment,
   chatText,
@@ -33,15 +33,21 @@ import {
   serialize,
   submitKeys,
 } from "../../components/eta-editor";
+import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { OutboxRows } from "./composer-delivery";
-import { drainOutbox, openComposerDraft } from "./composer-draft";
+import {
+  drainOutbox,
+  openComposerDraft,
+  placedNow,
+  retryOutgoing,
+} from "./composer-draft";
 
 import { ComposerRecipients } from "./composer-recipients";
 import { HeldMessages } from "./held-messages";
-
 import { activeReply } from "./member-status";
+
+import { deliveries, waitsForOf } from "./outbox";
 
 interface ComposerProps {
   id: string;
@@ -49,6 +55,8 @@ interface ComposerProps {
   members: MemberView[];
   steward?: string | null;
   group: boolean;
+  /** The conversation's kind (`group` by default, `captain`): who a message goes to follows from it. */
+  kind?: string;
   projectId?: string;
   tablet: boolean;
   writing: boolean;
@@ -78,18 +86,23 @@ export function Composer(props: ComposerProps) {
 }
 
 /** The box while the saved draft loads: its outline, so the layout does not jump. */
+/** About the composer's height with an empty draft. */
+const shellHeight = 84;
+
 function ComposerShell(props: { phone: boolean }) {
   const c = colors();
   return (
     <View
       style={{
-        paddingVertical: props.phone ? 12 : 16,
-        paddingHorizontal: props.phone ? 12 : 16,
-        paddingTop: 8,
+        paddingVertical: props.phone ? space[12] : space[16],
+        paddingHorizontal: props.phone ? space[12] : space[16],
+        paddingTop: space[8],
         flexShrink: 0,
       }}
     >
-      <View style={{ height: 82, borderWidth: 1, borderColor: c().ink }} />
+      <View
+        style={{ height: shellHeight, borderWidth: 1, borderColor: c().ink }}
+      />
     </View>
   );
 }
@@ -267,6 +280,17 @@ function ComposerBody(
     !props.blocked &&
     state().files <= MAX_ATTACHMENTS;
   const outgoing = () => store.value().outgoing;
+  /**
+   * Messages on their way that wait in the queue (every agent they go to was answering as they
+   * went, or the host said so): after the held ones, until the host's rows take their place.
+   */
+  const queuing = computed(() =>
+    deliveries({
+      outgoing: outgoing(),
+      landed: store.landed(),
+      shown: new Set(props.held.map((message) => message.id)),
+    }).filter((entry) => entry.waitsFor.length),
+  );
   function removeOutgoing(id: string) {
     return outgoing().filter((item) => item.id !== id);
   }
@@ -279,17 +303,25 @@ function ComposerBody(
       conversationId,
       sent.attachments.map((file) => file.id),
     );
+    const mentions = props.group ? targetAtSend.mentions : undefined;
     edit({
       sticky: props.group ? targetAtSend.sticky : undefined,
       outgoing: [
         ...outgoing(),
-        {
+        placedNow({
           id: crypto.randomUUID(),
           text: sent.text,
           blocks: sent.blocks,
-          mentions: props.group ? targetAtSend.mentions : undefined,
+          mentions,
           attachments: sent.attachments,
-        },
+          at: Date.now(),
+          waitsFor: waitsForOf({
+            kind: props.kind ?? "group",
+            members: props.members,
+            steward: props.steward,
+            mentions,
+          }),
+        }),
       ],
     });
     editor.clear();
@@ -326,6 +358,13 @@ function ComposerBody(
     else editor.insert(nodes, 0);
     editor.focus();
   }
+  // A failed message the reader chose to edit, from its row in the transcript or the queue.
+  effect(() => {
+    const message = store.editing();
+    if (!message) return;
+    store.editing.set(undefined);
+    untracked(() => restore(message));
+  });
   function toggle(id: string) {
     const selected = target().ids;
     const next = selected.includes(id)
@@ -339,32 +378,24 @@ function ComposerBody(
       testID="conversation-composer"
       style={{
         position: "relative",
+        // design-value: order inside the conversation, so the composer's popovers draw over the transcript
         zIndex: 2,
-        paddingVertical: props.phone ? 12 : 16,
-        paddingHorizontal: props.phone ? 12 : props.alignWithContent ? 0 : 16,
-        paddingTop: 8,
-        gap: 8,
+        paddingVertical: props.phone ? space[12] : space[16],
+        paddingHorizontal: props.phone
+          ? space[12]
+          : props.alignWithContent
+            ? 0
+            : space[16],
+        paddingTop: space[8],
+        gap: space[8],
         flexShrink: 0,
         borderTopWidth: props.phone ? 1 : 0,
         borderColor: c().border,
         backgroundColor: c().canvas,
       }}
     >
-      <OutboxRows
-        messages={outgoing()}
-        onRetry={(id) => {
-          edit({
-            outgoing: outgoing().map((item) =>
-              item.id === id ? { ...item, failure: undefined } : item,
-            ),
-          });
-          flush();
-        }}
-        onEdit={restore}
-        onDiscard={(id) => edit({ outgoing: removeOutgoing(id) })}
-      />
       <If when={props.blocked}>
-        <View style={{ ...row, gap: 6 }}>
+        <View style={{ ...row, gap: space[4] }}>
           <Label variant="small">
             {uiText(
               props.blocked === "archived"
@@ -382,6 +413,10 @@ function ComposerBody(
       </If>
       <HeldMessages
         messages={props.held}
+        sending={queuing()}
+        onRetry={(id) => retryOutgoing(store, host, origin, conversationId, id)}
+        onEdit={restore}
+        onDiscard={(id) => edit({ outgoing: removeOutgoing(id) })}
         conversationId={conversationId}
         phone={props.phone}
         onPullBack={prepend}
@@ -411,7 +446,7 @@ function ComposerBody(
         />
       </If>
       <If when={limits.tooLong()}>
-        <Label tone="amber" variant="small">
+        <Label tone="warning" variant="small">
           {uiText("composerTooLong")}
         </Label>
       </If>
@@ -421,7 +456,7 @@ function ComposerBody(
           position: "relative",
           borderWidth: 1,
           borderColor: c().ink,
-          opacity: offline() ? 0.45 : 1,
+          opacity: offline() ? opacity.disabled : 1,
           pointerEvents: offline() ? "none" : undefined,
         }}
       >
@@ -452,10 +487,10 @@ function ComposerBody(
           <View
             style={{
               ...row,
-              height: 40,
-              paddingLeft: props.phone ? 0 : 12,
-              paddingRight: 6,
-              gap: props.phone ? 6 : 12,
+              height: space[40],
+              paddingLeft: props.phone ? 0 : space[12],
+              paddingRight: space[8],
+              gap: props.phone ? space[4] : space[12],
               backgroundColor: props.phone ? c().canvas : c().surface,
               borderTopWidth: props.phone ? 0 : 1,
               borderColor: c().border,
@@ -469,23 +504,19 @@ function ComposerBody(
                 if (!attachDisabled())
                   void host.action(() => files$.pick(editor));
               }}
-              hoverStyle={{ opacity: 0.7 }}
-              focusVisibleStyle={{
-                outlineWidth: 1,
-                outlineColor: c().blue,
-                outlineOffset: 1,
-              }}
+              hoverStyle={{ opacity: opacity.muted }}
+              focusVisibleStyle={focusRing(c())}
               style={{
                 ...row,
                 justifyContent: "center",
-                width: props.phone ? 32 : 14,
-                height: props.phone ? 32 : 14,
+                width: props.phone ? control.lg : icon.md,
+                height: props.phone ? control.lg : icon.md,
                 flexShrink: 0,
-                opacity: attachDisabled() ? 0.45 : 1,
+                opacity: attachDisabled() ? opacity.disabled : 1,
                 cursor: attachDisabled() ? "default" : "pointer",
               }}
             >
-              <Icon name="plus" size={props.phone ? 16 : 14} tone="muted" />
+              <Icon name="plus" size={icon.md} tone="muted" />
             </View>
             <View style={{ flex: props.phone ? 0 : 1 }} />
             <Button
@@ -493,12 +524,14 @@ function ComposerBody(
               icon={props.phone ? "arrowUp" : undefined}
               iconOnly={props.phone}
               end={props.phone ? undefined : "return"}
-              size={props.phone ? 32 : 28}
-              iconSize={props.phone ? 16 : undefined}
+              size={props.phone ? control.lg : control.md}
+              iconSize={props.phone ? icon.md : undefined}
               labelVariant="caption"
-              labelWeight={500}
+              labelWeight={weight.regular}
               style={
-                props.phone ? undefined : { paddingHorizontal: 10, gap: 8 }
+                props.phone
+                  ? undefined
+                  : { paddingHorizontal: space[12], gap: space[8] }
               }
               tone="primary"
               dimDisabled={

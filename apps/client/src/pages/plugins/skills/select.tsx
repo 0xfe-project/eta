@@ -3,6 +3,7 @@ import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../../components";
 import { canHover } from "../../../components/menu";
 import { LayoutSelect } from "../../../components/select";
+import { control, icon, shadow, space } from "../../../components/tokens";
 
 /**
  * The skills page's device and project pickers: the design's select menu, as
@@ -31,13 +32,13 @@ export function SkillSelect(props: {
       cover={false}
       offset={3}
       popupStyle={{
-        padding: 4,
+        padding: space[4],
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
-        boxShadow: [{ x: 0, y: 8, blur: 24, color: "#0000001f" }],
+        boxShadow: [shadow.popover],
       }}
-      itemStyle={{ minHeight: 28, paddingHorizontal: 0 }}
+      itemStyle={{ minHeight: control.md, paddingHorizontal: 0 }}
       renderItem={(entry) => {
         const item = props.items.find((option) => option.value === entry.value);
         const chosen = () => entry.value === props.value;
@@ -49,13 +50,13 @@ export function SkillSelect(props: {
             style={{
               ...row,
               flex: 1,
-              gap: 8,
-              height: 28,
-              paddingHorizontal: 8,
+              gap: space[8],
+              height: control.md,
+              paddingHorizontal: space[8],
               backgroundColor: chosen() ? c().selected : undefined,
             }}
           >
-            <View style={{ ...row, flex: 1, minWidth: 0, gap: 6 }}>
+            <View style={{ ...row, flex: 1, minWidth: 0, gap: space[4] }}>
               <Label variant="small" lines={1} style={{ flexShrink: 1 }}>
                 {item?.title ?? entry.title}
               </Label>
@@ -65,9 +66,9 @@ export function SkillSelect(props: {
                 </Label>
               </If>
             </View>
-            <View style={{ width: 14, flexShrink: 0 }}>
+            <View style={{ width: icon.md, flexShrink: 0 }}>
               <If when={chosen()}>
-                <Icon name="check" size={14} />
+                <Icon name="check" size={icon.md} />
               </If>
             </View>
           </View>
@@ -79,9 +80,9 @@ export function SkillSelect(props: {
           style={{
             ...row,
             justifyContent: "space-between",
-            gap: 8,
-            height: 28,
-            paddingHorizontal: 8,
+            gap: space[8],
+            height: control.md,
+            paddingHorizontal: space[8],
             borderWidth: 1,
             borderColor: c().strong,
             backgroundColor: c().canvas,
@@ -97,7 +98,7 @@ export function SkillSelect(props: {
           >
             {current()?.title ?? props.placeholder}
           </Label>
-          <Icon name="down" size={10} tone="muted" />
+          <Icon name="down" size={icon.sm} tone="muted" />
         </View>
       }
       onChange={({ value }) => {

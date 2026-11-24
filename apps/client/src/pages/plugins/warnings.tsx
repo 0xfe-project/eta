@@ -4,6 +4,7 @@ import { signal, View } from "nsh";
 import {
   Button,
   colors,
+  dialogWidth,
   Icon,
   Label,
   Modal,
@@ -11,6 +12,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 import { pluginText as text } from "./labels";
@@ -90,6 +92,9 @@ function WarningsText(props: { item: PluginView; inline?: boolean }) {
   );
 }
 
+/** How far the dialog's list of warnings grows before it scrolls. */
+const listHeight = 300;
+
 export function PluginWarningsDialog(props: {
   item: PluginView;
   onClose: () => void;
@@ -98,33 +103,33 @@ export function PluginWarningsDialog(props: {
   return (
     <Modal
       title={uiText("warningsFor", { name: props.item.name })}
-      width={384}
+      width={dialogWidth.md}
       modalFocus
       overPhoneNavigation
       hideHeader
-      panelStyle={{ gap: 12 }}
+      panelStyle={{ gap: space[12] }}
       onClose={props.onClose}
     >
       <View
         style={{
           ...row,
           justifyContent: "space-between",
-          gap: 8,
-          paddingHorizontal: 16,
-          paddingTop: 16,
+          gap: space[8],
+          paddingHorizontal: space[16],
+          paddingTop: space[16],
         }}
       >
-        <Label weight={500} lines={1} style={{ flexShrink: 1 }}>
+        <Label weight={weight.regular} lines={1} style={{ flexShrink: 1 }}>
           {uiText("warningsFor", { name: props.item.name })}
         </Label>
         <CloseButton
           onPress={props.onClose}
-          iconSize={14}
-          style={{ marginVertical: -2, marginRight: -6 }}
+          iconSize={icon.md}
+          style={{ marginVertical: -space[2], marginRight: -space[8] }}
         />
       </View>
-      <SmoothScroll style={{ maxHeight: 300 }} scrollbar={false}>
-        <View style={{ paddingHorizontal: 16, gap: 6 }}>
+      <SmoothScroll style={{ maxHeight: listHeight }} scrollbar={false}>
+        <View style={{ paddingHorizontal: space[16], gap: space[4] }}>
           <WarningsText item={props.item} />
         </View>
       </SmoothScroll>
@@ -132,8 +137,8 @@ export function PluginWarningsDialog(props: {
         style={{
           ...row,
           justifyContent: "flex-end",
-          paddingHorizontal: 16,
-          paddingVertical: 12,
+          paddingHorizontal: space[16],
+          paddingVertical: space[12],
           borderTopWidth: 1,
           borderColor: c().border,
         }}
@@ -141,9 +146,9 @@ export function PluginWarningsDialog(props: {
         <Button
           label={text("ok")}
           tone="primary"
-          size={28}
-          labelWeight={500}
-          style={{ paddingHorizontal: 14 }}
+          size={control.md}
+          labelWeight={weight.regular}
+          style={{ paddingHorizontal: space[16] }}
           onPress={props.onClose}
         />
       </View>
@@ -164,7 +169,9 @@ export function PluginWarnings(props: {
       style={{
         borderWidth: 1,
         borderColor: c().border,
-        ...(props.phone ? { paddingLeft: 12, paddingBottom: 4, gap: 8 } : {}),
+        ...(props.phone
+          ? { paddingLeft: space[12], paddingBottom: space[4], gap: space[8] }
+          : {}),
         ...props.style,
       }}
     >
@@ -174,27 +181,41 @@ export function PluginWarnings(props: {
           borderBottomWidth: 1,
           borderColor: c().border,
           ...(props.phone
-            ? { gap: 6, paddingTop: 2, paddingBottom: 6 }
-            : { gap: 8, height: 32, paddingHorizontal: 10 }),
+            ? { gap: space[4], paddingTop: space[2], paddingBottom: space[8] }
+            : {
+                gap: space[8],
+                height: space[32],
+                paddingHorizontal: space[12],
+              }),
         }}
       >
-        <Icon name="warning" size={14} />
-        <Label weight={600} variant="small">
+        <Icon name="warning" size={icon.md} />
+        <Label weight={weight.strong} variant="small">
           {uiText("warningsFor", { name: props.item.name })}
         </Label>
       </View>
-      <View style={props.phone ? { gap: 8 } : { padding: 10, gap: 8 }}>
+      <View
+        style={
+          props.phone
+            ? { gap: space[8] }
+            : { padding: space[12], gap: space[8] }
+        }
+      >
         <WarningsText item={props.item} inline />
         <Button
           label={checking() ? uiText("checking") : uiText("checkAgain")}
           disabled={checking()}
           icon="refresh"
-          size={props.phone ? 28 : undefined}
+          size={props.phone ? control.md : undefined}
           labelVariant="caption"
           style={
             props.phone
-              ? { alignSelf: "flex-start", gap: 6, paddingHorizontal: 10 }
-              : { alignSelf: "flex-start", marginTop: 2 }
+              ? {
+                  alignSelf: "flex-start",
+                  gap: space[4],
+                  paddingHorizontal: space[12],
+                }
+              : { alignSelf: "flex-start", marginTop: space[2] }
           }
           onPress={() => {
             if (checking()) return;

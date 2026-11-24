@@ -23,6 +23,8 @@ import {
 } from "../../components";
 import { AgentFace, UserFace } from "../../components/agent-face";
 import { canHover, touchScreen } from "../../components/menu";
+import { densityDefaults } from "../../components/theme";
+import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { taskMoment } from "./facts";
@@ -292,8 +294,10 @@ export function TaskActivity(props: {
   // What a named task or artifact is now: one gone, or out of this board's reach, cannot be opened.
   follow(() => (props.onTask ? "tasks" : undefined));
   follow(() => (props.onArtifact ? "artifacts" : undefined));
+  /** An author's face: the density's (24 in a task's page, 16 in the side panel). */
+  const face = densityDefaults();
   const gap = () => props.gap ?? 8;
-  const indent = () => 20 + gap();
+  const indent = () => face().avatar + gap();
   const name = (actor: TaskActor) =>
     host.agent(actor.agentId)?.name ??
     (actor.kind === "user" ? uiText("taskMe") : "Eta");
@@ -398,12 +402,14 @@ export function TaskActivity(props: {
       return target?.kind === "artifact" && resolve(target) === "gone";
     };
     return (
-      <View style={{ ...row, gap: 4, flexWrap: "wrap" }}>
+      <View style={{ ...row, gap: space[4], flexWrap: "wrap" }}>
         <Label variant="caption" tone="muted">
           {name(lineActor(line.entry))}
         </Label>
         <If when={mark()}>
-          {(icon) => <Icon name={icon().name} size={10} tone={icon().tone} />}
+          {(glyph) => (
+            <Icon name={glyph().name} size={icon.sm} tone={glyph().tone} />
+          )}
         </If>
         <If
           when={parts()}
@@ -466,17 +472,24 @@ export function TaskActivity(props: {
         count: fold.entries.length,
       });
     return (
-      <View style={{ gap: 4, paddingTop: 6, paddingLeft: indent() }}>
+      <View
+        style={{ gap: space[4], paddingTop: space[8], paddingLeft: indent() }}
+      >
         <View
           role="button"
           accessibilityLabel={label()}
           accessibilityState={{ expanded: open() }}
           onPress={() => open.set(!open())}
-          style={{ ...row, gap: 4, alignSelf: "flex-start", cursor: "pointer" }}
+          style={{
+            ...row,
+            gap: space[4],
+            alignSelf: "flex-start",
+            cursor: "pointer",
+          }}
         >
           <Icon
             name={open() ? "down" : "right"}
-            size={10}
+            size={icon.sm}
             tone={open() ? "ink" : "muted"}
           />
           <Label variant="caption" tone={open() ? "ink" : "muted"}>
@@ -501,23 +514,26 @@ export function TaskActivity(props: {
           ...row,
           alignItems: "flex-start",
           gap: gap(),
-          paddingTop: message.head ? 12 : 4,
+          paddingTop: message.head ? space[12] : space[4],
         }}
       >
-        <View style={{ width: 20, flexShrink: 0 }}>
+        <View style={{ width: face().avatar, flexShrink: 0 }}>
           <If when={message.head}>
             <If
               when={message.entry.actor.kind === "agent"}
-              else={<UserFace size={20} />}
+              else={<UserFace size={face().avatar} />}
             >
-              <AgentFace id={message.entry.actor.agentId} size={20} />
+              <AgentFace
+                id={message.entry.actor.agentId}
+                size={face().avatar}
+              />
             </If>
           </If>
         </View>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
           <If when={message.head}>
-            <View style={{ ...row, gap: 8, alignItems: "baseline" }}>
-              <Label variant="small" weight={600}>
+            <View style={{ ...row, gap: space[8], alignItems: "baseline" }}>
+              <Label variant="small" weight={weight.strong}>
                 {name(message.entry.actor)}
               </Label>
               <Label variant="caption" tone="muted">
@@ -552,10 +568,7 @@ export function TaskActivity(props: {
         <Caption text={uiText("activity")} />
       </If>
       <If when={props.heading === "desktop" || props.heading === "tablet"}>
-        <Label
-          weight={props.heading === "tablet" ? 600 : 700}
-          style={{ paddingBottom: 4 }}
-        >
+        <Label weight={weight.strong} style={{ paddingBottom: space[4] }}>
           {uiText("activity")}
         </Label>
       </If>
@@ -571,7 +584,7 @@ export function TaskActivity(props: {
           if (at.kind === "message")
             return <Message entry={at.entry} head={at.head} />;
           return (
-            <View style={{ paddingTop: 6, paddingLeft: indent() }}>
+            <View style={{ paddingTop: space[8], paddingLeft: indent() }}>
               <Line entry={at.entry} />
             </View>
           );

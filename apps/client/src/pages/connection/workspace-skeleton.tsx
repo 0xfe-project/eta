@@ -3,6 +3,7 @@ import { View } from "nsh";
 import { desktopPanelOpen } from "../../app/desktop-panel";
 import { paneWidth } from "../../app/pane-width";
 import { colors, fill, grow, row, sizes } from "../../components";
+import { avatar, icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { PhoneTabItem, phoneTabs } from "../../navigation/phone-tabs";
 
@@ -27,7 +28,35 @@ function SkeletonBlock(props: {
   );
 }
 
-/** The tablet list pane's placeholder: four 52pt conversation rows. */
+/** A placeholder line of text, and a rail glyph's label under it. */
+const lineHeight = 12;
+const railLabelHeight = 8;
+/** A conversation row in the tablet list, the sidebar's chat and group rows, a section
+ * heading's text. */
+const tabletRowHeight = 52;
+const sidebarRowHeight = 52;
+const groupRowHeight = 36;
+const headingWidth = 48;
+/** The tablet list's header title, a row's leading mark and trailing time. */
+const titleWidth = { tablet: 140, other: 96 } as const;
+const leadingWidth = 20;
+const timeWidth = 28;
+/** A reply's author mark, and the button-sized block under a reply. */
+const authorWidth = 20;
+const actionHeight = 36;
+/** The composer's place at the foot of the desktop page. */
+const composerHeight = 84;
+/** A desktop reply's first line, just short of the column. */
+const firstLineWidth = "97%";
+/** A reply's lines (a tablet's first is full width), and the block under it. */
+const replyWidth = {
+  tablet: [560, 360, 240],
+  phone: [216, 144, 180],
+  desktop: [408, 272],
+} as const;
+const actionWidth = { tablet: 240, phone: 144, desktop: 288 } as const;
+
+/** The tablet list pane's placeholder: four conversation rows. */
 const tabletRows = [
   [150, 100],
   [110, 130],
@@ -36,9 +65,9 @@ const tabletRows = [
 ] as const;
 
 /** Tablet rail: the Captain circle, then five page glyphs over their labels. */
-const railLabels = [30, 24, 28, 34, 30];
+const railLabelWidth = [32, 24, 28, 36, 32];
 
-function SkeletonRows(props: { widths: number[]; height: number }) {
+function SkeletonRows(props: { widths: readonly number[]; height: number }) {
   return (
     <Each of={props.widths}>
       {(width) => (
@@ -46,12 +75,12 @@ function SkeletonRows(props: { widths: number[]; height: number }) {
           style={{
             ...row,
             height: props.height,
-            paddingHorizontal: 8,
-            gap: 12,
+            paddingHorizontal: space[8],
+            gap: space[12],
           }}
         >
-          <SkeletonBlock width={14} height={14} />
-          <SkeletonBlock width={width()} height={12} />
+          <SkeletonBlock width={icon.sm} height={icon.sm} />
+          <SkeletonBlock width={width()} height={lineHeight} />
         </View>
       )}
     </Each>
@@ -94,80 +123,130 @@ export function WorkspaceSkeleton(props: {
           <If
             when={desktop()}
             else={
-              <View style={{ alignItems: "center", gap: 20, paddingTop: 20 }}>
-                <View style={{ marginBottom: 8 }}>
-                  <SkeletonBlock width={28} height={28} round />
+              <View
+                style={{
+                  alignItems: "center",
+                  gap: space[20],
+                  paddingTop: space[20],
+                }}
+              >
+                <View style={{ marginBottom: space[8] }}>
+                  <SkeletonBlock width={avatar.lg} height={avatar.lg} round />
                 </View>
-                <Each of={railLabels}>
+                <Each of={railLabelWidth}>
                   {(width) => (
-                    <View style={{ alignItems: "center", gap: 6 }}>
-                      <SkeletonBlock width={18} height={18} />
-                      <SkeletonBlock width={width()} height={8} />
+                    <View style={{ alignItems: "center", gap: space[4] }}>
+                      <SkeletonBlock width={icon.md} height={icon.md} />
+                      <SkeletonBlock width={width()} height={railLabelHeight} />
                     </View>
                   )}
                 </Each>
               </View>
             }
           >
-            <View style={{ ...bar(), height: 40 }} />
+            <View style={{ ...bar(), height: space[40] }} />
             <View
               style={{
-                paddingHorizontal: 8,
-                paddingTop: 8,
-                paddingBottom: 4,
+                paddingHorizontal: space[8],
+                paddingTop: space[8],
+                paddingBottom: space[4],
                 borderBottomWidth: 1,
                 borderColor: c().border,
               }}
             >
-              <SkeletonRows widths={[107, 71, 89, 119]} height={32} />
-            </View>
-            <View style={{ ...grow, paddingHorizontal: 8, paddingTop: 8 }}>
-              <View style={{ ...bar(), height: 24, paddingHorizontal: 8 }}>
-                <SkeletonBlock width={48} height={10} />
-              </View>
-              <SkeletonRows widths={[107, 71, 89, 119]} height={50} />
+              <SkeletonRows widths={[108, 72, 88, 120]} height={space[32]} />
             </View>
             <View
               style={{
-                paddingHorizontal: 8,
-                paddingTop: 8,
+                ...grow,
+                paddingHorizontal: space[8],
+                paddingTop: space[8],
+              }}
+            >
+              <View
+                style={{
+                  ...bar(),
+                  height: space[24],
+                  paddingHorizontal: space[8],
+                }}
+              >
+                <SkeletonBlock width={headingWidth} height={lineHeight} />
+              </View>
+              <SkeletonRows
+                widths={[108, 72, 88, 120]}
+                height={sidebarRowHeight}
+              />
+            </View>
+            <View
+              style={{
+                paddingHorizontal: space[8],
+                paddingTop: space[8],
                 borderTopWidth: 1,
                 borderColor: c().border,
               }}
             >
-              <View style={{ ...bar(), height: 24, paddingHorizontal: 8 }}>
-                <SkeletonBlock width={48} height={10} />
+              <View
+                style={{
+                  ...bar(),
+                  height: space[24],
+                  paddingHorizontal: space[8],
+                }}
+              >
+                <SkeletonBlock width={headingWidth} height={lineHeight} />
               </View>
-              <View style={{ paddingVertical: 6 }}>
-                <SkeletonRows widths={[107, 71]} height={36} />
+              <View style={{ paddingVertical: space[8] }}>
+                <SkeletonRows widths={[108, 72]} height={groupRowHeight} />
               </View>
             </View>
             <View
-              style={{ padding: 4, borderTopWidth: 1, borderColor: c().border }}
+              style={{
+                padding: space[4],
+                borderTopWidth: 1,
+                borderColor: c().border,
+              }}
             >
-              <SkeletonRows widths={[89]} height={32} />
+              <SkeletonRows widths={[88]} height={space[32]} />
             </View>
           </If>
         </View>
       </If>
       <If when={!desktop() && !phone()}>
         <View
-          style={{ width: 320, borderRightWidth: 1, borderColor: c().border }}
+          style={{
+            width: sizes.tabletList,
+            borderRightWidth: 1,
+            borderColor: c().border,
+          }}
         >
-          <View style={{ ...bar(), height: 40, paddingHorizontal: 14 }}>
-            <SkeletonBlock width={96} height={12} />
+          <View
+            style={{
+              ...bar(),
+              height: space[40],
+              paddingHorizontal: space[16],
+            }}
+          >
+            <SkeletonBlock width={titleWidth.other} height={lineHeight} />
           </View>
           <Each of={tabletRows}>
             {(widths) => (
               <View
-                style={{ ...bar(), height: 52, paddingHorizontal: 14, gap: 12 }}
+                style={{
+                  ...bar(),
+                  height: tabletRowHeight,
+                  paddingHorizontal: space[16],
+                  gap: space[12],
+                }}
               >
-                <SkeletonBlock width={20} height={20} round />
-                <View style={{ ...grow, gap: 6 }}>
-                  <SkeletonBlock width={widths()[0]} height={12} />
-                  <SkeletonBlock width={widths()[1]} height={10} />
+                <SkeletonBlock
+                  width={leadingWidth}
+                  height={leadingWidth}
+                  round
+                />
+                <View style={{ ...grow, gap: space[4] }}>
+                  <SkeletonBlock width={widths()[0]} height={lineHeight} />
+                  <SkeletonBlock width={widths()[1]} height={lineHeight} />
                 </View>
-                <SkeletonBlock width={28} height={10} />
+                <SkeletonBlock width={timeWidth} height={lineHeight} />
               </View>
             )}
           </Each>
@@ -177,32 +256,51 @@ export function WorkspaceSkeleton(props: {
         <View
           style={{
             ...bar(),
-            height: phone() ? 48 : 40,
-            paddingHorizontal: desktop() ? 16 : phone() ? 16 : 14,
+            height: phone() ? space[48] : space[40],
+            paddingHorizontal: desktop() ? space[16] : space[16],
           }}
         >
           <SkeletonBlock
-            width={tablet() ? 140 : 96}
-            height={12}
+            width={tablet() ? titleWidth.tablet : titleWidth.other}
+            height={lineHeight}
             light={phone()}
           />
         </View>
         <If when={tablet()}>
-          <View style={{ paddingVertical: 32, paddingHorizontal: 16, gap: 28 }}>
-            <Each of={[360, 240]}>
+          <View
+            style={{
+              paddingVertical: space[32],
+              paddingHorizontal: space[16],
+              gap: space[24],
+            }}
+          >
+            <Each of={replyWidth.tablet.slice(1)}>
               {(width, index) => (
                 <>
-                  <View style={{ gap: 10 }}>
-                    <View style={{ ...row, gap: 8 }}>
-                      <SkeletonBlock width={18} height={18} round />
-                      <SkeletonBlock width={96} height={12} />
+                  <View style={{ gap: space[8] }}>
+                    <View style={{ ...row, gap: space[8] }}>
+                      <SkeletonBlock
+                        width={authorWidth}
+                        height={authorWidth}
+                        round
+                      />
+                      <SkeletonBlock
+                        width={titleWidth.other}
+                        height={lineHeight}
+                      />
                     </View>
-                    <SkeletonBlock width={560} height={12} />
-                    <SkeletonBlock width={width()} height={12} />
+                    <SkeletonBlock
+                      width={replyWidth.tablet[0]}
+                      height={lineHeight}
+                    />
+                    <SkeletonBlock width={width()} height={lineHeight} />
                   </View>
                   <If when={index() === 0}>
                     <View style={{ alignItems: "flex-end" }}>
-                      <SkeletonBlock width={240} height={36} />
+                      <SkeletonBlock
+                        width={actionWidth.tablet}
+                        height={actionHeight}
+                      />
                     </View>
                   </If>
                 </>
@@ -211,23 +309,45 @@ export function WorkspaceSkeleton(props: {
           </View>
         </If>
         <If when={phone()}>
-          <View style={{ paddingVertical: 20, paddingHorizontal: 16, gap: 28 }}>
-            <Each of={[215, 143, 179]}>
+          <View
+            style={{
+              paddingVertical: space[20],
+              paddingHorizontal: space[16],
+              gap: space[24],
+            }}
+          >
+            <Each of={replyWidth.phone}>
               {(width, index) => (
                 <>
-                  <View style={{ gap: 10 }}>
-                    <View style={{ ...row, gap: 8 }}>
-                      <SkeletonBlock width={18} height={18} light />
-                      <SkeletonBlock width={96} height={12} light />
+                  <View style={{ gap: space[8] }}>
+                    <View style={{ ...row, gap: space[8] }}>
+                      <SkeletonBlock
+                        width={authorWidth}
+                        height={authorWidth}
+                        light
+                      />
+                      <SkeletonBlock
+                        width={titleWidth.other}
+                        height={lineHeight}
+                        light
+                      />
                     </View>
-                    <View style={{ gap: 8 }}>
-                      <SkeletonBlock width="100%" height={12} light />
-                      <SkeletonBlock width={width()} height={12} light />
+                    <View style={{ gap: space[8] }}>
+                      <SkeletonBlock width="100%" height={lineHeight} light />
+                      <SkeletonBlock
+                        width={width()}
+                        height={lineHeight}
+                        light
+                      />
                     </View>
                   </View>
                   <If when={index() < 2}>
                     <View style={{ alignItems: "flex-end" }}>
-                      <SkeletonBlock width={143} height={36} light />
+                      <SkeletonBlock
+                        width={actionWidth.phone}
+                        height={actionHeight}
+                        light
+                      />
                     </View>
                   </If>
                 </>
@@ -236,22 +356,38 @@ export function WorkspaceSkeleton(props: {
           </View>
         </If>
         <If when={desktop()}>
-          <View style={{ paddingTop: 24, paddingHorizontal: 24 }}>
+          <View style={{ paddingTop: space[24], paddingHorizontal: space[24] }}>
             <Each of={[0, 1]}>
               {(width) => (
                 <>
-                  <View style={{ gap: 10, marginBottom: 28 }}>
-                    <View style={{ ...row, gap: 8 }}>
-                      <SkeletonBlock width={18} height={18} />
-                      <SkeletonBlock width={96} height={12} />
+                  <View style={{ gap: space[8], marginBottom: space[32] }}>
+                    <View style={{ ...row, gap: space[8] }}>
+                      <SkeletonBlock width={authorWidth} height={authorWidth} />
+                      <SkeletonBlock
+                        width={titleWidth.other}
+                        height={lineHeight}
+                      />
                     </View>
-                    <View style={{ gap: 8, paddingHorizontal: 2 }}>
-                      <SkeletonBlock width="97%" height={12} />
-                      <SkeletonBlock width={[408, 272][width()]!} height={12} />
+                    <View
+                      style={{ gap: space[8], paddingHorizontal: space[2] }}
+                    >
+                      <SkeletonBlock
+                        width={firstLineWidth}
+                        height={lineHeight}
+                      />
+                      <SkeletonBlock
+                        width={replyWidth.desktop[width()]!}
+                        height={lineHeight}
+                      />
                     </View>
                   </View>
-                  <View style={{ alignItems: "flex-end", marginBottom: 28 }}>
-                    <SkeletonBlock width={288} height={36} />
+                  <View
+                    style={{ alignItems: "flex-end", marginBottom: space[32] }}
+                  >
+                    <SkeletonBlock
+                      width={actionWidth.desktop}
+                      height={actionHeight}
+                    />
                   </View>
                 </>
               )}
@@ -284,9 +420,9 @@ export function WorkspaceSkeleton(props: {
           <View
             style={{
               marginTop: "auto",
-              marginBottom: 14,
-              marginHorizontal: 16,
-              height: 83,
+              marginBottom: space[16],
+              marginHorizontal: space[16],
+              height: composerHeight,
               borderWidth: 1,
               borderColor: c().border,
             }}
@@ -302,11 +438,11 @@ export function WorkspaceSkeleton(props: {
             borderColor: c().border,
           }}
         >
-          <View style={{ ...bar(), height: 40 }} />
+          <View style={{ ...bar(), height: space[40] }} />
         </View>
       </If>
       <If when={props.backdrop}>
-        <View style={{ ...fill, backgroundColor: c().shade }} />
+        <View style={{ ...fill, backgroundColor: c().scrim }} />
       </If>
     </View>
   );

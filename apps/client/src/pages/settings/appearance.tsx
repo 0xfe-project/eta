@@ -18,8 +18,13 @@ import {
 import { ElementPicking, pickerTarget } from "../../components/element-picker";
 import { flavors, paletteIds } from "../../components/palettes";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { control, space } from "../../components/tokens";
 import { languageChoices, LanguageSettings, useText } from "../../i18n";
 import { pictureModes, PictureModes } from "../../services/picture-mode";
+
+/** A choice's menu and a typed value, beside their label off phones. */
+const menuWidth = 160;
+const fieldWidth = 200;
 
 const themeLabels = {
   system: "system",
@@ -82,16 +87,22 @@ function AppearanceRow(props: {
     <View
       {...picker}
       style={{
-        ...(props.stack ? { gap: 8 } : { ...row, gap: props.phone ? 24 : 16 }),
-        minHeight: props.phone ? 44 : 40,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        ...(props.stack
+          ? { gap: space[8] }
+          : { ...row, gap: props.phone ? space[24] : space[16] }),
+        minHeight: props.phone ? control.touch : space[40],
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
         flexShrink: 0,
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
     >
-      <View style={props.stack ? undefined : { flex: 1, minWidth: 0, gap: 2 }}>
+      <View
+        style={
+          props.stack ? undefined : { flex: 1, minWidth: 0, gap: space[2] }
+        }
+      >
         <Label>{props.title}</Label>
         <If when={props.error}>
           <Label variant="small" tone="red">
@@ -112,7 +123,7 @@ function AppearanceRow(props: {
 /** A palette's ink, accents and canvas as small squares, to choose by sight. */
 function Swatches(props: { colors: ReturnType<typeof palette> }) {
   return (
-    <View style={{ ...row, gap: 4 }}>
+    <View style={{ ...row, gap: space[4] }}>
       <Each
         of={
           [
@@ -120,7 +131,7 @@ function Swatches(props: { colors: ReturnType<typeof palette> }) {
             props.colors.ink,
             props.colors.blue,
             props.colors.green,
-            props.colors.amber,
+            props.colors.warning,
             props.colors.red,
           ] as const
         }
@@ -128,8 +139,8 @@ function Swatches(props: { colors: ReturnType<typeof palette> }) {
         {(color) => (
           <View
             style={{
-              width: 12,
-              height: 12,
+              width: space[12],
+              height: space[12],
               borderRadius: 2,
               borderWidth: 1,
               borderColor: props.colors.strong,
@@ -160,7 +171,7 @@ function ChoiceRow<T extends string>(props: {
       phone={props.phone}
       stack={props.phone}
     >
-      <View style={{ ...row, gap: 8 }}>
+      <View style={{ ...row, gap: space[8] }}>
         <If when={props.swatches}>
           {(colors) => <Swatches colors={colors()} />}
         </If>
@@ -168,10 +179,10 @@ function ChoiceRow<T extends string>(props: {
           label={props.title}
           value={props.displayValue ?? props.name(props.value)}
           triggerStyle={{
-            width: props.phone ? "100%" : 160,
-            height: props.phone ? 32 : 24,
-            paddingLeft: props.phone ? 12 : 10,
-            paddingRight: props.phone ? 12 : 8,
+            width: props.phone ? "100%" : menuWidth,
+            height: props.phone ? space[32] : space[24],
+            paddingLeft: space[12],
+            paddingRight: props.phone ? space[12] : space[8],
           }}
         >
           <Each of={props.choices}>
@@ -240,11 +251,11 @@ function FontRow(props: {
         onBlur={commit}
         onSubmit={commit}
         style={{
-          width: props.phone ? "100%" : 200,
-          height: props.phone ? 32 : 24,
+          width: props.phone ? "100%" : fieldWidth,
+          height: props.phone ? space[32] : space[24],
           ...textStyle(type("small")),
-          paddingHorizontal: props.phone ? 12 : 10,
-          paddingVertical: 2,
+          paddingHorizontal: space[12],
+          paddingVertical: space[2],
           borderColor: invalid() ? c().red : c().strong,
         }}
       />

@@ -5,6 +5,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Bounds, JSX, ListRef, ViewRef } from "nsh";
 import type { TextSelection } from "../../components/eta-editor";
+import type { DeliveryActions } from "./composer-delivery";
 import { cleanup, computed, effect, List, Overlay, signal, View } from "nsh";
 import { onWindows } from "../../app/platform";
 import {
@@ -17,6 +18,14 @@ import {
   MessagesSkeleton,
 } from "../../components";
 import { wheelScroll } from "../../components/scroll-follow";
+import {
+  control,
+  icon,
+  opacity,
+  shadow,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { Message } from "./message";
@@ -32,6 +41,14 @@ export function ConversationTimeline(props: {
   onReadDraft?: () => void;
   rows: MessageView[];
   additions: Map<string, MessageView[]>;
+  /** The reader's messages on their way, by row id: the rows at the end not taken by the host yet. */
+  deliveries?: Map<string, { failure?: string } & DeliveryActions>;
+  /**
+   * The newest message this window sent that is in the transcript (with `:failed` once it failed).
+   * The list does not follow new rows, but one the reader just sent, one the host moved out of the
+   * queue, or one that failed is scrolled to, so they see what happened to it.
+   */
+  sendingId?: string;
   recipients: Map<string, string[]>;
   members: MemberView[];
   loaded: boolean;
@@ -56,6 +73,8 @@ export function ConversationTimeline(props: {
   onWidgetDraft: (conversationId: string, text: string) => void;
   /** Hands out the function that scrolls to the row of a question's reply. */
   revealer?: (reveal: (replyId: string | null) => void) => void;
+  /** The ids of the rows on screen, each time they change. */
+  onVisibleRows?: (ids: ReadonlySet<string>) => void;
   /** Quote what the reader selected in a reply into the composer. */
   onQuote: (conversationId: string, text: string) => void;
   /** A mention's press in a message: its member, by agent id. */
@@ -118,6 +137,14 @@ export function ConversationTimeline(props: {
         viewPosition: 0.5,
         animated: true,
       });
+  });
+  let shownSending: string | undefined;
+  effect(() => {
+    const id = props.sendingId;
+    if (!id || id === shownSending) return;
+    shownSending = id;
+    // After the row is laid out.
+    setTimeout(() => transcriptList?.scrollToEnd({ animated: true }), 0);
   });
   let timelineFocus: ViewRef | undefined;
   let pendingFocus: string | undefined;
@@ -210,15 +237,19 @@ export function ConversationTimeline(props: {
             title={uiText("lostTheConnectionToTheHost")}
             description={uiText("agentsKeepRunningOnTheHost")}
             icon="linkBreak"
-            iconSize={28}
+            iconSize={icon.xl}
             iconTone="ink"
-            titleWeight={600}
+            titleWeight={weight.strong}
           >
             <Button
               label={uiText("retry")}
               icon="refresh"
-              size={32}
-              style={{ marginTop: 8, paddingHorizontal: 12, gap: 6 }}
+              size={control.lg}
+              style={{
+                marginTop: space[8],
+                paddingHorizontal: space[12],
+                gap: space[4],
+              }}
               onPress={host.reconnect}
             />
           </Empty>
@@ -242,6 +273,7 @@ export function ConversationTimeline(props: {
           each={props.rows}
           keyExtractor={(message) => message.id}
           initialScrollAtEnd
+          // design-value: a virtual list's first guess at a row's height, not a drawn size
           estimatedItemSize={134}
           scrollbar={false}
           scrollEventThrottle={onWindows ? 16 : undefined}
@@ -252,15 +284,18 @@ export function ConversationTimeline(props: {
           }}
           onViewableItemsChange={({ viewableItems }) => {
             firstVisibleId.set(viewableItems[0]?.item.id);
+            props.onVisibleRows?.(
+              new Set(viewableItems.map((token) => token.item.id)),
+            );
           }}
           contentStyle={{
-            paddingLeft: 16,
-            paddingRight: props.rail ? 60 : 16,
+            paddingLeft: space[16],
+            paddingRight: props.rail ? space[64] : space[16],
             // The header's slot stays, empty, with a gap after it: take that
             // gap back while there is nothing older to load.
             paddingTop: (phone() ? 16 : 12) - (props.hasOlder ? 0 : 12),
-            paddingBottom: 12,
-            gap: 12,
+            paddingBottom: space[12],
+            gap: space[12],
           }}
           header={() => (
             <If when={props.hasOlder}>
@@ -272,11 +307,11 @@ export function ConversationTimeline(props: {
                   onPress={() => {
                     if (!props.paging) props.onPageOlder();
                   }}
-                  hoverStyle={{ opacity: 0.7 }}
+                  hoverStyle={{ opacity: opacity.muted }}
                   focusVisibleStyle={focusRing(c())}
                   style={{
-                    paddingVertical: 4,
-                    opacity: props.paging ? 0.45 : 1,
+                    paddingVertical: space[4],
+                    opacity: props.paging ? opacity.disabled : 1,
                     cursor: props.paging ? "default" : "pointer",
                   }}
                 >
@@ -288,7 +323,7 @@ export function ConversationTimeline(props: {
             </If>
           )}
           empty={() => (
-            <Label tone="muted" style={{ padding: 16 }}>
+            <Label tone="muted" style={{ padding: space[16] }}>
               {uiText("noMessagesYet")}
             </Label>
           )}
@@ -313,6 +348,7 @@ export function ConversationTimeline(props: {
                   onInsertClose={props.onInsertClose}
                   insertPanel={props.insertPanel}
                   sameFailureAsNext={sameFailures().has(message().id)}
+                  delivery={props.deliveries?.get(message().id)}
                   phone={phone()}
                   compact={props.compact}
                   captain={props.captain}
@@ -344,14 +380,14 @@ export function ConversationTimeline(props: {
               <Button
                 label={uiText("quoteSelection")}
                 icon="return"
-                size={28}
+                size={control.md}
                 style={{
-                  paddingHorizontal: 10,
-                  gap: 6,
+                  paddingHorizontal: space[12],
+                  gap: space[4],
                   backgroundColor: c().canvas,
                   borderWidth: 1,
                   borderColor: c().border,
-                  boxShadow: [{ x: 0, y: 4, blur: 16, color: "#0a0a0a14" }],
+                  boxShadow: [shadow.float],
                 }}
                 onPress={quote}
               />
@@ -375,7 +411,7 @@ export function ConversationTimeline(props: {
               top: 10,
               right: 10,
               flexDirection: "row",
-              gap: 3,
+              gap: space[2],
             }}
           >
             <Each of={["agent", "user"] as const}>
@@ -386,12 +422,12 @@ export function ConversationTimeline(props: {
                     .filter((entry) => entry.message.author === author())
                     .slice(-12);
                 return (
-                  <View style={{ gap: 3 }}>
+                  <View style={{ gap: space[2] }}>
                     <Each of={entries()} key={(entry) => entry.message.id}>
                       {(entry, index) => (
                         <Button
                           label={`${author() === "user" ? "Prompt" : "Reply"} ${index() + 1}`}
-                          size={20}
+                          size={control.sm}
                           iconOnly
                           selected={firstVisibleId() === entry().message.id}
                           icon={author() === "user" ? "chat" : "info"}

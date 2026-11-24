@@ -1,12 +1,13 @@
 export { ActionItem, ActionMenu, Button, Field } from "./controls";
-export { Empty } from "./empty";
+export { Compact } from "./density";
+export { Empty, emptyWidth } from "./empty";
 export { Header } from "./header";
 export {
   DetailSkeleton,
   ListSkeleton,
   MessagesSkeleton,
 } from "./loading-skeleton";
-export { Modal } from "./modal";
+export { dialogWidth, Modal } from "./modal";
 export { PaneHandle } from "./pane-handle";
 export { keyboardShown, SafeArea } from "./safe-area";
 export { SmoothScroll } from "./smooth-scroll";
@@ -20,12 +21,13 @@ export {
   fontFamily,
   Fonts,
   grow,
+  inCompact,
   monoFontFamily,
   palette,
   Palette,
   row,
   Screen,
-  sizes,
   textFaces,
   textStyle,
 } from "./theme";
+export { sizes } from "./tokens";

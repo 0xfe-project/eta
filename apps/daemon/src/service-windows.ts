@@ -258,9 +258,13 @@ export function windowsManager(
   async function register(
     registration: Parameters<Api["registerService"]>[0],
   ): Promise<void> {
-    for (let tries = 1; !api.registerService(registration); tries += 1) {
+    for (let tries = 1; ; tries += 1) {
+      const deleting = api.registerService(registration);
+      if (deleting === undefined) return;
       if (tries === CREATE_TRIES)
-        throw new Error(`${registration.name} is still being deleted`);
+        throw new Error(
+          `${registration.name} is still being deleted after ${(CREATE_TRIES * CREATE_RETRY_MS) / 1000}s: ${deleting.message}`,
+        );
       await sleep(CREATE_RETRY_MS);
     }
   }

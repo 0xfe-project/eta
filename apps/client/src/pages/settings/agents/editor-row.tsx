@@ -1,6 +1,10 @@
 import type { JSX, ViewRef } from "nsh";
 import { View } from "nsh";
 import { colors, Label, row } from "../../../components";
+import { space } from "../../../components/tokens";
+
+/** A field beside its label. */
+const fieldWidth = 160;
 
 export function EditorRow(props: {
   label: string;
@@ -14,22 +18,26 @@ export function EditorRow(props: {
   return (
     <View
       style={{
-        ...(props.stack ? { gap: props.phone ? 8 : 6 } : row),
-        minHeight: props.stack ? undefined : 40,
-        paddingHorizontal: props.stack && !props.phone ? 0 : 16,
-        paddingVertical: props.stack && !props.phone ? 0 : 8,
+        ...(props.stack ? { gap: props.phone ? space[8] : space[4] } : row),
+        minHeight: props.stack ? undefined : space[40],
+        paddingHorizontal: props.stack && !props.phone ? 0 : space[16],
+        paddingVertical: props.stack && !props.phone ? 0 : space[8],
         borderBottomWidth: props.stack && !props.phone ? 0 : 1,
         borderColor: c().border,
-        columnGap: 16,
+        columnGap: space[16],
       }}
     >
-      <View style={props.stack ? undefined : { flex: 1, minWidth: 0, gap: 2 }}>
+      <View
+        style={
+          props.stack ? undefined : { flex: 1, minWidth: 0, gap: space[2] }
+        }
+      >
         <Label variant={props.stack ? "caption" : "body"}>{props.label}</Label>
         <If when={!props.stack}>{props.hint}</If>
       </View>
       <View
         style={{
-          width: props.stack ? "100%" : (props.width ?? 160),
+          width: props.stack ? "100%" : (props.width ?? fieldWidth),
           flexShrink: 0,
         }}
       >

@@ -1,7 +1,16 @@
 import type { ArtifactView } from "@eta/client-contracts";
 import type { DayGroup } from "./filter";
 import { Text, View } from "nsh";
-import { colors, fill, grow, Icon, Label, row } from "../../../components";
+import {
+  colors,
+  fill,
+  focusRing,
+  grow,
+  Icon,
+  Label,
+  row,
+} from "../../../components";
+import { control, icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { clock, useHost } from "../../../services/host";
 import { messageTime } from "../message-time";
@@ -65,23 +74,19 @@ export function ArtifactRow(props: {
         accessibilityLabel={title()}
         onPress={props.onPress}
         hoverStyle={{ backgroundColor: c().selected }}
-        focusVisibleStyle={{
-          outlineWidth: 1,
-          outlineColor: c().blue,
-          outlineOffset: -1,
-        }}
+        focusVisibleStyle={focusRing(c(), "inset")}
         style={{
           ...row,
-          gap: 8,
-          minHeight: 32,
-          paddingVertical: 4,
-          paddingHorizontal: 12,
+          gap: space[8],
+          minHeight: space[32],
+          paddingVertical: space[4],
+          paddingHorizontal: space[12],
           borderWidth: 1,
           borderColor: c().border,
           cursor: "pointer",
         }}
       >
-        <Icon name="artifact" size={16} tone="muted" />
+        <Icon name="artifact" size={icon.md} tone="muted" />
         <View style={{ ...row, ...grow }}>
           <Label lines={1} style={{ flexShrink: 1 }}>
             {props.artifact.title}
@@ -90,7 +95,7 @@ export function ArtifactRow(props: {
             {title().slice(props.artifact.title.length)}
           </Label>
         </View>
-        <Icon name="right" size={12} tone="muted" />
+        <Icon name="right" size={icon.sm} tone="muted" />
       </View>
     );
   return (
@@ -107,35 +112,35 @@ export function ArtifactRow(props: {
         accessibilityLabel={title()}
         accessibilityHint={metadata()}
         onPress={props.onPress}
-        focusVisibleStyle={{
-          outlineWidth: 1,
-          outlineColor: c().blue,
-          outlineOffset: -1,
-        }}
+        focusVisibleStyle={focusRing(c(), "inset")}
         style={{ ...fill, cursor: "pointer" }}
       />
       <View
         style={{
           ...row,
           alignItems: "flex-start",
-          gap: list() ? 10 : 8,
-          minHeight: props.phone ? 44 : undefined,
-          paddingHorizontal: list() ? 10 : 12,
-          paddingVertical: list() ? 10 : 8,
+          gap: space[8],
+          minHeight: props.phone ? control.touch : undefined,
+          paddingHorizontal: space[12],
+          paddingVertical: list() ? space[12] : space[8],
           pointerEvents: "box-none",
         }}
       >
         <View
           style={{
-            marginTop: list() ? 3 : 2,
+            marginTop: list() ? space[4] : space[2],
             flexShrink: 0,
             pointerEvents: "none",
           }}
         >
-          <Icon name="artifact" size={12} tone="mutedInk" />
+          <Icon name="artifact" size={icon.sm} tone="mutedInk" />
         </View>
         <View
-          style={{ ...grow, gap: list() ? 2 : 0, pointerEvents: "box-none" }}
+          style={{
+            ...grow,
+            gap: list() ? space[2] : 0,
+            pointerEvents: "box-none",
+          }}
         >
           <Label
             variant="small"
@@ -152,7 +157,7 @@ export function ArtifactRow(props: {
               )}
             </Each>
           </Label>
-          <View style={{ ...row, gap: 6, pointerEvents: "box-none" }}>
+          <View style={{ ...row, gap: space[4], pointerEvents: "box-none" }}>
             <Label
               variant="caption"
               tone="muted"
@@ -177,17 +182,14 @@ export function ArtifactRow(props: {
                   style={{
                     ...row,
                     flexShrink: 0,
-                    paddingHorizontal: 4,
+                    paddingHorizontal: space[4],
                     borderWidth: 1,
                     borderColor: c().border,
                     cursor: "pointer",
                     pointerEvents: "auto",
                   }}
                   hoverStyle={{ backgroundColor: c().canvas }}
-                  focusVisibleStyle={{
-                    outlineWidth: 1,
-                    outlineColor: c().blue,
-                  }}
+                  focusVisibleStyle={focusRing(c(), "inset")}
                   onPress={() => props.onTask?.(task().id)}
                 >
                   <Label

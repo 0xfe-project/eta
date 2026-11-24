@@ -1,6 +1,10 @@
 import { View } from "nsh";
 import { colors, Field, Label, row, textFaces } from "../../components";
+import { border, control, space, tracked } from "../../components/tokens";
 import { uiText } from "../../i18n";
+
+/** A row of the plain (phone) form; its field sits inside the row's bottom line. */
+const plainRowHeight = 56;
 
 export function HostFields(props: {
   plain?: boolean;
@@ -18,7 +22,7 @@ export function HostFields(props: {
     props.plain
       ? {
           flex: 1,
-          height: 54,
+          height: plainRowHeight - 2 * border.hair,
           borderWidth: 0,
           paddingHorizontal: 0,
           fontSize: type("subtitle").size,
@@ -26,25 +30,25 @@ export function HostFields(props: {
       : props.tablet
         ? {
             flex: 1,
-            height: 44,
-            paddingHorizontal: 12,
+            height: control.touch,
+            paddingHorizontal: space[12],
           }
-        : { flex: 1, height: 32 };
+        : { flex: 1, height: space[32] };
   const line = () =>
     props.plain
       ? {
           ...row,
-          height: 56,
-          paddingHorizontal: 16,
-          gap: 16,
+          height: plainRowHeight,
+          paddingHorizontal: space[16],
+          gap: space[16],
           borderBottomWidth: 1,
           borderColor: c().border,
         }
-      : { ...row, gap: 8 };
+      : { ...row, gap: space[8] };
   return (
     <View
       style={{
-        gap: props.plain ? 0 : 8,
+        gap: props.plain ? 0 : space[8],
         borderTopWidth: props.plain ? 1 : 0,
         borderColor: c().border,
       }}
@@ -53,7 +57,7 @@ export function HostFields(props: {
         <Label
           variant={props.plain ? "caption" : "body"}
           tone="muted"
-          style={{ width: props.plain ? 44 : 64 }}
+          style={{ width: props.plain ? control.touch : space[64] }}
         >
           {uiText("address")}
         </Label>
@@ -70,7 +74,7 @@ export function HostFields(props: {
         <Label
           variant={props.plain ? "caption" : "body"}
           tone="muted"
-          style={{ width: props.plain ? 44 : 64 }}
+          style={{ width: props.plain ? control.touch : space[64] }}
         >
           {uiText("token")}
         </Label>
@@ -83,8 +87,13 @@ export function HostFields(props: {
           onSubmit={props.onSubmit}
           style={{
             ...fieldStyle(),
-            ...(props.tablet && props.token ? { letterSpacing: 2.24 } : {}),
-            ...(props.plain && props.token ? { letterSpacing: 1.6 } : {}),
+            // A token's characters spaced apart, in em of the field's text.
+            ...(props.tablet && props.token
+              ? { letterSpacing: tracked("caps", type("body").size) }
+              : {}),
+            ...(props.plain && props.token
+              ? { letterSpacing: tracked("caps", type("subtitle").size) }
+              : {}),
             ...(props.tokenWrong ? { borderColor: c().ink } : {}),
           }}
         />

@@ -3,8 +3,15 @@ import { View } from "nsh";
 import { Button, colors, grow, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { CheckControl } from "../../components/check-control";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { localizedText, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+
+/** A member row: a finger's row on phones, a list row elsewhere. */
+const memberRowHeight = { phone: 52, desktop: 36 } as const;
+
+/** The steward's slot at the end of a row, kept when unticked so the columns line up. */
+const stewardColumnWidth = 104;
 
 export function ConversationMembers(props: {
   directory: DirectoryChoice;
@@ -22,13 +29,13 @@ export function ConversationMembers(props: {
       <View
         style={{
           ...row,
-          gap: 8,
-          marginHorizontal: 16,
-          marginTop: props.phone ? 12 : 10,
-          height: props.phone ? 32 : undefined,
+          gap: space[8],
+          marginHorizontal: space[16],
+          marginTop: space[12],
+          height: props.phone ? space[32] : undefined,
         }}
       >
-        <Icon name="folder" size={14} />
+        <Icon name="folder" size={icon.md} />
         <Label
           variant="small"
           lines={1}
@@ -36,7 +43,11 @@ export function ConversationMembers(props: {
       </View>
       <Label
         tone="muted"
-        style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}
+        style={{
+          paddingHorizontal: space[16],
+          paddingTop: space[4],
+          paddingBottom: space[8],
+        }}
       >
         {localizedText(
           "Who should work in this conversation?",
@@ -51,10 +62,12 @@ export function ConversationMembers(props: {
             <View
               style={{
                 ...row,
-                height: props.phone ? 52 : 34,
-                gap: 12,
-                marginHorizontal: 16,
-                paddingRight: 4,
+                height: props.phone
+                  ? memberRowHeight.phone
+                  : memberRowHeight.desktop,
+                gap: space[12],
+                marginHorizontal: space[16],
+                paddingRight: space[4],
                 borderTopWidth: index() === 0 ? 1 : 0,
                 borderBottomWidth: 1,
                 borderColor: c().border,
@@ -65,7 +78,7 @@ export function ConversationMembers(props: {
                 checked={checked()}
                 onChange={() => props.onToggleAgent(agent().id)}
                 hoverStyle={{ backgroundColor: c().selected }}
-                size={14}
+                size={icon.md}
                 indicatorStyle={{
                   borderColor: checked() ? c().ink : c().strong,
                 }}
@@ -73,12 +86,12 @@ export function ConversationMembers(props: {
                   ...row,
                   ...grow,
                   alignSelf: "stretch",
-                  gap: 12,
-                  paddingHorizontal: 4,
+                  gap: space[12],
+                  paddingHorizontal: space[4],
                   cursor: "pointer",
                 }}
               >
-                <AgentFace id={agent().id} size={24} />
+                <AgentFace id={agent().id} size={avatar.md} />
                 <Label style={grow} lines={1}>
                   {agent().name}
                 </Label>
@@ -99,7 +112,7 @@ export function ConversationMembers(props: {
                 style={{
                   ...row,
                   justifyContent: "flex-end",
-                  width: 104,
+                  width: stewardColumnWidth,
                   flexShrink: 0,
                 }}
               >
@@ -108,9 +121,9 @@ export function ConversationMembers(props: {
                     label={uiText(steward() ? "steward2" : "makeSteward")}
                     tone={steward() ? "primary" : "ghost"}
                     selected={steward()}
-                    labelWeight={400}
-                    size={props.phone ? 28 : 24}
-                    style={{ paddingHorizontal: 10 }}
+                    labelWeight={weight.regular}
+                    size={props.phone ? control.md : control.sm}
+                    style={{ paddingHorizontal: space[12] }}
                     onPress={() =>
                       props.onSteward(steward() ? null : agent().id)
                     }
@@ -122,7 +135,7 @@ export function ConversationMembers(props: {
         }}
       </Each>
       <If when={!host.agents().length}>
-        <Label tone="muted" style={{ padding: 16 }}>
+        <Label tone="muted" style={{ padding: space[16] }}>
           {uiText("createAnAgentFirstInSettings")}
         </Label>
       </If>

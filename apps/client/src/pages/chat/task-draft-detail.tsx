@@ -15,6 +15,7 @@ import {
   Field,
   grow,
   Label,
+  dialogWidth,
   Modal,
   row,
   SmoothScroll,
@@ -23,6 +24,7 @@ import {
 } from "../../components";
 import { sendShortcut } from "../../components/eta-editor";
 import { showToast } from "../../components/toast";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { createDescription, DescriptionBox } from "../tasks/description-box";
@@ -34,10 +36,16 @@ export function draftTitle(message: MessageView) {
   return message.text.trim() ? message.text : uiText("draftNoTitle");
 }
 
+/** The label column of a draft's details. */
+const detailLabelWidth = 84;
+
+/** The confirm dialog's height off phones (a phone gives it the whole page). */
+const dialogHeight = "85%";
+
 function Detail(props: { label: string; value: string }) {
   return (
-    <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
-      <Label variant="small" tone="muted" style={{ width: 84 }}>
+    <View style={{ ...row, alignItems: "flex-start", gap: space[8] }}>
+      <Label variant="small" tone="muted" style={{ width: detailLabelWidth }}>
         {props.label}
       </Label>
       <Label variant="small" style={{ flex: 1 }}>
@@ -49,7 +57,7 @@ function Detail(props: { label: string; value: string }) {
 
 function FormRow(props: { label: string; children: JSX.Element }) {
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: space[4] }}>
       <Label variant="small" tone="mutedInk">
         {props.label}
       </Label>
@@ -187,15 +195,15 @@ export function TaskDraftDetail(props: {
     return task ? `#${task.number} ${task.title}` : id;
   };
   const input = {
-    paddingHorizontal: 10,
+    paddingHorizontal: space[12],
     ...textStyle(type("small")),
     borderColor: color().strong,
   };
   return (
     <Modal
       title={uiText("draftConfirmTitle")}
-      width={Math.min(560, windowSize().width - 32)}
-      height={props.phone ? "100%" : "85%"}
+      width={Math.min(dialogWidth.lg, windowSize().width - 32)}
+      height={props.phone ? "100%" : dialogHeight}
       phone={props.phone}
       phonePage={props.phone}
       overPhoneNavigation
@@ -205,9 +213,9 @@ export function TaskDraftDetail(props: {
       <If when={host.state().status !== "open"}>
         <View
           role="alert"
-          style={{ padding: 8, backgroundColor: color().amberFill }}
+          style={{ padding: space[8], backgroundColor: color().warningFill }}
         >
-          <Label tone="amber">{uiText("connectionLostReconnecting")}</Label>
+          <Label tone="warning">{uiText("connectionLostReconnecting")}</Label>
         </View>
       </If>
       <SmoothScroll
@@ -217,7 +225,12 @@ export function TaskDraftDetail(props: {
         accessibilityLabel={draftTitle(props.message)}
         style={grow}
       >
-        <View style={{ padding: props.phone ? 16 : 20, gap: 16 }}>
+        <View
+          style={{
+            padding: props.phone ? space[16] : space[20],
+            gap: space[16],
+          }}
+        >
           <If
             when={pending()}
             else={
@@ -242,7 +255,7 @@ export function TaskDraftDetail(props: {
                 value={title()}
                 maxLength={200}
                 onChange={title.set}
-                style={{ ...input, height: 30 }}
+                style={{ ...input, height: control.lg }}
               />
             </FormRow>
             <FormRow label={uiText("description")}>
@@ -271,7 +284,7 @@ export function TaskDraftDetail(props: {
               </Label>
             </FormRow>
             <If when={execution().length}>
-              <View style={{ gap: 6 }}>
+              <View style={{ gap: space[4] }}>
                 <Caption text={uiText("draftExecution")} />
                 <Each of={execution()} key={(field) => field.label}>
                   {(field) => (
@@ -281,7 +294,7 @@ export function TaskDraftDetail(props: {
               </View>
             </If>
             <If when={data().dependsOn?.length}>
-              <View style={{ gap: 6 }}>
+              <View style={{ gap: space[4] }}>
                 <Caption text={uiText("dependencies")} />
                 <Each of={data().dependsOn ?? []} key={(edge) => edge.taskId}>
                   {(edge) => (
@@ -310,8 +323,8 @@ export function TaskDraftDetail(props: {
           <View
             role="alert"
             style={{
-              paddingVertical: 8,
-              paddingHorizontal: props.phone ? 16 : 20,
+              paddingVertical: space[8],
+              paddingHorizontal: props.phone ? space[16] : space[20],
               backgroundColor: color().redFill,
               flexShrink: 0,
             }}
@@ -325,10 +338,10 @@ export function TaskDraftDetail(props: {
       <View
         style={{
           ...row,
-          gap: 8,
+          gap: space[8],
           justifyContent: "flex-end",
-          paddingVertical: 10,
-          paddingHorizontal: props.phone ? 16 : 20,
+          paddingVertical: space[12],
+          paddingHorizontal: props.phone ? space[16] : space[20],
           borderTopWidth: 1,
           borderColor: color().border,
           flexShrink: 0,

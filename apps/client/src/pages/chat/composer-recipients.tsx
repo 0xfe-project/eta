@@ -3,6 +3,7 @@ import { Scroll, signal, View } from "nsh";
 import { Button, colors, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 
@@ -37,15 +38,15 @@ function StopMemberReply(props: {
       style={{
         ...row,
         justifyContent: "center",
-        width: 18,
-        height: 18,
+        width: control.sm,
+        height: control.sm,
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
         cursor: "pointer",
       }}
     >
-      <Icon name="stop" size={10} />
+      <Icon name="stop" size={icon.sm} />
     </View>
   );
 }
@@ -84,11 +85,15 @@ export function ComposerRecipients(props: {
         flexDirection: props.phone ? "column-reverse" : "row",
         alignItems: props.phone ? "stretch" : "center",
         justifyContent: "space-between",
-        gap: 6,
+        gap: space[4],
       }}
     >
       <View
-        style={{ minWidth: 0, flex: props.phone ? undefined : 1, height: 28 }}
+        style={{
+          minWidth: 0,
+          flex: props.phone ? undefined : 1,
+          height: control.md,
+        }}
       >
         <Scroll
           horizontal
@@ -99,7 +104,7 @@ export function ComposerRecipients(props: {
           onScroll={(event) => offset.set(event.offset.x)}
         >
           <View
-            style={{ ...row, gap: 6 }}
+            style={{ ...row, gap: space[4] }}
             onLayout={(event) => content.set(event.bounds.size.width)}
           >
             <View
@@ -116,10 +121,10 @@ export function ComposerRecipients(props: {
               hoverStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: 28,
-                gap: 6,
-                paddingLeft: 8,
-                paddingRight: 10,
+                height: control.md,
+                gap: space[4],
+                paddingLeft: space[8],
+                paddingRight: space[12],
                 flexShrink: 0,
                 borderWidth: 1,
                 borderColor: c().border,
@@ -130,15 +135,15 @@ export function ComposerRecipients(props: {
                 style={{
                   ...row,
                   justifyContent: "center",
-                  width: 14,
-                  height: 14,
+                  width: icon.md,
+                  height: icon.md,
                   borderWidth: 1,
                   borderColor: c().strong,
                   backgroundColor: c().canvas,
                 }}
               >
                 <If when={everyone()}>
-                  <Icon name="check" size={10} />
+                  <Icon name="check" size={icon.sm} />
                 </If>
               </View>
               <Label variant="small" tone="mutedInk">
@@ -161,8 +166,8 @@ export function ComposerRecipients(props: {
                   <View
                     style={{
                       ...row,
-                      height: 28,
-                      paddingRight: running() ? 4 : 0,
+                      height: control.md,
+                      paddingRight: running() ? space[4] : 0,
                       flexShrink: 0,
                       borderWidth: 1,
                       borderColor: selected() ? c().ink : c().border,
@@ -177,19 +182,23 @@ export function ComposerRecipients(props: {
                       hoverStyle={{ backgroundColor: c().selected }}
                       style={{
                         ...row,
-                        gap: 6,
+                        gap: space[4],
                         alignSelf: "stretch",
-                        paddingLeft: 6,
-                        paddingRight: running() ? 6 : props.phone ? 8 : 10,
+                        paddingLeft: space[8],
+                        paddingRight: running()
+                          ? space[8]
+                          : props.phone
+                            ? space[8]
+                            : space[12],
                         cursor: "pointer",
                       }}
                     >
-                      <AgentFace id={id()} size={16} />
+                      <AgentFace id={id()} size={avatar.sm} />
                       <Label
                         variant="small"
                         lines={1}
                         tone={selected() ? "ink" : "mutedInk"}
-                        weight={selected() ? 600 : 400}
+                        weight={selected() ? weight.strong : weight.regular}
                       >
                         {running()
                           ? uiText("memberWriting", { name: name() })
@@ -228,7 +237,7 @@ export function ComposerRecipients(props: {
             <If when={collapsed()}>
               <Button
                 label={`+${props.members.length - 3}`}
-                size={28}
+                size={control.md}
                 onPress={() => expanded.set(true)}
               />
             </If>
@@ -241,14 +250,14 @@ export function ComposerRecipients(props: {
               top: 0,
               right: 0,
               bottom: 0,
-              width: 32,
+              width: space[32],
               pointerEvents: "none",
               backgroundImage: `linear-gradient(90deg, ${c().canvas}00 0%, ${c().canvas} 100%)`,
             }}
           />
         </If>
       </View>
-      <View style={{ ...row, gap: 6 }}>
+      <View style={{ ...row, gap: space[4] }}>
         <StatusDot color={props.waitsFor ? c().blue : c().green} />
         <Label variant="small" tone={props.waitsFor ? "blue" : "mutedInk"}>
           {props.waitsFor

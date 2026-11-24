@@ -1,6 +1,7 @@
 import type { PluginView } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, Empty, Icon, Label } from "../../components";
+import { icon, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
 export function PluginGlyph(props: { size: number }) {
@@ -44,35 +45,28 @@ export const authStyle = (
     | "serverExpired"
     | "serverNeedsSetup";
   tone: "green" | "warningInk" | "red";
-  /** The quiet badge: a ~15% tint of the state colour as its background, and a low-alpha edge of the same hue. */
-  fill: "greenFill" | "amberFill" | "redFill";
-  edge: "green" | "warning" | "red";
+  /** The quiet badge: the state colour's fill token as its background (as the task status chips). */
+  fill: "greenFill" | "warningFill" | "redFill";
 } =>
   state === "signed_in"
     ? {
         text: "serverSignedIn",
         tone: "green",
         fill: "greenFill",
-        edge: "green",
       }
     : state === "expired"
-      ? { text: "serverExpired", tone: "red", fill: "redFill", edge: "red" }
+      ? { text: "serverExpired", tone: "red", fill: "redFill" }
       : state === "needs_login"
         ? {
             text: "serverNeedsLogin",
             tone: "warningInk",
-            fill: "amberFill",
-            edge: "warning",
+            fill: "warningFill",
           }
         : {
             text: "serverNeedsSetup",
             tone: "warningInk",
-            fill: "amberFill",
-            edge: "warning",
+            fill: "warningFill",
           };
-
-/** Alpha of the badge's edge, as the hex suffix of a #rrggbb token (about 33%). */
-export const BADGE_EDGE_ALPHA = "55";
 
 /**
  * The login a card shows, from its servers' states: only with evidence, never for headers-only
@@ -116,7 +110,7 @@ export function Status(props: { item: PluginView; phone?: boolean }) {
         tone={missing() ? "warningInk" : "muted"}
         style={{
           alignSelf: props.phone ? "flex-start" : "center",
-          paddingHorizontal: missing() ? 6 : 0,
+          paddingHorizontal: missing() ? space[8] : 0,
           paddingVertical: 1,
           borderWidth: missing() ? 1 : 0,
           borderColor: c().warning,
@@ -131,18 +125,17 @@ export function Status(props: { item: PluginView; phone?: boolean }) {
 }
 
 /** No plugins: the design's empty state, under the intro. */
-export function NoPlugins(props: { width: number }) {
+export function NoPlugins() {
   return (
     <Empty
       title={uiText("noPluginsYet")}
       description={uiText("noPluginsHint")}
       icon="plugins"
-      iconSize={32}
-      descriptionWidth={props.width}
+      iconSize={icon.xl}
       style={{
         flex: undefined,
         justifyContent: "flex-start",
-        paddingVertical: 40,
+        paddingVertical: space[40],
       }}
     />
   );

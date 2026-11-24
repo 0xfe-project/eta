@@ -12,6 +12,7 @@ import {
   Button,
   colors,
   Empty,
+  emptyWidth,
   grow,
   Header,
   Icon,
@@ -19,6 +20,8 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
+import { dotSize } from "../../../components/status-dot";
+import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { SkillFileTree } from "./file-tree";
 import { SkillFile, skillFileLink } from "./reader";
@@ -171,9 +174,9 @@ export function SkillDetail(props: {
       label={uiText("skillReloadReader")}
       icon="refresh"
       iconOnly
-      iconSize={14}
+      iconSize={icon.md}
       tone={tablet() ? "plain" : "ghost"}
-      style={tablet() ? undefined : { marginLeft: 6 }}
+      style={tablet() ? undefined : { marginLeft: space[8] }}
       onPress={refresh}
     />
   );
@@ -289,32 +292,39 @@ export function SkillDetail(props: {
         if (file()) scrollY = offset.y;
       }}
     >
-      <View ref={contentStart.set} style={{ padding: 12, gap: 12 }}>
+      <View
+        ref={contentStart.set}
+        style={{ padding: space[12], gap: space[12] }}
+      >
         <If when={failure()}>
-          <View style={{ alignItems: "flex-start", gap: 4 }}>
+          <View style={{ alignItems: "flex-start", gap: space[4] }}>
             <Empty
               title={uiText("skillUnableToLoadFile", {
                 name: fileName() || props.skill.name,
               })}
               description={failure()}
               icon="warning"
-              iconSize={32}
+              iconSize={icon.xl}
               iconTone="red"
-              descriptionWidth={320}
+              descriptionWidth={emptyWidth.narrow}
               style={{
                 flex: undefined,
                 alignSelf: "stretch",
-                paddingVertical: 40,
+                paddingVertical: space[40],
               }}
             />
-            <Button label={uiText("retry")} size={28} onPress={refresh} />
+            <Button
+              label={uiText("retry")}
+              size={control.md}
+              onPress={refresh}
+            />
           </View>
         </If>
         <If when={preview()?.metadata}>
           <View
             style={{
-              gap: 6,
-              paddingBottom: 8,
+              gap: space[4],
+              paddingBottom: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
@@ -326,16 +336,16 @@ export function SkillDetail(props: {
               onPress={() => metadata.set(!metadata())}
               style={{
                 ...row,
-                gap: 6,
+                gap: space[4],
                 alignSelf: "flex-start",
                 cursor: "pointer",
               }}
             >
-              <Icon name={metadata() ? "down" : "right"} size={10} />
+              <Icon name={metadata() ? "down" : "right"} size={icon.sm} />
               <Label variant="small">{uiText("metadata")}</Label>
             </View>
             <If when={metadata()}>
-              <View style={{ paddingLeft: 16, gap: 2 }}>
+              <View style={{ paddingLeft: space[16], gap: space[2] }}>
                 <Each of={preview()!.metadata!.split("\n")}>
                   {(line) => (
                     <Label variant="caption" tone="muted">
@@ -351,7 +361,11 @@ export function SkillDetail(props: {
           when={file()}
           else={
             <If when={!failure()}>
-              <Label tone="muted" variant="small" style={{ paddingTop: 8 }}>
+              <Label
+                tone="muted"
+                variant="small"
+                style={{ paddingTop: space[8] }}
+              >
                 {reading() || !handle()
                   ? uiText("loadingSkill")
                   : uiText("selectAFile")}
@@ -384,22 +398,22 @@ export function SkillDetail(props: {
       <View
         accessibilityLabel={uiText("skillDiagnostics")}
         style={{
-          paddingHorizontal: phone() ? 0 : tablet() ? 12 : 24,
-          paddingTop: tablet() ? 12 : 0,
-          paddingBottom: phone() || tablet() ? 0 : 8,
-          gap: 4,
+          paddingHorizontal: phone() ? 0 : tablet() ? space[12] : space[24],
+          paddingTop: tablet() ? space[12] : 0,
+          paddingBottom: phone() || tablet() ? 0 : space[8],
+          gap: space[4],
         }}
       >
         <Each of={diagnostics()} key={(message) => message}>
           {(message) => (
-            // A small warning mark beside foreground text: red or amber
+            // A small warning mark beside foreground text: red or warning
             // stays a status mark, never the message.
-            <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
+            <View style={{ ...row, alignItems: "flex-start", gap: space[8] }}>
               <View
                 style={{
-                  width: 6,
-                  height: 6,
-                  marginTop: 5,
+                  width: dotSize,
+                  height: dotSize,
+                  marginTop: space[4],
                   flexShrink: 0,
                   backgroundColor: c().warning,
                 }}
@@ -419,9 +433,9 @@ export function SkillDetail(props: {
         ...grow,
         ...row,
         alignItems: "stretch",
-        marginHorizontal: phone() ? 0 : tablet() ? 12 : 24,
-        marginTop: tablet() ? 12 : 0,
-        marginBottom: phone() ? 0 : tablet() ? 12 : 16,
+        marginHorizontal: phone() ? 0 : tablet() ? space[12] : space[24],
+        marginTop: tablet() ? space[12] : 0,
+        marginBottom: phone() ? 0 : tablet() ? space[12] : space[16],
         borderWidth: 1,
         borderColor: c().border,
       }}
@@ -450,7 +464,7 @@ export function SkillDetail(props: {
         <Header title={props.skill.name} layout="phone" onBack={previousFile} />
       </If>
       <If when={tablet()}>
-        <Header title={props.skill.name} layout="tablet" inset={14}>
+        <Header title={props.skill.name} layout="tablet" inset={space[16]}>
           <Label
             variant="small"
             tone="muted"
@@ -463,12 +477,12 @@ export function SkillDetail(props: {
       <If when={!tablet() && !phone()}>
         <View
           style={{
-            paddingHorizontal: 24,
-            paddingBottom: 8,
-            gap: 8,
+            paddingHorizontal: space[24],
+            paddingBottom: space[8],
+            gap: space[8],
           }}
         >
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <Button
               label={uiText("skillBackToList")}
               tone="ghost"
@@ -476,9 +490,9 @@ export function SkillDetail(props: {
             />
             {previousButton()}
           </View>
-          <View style={{ ...row, gap: 4, minHeight: 24 }}>
+          <View style={{ ...row, gap: space[4], minHeight: space[24] }}>
             <Label variant="small" tone="muted">{`${crumbs()}  /`}</Label>
-            <Label variant="small" weight={600}>
+            <Label variant="small" weight={weight.strong}>
               {props.skill.name}
             </Label>
             {reload()}
@@ -499,12 +513,12 @@ export function SkillDetail(props: {
         <View
           style={{
             ...grow,
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            gap: 8,
+            paddingHorizontal: space[16],
+            paddingVertical: space[12],
+            gap: space[8],
           }}
         >
-          <View style={{ ...row, height: 16 }}>
+          <View style={{ ...row, height: space[16] }}>
             <Label variant="small" tone="muted" style={{ flex: 1 }}>
               {crumbs()}
             </Label>
@@ -518,17 +532,17 @@ export function SkillDetail(props: {
             onPress={toggleFiles}
             style={{
               ...row,
-              height: 28,
-              gap: 6,
+              height: control.md,
+              gap: space[4],
               alignSelf: "flex-start",
-              paddingHorizontal: 10,
+              paddingHorizontal: space[12],
               borderWidth: 1,
               borderColor: showFiles() ? c().ink : c().strong,
               backgroundColor: showFiles() ? c().selected : undefined,
               cursor: "pointer",
             }}
           >
-            <Icon name="folder" size={11} />
+            <Icon name="folder" size={icon.sm} />
             <Label variant="small">{uiText("files")}</Label>
             <If when={!showFiles() && fileName()}>
               <Label variant="caption" tone="muted">

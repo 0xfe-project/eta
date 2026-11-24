@@ -1,8 +1,9 @@
 import type { RoutineSummary, RunView } from "@eta/client-contracts";
 import { View } from "nsh";
-import { colors, Icon, Label, row } from "../../components";
+import { colors, focusRing, Icon, Label, row } from "../../components";
 import { chatText, shownMentions } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { clockDistance, feedTime, runHistory, scheduleLabel } from "./schedule";
@@ -13,14 +14,16 @@ export function RoutineHistory(props: {
 }) {
   const c = colors();
   return (
-    <View style={{ ...row, gap: props.full ? 4 : 2, flexShrink: 0 }}>
+    <View
+      style={{ ...row, gap: props.full ? space[4] : space[2], flexShrink: 0 }}
+    >
       <Each of={runHistory(props.runs)} key="index">
         {(status) => (
           <View
             style={{
               ...(props.full
-                ? { flex: 1, height: 8 }
-                : { width: 8, height: 8 }),
+                ? { flex: 1, height: space[8] }
+                : { width: space[8], height: space[8] }),
               backgroundColor:
                 status() === "failed"
                   ? c().red
@@ -62,20 +65,22 @@ export function PhoneRoutineRow(props: {
       accessibilityDescription={`${scheduleLabel(props.item.schedule)} · ${status()}`}
       onPress={props.onOpen}
       hoverStyle={{ backgroundColor: c().selected }}
-      focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+      focusVisibleStyle={focusRing(c(), "inset")}
       style={{
         ...row,
-        paddingVertical: 12,
-        paddingLeft: 16,
-        paddingRight: 12,
-        gap: 12,
+        paddingVertical: space[12],
+        paddingLeft: space[16],
+        paddingRight: space[12],
+        gap: space[12],
         borderBottomWidth: 1,
         borderColor: c().border,
         cursor: "pointer",
       }}
     >
-      <View style={{ flex: 1, minWidth: 0, gap: 3, paddingBottom: 6 }}>
-        <View style={{ ...row, gap: 8 }}>
+      <View
+        style={{ flex: 1, minWidth: 0, gap: space[2], paddingBottom: space[8] }}
+      >
+        <View style={{ ...row, gap: space[8] }}>
           <Label lines={1} style={{ flex: 1, minWidth: 0 }}>
             {props.item.name}
           </Label>
@@ -83,7 +88,7 @@ export function PhoneRoutineRow(props: {
             <RoutineHistory runs={props.item.runs} />
           </If>
         </View>
-        <View style={{ ...row, gap: 8 }}>
+        <View style={{ ...row, gap: space[8] }}>
           <Label
             variant="caption"
             tone="muted"
@@ -108,7 +113,7 @@ export function PhoneRoutineRow(props: {
           color={props.item.unseenFailures || failed() ? c().red : c().blue}
         />
       </If>
-      <Icon name="right" size={14} />
+      <Icon name="right" size={icon.md} />
     </View>
   );
 }
@@ -131,6 +136,12 @@ export function reportBody(run: RunView) {
 }
 
 /** The newest report, in full, at the top of a routine's feed. */
+/** How much of the latest report its card shows before it is opened. */
+const reportPreviewHeight = 280;
+
+/** An earlier run's card when the run was missed, outside the compact list. */
+const missedCardHeight = 112;
+
 export function LatestReportCard(props: {
   run: RunView;
   /** The phone shows the whole report in a tighter card. */
@@ -142,18 +153,20 @@ export function LatestReportCard(props: {
   const inset = () => (props.phone ? 12 : 16);
   return (
     <View style={{ borderWidth: 1, borderColor: c().border }}>
-      <View style={{ padding: inset(), gap: 6 }}>
+      <View style={{ padding: inset(), gap: space[4] }}>
         <Label variant="small" tone="muted">
           {feedTime(props.run.startedAt)}
         </Label>
-        <View style={{ gap: 8 }}>
-          <Label variant="subtitle" weight={600}>
+        <View style={{ gap: space[8] }}>
+          <Label variant="subtitle" weight={weight.strong}>
             {runTitle(props.run)}
           </Label>
           <If when={props.run.report}>
             <View
               style={
-                props.phone ? undefined : { maxHeight: 280, overflow: "hidden" }
+                props.phone
+                  ? undefined
+                  : { maxHeight: reportPreviewHeight, overflow: "hidden" }
               }
             >
               <chatText.View
@@ -171,7 +184,7 @@ export function LatestReportCard(props: {
       <View
         style={{
           ...row,
-          height: 32,
+          height: space[32],
           paddingHorizontal: inset(),
           borderTopWidth: 1,
           borderColor: c().border,
@@ -181,13 +194,13 @@ export function LatestReportCard(props: {
           role="button"
           accessibilityLabel={uiText("readReport")}
           onPress={props.onOpen}
-          focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
-          style={{ ...row, gap: 6, cursor: "pointer" }}
+          focusVisibleStyle={focusRing(c(), "inset")}
+          style={{ ...row, gap: space[4], cursor: "pointer" }}
         >
-          <Label variant="small" weight={600}>
+          <Label variant="small" weight={weight.strong}>
             {uiText("readReport")}
           </Label>
-          <Icon name="arrowRight" size={12} />
+          <Icon name="arrowRight" size={icon.sm} />
         </View>
       </View>
     </View>
@@ -238,17 +251,17 @@ export function EarlierReportCard(props: {
       accessibilityLabel={runTitle(props.run)}
       onPress={props.onOpen}
       hoverStyle={{ backgroundColor: c().surface }}
-      focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+      focusVisibleStyle={focusRing(c(), "inset")}
       style={{
         flex: 1,
         minWidth: 0,
-        gap: props.compact && missed() ? 2 : 4,
-        paddingVertical: 10,
-        paddingHorizontal: 12,
+        gap: props.compact && missed() ? space[2] : space[4],
+        paddingVertical: space[12],
+        paddingHorizontal: space[12],
         borderWidth: 1,
         borderColor: c().border,
         cursor: "pointer",
-        height: missed() && !props.compact ? 110 : undefined,
+        height: missed() && !props.compact ? missedCardHeight : undefined,
       }}
     >
       <Label variant="small" tone="muted">
@@ -258,12 +271,12 @@ export function EarlierReportCard(props: {
         when={missed()}
         else={
           <>
-            <Label weight={600} lines={1}>
+            <Label weight={weight.strong} lines={1}>
               {runTitle(props.run)}
             </Label>
             <Label
               lines={props.compact ? undefined : 2}
-              style={props.compact ? undefined : { height: 44 }}
+              style={props.compact ? undefined : { height: control.touch }}
             >
               {summary()}
             </Label>
@@ -271,9 +284,9 @@ export function EarlierReportCard(props: {
         }
       >
         <If when={props.compact}>
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <StatusDot color={c().red} />
-            <Label weight={600} tone="muted">
+            <Label weight={weight.strong} tone="muted">
               {uiText("noReport")}
             </Label>
             <Label tone="muted" lines={1} style={{ flex: 1, minWidth: 0 }}>
@@ -283,9 +296,9 @@ export function EarlierReportCard(props: {
           </View>
         </If>
         <If when={!props.compact}>
-          <View style={{ ...row, gap: 8 }}>
+          <View style={{ ...row, gap: space[8] }}>
             <StatusDot color={c().red} />
-            <Label weight={600} tone="muted">
+            <Label weight={weight.strong} tone="muted">
               {uiText("noReport")}
             </Label>
           </View>

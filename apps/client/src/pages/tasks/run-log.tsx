@@ -2,10 +2,14 @@ import type { MachineView, TaskRunView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { View } from "nsh";
 import { Button, colors, grow, Label, row } from "../../components";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { MemberRun } from "../chat/run/member-run";
 import { RunPanel } from "../chat/run/run-panel";
+
+/** The bar under a running run's log, with its stop button. */
+const stopBarHeight = { phone: 56, regular: 44 } as const;
 
 export function isActiveRunStatus(status: TaskRunView["status"]): boolean {
   return status === "queued" || status === "starting" || status === "running";
@@ -93,7 +97,7 @@ export function TaskRunLog(props: {
       <If
         when={props.run.sessionId}
         else={
-          <View style={{ ...grow, padding: 16, gap: 8 }}>
+          <View style={{ ...grow, padding: space[16], gap: space[8] }}>
             <Label variant="small" tone={props.run.error ? "red" : "muted"}>
               {props.run.error ??
                 (props.run.status === "queued"
@@ -120,9 +124,9 @@ export function TaskRunLog(props: {
         <View
           style={{
             ...row,
-            paddingHorizontal: 16,
-            minHeight: phone() ? 56 : 42,
-            gap: 8,
+            paddingHorizontal: space[16],
+            minHeight: phone() ? stopBarHeight.phone : stopBarHeight.regular,
+            gap: space[8],
             borderTopWidth: 1,
             borderColor: c().border,
           }}

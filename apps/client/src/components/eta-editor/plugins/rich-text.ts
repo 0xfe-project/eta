@@ -1,6 +1,7 @@
 import type { TextTheme } from "../look";
 import type { TextPlugin } from "../plugin";
 import { markdown, StarterKit } from "nsh/base";
+import { border, icon, space, weight } from "../../tokens";
 
 /**
  * Formatted text, written as Markdown is: `# ` a heading, `- ` / `1. ` / `[ ] ` a list, `> ` a
@@ -47,7 +48,7 @@ const heading = (
 ) => ({
   fontSize: theme.face(variant).size,
   lineHeight: theme.face(variant).prose,
-  fontWeight: 600,
+  fontWeight: weight.strong,
   marginTop: above,
 });
 
@@ -65,20 +66,20 @@ function proseStyles(theme: TextTheme) {
     heading2: heading(theme, "subtitle", 6),
     heading3: heading(theme, "body", 4),
     blockquote: {
-      borderLeftWidth: 2,
+      borderLeftWidth: border.thick,
       borderColor: c.strong,
-      paddingLeft: 10,
+      paddingLeft: space[12],
       color: c.muted,
     },
-    list: { paddingLeft: 20 },
+    list: { paddingLeft: space[20] },
     codeBlock: {
       backgroundColor: c.surface,
       borderWidth: 1,
       borderColor: c.border,
       borderRadius: 0,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      marginVertical: 2,
+      paddingVertical: space[8],
+      paddingHorizontal: space[12],
+      marginVertical: space[2],
       fontFamily: theme.mono,
       fontSize: small.size,
       lineHeight: small.prose,
@@ -86,9 +87,9 @@ function proseStyles(theme: TextTheme) {
     rule: {
       borderTopWidth: 1,
       borderColor: c.border,
-      marginVertical: 6,
+      marginVertical: space[8],
     },
-    strong: { fontWeight: 600 },
+    strong: { fontWeight: weight.strong },
     emphasis: { fontStyle: "italic" as const },
     strikethrough: { textDecorationLine: "line-through" as const },
     code: {
@@ -105,7 +106,7 @@ function proseEditor(theme: TextTheme) {
   return {
     nodes: {
       taskList: { paddingLeft: 0 },
-      taskItem: { gap: 8 },
+      taskItem: { gap: space[8] },
       // Done, as the view shows it: struck through, muted.
       "taskItem[checked=true]": {
         color: theme.colors.muted,
@@ -118,8 +119,8 @@ function proseEditor(theme: TextTheme) {
     },
     listMarker: { color: theme.colors.muted },
     taskCheckbox: {
-      width: 14,
-      height: 14,
+      width: icon.md,
+      height: icon.md,
       borderWidth: 1,
       borderColor: theme.colors.strong,
     },
@@ -140,12 +141,12 @@ function proseView(theme: TextTheme) {
     listItemContent: { gap: 0 },
     listMarker: { color: theme.colors.muted },
     taskMarker: {
-      width: 14,
-      height: 14,
+      width: icon.md,
+      height: icon.md,
       borderWidth: 1,
       borderRadius: 0,
       borderColor: theme.colors.strong,
-      marginRight: 8,
+      marginRight: space[8],
     },
     taskMarkerChecked: {
       backgroundColor: theme.colors.ink,

@@ -72,10 +72,17 @@ export function conversationList(
   );
 }
 
-/** A conversation's name for its tab: from the list, else the start of its id. */
+/**
+ * A conversation's name for its tab: from the list, else from its own target (Captain's
+ * conversation is not listed), else the start of its id.
+ */
 export function conversationTitle(state: WireState, id: string): string {
+  const info = state.targets[conversationTarget(id)]?.sections.info as
+    | ConversationInfo
+    | undefined;
   return (
     conversationList(state).find((c) => c.id === id)?.name ??
+    info?.name ??
     id.slice(0, ID_PREFIX)
   );
 }
@@ -135,6 +142,26 @@ export function conversationStatus(
 /** The conversation's own target, as the tab follows it. */
 export function conversationTarget(id: string): string {
   return `conversations.${id}`;
+}
+
+/**
+ * The conversation's kind, from the list or else its own target: Captain's conversation is only
+ * on its target. Undefined before either has it.
+ */
+export function conversationKind(
+  state: WireState,
+  id: string,
+): ConversationInfo["kind"] | undefined {
+  const listed = (
+    state.targets.conversations?.sections.list as
+      | ConversationSummary[]
+      | undefined
+  )?.find((c) => c.id === id);
+  if (listed !== undefined) return listed.kind;
+  const info = state.targets[conversationTarget(id)]?.sections.info as
+    | ConversationInfo
+    | undefined;
+  return info?.kind;
 }
 
 /**

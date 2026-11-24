@@ -17,6 +17,8 @@ export const manageMessages = defineMessages({
       "The conversation's details have not arrived yet; try again in a moment",
     privateChat:
       "A private chat is just the agent and you; members cannot be added or removed",
+    captainChat:
+      "Captain's conversation is just Captain and you; members cannot be added or removed",
     severalAgents: "“{name}” could be: {names}",
     noSuchAgent: "No agent called “{name}”",
     noSuchConversation: "No conversation called {name}",
@@ -124,6 +126,7 @@ export const manageMessages = defineMessages({
     stewardNone: "{conversation} 现在没有主理人",
     notArrived: "对话信息还没到，稍后再试",
     privateChat: "私聊只有这个智能体和你，不能加人或移除成员",
+    captainChat: "Captain 的对话只有 Captain 和你，不能加人或移除成员",
     severalAgents: "「{name}」可能是：{names}",
     noSuchAgent: "没有叫「{name}」的智能体",
     noSuchConversation: "没有叫 {name} 的对话",

@@ -15,6 +15,14 @@ import {
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { StatusDot } from "../../components/status-dot";
+import {
+  avatar,
+  border,
+  control,
+  icon,
+  space,
+  weight,
+} from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
@@ -32,7 +40,10 @@ import { messageTime } from "./message-time";
 const goalPreview = 600;
 
 /** The detail's side inset, on each part rather than the whole, so rows can reach both edges. */
-const inset = 11;
+const inset = space[12];
+
+/** A row naming a task this one waits for or that waits for it. */
+const dependencyRowHeight = 32;
 
 /** A task opened in the conversation panel: under its tabs, compact. */
 export function PanelTask(props: {
@@ -73,7 +84,7 @@ export function PanelTask(props: {
           <View
             style={{
               ...grow,
-              paddingBottom: 11,
+              paddingBottom: space[12],
               backgroundColor: c().surface,
             }}
           >
@@ -88,11 +99,12 @@ export function PanelTask(props: {
               <ActionMenu
                 label={uiText("taskActions")}
                 triggerStyle={{
-                  minWidth: 28,
-                  width: 28,
-                  height: 28,
+                  minWidth: control.sm,
+                  width: control.sm,
+                  height: control.sm,
                   paddingHorizontal: 0,
                 }}
+                iconSize={icon.sm}
               >
                 <ActionItem
                   label={uiText("edit")}
@@ -117,12 +129,13 @@ export function PanelTask(props: {
               </ActionMenu>
             </TaskTopBar>
             <SmoothScroll style={grow} scrollbar={false}>
+              {/* The panel's section title: body 14 / 600 (compact), not the page's subtitle. */}
               <Label
-                variant="subtitle"
-                weight={700}
+                variant="body"
+                weight={weight.strong}
                 style={{
-                  paddingTop: 12,
-                  paddingBottom: 7,
+                  paddingTop: space[12],
+                  paddingBottom: space[8],
                   paddingHorizontal: inset,
                 }}
               >
@@ -148,22 +161,25 @@ export function PanelTask(props: {
                 style={{
                   ...row,
                   alignItems: "flex-start",
-                  gap: 15,
-                  paddingTop: 7,
+                  gap: space[16],
+                  paddingTop: space[8],
                   paddingHorizontal: inset,
                 }}
               >
-                <AgentFace id={item().createdBy.agentId ?? "user"} size={20} />
-                <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                  <View style={{ ...row, gap: 8 }}>
-                    <Label variant="small" weight={600}>
+                <AgentFace
+                  id={item().createdBy.agentId ?? "user"}
+                  size={avatar.sm}
+                />
+                <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
+                  <View style={{ ...row, gap: space[8] }}>
+                    <Label variant="small" weight={weight.strong}>
                       {actorLabel(item().createdBy, host.agent)}
                     </Label>
                     <Label variant="caption" tone="muted">
                       {messageTime(item().createdAt, false)}
                     </Label>
                   </View>
-                  <View style={{ gap: 12 }}>
+                  <View style={{ gap: space[12] }}>
                     <If when={item().description}>
                       <Markdown value={goal()} dense />
                     </If>
@@ -187,8 +203,8 @@ export function PanelTask(props: {
                 <View
                   style={{
                     ...row,
-                    gap: 8,
-                    paddingTop: 14,
+                    gap: space[8],
+                    paddingTop: space[16],
                     paddingHorizontal: inset,
                   }}
                 >
@@ -202,12 +218,14 @@ export function PanelTask(props: {
                   />
                 </View>
               </If>
-              <View style={{ paddingBottom: 11, paddingHorizontal: inset }}>
+              <View
+                style={{ paddingBottom: space[12], paddingHorizontal: inset }}
+              >
                 <TaskActivity
                   entries={activity()}
                   runs={item().runs}
                   createdBy={item().createdBy}
-                  gap={15}
+                  gap={space[16]}
                   onLog={(entry) => log.set(entry)}
                   onTask={props.onTask}
                   onArtifact={props.onArtifact}
@@ -221,14 +239,18 @@ export function PanelTask(props: {
                 <View
                   style={{
                     ...row,
-                    height: 24,
-                    gap: 8,
+                    height: space[24],
+                    gap: space[8],
                     flexShrink: 0,
                     paddingHorizontal: inset,
                   }}
                 >
                   <StatusDot color={c().blue} />
-                  <Label variant="caption" weight={600} style={{ flex: 1 }}>
+                  <Label
+                    variant="caption"
+                    weight={weight.strong}
+                    style={{ flex: 1 }}
+                  >
                     {uiText("agentIsWorking", {
                       name: state.executor()?.name ?? uiText("agent"),
                     })}
@@ -246,17 +268,17 @@ export function PanelTask(props: {
                     role="button"
                     accessibilityLabel={uiText("stop")}
                     onPress={() => state.stop(entry())}
-                    style={{ ...row, gap: 4, cursor: "pointer" }}
+                    style={{ ...row, gap: space[4], cursor: "pointer" }}
                   >
                     <View
                       style={{
-                        width: 8,
-                        height: 8,
-                        borderWidth: 1.5,
+                        width: space[8],
+                        height: space[8],
+                        borderWidth: border.hair,
                         borderColor: c().ink,
                       }}
                     />
-                    <Label variant="caption" weight={600}>
+                    <Label variant="caption" weight={weight.strong}>
                       {uiText("stop")}
                     </Label>
                   </View>
@@ -294,15 +316,15 @@ function Edges(props: {
         variant="small"
         tone="muted"
         style={{
-          paddingTop: props.before ? 0 : 14,
-          paddingBottom: 4,
+          paddingTop: props.before ? 0 : space[16],
+          paddingBottom: space[4],
           paddingHorizontal: inset,
         }}
       >
         {props.label}
       </Label>
       <Each of={props.edges} key={(edge) => edge.taskId}>
-        {(edge) => (
+        {(edge, index) => (
           <View
             role="button"
             accessibilityLabel={edge().title}
@@ -310,18 +332,24 @@ function Edges(props: {
             hoverStyle={{ backgroundColor: c().selected }}
             style={{
               ...row,
-              height: 30,
-              gap: 8,
+              height: dependencyRowHeight,
+              gap: space[8],
               // Edge to edge, so the hover does too; the text stays where the bordered box put it.
-              paddingHorizontal: inset + 1 + 10,
-              borderTopWidth: 1,
+              paddingHorizontal: inset + space[12],
+              // One line between two rows: only the first draws the line above the list.
+              borderTopWidth: index() === 0 ? 1 : 0,
               borderBottomWidth: 1,
               borderColor: c().border,
               cursor: "pointer",
             }}
           >
-            <TaskGlyph status={edge().status} size={12} />
-            <Label variant="small" weight={600} lines={1} style={{ flex: 1 }}>
+            <TaskGlyph status={edge().status} size={icon.sm} />
+            <Label
+              variant="small"
+              weight={weight.strong}
+              lines={1}
+              style={{ flex: 1 }}
+            >
               {edge().title}
             </Label>
             <Label variant="caption" tone="muted">

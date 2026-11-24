@@ -2,6 +2,14 @@ import type { JSX, Point, ViewRef } from "nsh";
 import type { IconName } from "../components/icons";
 import { View } from "nsh";
 import { colors, focusRing, Icon, Label } from "../components";
+import { dotSize } from "../components/status-dot";
+import { control, icon, space } from "../components/tokens";
+
+/** An unread count over a rail icon. */
+const badgeHeight = 16;
+/** A rail destination: its icon over its caption. */
+const buttonHeight = 40;
+const labelWidth = 48;
 
 export function RailButton(props: {
   label: string;
@@ -30,8 +38,8 @@ export function RailButton(props: {
       hoverStyle={{ backgroundColor: c().selected }}
       focusVisibleStyle={focusRing(c())}
       style={{
-        width: props.width ?? props.size ?? 28,
-        height: props.size ?? 28,
+        width: props.width ?? props.size ?? control.md,
+        height: props.size ?? control.md,
         alignItems: "center",
         justifyContent: "center",
         flexShrink: 0,
@@ -41,21 +49,21 @@ export function RailButton(props: {
     >
       <View
         style={{
-          width: props.iconSize ?? 14,
-          height: props.iconSize ?? 14,
+          width: props.iconSize ?? icon.md,
+          height: props.iconSize ?? icon.md,
           position: "relative",
         }}
       >
-        <Icon name={props.icon} size={props.iconSize} />
+        <Icon name={props.icon} size={props.iconSize ?? icon.md} />
         <If when={(props.count ?? 0) > 0}>
           <View
             style={{
               position: "absolute",
               right: -5,
               top: -2,
-              height: 13,
-              minWidth: 10,
-              paddingHorizontal: 2,
+              height: badgeHeight,
+              minWidth: badgeHeight,
+              paddingHorizontal: space[2],
               alignItems: "center",
               justifyContent: "center",
               borderWidth: 1,
@@ -94,12 +102,12 @@ export function RailEntry(props: {
       focusVisibleStyle={focusRing(c())}
       style={{
         position: "relative",
-        height: 41,
+        height: buttonHeight,
         flexShrink: 0,
         alignItems: "center",
-        paddingTop: 5,
-        paddingHorizontal: 4,
-        gap: 3,
+        paddingTop: space[4],
+        paddingHorizontal: space[4],
+        gap: space[2],
         borderBottomWidth: 1,
         borderColor: c().border,
         backgroundColor: props.selected ? c().selected : "transparent",
@@ -110,7 +118,7 @@ export function RailEntry(props: {
       <Label
         variant="caption"
         lines={1}
-        style={{ maxWidth: 49, textAlign: "center" }}
+        style={{ maxWidth: labelWidth, textAlign: "center" }}
       >
         {props.label}
       </Label>
@@ -120,8 +128,8 @@ export function RailEntry(props: {
             position: "absolute",
             top: 2,
             left: 2,
-            width: 6,
-            height: 6,
+            width: dotSize,
+            height: dotSize,
             backgroundColor: c().green,
           }}
         />

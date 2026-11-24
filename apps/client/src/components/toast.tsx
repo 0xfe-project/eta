@@ -4,12 +4,15 @@ import { screenInsets } from "./safe-area";
 import { StatusDot } from "./status-dot";
 import { Label } from "./text";
 import { colors, row, Screen } from "./theme";
+import { layer, shadow, space, weight } from "./tokens";
+
+const toastWidth = 356;
 
 // A short app-wide note that goes by itself ("Updated to 0.9.1"). A native dialog (Settings on a
 // computer or tablet) is a layer over the window that nothing in the root can draw above, so each
 // layer that may be on top hosts a `ToastLayer`, and only the one opened last shows the toasts.
 
-type ToastTone = "green" | "blue" | "amber" | "red";
+type ToastTone = "green" | "blue" | "warning" | "red";
 
 export interface ToastNote {
   title: string;
@@ -57,13 +60,13 @@ export function ToastLayer(props: { phone?: boolean }) {
       <View
         style={{
           position: "absolute",
-          zIndex: 1000,
+          zIndex: layer.toast,
           right: phone() ? 12 + insets().right : 16,
           left: phone() ? 12 + insets().left : undefined,
           top: phone() ? 8 + insets().top : undefined,
           bottom: phone() ? undefined : 16 + insets().bottom,
-          width: phone() ? undefined : 356,
-          gap: 8,
+          width: phone() ? undefined : toastWidth,
+          gap: space[8],
         }}
       >
         <Each of={toasts()} key={(toast) => toast.id}>
@@ -79,21 +82,21 @@ export function ToastLayer(props: { phone?: boolean }) {
               style={{
                 ...row,
                 alignItems: "flex-start",
-                gap: 10,
-                paddingVertical: 12,
-                paddingHorizontal: 14,
+                gap: space[8],
+                paddingVertical: space[12],
+                paddingHorizontal: space[16],
                 borderWidth: 1,
                 borderColor: c().border,
                 backgroundColor: c().canvas,
-                boxShadow: [{ x: 0, y: 4, blur: 16, color: "#0a0a0a14" }],
+                boxShadow: [shadow.float],
                 cursor: "pointer",
               }}
             >
-              <View style={{ paddingTop: 6 }}>
+              <View style={{ paddingTop: space[8] }}>
                 <StatusDot color={c()[toast().tone ?? "green"]} />
               </View>
-              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                <Label variant="small" weight={500}>
+              <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+                <Label variant="small" weight={weight.regular}>
                   {toast().title}
                 </Label>
                 <If when={toast().body}>

@@ -12,6 +12,7 @@ import {
   textFaces,
   textStyle,
 } from "../../../components";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 
 export type SkillReadingPosition =
@@ -40,6 +41,9 @@ export function skillFileLink(
     return undefined;
   }
 }
+
+/** An image file, shown whole in this box. */
+const imageHeight = 300;
 
 const markerName = "skill-heading-anchor";
 const linkName = "skill-keyboard-link";
@@ -154,8 +158,8 @@ function SkillKeyboardLink(props: {
         focusVisibleStyle={{ backgroundColor: c().blue }}
         style={{
           position: "absolute",
-          width: 2,
-          height: 16,
+          width: space[2],
+          height: space[16],
           left: -3,
           top: -14,
           pointerEvents: "none",
@@ -357,14 +361,14 @@ export function SkillFile(props: {
                   fontFamily: fontFamily(fonts().interface),
                   ...textStyle(type("body")),
                   color: c().ink,
-                  gap: 12,
+                  gap: space[12],
                 },
                 heading: { marginTop: 0, marginBottom: 0 },
                 heading1: textStyle(type("title"), "prose"),
                 heading2: textStyle(type("subtitle"), "prose"),
                 heading3: textStyle(type("body")),
                 paragraph: { marginTop: 0, marginBottom: 0 },
-                list: { gap: 6 },
+                list: { gap: space[4] },
                 listMarker: { color: c().ink },
                 code: { fontFamily: monoFontFamily(fonts()) },
                 codeBlockCode: {
@@ -379,7 +383,7 @@ export function SkillFile(props: {
       >
         <Image
           src={image()}
-          style={{ width: "100%", height: 300, objectFit: "contain" }}
+          style={{ width: "100%", height: imageHeight, objectFit: "contain" }}
         />
       </If>
     </View>

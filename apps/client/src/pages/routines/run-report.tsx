@@ -7,6 +7,7 @@ import {
   Caption,
   colors,
   Field,
+  focusRing,
   grow,
   Icon,
   Label,
@@ -19,6 +20,14 @@ import {
 import { UserFace } from "../../components/agent-face";
 import { chatText, shownMentions } from "../../components/eta-editor";
 import { StatusDot } from "../../components/status-dot";
+import {
+  avatar,
+  border,
+  control,
+  icon,
+  space,
+  weight,
+} from "../../components/tokens";
 import { formatLocale, localizedText, uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { reportBody, RoutineHistory } from "./history";
@@ -47,6 +56,15 @@ interface RoutineReportProps {
   onFeedback: (value: string) => void;
   onSend: () => void;
 }
+
+/** The "Output" tag over a failed run's error. */
+const badgeHeight = 20;
+/** The report link row on a failed run's page. */
+const reportRowHeight = 56;
+/** A report's column on a wide screen. */
+const columnWidth = 640;
+/** The feedback box under a report, its border included. */
+const feedbackHeight = 40;
 
 function runDay(at: number) {
   const date = new Date(at);
@@ -145,21 +163,22 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
       }
     >
       <SmoothScroll style={grow} scrollbar={false}>
-        <View style={{ padding: 16, gap: 18 }}>
-          <View style={{ gap: 8 }}>
-            <View style={{ ...row, gap: 8 }}>
+        <View style={{ padding: space[16], gap: space[16] }}>
+          <View style={{ gap: space[8] }}>
+            <View style={{ ...row, gap: space[8] }}>
               <View
                 style={{
-                  height: 18,
-                  paddingHorizontal: 8,
+                  height: badgeHeight,
+                  paddingHorizontal: space[8],
                   justifyContent: "center",
                   backgroundColor: c().button,
                 }}
               >
                 <Label
+                  tracking="caps"
                   variant="caption"
                   tone="buttonInk"
-                  style={{ textTransform: "uppercase", letterSpacing: 0.4 }}
+                  style={{ textTransform: "uppercase" }}
                 >
                   {status()}
                 </Label>
@@ -174,7 +193,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
               {schedule()}
             </Label>
           </View>
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: space[4] }}>
             <Caption text={uiText("report")} />
             <Label>{error()}</Label>
             <If when={previous()}>
@@ -203,29 +222,26 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
           </View>
           <If when={previous()}>
             {(run) => (
-              <View style={{ gap: 6 }}>
+              <View style={{ gap: space[4] }}>
                 <Caption text={localizedText("Output", "输出")} />
                 <View
                   role="button"
                   accessibilityLabel={run().title ?? uiText("report")}
                   onPress={() => props.onMove(previousIndex() - props.index)}
                   hoverStyle={{ backgroundColor: c().selected }}
-                  focusVisibleStyle={{
-                    outlineWidth: 1,
-                    outlineColor: c().blue,
-                  }}
+                  focusVisibleStyle={focusRing(c(), "inset")}
                   style={{
                     ...row,
-                    minHeight: 56,
-                    gap: 10,
-                    paddingHorizontal: 12,
+                    minHeight: reportRowHeight,
+                    gap: space[8],
+                    paddingHorizontal: space[12],
                     borderWidth: 1,
                     borderColor: c().border,
                     cursor: "pointer",
                   }}
                 >
-                  <Icon name="panel" size={14} tone="muted" />
-                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <Icon name="panel" size={icon.md} tone="muted" />
+                  <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                     <Label variant="small" lines={1}>
                       {run().title ?? uiText("report")}
                     </Label>
@@ -234,12 +250,12 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
                       tone="muted"
                     >{`${uiText("report")} · ${routineTime(run().startedAt)}`}</Label>
                   </View>
-                  <Icon name="right" size={10} tone="muted" />
+                  <Icon name="right" size={icon.sm} tone="muted" />
                 </View>
               </View>
             )}
           </If>
-          <View style={{ gap: 6 }}>
+          <View style={{ gap: space[4] }}>
             <Caption text={localizedText("Last 7 runs", "最近 7 次运行")} />
             <RoutineHistory runs={recent()} full />
             <View style={{ ...row, justifyContent: "space-between" }}>
@@ -257,9 +273,9 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
         style={{
           ...row,
           justifyContent: "space-between",
-          paddingHorizontal: 16,
-          minHeight: 64,
-          gap: 8,
+          paddingHorizontal: space[16],
+          minHeight: space[64],
+          gap: space[8],
           borderTopWidth: 1,
           borderColor: c().border,
         }}
@@ -275,9 +291,9 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
           label={uiText("runNow")}
           tone="primary"
           icon="play"
-          size={36}
-          labelWeight={600}
-          style={{ paddingHorizontal: 16, gap: 6 }}
+          size={control.touch}
+          labelWeight={weight.strong}
+          style={{ paddingHorizontal: space[16], gap: space[4] }}
           disabled={!props.canRetry}
           onPress={props.onRetry}
         />
@@ -298,8 +314,8 @@ export function RoutineReport(props: RoutineReportProps) {
     [feedTime(props.run.startedAt), recordedDuration(props.run)]
       .filter(Boolean)
       .join(" · ");
-  const inset = () => (props.phone ? 16 : 32);
-  const column = { width: "100%", maxWidth: 640 } as const;
+  const inset = () => (props.phone ? space[16] : space[32]);
+  const column = { width: "100%", maxWidth: columnWidth } as const;
   const move = (label: string, enabled: boolean, by: number) => (
     <View
       role="button"
@@ -308,7 +324,7 @@ export function RoutineReport(props: RoutineReportProps) {
       onPress={() => {
         if (enabled) props.onMove(by);
       }}
-      focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
+      focusVisibleStyle={focusRing(c(), "inset")}
       style={{ cursor: enabled ? "pointer" : "default" }}
     >
       <Label
@@ -325,13 +341,13 @@ export function RoutineReport(props: RoutineReportProps) {
         style={{
           ...row,
           paddingHorizontal: inset(),
-          gap: props.phone ? 12 : 16,
-          height: props.phone ? 40 : 48,
+          gap: props.phone ? space[12] : space[16],
+          height: props.phone ? space[40] : space[48],
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
-        <View style={{ ...row, gap: 8, flex: 1, minWidth: 0 }}>
+        <View style={{ ...row, gap: space[8], flex: 1, minWidth: 0 }}>
           <If
             when={!props.phone}
             else={
@@ -347,10 +363,10 @@ export function RoutineReport(props: RoutineReportProps) {
               role="button"
               accessibilityLabel={props.routine.name}
               onPress={props.onBack}
-              focusVisibleStyle={{ outlineWidth: 1, outlineColor: c().blue }}
-              style={{ ...row, gap: 8, minWidth: 0, cursor: "pointer" }}
+              focusVisibleStyle={focusRing(c(), "inset")}
+              style={{ ...row, gap: space[8], minWidth: 0, cursor: "pointer" }}
             >
-              <Icon name="arrowLeft" size={12} />
+              <Icon name="arrowLeft" size={icon.sm} />
               <Label variant="small" lines={1}>
                 {props.routine.name}
               </Label>
@@ -375,20 +391,20 @@ export function RoutineReport(props: RoutineReportProps) {
         <View
           style={{
             alignItems: "center",
-            paddingTop: props.phone ? 16 : 20,
-            paddingBottom: 16,
+            paddingTop: props.phone ? space[16] : space[20],
+            paddingBottom: space[16],
             paddingHorizontal: inset(),
           }}
         >
           <View
             style={{
               ...column,
-              gap: props.phone ? 8 : 6,
+              gap: props.phone ? space[8] : space[4],
               // On the phone a missed run sits in a card.
               ...(props.phone && failed()
                 ? {
-                    gap: 6,
-                    padding: 12,
+                    gap: space[4],
+                    padding: space[12],
                     borderWidth: 1,
                     borderColor: c().border,
                   }
@@ -398,12 +414,14 @@ export function RoutineReport(props: RoutineReportProps) {
             <Label variant="small" tone="muted">
               {date()}
             </Label>
-            <View style={{ gap: props.phone && failed() ? 6 : 8 }}>
+            <View
+              style={{ gap: props.phone && failed() ? space[4] : space[8] }}
+            >
               <If
                 when={failed()}
                 else={
                   <>
-                    <Label variant="subtitle" weight={600}>
+                    <Label variant="subtitle" weight={weight.strong}>
                       {props.run.title ?? uiText("report")}
                     </Label>
                     <chatText.View
@@ -422,11 +440,11 @@ export function RoutineReport(props: RoutineReportProps) {
                   </>
                 }
               >
-                <View style={{ ...row, gap: 8 }}>
+                <View style={{ ...row, gap: space[8] }}>
                   <StatusDot color={c().red} />
                   <Label
                     variant="subtitle"
-                    weight={600}
+                    weight={weight.strong}
                     tone={props.phone ? "muted" : "mutedInk"}
                   >
                     {uiText("noReport")}
@@ -435,13 +453,17 @@ export function RoutineReport(props: RoutineReportProps) {
                 <Label tone={props.phone ? "muted" : "mutedInk"}>
                   {props.run.error ?? uiText("theRoutineWasSkipped")}
                 </Label>
-                <View style={{ ...row, paddingTop: props.phone ? 4 : 0 }}>
+                <View
+                  style={{ ...row, paddingTop: props.phone ? space[4] : 0 }}
+                >
                   <Button
                     label={uiText("retry")}
                     disabled={!props.canRetry}
                     onPress={props.onRetry}
-                    size={props.phone ? 30 : undefined}
-                    style={props.phone ? { paddingHorizontal: 12 } : undefined}
+                    size={props.phone ? control.touch : undefined}
+                    style={
+                      props.phone ? { paddingHorizontal: space[12] } : undefined
+                    }
                   />
                 </View>
               </If>
@@ -456,20 +478,28 @@ export function RoutineReport(props: RoutineReportProps) {
           <View
             style={{
               alignItems: "center",
-              paddingVertical: 16,
+              paddingVertical: space[16],
               paddingHorizontal: inset(),
               borderTopWidth: 1,
               borderColor: c().border,
             }}
           >
-            <View style={{ ...column, gap: 12 }}>
+            <View style={{ ...column, gap: space[12] }}>
               <Each of={props.run.feedback} key={(entry) => entry.id}>
                 {(entry) => (
-                  <View style={{ ...row, alignItems: "flex-start", gap: 10 }}>
-                    <UserFace size={20} />
-                    <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
-                      <View style={{ ...row, alignItems: "baseline", gap: 8 }}>
-                        <Label variant="small" weight={600}>
+                  <View
+                    style={{ ...row, alignItems: "flex-start", gap: space[8] }}
+                  >
+                    <UserFace size={avatar.md} />
+                    <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
+                      <View
+                        style={{
+                          ...row,
+                          alignItems: "baseline",
+                          gap: space[8],
+                        }}
+                      >
+                        <Label variant="small" weight={weight.strong}>
                           {uiText("me")}
                         </Label>
                         <Label variant="small" tone="muted">
@@ -496,9 +526,9 @@ export function RoutineReport(props: RoutineReportProps) {
               <View
                 style={{
                   ...row,
-                  height: 38,
-                  gap: 8,
-                  paddingHorizontal: 10,
+                  height: feedbackHeight,
+                  gap: space[8],
+                  paddingHorizontal: space[12],
                   borderWidth: 1,
                   borderColor: c().border,
                 }}
@@ -513,7 +543,7 @@ export function RoutineReport(props: RoutineReportProps) {
                   }}
                   style={{
                     flex: 1,
-                    height: 36,
+                    height: feedbackHeight - 2 * border.hair,
                     ...textStyle(type("small")),
                     paddingHorizontal: 0,
                     borderWidth: 0,
@@ -522,12 +552,12 @@ export function RoutineReport(props: RoutineReportProps) {
                 <Button
                   label={uiText("sendFeedback")}
                   icon="send"
-                  iconSize={14}
+                  iconSize={icon.md}
                   labelTone="muted"
                   iconOnly
                   tone="ghost"
                   // The glyph sits on the box's 10px inset.
-                  style={{ marginRight: -5 }}
+                  style={{ marginRight: -space[4] }}
                   disabled={!sendable()}
                   onPress={props.onSend}
                 />

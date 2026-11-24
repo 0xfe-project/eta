@@ -6,7 +6,8 @@ import { pickerTarget } from "./element-picker";
 import { BackButton } from "./navigation-buttons";
 import { StatusDot } from "./status-dot";
 import { Label } from "./text";
-import { colors, row, sizes } from "./theme";
+import { colors, row } from "./theme";
+import { control, icon, sizes, space, weight } from "./tokens";
 
 export function Header(props: {
   title: string;
@@ -14,7 +15,7 @@ export function Header(props: {
   /** The count's role (`small` by default); `body` draws it 6pt after the title. */
   countVariant?: TextVariant;
   subtitle?: string;
-  subtitleTone?: "green" | "amber" | "muted";
+  subtitleTone?: "green" | "warning" | "muted";
   layout?: Layout;
   inset?: number;
   /** Right padding when the trailing control carries its own inset (a phone's 40pt button). */
@@ -48,9 +49,10 @@ export function Header(props: {
   const back = () => props.onBack !== undefined;
   // A phone top bar: 8pt insets around 40pt buttons, a `body` semibold title.
   const phoneBar = () => phone() && !props.compact && !props.dialog;
-  const fallbackInset = () => (phone() ? (back() ? 8 : 16) : 22);
+  const fallbackInset = () =>
+    phone() ? (back() ? space[8] : space[16]) : space[24];
   const paddingLeft = () => {
-    if (phone() && back()) return props.compact ? 0 : 8;
+    if (phone() && back()) return props.compact ? 0 : space[8];
     return props.inset ?? fallbackInset();
   };
   const titleVariant = (): TextVariant =>
@@ -70,7 +72,12 @@ export function Header(props: {
         ...row,
         flexShrink: 0,
         height:
-          props.height ?? (phone() ? (props.compact ? 44 : 48) : sizes.header),
+          props.height ??
+          (phone()
+            ? props.compact
+              ? control.touch
+              : space[48]
+            : sizes.header),
         paddingLeft: paddingLeft(),
         paddingRight: props.end ?? props.inset ?? fallbackInset(),
         borderBottomWidth: props.divider === false ? 0 : 1,
@@ -85,33 +92,37 @@ export function Header(props: {
                 : phone() || props.dialog
                   ? color().canvas
                   : color().surface,
-        gap: props.gap ?? (phoneBar() ? 4 : 8),
+        gap: props.gap ?? (phoneBar() ? space[4] : space[8]),
         zIndex: 1,
       }}
     >
       <If when={back()}>
         <BackButton
           icon={props.backIcon}
-          size={phone() ? 40 : undefined}
+          size={phone() ? control.touch : undefined}
           iconSize={
             props.backIconSize ??
-            (phone() ? (props.compact ? 16 : 20) : undefined)
+            (phone() ? (props.compact ? icon.md : icon.lg) : undefined)
           }
-          style={phone() && props.compact ? { marginRight: -8 } : undefined}
+          style={
+            phone() && props.compact ? { marginRight: -space[8] } : undefined
+          }
           onPress={() => props.onBack?.()}
         />
       </If>
       {props.leading}
       <View style={{ minWidth: 0, flexShrink: 1 }}>
         <Label
-          weight={props.titleWeight ?? (props.dialog ? 500 : 600)}
+          weight={
+            props.titleWeight ?? (props.dialog ? weight.regular : weight.strong)
+          }
           variant={titleVariant()}
           lines={1}
         >
           {props.title}
         </Label>
         <If when={props.subtitle}>
-          <View style={{ ...row, gap: 6 }}>
+          <View style={{ ...row, gap: space[4] }}>
             <If when={props.subtitleTone}>
               <StatusDot color={color()[props.subtitleTone ?? "muted"]} />
             </If>
@@ -140,7 +151,7 @@ export function Header(props: {
       {props.children}
       <If when={phoneBar() && back() && props.children === undefined}>
         {/* Keeps the title's lane the same as a bar with a trailing button. */}
-        <View style={{ width: 40, flexShrink: 0 }} />
+        <View style={{ width: space[40], flexShrink: 0 }} />
       </If>
     </View>
   );

@@ -18,8 +18,18 @@ import {
   textFaces,
   textStyle,
 } from "../../components";
+import { StatusDot } from "../../components/status-dot";
+import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
+
+/** A free answer's field; a proposal card's header and its fields' label column. */
+const answerWidth = 400;
+const cardHeaderHeight = 32;
+const fieldLabelWidth = 72;
+
+/** The strip above the transcript naming a question waiting off screen. */
+export const pendingStripHeight = 32;
 
 function SheetQuestion(props: {
   item: InteractionView;
@@ -34,8 +44,7 @@ function SheetQuestion(props: {
   const selected = signal<string[]>([]);
   const reply = signal("");
   const busy = signal(false);
-  const conversation = () =>
-    host.conversations().find((item) => item.id === props.item.conversationId);
+  const conversation = () => host.conversation(props.item.conversationId);
   async function answer(response: InboxResponse) {
     if (busy()) return;
     busy.set(true);
@@ -78,8 +87,12 @@ function SheetQuestion(props: {
         <View
           style={
             props.sheet
-              ? { paddingTop: 4, paddingHorizontal: 16, gap: 12 }
-              : { padding: 12, gap: 8 }
+              ? {
+                  paddingTop: space[4],
+                  paddingHorizontal: space[16],
+                  gap: space[12],
+                }
+              : { padding: space[12], gap: space[8] }
           }
         >
           <If when={props.sheet} else={<Caption text={uiText("question")} />}>
@@ -99,7 +112,9 @@ function SheetQuestion(props: {
           </If>
           <View
             style={
-              props.sheet ? { gap: 8 } : { ...row, flexWrap: "wrap", gap: 6 }
+              props.sheet
+                ? { gap: space[8] }
+                : { ...row, flexWrap: "wrap", gap: space[4] }
             }
           >
             <Each of={props.item.options}>
@@ -117,13 +132,13 @@ function SheetQuestion(props: {
                       ? "check"
                       : undefined
                   }
-                  size={props.sheet ? 44 : undefined}
+                  size={props.sheet ? control.touch : undefined}
                   style={
                     props.sheet
                       ? {
                           width: "100%",
                           justifyContent: "space-between",
-                          paddingHorizontal: 12,
+                          paddingHorizontal: space[12],
                         }
                       : undefined
                   }
@@ -144,8 +159,8 @@ function SheetQuestion(props: {
             style={
               props.sheet
                 ? {
-                    height: 44,
-                    paddingHorizontal: 12,
+                    height: control.touch,
+                    paddingHorizontal: space[12],
                   }
                 : undefined
             }
@@ -156,16 +171,16 @@ function SheetQuestion(props: {
         style={{
           ...row,
           justifyContent: "flex-end",
-          gap: 8,
+          gap: space[8],
           ...(props.sheet
-            ? { height: 64, paddingHorizontal: 16, flexShrink: 0 }
-            : { padding: 12 }),
+            ? { height: space[64], paddingHorizontal: space[16], flexShrink: 0 }
+            : { padding: space[12] }),
           borderTopWidth: props.sheet ? 1 : 0,
           borderColor: c().border,
         }}
       >
         <If when={props.sheet}>
-          <View style={{ ...row, flex: 1, gap: 16 }}>
+          <View style={{ ...row, flex: 1, gap: space[16] }}>
             <If when={props.onConversation}>
               <View
                 role="button"
@@ -202,9 +217,9 @@ function SheetQuestion(props: {
         <Button
           label={props.sheet ? uiText("sendAnswer") : uiText("answer")}
           tone="primary"
-          size={props.sheet ? 36 : undefined}
-          labelWeight={props.sheet ? 600 : undefined}
-          style={props.sheet ? { paddingHorizontal: 16 } : undefined}
+          size={props.sheet ? control.touch : undefined}
+          labelWeight={props.sheet ? weight.strong : undefined}
+          style={props.sheet ? { paddingHorizontal: space[16] } : undefined}
           disabled={busy() || (!selected().length && !reply().trim())}
           onPress={() => void submit()}
         />
@@ -226,9 +241,7 @@ function SheetProposal(props: {
   const title = () =>
     String(op().payload.name ?? op().payload.title ?? kindName(op().kind));
   const conversation = () =>
-    host
-      .conversations()
-      .find((item) => item.id === op().payload.originConversationId);
+    host.conversation(op().payload.originConversationId as string | undefined);
   async function decide(decision: "approve" | "reject") {
     if (working()) return;
     working.set(true);
@@ -243,10 +256,15 @@ function SheetProposal(props: {
   return (
     <View style={grow}>
       <SmoothScroll style={grow} scrollbar={false}>
-        <View style={{ paddingTop: 4, paddingHorizontal: 16, gap: 14 }}>
-          <View style={{ gap: 4 }}>
+        <View
+          style={{
+            paddingTop: space[4],
+            paddingHorizontal: space[16],
+            gap: space[12],
+          }}
+        >
+          <View style={{ gap: space[4] }}>
             <Caption
-              phone
               text={[
                 kindName(op().kind),
                 conversation()?.name,
@@ -259,8 +277,8 @@ function SheetProposal(props: {
           </View>
           <Each of={proposalFields(op(), host).filter(([, value]) => value)}>
             {(field) => (
-              <View style={{ gap: 4 }}>
-                <Caption phone text={uiText(field()[0])} />
+              <View style={{ gap: space[4] }}>
+                <Caption text={uiText(field()[0])} />
                 <Label variant="small">{field()[1]}</Label>
               </View>
             )}
@@ -292,18 +310,18 @@ function SheetProposal(props: {
         <View
           style={{
             ...row,
-            height: 64,
+            height: space[64],
             flexShrink: 0,
-            gap: 8,
-            paddingHorizontal: 16,
+            gap: space[8],
+            paddingHorizontal: space[16],
             borderTopWidth: 1,
             borderColor: c().border,
           }}
         >
           <Button
             label={uiText("reject")}
-            size={36}
-            style={{ paddingHorizontal: 16 }}
+            size={control.touch}
+            style={{ paddingHorizontal: space[16] }}
             disabled={working()}
             onPress={() => void decide("reject")}
           />
@@ -311,9 +329,9 @@ function SheetProposal(props: {
           <Button
             label={uiText("proposalCreate")}
             tone="primary"
-            size={36}
-            labelWeight={600}
-            style={{ paddingHorizontal: 20 }}
+            size={control.touch}
+            labelWeight={weight.strong}
+            style={{ paddingHorizontal: space[20] }}
             disabled={working()}
             onPress={() => void decide("approve")}
           />
@@ -412,15 +430,11 @@ function Choice(props: {
       hoverStyle={
         props.selected ? undefined : { backgroundColor: c().selected }
       }
-      focusVisibleStyle={{
-        outlineWidth: 1,
-        outlineColor: c().blue,
-        outlineOffset: 1,
-      }}
+      focusVisibleStyle={focusRing(c())}
       style={{
         ...row,
-        height: 28,
-        paddingHorizontal: 10,
+        height: control.md,
+        paddingHorizontal: space[12],
         borderWidth: 1,
         borderColor: props.selected
           ? c().button
@@ -428,19 +442,31 @@ function Choice(props: {
             ? c().border
             : c().strong,
         backgroundColor: props.selected ? c().button : "transparent",
-        opacity: props.disabled ? 0.45 : 1,
+        opacity: props.disabled ? opacity.disabled : 1,
         cursor: props.disabled ? "default" : "pointer",
       }}
     >
       <Label
+        tracking="caps"
         variant="caption"
         tone={props.selected ? "buttonInk" : props.quiet ? "muted" : "ink"}
-        style={{ letterSpacing: 0.9, textTransform: "uppercase" }}
+        style={{ textTransform: "uppercase" }}
       >
         {props.label}
       </Label>
     </View>
   );
+}
+
+/** The question a jump went to, its card lit up for a moment. */
+const flashing = signal("");
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Lights up the card of question `id` for a moment, after a jump to it. */
+export function flashQuestion(id: string) {
+  clearTimeout(flashTimer);
+  flashing.set(id);
+  flashTimer = setTimeout(() => flashing.set(""), 1200);
 }
 
 function QuestionCard(props: { item: InteractionView }) {
@@ -474,39 +500,48 @@ function QuestionCard(props: { item: InteractionView }) {
   }
   return (
     <View
+      testID={`question-${props.item.id}`}
       style={{
         borderWidth: 1,
-        borderColor: c().amber,
-        backgroundColor: c().canvas,
+        borderColor: c().strong,
+        // A jump from the strip above the transcript lights the card up for a moment.
+        backgroundColor:
+          flashing() === props.item.id ? c().warningFill : c().canvas,
+        transitionProperty: "backgroundColor",
+        transitionDuration: flashing() === props.item.id ? 0 : 900,
       }}
     >
       <View
         style={{
           ...row,
-          gap: 8,
-          paddingVertical: 4,
-          paddingHorizontal: 10,
-          backgroundColor: `${c().ink}08`,
+          gap: space[8],
+          paddingVertical: space[4],
+          paddingHorizontal: space[12],
+          backgroundColor: c().overlay,
           borderBottomWidth: 1,
           borderColor: c().border,
         }}
       >
         <Label
+          tracking="caps"
           variant="caption"
-          tone="amber"
-          style={{ letterSpacing: 1.4, textTransform: "uppercase" }}
+          tone="warning"
+          style={{ textTransform: "uppercase" }}
         >
           {uiText("confirmationRequestCaption")}
         </Label>
         <Label
+          tracking="caps"
           variant="caption"
           lines={1}
-          style={{ letterSpacing: 1.4, textTransform: "uppercase" }}
+          style={{ textTransform: "uppercase" }}
         >
           {name()}
         </Label>
       </View>
-      <Label style={{ paddingVertical: 8, paddingHorizontal: 10 }}>
+      <Label
+        style={{ paddingVertical: space[8], paddingHorizontal: space[12] }}
+      >
         {props.item.prompt}
       </Label>
       <If when={props.item.context}>
@@ -514,7 +549,7 @@ function QuestionCard(props: { item: InteractionView }) {
           <Label
             variant="small"
             tone="muted"
-            style={{ paddingHorizontal: 10, paddingBottom: 8 }}
+            style={{ paddingHorizontal: space[12], paddingBottom: space[8] }}
           >
             {text()}
           </Label>
@@ -524,9 +559,9 @@ function QuestionCard(props: { item: InteractionView }) {
         style={{
           ...row,
           flexWrap: "wrap",
-          gap: 6,
-          paddingHorizontal: 10,
-          paddingBottom: 10,
+          gap: space[4],
+          paddingHorizontal: space[12],
+          paddingBottom: space[12],
         }}
       >
         <If when={freeform()}>
@@ -539,9 +574,9 @@ function QuestionCard(props: { item: InteractionView }) {
                 void answer({ kind: "freeform", text: reply().trim() });
             }}
             style={{
-              width: 400,
+              width: answerWidth,
               maxWidth: "100%",
-              height: 28,
+              height: control.md,
               ...textStyle(type("small")),
             }}
           />
@@ -582,53 +617,52 @@ function QuestionCard(props: { item: InteractionView }) {
   );
 }
 
-/** The questions waiting in a conversation, above its transcript. */
+/** A question waiting off screen, above the transcript: pressing it goes to the question. */
 export function PendingStrip(props: {
-  items: InteractionView[];
-  onOpen?: (item: InteractionView) => void;
+  item: InteractionView;
+  /** How many other questions wait in the conversation. */
+  more: number;
+  onJump: (item: InteractionView) => void;
 }) {
   const host = useHost();
   const c = colors();
-  const first = () => props.items[0];
+  const text = () =>
+    uiText("waitingForYourAnswer", {
+      name: host.agent(props.item.agentId)?.name ?? uiText("agent"),
+      prompt: props.item.prompt,
+    });
   return (
-    <If when={first()}>
-      {(item) => (
-        <View
-          role="button"
-          accessibilityLabel={item().prompt}
-          onPress={() => props.onOpen?.(item())}
-          hoverStyle={{ opacity: 0.85 }}
-          focusVisibleStyle={focusRing(c())}
-          style={{
-            cursor: "pointer",
-            gap: 2,
-            paddingVertical: 4,
-            paddingHorizontal: 8,
-            borderWidth: 1,
-            borderColor: c().amber,
-            backgroundColor: c().canvas,
-          }}
-        >
-          <View style={{ ...row, gap: 8, paddingVertical: 2 }}>
-            <Label
-              variant="caption"
-              tone="amber"
-              style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
-            >
-              {host.agent(item().agentId)?.name ?? uiText("agent")}
-            </Label>
-            <Label variant="small" lines={1} style={{ flex: 1 }}>
-              {item().prompt}
-            </Label>
-          </View>
-          <If when={props.items.length > 1}>
-            <Label variant="caption" tone="muted">
-              {uiText("moreWaiting", { count: props.items.length - 1 })}
-            </Label>
-          </If>
-        </View>
-      )}
-    </If>
+    <View
+      role="button"
+      accessibilityLabel={uiText("jumpToQuestion")}
+      accessibilityHint={text()}
+      onPress={() => props.onJump(props.item)}
+      hoverStyle={{ backgroundColor: c().selected }}
+      focusVisibleStyle={focusRing(c())}
+      style={{
+        ...row,
+        height: pendingStripHeight,
+        gap: space[8],
+        paddingHorizontal: space[12],
+        borderWidth: 1,
+        borderColor: c().strong,
+        backgroundColor: c().canvas,
+        cursor: "pointer",
+      }}
+    >
+      <StatusDot color={c().warning} />
+      <Label variant="small" lines={1} style={{ flex: 1 }}>
+        {text()}
+      </Label>
+      <If when={props.more > 0}>
+        <Label variant="caption" tone="muted" style={{ flexShrink: 0 }}>
+          {uiText("moreQuestions", { count: props.more })}
+        </Label>
+      </If>
+      <Label variant="caption" tone="muted" style={{ flexShrink: 0 }}>
+        {uiText("jumpToQuestion")}
+      </Label>
+    </View>
   );
 }
 
@@ -704,26 +738,36 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
         onPress={() => open.set(!expanded())}
         style={{
           ...row,
-          height: 30,
-          gap: 6,
-          paddingHorizontal: 8,
+          height: cardHeaderHeight,
+          gap: space[4],
+          paddingHorizontal: space[8],
           cursor: "pointer",
         }}
       >
-        <Icon name={expanded() ? "down" : "right"} size={8} tone="muted" />
+        <Icon
+          name={expanded() ? "down" : "right"}
+          size={icon.sm}
+          tone="muted"
+        />
         <Label
+          tracking="caps"
           variant="caption"
           tone="muted"
-          style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
+          style={{ textTransform: "uppercase" }}
         >
           {kindName(op().kind)}
         </Label>
-        <Label variant="small" weight={600} lines={1} style={{ flex: 1 }}>
+        <Label
+          variant="small"
+          weight={weight.strong}
+          lines={1}
+          style={{ flex: 1 }}
+        >
           {title()}
         </Label>
         <View
           style={{
-            paddingHorizontal: pending() ? 5 : 0,
+            paddingHorizontal: pending() ? space[4] : 0,
             borderWidth: pending() ? 1 : 0,
             borderColor: c().strong,
             flexShrink: 0,
@@ -737,22 +781,22 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
       <If when={expanded() && pending()}>
         <View
           style={{
-            padding: 10,
-            gap: 6,
+            padding: space[12],
+            gap: space[4],
             borderTopWidth: 1,
             borderColor: c().border,
           }}
         >
           <Each of={fields().filter(([, value]) => value)}>
             {(field) => (
-              <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
+              <View style={{ ...row, alignItems: "flex-start", gap: space[8] }}>
                 <Label
+                  tracking="caps"
                   variant="caption"
                   tone="muted"
                   style={{
-                    width: 72,
+                    width: fieldLabelWidth,
                     flexShrink: 0,
-                    letterSpacing: 0.8,
                     textTransform: "uppercase",
                   }}
                 >
@@ -764,13 +808,13 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
               </View>
             )}
           </Each>
-          <View style={{ ...row, gap: 8, paddingTop: 4 }}>
+          <View style={{ ...row, gap: space[8], paddingTop: space[4] }}>
             <Button
               label={uiText("proposalCreate")}
               tone="primary"
-              size={22}
+              size={control.sm}
               labelVariant="caption"
-              style={{ paddingHorizontal: 10 }}
+              style={{ paddingHorizontal: space[12] }}
               disabled={working()}
               onPress={() => void decide("approve")}
             />
@@ -783,8 +827,8 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
               hoverStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: 22,
-                paddingHorizontal: 10,
+                height: control.sm,
+                paddingHorizontal: space[12],
                 cursor: "pointer",
               }}
             >
@@ -800,8 +844,8 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
           variant="small"
           tone={op().status === "failed" ? "mutedInk" : "ink"}
           style={{
-            paddingVertical: 8,
-            paddingHorizontal: 10,
+            paddingVertical: space[8],
+            paddingHorizontal: space[12],
             borderTopWidth: 1,
             borderColor: c().border,
           }}

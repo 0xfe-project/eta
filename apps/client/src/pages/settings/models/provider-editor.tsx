@@ -1,7 +1,15 @@
 import type { ProviderSummary } from "@eta/client-contracts";
 import { modelSource } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { Button, Caption, Field, Modal, row } from "../../../components";
+import {
+  Button,
+  Caption,
+  dialogWidth,
+  Field,
+  Modal,
+  row,
+} from "../../../components";
+import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 
@@ -93,10 +101,10 @@ export function ProviderEditor(props: {
     <Modal
       title={item ? (item.name ?? item.id) : uiText("addModelSource")}
       phone={props.phone}
-      width={520}
+      width={dialogWidth.lg}
       onClose={props.onClose}
     >
-      <View style={{ padding: 16, gap: 8 }}>
+      <View style={{ padding: space[16], gap: space[8] }}>
         <Caption text={preset()?.name ?? uiText("openaiCompatibleSource")} />
         <Field
           label={uiText("sourceName")}
@@ -123,7 +131,7 @@ export function ProviderEditor(props: {
           value={models()}
           onChange={models.set}
         />
-        <View style={{ ...row, gap: 8, justifyContent: "flex-end" }}>
+        <View style={{ ...row, gap: space[8], justifyContent: "flex-end" }}>
           <Button
             label={uiText("discoverModels")}
             disabled={!url().trim() || busy()}

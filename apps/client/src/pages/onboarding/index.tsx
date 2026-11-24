@@ -4,6 +4,7 @@ import { signal, View } from "nsh";
 import {
   Button,
   colors,
+  dialogWidth,
   grow,
   Header,
   Icon,
@@ -14,6 +15,7 @@ import {
 } from "../../components";
 import { useModels } from "../../components/model-select";
 import { StatusDot } from "../../components/status-dot";
+import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { AddSource } from "../settings/models/add-source";
@@ -24,12 +26,16 @@ import { WelcomeStep } from "./welcome";
 // Footer buttons: 12pt from the edge to the label (the primary's 1pt border
 // counts), 8 before a leading icon, a 6pt gap, and half opacity when disabled.
 const footerButton = (disabled = false) => ({
-  paddingHorizontal: 11,
-  gap: 6,
-  opacity: disabled ? 0.5 : 1,
+  paddingHorizontal: space[12],
+  gap: space[4],
+  opacity: disabled ? opacity.disabled : 1,
 });
-// On a phone the footer's buttons are 36pt tall, as is step 1's first Add source.
-const phoneButton = 36;
+// On a phone the footer's buttons are touch height, as is step 1's first Add source.
+const phoneButton = control.touch;
+/** A source row's trailing state (a dot and its model count). */
+const sourceStateWidth = 80;
+/** The provider dialog's height: most of a phone's screen, a fixed one elsewhere. */
+const providerHeight = { phone: "90%", other: 560 } as const;
 
 /** "A", "A and B", "A, B and C". */
 function listText(items: string[]) {
@@ -114,7 +120,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
         // A phone gets the whole screen, as the web's /onboard page.
         phonePage={props.phone}
         overPhoneNavigation={props.phone}
-        width={640}
+        width={dialogWidth.xl}
         height={props.phone ? "100%" : undefined}
         onClose={props.onClose}
         dismissible={false}
@@ -124,32 +130,28 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           title={uiText("setUpEta")}
           layout="desktop"
           dialog
-          inset={16}
-          end={12}
+          inset={space[16]}
+          end={space[12]}
         />
         <If when={step() > 0}>
           <View
             style={{
               ...row,
-              height: 40,
+              height: space[40],
               flexShrink: 0,
-              paddingHorizontal: 16,
-              gap: 12,
+              paddingHorizontal: space[16],
+              gap: space[12],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
           >
-            <View style={{ ...row, gap: 8 }}>
-              <If when={step() < 3} else={<Icon name="check" size={12} />}>
-                <Label
-                  variant="caption"
-                  tone="muted"
-                  style={{ letterSpacing: 0.8 }}
-                >
+            <View style={{ ...row, gap: space[8] }}>
+              <If when={step() < 3} else={<Icon name="check" size={icon.sm} />}>
+                <Label tracking="caps" variant="caption" tone="muted">
                   {`${step()}/2`}
                 </Label>
               </If>
-              <Label variant="small" weight={600}>
+              <Label variant="small" weight={weight.strong}>
                 {step() === 1
                   ? uiText("connectAModel")
                   : step() === 2
@@ -168,7 +170,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                   ? uiText("lastStep")
                   : ""}
             </Label>
-            <View style={{ ...row, gap: 4 }}>
+            <View style={{ ...row, gap: space[4] }}>
               <Each of={[1, 2]}>
                 {(num) => (
                   <If
@@ -176,18 +178,15 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                     else={
                       <View
                         style={{
-                          width: 8,
-                          height: 8,
+                          width: space[8],
+                          height: space[8],
                           borderWidth: 1,
                           borderColor: c().strong,
                         }}
                       />
                     }
                   >
-                    <StatusDot
-                      color={step() === num() ? c().ink : c().faint}
-                      size={8}
-                    />
+                    <StatusDot color={step() === num() ? c().ink : c().faint} />
                   </If>
                 )}
               </Each>
@@ -202,8 +201,14 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
             <WelcomeStep phone={props.phone} />
           </If>
           <If when={step() === 1}>
-            <View style={{ padding: 16, paddingTop: 24, gap: 4 }}>
-              <Label variant="subtitle" weight={600}>
+            <View
+              style={{
+                padding: space[16],
+                paddingTop: space[24],
+                gap: space[4],
+              }}
+            >
+              <Label variant="subtitle" weight={weight.strong}>
                 {uiText("whichModelShouldYourAgentsUse")}
               </Label>
               <Label tone="mutedInk">
@@ -219,7 +224,13 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                   : uiText("aSubscriptionAProviderApiKey")}
               </Label>
             </View>
-            <View style={{ paddingHorizontal: 16, paddingBottom: 24, gap: 8 }}>
+            <View
+              style={{
+                paddingHorizontal: space[16],
+                paddingBottom: space[24],
+                gap: space[8],
+              }}
+            >
               <Each of={sources()} key={(source) => source.id}>
                 {(source) => (
                   <View
@@ -230,9 +241,9 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                     style={{
                       ...row,
                       alignItems: "flex-start",
-                      gap: 10,
-                      paddingVertical: 8,
-                      paddingHorizontal: 12,
+                      gap: space[8],
+                      paddingVertical: space[8],
+                      paddingHorizontal: space[12],
                       borderWidth: 1,
                       borderColor: c().border,
                       cursor: "pointer",
@@ -240,8 +251,8 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                   >
                     <View
                       style={{
-                        width: 24,
-                        height: 24,
+                        width: space[24],
+                        height: space[24],
                         flexShrink: 0,
                         alignItems: "center",
                         justifyContent: "center",
@@ -249,10 +260,12 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                         borderColor: c().strong,
                       }}
                     >
-                      <Icon name="plugins" size={14} />
+                      <Icon name="plugins" size={icon.md} />
                     </View>
-                    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                      <Label weight={500}>{source().name ?? source().id}</Label>
+                    <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+                      <Label weight={weight.regular}>
+                        {source().name ?? source().id}
+                      </Label>
                       <Label variant="small" tone="muted">
                         {[
                           ...(source().hasApiKey
@@ -267,14 +280,14 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                     <View
                       style={{
                         ...row,
-                        width: 80,
-                        height: 20,
-                        gap: 6,
+                        width: sourceStateWidth,
+                        height: space[20],
+                        gap: space[4],
                         flexShrink: 0,
                       }}
                     >
                       <StatusDot
-                        color={source().models.length ? c().green : c().amber}
+                        color={source().models.length ? c().green : c().warning}
                       />
                       <Label variant="small" tone="mutedInk">
                         {source().models.length
@@ -282,8 +295,8 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                           : uiText("needsAttention")}
                       </Label>
                     </View>
-                    <View style={{ marginTop: 2 }}>
-                      <Icon name="right" size={16} tone="mutedInk" />
+                    <View style={{ marginTop: space[2] }}>
+                      <Icon name="right" size={icon.md} tone="mutedInk" />
                     </View>
                   </View>
                 )}
@@ -292,12 +305,18 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                 label={uiText("addSource")}
                 icon="plus"
                 tone={sources().length ? "ghost" : "primary"}
-                size={sources().length ? 24 : props.phone ? phoneButton : 28}
+                size={
+                  sources().length
+                    ? control.sm
+                    : props.phone
+                      ? phoneButton
+                      : control.md
+                }
                 onPress={() => adding.set(true)}
                 style={{
                   alignSelf: "flex-start",
-                  gap: 6,
-                  paddingHorizontal: sources().length ? 0 : 11,
+                  gap: space[4],
+                  paddingHorizontal: sources().length ? 0 : space[12],
                 }}
               />
             </View>
@@ -327,9 +346,13 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           </If>
           <If when={step() === 3}>
             <View
-              style={{ paddingHorizontal: 16, paddingVertical: 24, gap: 4 }}
+              style={{
+                paddingHorizontal: space[16],
+                paddingVertical: space[24],
+                gap: space[4],
+              }}
             >
-              <Label variant="subtitle" weight={600}>
+              <Label variant="subtitle" weight={weight.strong}>
                 {uiText("yourAgentsAreReady")}
               </Label>
               <Label tone="mutedInk">
@@ -355,9 +378,9 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
               ...row,
               alignItems: "flex-start",
               flexShrink: 0,
-              gap: 8,
-              paddingVertical: 10,
-              paddingHorizontal: 16,
+              gap: space[8],
+              paddingVertical: space[12],
+              paddingHorizontal: space[16],
               borderTopWidth: 1,
               borderColor: c().border,
               backgroundColor: c().selected,
@@ -365,13 +388,13 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           >
             <View
               style={{
-                width: 16,
-                height: 20,
+                width: space[16],
+                height: space[20],
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <Icon name="warning" size={14} tone="red" />
+              <Icon name="warning" size={icon.md} tone="red" />
             </View>
             <Label style={{ flex: 1, minWidth: 0 }}>
               {uiText("installFailed", { message: error() })}
@@ -382,18 +405,18 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           style={{
             ...row,
             flexShrink: 0,
-            paddingTop: 12,
-            paddingBottom: props.phone ? 28 : 12,
-            paddingHorizontal: 16,
+            paddingTop: space[12],
+            paddingBottom: props.phone ? space[32] : space[12],
+            paddingHorizontal: space[16],
             borderTopWidth: 1,
             borderColor: c().border,
-            gap: 8,
+            gap: space[8],
           }}
         >
           <View
             style={{
               ...row,
-              gap: 8,
+              gap: space[8],
               flexGrow: 1,
               // Step 2's Previous keeps its width; the count beside it wraps.
               flexShrink: step() === 2 ? 0 : 1,
@@ -409,8 +432,8 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                 onPress={() => step.update((value) => value - 1)}
                 style={{
                   ...footerButton(working()),
-                  paddingLeft: 8,
-                  paddingRight: 12,
+                  paddingLeft: space[8],
+                  paddingRight: space[12],
                 }}
               />
             </If>
@@ -422,7 +445,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
               </Label>
             </If>
           </View>
-          <View style={{ ...row, flexShrink: 1, gap: 12 }}>
+          <View style={{ ...row, flexShrink: 1, gap: space[12] }}>
             <If when={step() === 2 && loadingCards()}>
               <Label variant="small" tone="muted">
                 {uiText("loadingEllipsis")}
@@ -500,8 +523,8 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
             sources().find((source) => source.id === detail())?.name ?? detail()
           }
           phone={props.phone}
-          width={640}
-          height={props.phone ? "90%" : 560}
+          width={dialogWidth.xl}
+          height={props.phone ? providerHeight.phone : providerHeight.other}
           hideHeader
           onClose={() => detail.set("")}
         >

@@ -3,6 +3,7 @@ import type { Layout } from "../../components";
 import type { taskDropZones } from "./drag";
 import { View } from "nsh";
 import { colors, grow, Label, row, SmoothScroll } from "../../components";
+import { control, icon, space } from "../../components/tokens";
 import { BoardCard } from "./board-card";
 import { statusName, TaskGlyph } from "./status";
 
@@ -19,6 +20,10 @@ export const visibleStatuses: BoardTaskStatus[] = [
   "backlog",
   "cancelled",
 ];
+
+/** A status column on a tablet, at its widest; its heading. */
+const columnMaxWidth = 160;
+const headerHeight = 24;
 
 export function TaskWorkspaceBoard(props: {
   layout: Layout;
@@ -38,10 +43,10 @@ export function TaskWorkspaceBoard(props: {
       style={{
         ...row,
         ...grow,
-        paddingHorizontal: tablet() ? 14 : 22,
-        paddingTop: 12,
-        paddingBottom: tablet() ? 12 : 0,
-        gap: tablet() ? 8 : 9,
+        paddingHorizontal: tablet() ? space[16] : space[24],
+        paddingTop: space[12],
+        paddingBottom: tablet() ? space[12] : 0,
+        gap: space[8],
         alignItems: "stretch",
       }}
     >
@@ -55,8 +60,12 @@ export function TaskWorkspaceBoard(props: {
               ref={(view) => boardDrag.register(status(), view)}
               style={{
                 flex: folded() ? undefined : 1,
-                width: folded() ? (tablet() ? 28 : 32) : undefined,
-                maxWidth: tablet() && !folded() ? 160 : undefined,
+                width: folded()
+                  ? tablet()
+                    ? control.md
+                    : space[32]
+                  : undefined,
+                maxWidth: tablet() && !folded() ? columnMaxWidth : undefined,
                 minWidth: 0,
                 backgroundColor: folded()
                   ? tablet()
@@ -73,21 +82,21 @@ export function TaskWorkspaceBoard(props: {
                   folded()
                     ? {
                         alignItems: "center",
-                        paddingTop: tablet() ? 6 : 9,
-                        gap: tablet() ? 8 : 7,
+                        paddingTop: space[8],
+                        gap: space[8],
                         cursor: "pointer",
                       }
                     : {
                         ...row,
-                        gap: tablet() ? 6 : 7,
-                        height: tablet() ? 24 : 25,
-                        paddingTop: tablet() ? 6 : 7,
-                        paddingLeft: tablet() ? 0 : 2,
+                        gap: tablet() ? space[4] : space[8],
+                        height: headerHeight,
+                        paddingTop: space[8],
+                        paddingLeft: tablet() ? 0 : space[2],
                         cursor: "pointer",
                       }
                 }
               >
-                <TaskGlyph status={status()} size={tablet() ? 12 : 12.6} />
+                <TaskGlyph status={status()} size={icon.sm} />
                 <If
                   when={!folded()}
                   else={
@@ -116,10 +125,10 @@ export function TaskWorkspaceBoard(props: {
               </View>
               <If when={!folded()}>
                 <SmoothScroll
-                  style={{ ...grow, marginTop: tablet() ? 8 : 7 }}
+                  style={{ ...grow, marginTop: space[8] }}
                   scrollbar={false}
                 >
-                  <View style={{ gap: tablet() ? 8 : 7 }}>
+                  <View style={{ gap: space[8] }}>
                     <Each of={column(status())} key={(task) => task.id}>
                       {(task) => (
                         <BoardCard
@@ -148,7 +157,7 @@ export function TaskWorkspaceBoard(props: {
 function SideLabel(props: { text: string; tone: "muted" | "mutedInk" }) {
   const length = () => railLength(props.text);
   return (
-    <View style={{ width: 16, height: length() }}>
+    <View style={{ width: space[16], height: length() }}>
       <Label
         variant="small"
         tone={props.tone}

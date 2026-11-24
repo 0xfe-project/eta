@@ -1,0 +1,35 @@
+# A length off the grid: a number other than 0, 1, 2 or a multiple of 4 (a fraction included), or
+# such a number in an arm of a ternary or of `??` / `||` / `&&`, or as a field of an object.
+id: off-grid
+language: tsx
+rule:
+  any:
+    - kind: number
+      not:
+        regex: ^(0|1|2|4|8|[\d_]*[02468][048]|[\d_]*[13579][26])$
+    - kind: unary_expression
+      regex: ^-\s*\d
+      has:
+        kind: number
+        not:
+          regex: ^(0|1|2|4|8|[\d_]*[02468][048]|[\d_]*[13579][26])$
+    - kind: parenthesized_expression
+      has:
+        matches: off-grid
+    - kind: ternary_expression
+      any:
+        - has: { field: consequence, matches: off-grid }
+        - has: { field: alternative, matches: off-grid }
+    - kind: binary_expression
+      has:
+        field: operator
+        regex: ^(\?\?|\|\||&&)$
+      any:
+        - has: { field: left, matches: off-grid }
+        - has: { field: right, matches: off-grid }
+    - kind: as_expression
+      has: { nthChild: 1, matches: off-grid }
+    - kind: object
+      has:
+        kind: pair
+        has: { field: value, matches: off-grid }

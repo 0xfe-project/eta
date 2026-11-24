@@ -12,6 +12,7 @@ import {
   touchRow,
   touchScreen,
 } from "../../components/menu";
+import { control, icon, space, weight } from "../../components/tokens";
 import { statusHint, statusName, TaskGlyph } from "./status";
 
 /**
@@ -20,6 +21,9 @@ import { statusHint, statusName, TaskGlyph } from "./status";
  * caption. In the phone layout it is a sheet at the bottom, as the shared
  * `ActionMenu` is (`menuPresentation`).
  */
+/** A menu row in a phone's sheet. */
+const sheetRowHeight = 52;
+
 export function TaskMenu(props: {
   trigger: JSX.Element;
   width: number;
@@ -38,7 +42,7 @@ export function TaskMenu(props: {
       onOpenChange={(open) => props.onOpenChange?.(open)}
       popupStyle={{
         width: props.width,
-        paddingVertical: 4,
+        paddingVertical: space[4],
         borderWidth: 1,
         borderColor: c().strong,
         backgroundColor: c().canvas,
@@ -49,9 +53,9 @@ export function TaskMenu(props: {
         {(caption) => (
           <View
             style={{
-              paddingTop: 6,
-              paddingBottom: 4,
-              paddingHorizontal: inSheet() ? 16 : 10,
+              paddingTop: space[8],
+              paddingBottom: space[4],
+              paddingHorizontal: inSheet() ? space[16] : space[12],
             }}
           >
             <Caption text={caption()} />
@@ -106,15 +110,15 @@ export function TaskMenuItem(props: {
         ...row,
         alignItems: props.hint ? "flex-start" : "center",
         minHeight: inSheet()
-          ? 52
+          ? sheetRowHeight
           : touchScreen
             ? touchRow
             : props.hint
               ? undefined
-              : (props.height ?? 28),
-        paddingVertical: props.hint ? 6 : 0,
-        paddingHorizontal: inSheet() ? 16 : 10,
-        gap: 8,
+              : (props.height ?? control.md),
+        paddingVertical: props.hint ? space[8] : 0,
+        paddingHorizontal: inSheet() ? space[16] : space[12],
+        gap: space[8],
         backgroundColor: props.checked ? c().selected : undefined,
         ...props.style,
       }}
@@ -124,7 +128,7 @@ export function TaskMenuItem(props: {
         <View
           style={{
             ...row,
-            height: props.hint ? 16 : undefined,
+            height: props.hint ? space[16] : undefined,
             flexShrink: 0,
           }}
         >
@@ -154,13 +158,13 @@ export function TaskMenuItem(props: {
         <View
           style={{
             ...row,
-            width: 12,
-            height: props.hint ? 16 : 12,
+            width: space[12],
+            height: props.hint ? space[16] : space[12],
             flexShrink: 0,
           }}
         >
           <If when={props.checked}>
-            <Icon name="check" size={12} />
+            <Icon name="check" size={icon.sm} />
           </If>
         </View>
       </If>
@@ -169,7 +173,7 @@ export function TaskMenuItem(props: {
 }
 
 /**
- * A header filter's trigger: 25px, the label and its caret muted, both ink and
+ * A header filter's trigger: 24px, the label and its caret muted, both ink and
  * filled muted while the menu is open or the filter is on.
  */
 export function FilterTrigger(props: {
@@ -185,9 +189,9 @@ export function FilterTrigger(props: {
       expandedStyle={{ backgroundColor: c().selected }}
       style={{
         ...row,
-        height: 25,
-        paddingHorizontal: props.tablet ? 6 : 8,
-        gap: 4,
+        height: control.sm,
+        paddingHorizontal: space[8],
+        gap: space[4],
         flexShrink: 0,
         cursor: "pointer",
         backgroundColor: props.active ? c().selected : undefined,
@@ -195,12 +199,12 @@ export function FilterTrigger(props: {
     >
       <Label
         variant="small"
-        weight={props.tablet ? 500 : 400}
+        weight={weight.regular}
         tone={props.active ? "ink" : "muted"}
       >
         {props.label}
       </Label>
-      <Icon name="down" size={10} tone={props.active ? "ink" : "muted"} />
+      <Icon name="down" size={icon.sm} tone={props.active ? "ink" : "muted"} />
     </View>
   );
 }
@@ -225,7 +229,7 @@ export function StatusOptions(props: {
           <TaskMenuItem
             label={statusName(entry())}
             hint={statusHint(entry(), props.waiting)}
-            leading={<TaskGlyph status={entry()} size={12} />}
+            leading={<TaskGlyph status={entry()} size={icon.sm} />}
             checked={props.current === entry()}
             onSelect={() => props.onChange(entry())}
           />

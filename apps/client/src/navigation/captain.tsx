@@ -1,11 +1,15 @@
-import type { CaptainIdentityView } from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, focusRing, Label, row } from "../components";
 import { AgentFace } from "../components/agent-face";
+import { avatar, space, weight } from "../components/tokens";
 import { uiText, useText } from "../i18n";
 import { messageTime } from "../pages/chat/message-time";
 import { useHost } from "../services/host";
 import { CaptainContextRing } from "./captain-context-ring";
+
+const cardHeight = 56;
+/** Captain atop the tablet rail: its face and its name. */
+const railCaptainHeight = 80;
 
 export function CaptainFace(props: { size: number }) {
   const host = useHost();
@@ -16,17 +20,9 @@ export function CaptainCard(props: { onPress: () => void }) {
   const text = useText();
   const host = useHost();
   const c = colors();
-  const lastReply = () => {
-    const id = host.section<CaptainIdentityView>(
-      "captain",
-      "identity",
-    )?.conversationId;
-    return id
-      ? host.conversations().find((item) => item.id === id)?.lastMessageAt
-      : undefined;
-  };
+  const lastReply = () => host.captainConversation()?.lastMessageAt;
   return (
-    <View style={{ flexShrink: 0, padding: 14 }}>
+    <View style={{ flexShrink: 0, padding: space[16] }}>
       <View
         role="button"
         accessibilityLabel={text("captain")}
@@ -36,20 +32,20 @@ export function CaptainCard(props: { onPress: () => void }) {
         style={{
           ...row,
           alignItems: "flex-start",
-          gap: 12,
-          minHeight: 54,
-          paddingVertical: 8,
-          paddingHorizontal: 14,
+          gap: space[12],
+          minHeight: cardHeight,
+          paddingVertical: space[8],
+          paddingHorizontal: space[16],
           borderWidth: 1,
           borderColor: c().border,
           backgroundColor: c().canvas,
           cursor: "pointer",
         }}
       >
-        <CaptainFace size={24} />
+        <CaptainFace size={avatar.md} />
         <View style={{ flex: 1, gap: 1 }}>
-          <View style={{ ...row, gap: 8 }}>
-            <Label weight={500}>{text("captain")}</Label>
+          <View style={{ ...row, gap: space[8] }}>
+            <Label weight={weight.regular}>{text("captain")}</Label>
             <Label variant="caption" tone="muted">
               {text(host.captain()?.status === "working" ? "working" : "idle")}
             </Label>
@@ -73,10 +69,10 @@ export function RailCaptain(props: { selected: boolean; onPress: () => void }) {
   return (
     <View
       style={{
-        height: 80,
+        height: railCaptainHeight,
         flexShrink: 0,
         alignItems: "center",
-        paddingTop: 7,
+        paddingTop: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -89,15 +85,16 @@ export function RailCaptain(props: { selected: boolean; onPress: () => void }) {
         hoverStyle={{ backgroundColor: c().selected }}
         focusVisibleStyle={focusRing(c())}
         style={{
-          width: 48,
-          height: 64,
+          width: space[48],
+          height: space[64],
           alignItems: "center",
-          gap: 3,
+          gap: space[2],
           backgroundColor: props.selected ? c().selected : "transparent",
           cursor: "pointer",
         }}
       >
         <CaptainContextRing>
+          {/* design-value: sized to sit inside its 44px context ring */}
           <CaptainFace size={36} />
         </CaptainContextRing>
         <Label variant="caption">{text("captain")}</Label>

@@ -1,0 +1,51 @@
+id: type-scale
+language: tsx
+severity: error
+message: A text size written as a number; text takes a role of the type scale (typeScale in theme.ts).
+note: |
+  `<Label variant="small">`, `<Markdown variant=…>`, `textStyle(type("small"))`. Icon and control
+  sizes are not text and are left to design-number.
+ignores:
+  - src/components/theme.ts
+rule:
+  any:
+    # fontSize: 13, lineHeight: phone() ? 20 : 18, labelSize: 12…
+    - kind: pair
+      all:
+        - has:
+            field: key
+            regex: ^["']?(fontSize|lineHeight|(label|title|description|count|detail)(Size|Line))["']?$
+        - has:
+            field: value
+            has:
+              kind: number
+              stopBy: end
+    - kind: pair
+      all:
+        - has:
+            field: key
+            regex: ^["']?(fontSize|lineHeight|(label|title|description|count|detail)(Size|Line))["']?$
+        - has:
+            field: value
+            kind: number
+    - kind: jsx_attribute
+      all:
+        - has:
+            kind: property_identifier
+            regex: ^(fontSize|lineHeight|(label|title|description|count|detail)(Size|Line))$
+        - has:
+            kind: number
+            stopBy: end
+    # <Label size={…}>: a Label, Caption or Markdown takes a variant, never a size or line.
+    - kind: jsx_attribute
+      all:
+        - has:
+            kind: property_identifier
+            regex: ^(size|line)$
+        - inside:
+            any:
+              - kind: jsx_opening_element
+              - kind: jsx_self_closing_element
+            has:
+              field: name
+              regex: ^(Label|Caption|Markdown)$

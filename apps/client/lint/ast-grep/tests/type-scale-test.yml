@@ -1,0 +1,16 @@
+id: type-scale
+valid:
+  - "const a = { fontSize: type(\"small\").size, lineHeight: face.line };"
+  - "const a = { ...textStyle(type(\"body\"), \"prose\") };"
+  - "<Label variant=\"small\">x</Label>"
+  - "<Markdown variant=\"small\" text={t} />"
+  - "<Icon size={14} />"
+invalid:
+  - "const a = { fontSize: 13 };"
+  - "const a = { lineHeight: phone() ? 20 : 18 };"
+  - "const a = { fontSize: type(\"small\").size + 2 };"
+  - "const a = { labelSize: 12 };"
+  - "<Header titleSize={16} />"
+  - "<Label size={12}>x</Label>"
+  - "<Caption line={face().line}>x</Caption>"
+  - "<Markdown size={14} text={t} />"

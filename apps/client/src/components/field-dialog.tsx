@@ -5,10 +5,11 @@ import { Button, Field } from "./controls";
 import { Modal } from "./modal";
 import { Label } from "./text";
 import { colors, row, textFaces, textStyle } from "./theme";
+import { control, space, weight } from "./tokens";
 
 /**
  * A small dialog with one field and Cancel / Save, such as renaming a machine or a group. Off
- * phones it is the design's 480pt dialog (14pt padding, a 14/500 title); on a phone it is a bottom
+ * phones it is the design's 480pt dialog (14pt padding, a 14/400 title); on a phone it is a bottom
  * sheet with full-width Save and Cancel. Return saves, Escape cancels.
  */
 export function FieldDialog(props: {
@@ -43,9 +44,9 @@ export function FieldDialog(props: {
         }, 50)
       }
       style={{
-        height: props.phone ? 36 : 30,
+        height: props.phone ? control.touch : control.lg,
         ...textStyle(type("small")),
-        paddingHorizontal: 10,
+        paddingHorizontal: space[12],
         borderColor: props.error ? c().red : c().strong,
       }}
     />
@@ -64,7 +65,7 @@ export function FieldDialog(props: {
       sheet={props.phone}
       plainSheetHeader={props.phone}
       compact={!props.phone}
-      titleWeight={500}
+      titleWeight={weight.regular}
       overPhoneNavigation
       dismissible={!props.busy}
       onClose={props.onClose}
@@ -73,7 +74,7 @@ export function FieldDialog(props: {
         when={props.phone}
         else={
           <>
-            <View style={{ paddingTop: 12, gap: 8 }}>
+            <View style={{ paddingTop: space[12], gap: space[8] }}>
               {props.description}
               {field()}
               {error()}
@@ -82,22 +83,22 @@ export function FieldDialog(props: {
               style={{
                 ...row,
                 justifyContent: "flex-end",
-                gap: 8,
-                paddingTop: 20,
+                gap: space[8],
+                paddingTop: space[20],
               }}
             >
               <Button
                 label={uiText("cancel")}
-                size={28}
-                style={{ paddingHorizontal: 8 }}
+                size={control.md}
+                style={{ paddingHorizontal: space[8] }}
                 disabled={props.busy}
                 onPress={props.onClose}
               />
               <Button
                 label={props.saveLabel ?? uiText("save")}
                 tone="primary"
-                size={28}
-                style={{ paddingHorizontal: 8 }}
+                size={control.md}
+                style={{ paddingHorizontal: space[8] }}
                 disabled={props.busy || !props.valid}
                 onPress={props.onSave}
               />
@@ -105,22 +106,28 @@ export function FieldDialog(props: {
           </>
         }
       >
-        <View style={{ paddingHorizontal: 16, paddingTop: 12, gap: 8 }}>
+        <View
+          style={{
+            paddingHorizontal: space[16],
+            paddingTop: space[12],
+            gap: space[8],
+          }}
+        >
           {props.description}
           {field()}
           {error()}
         </View>
-        <View style={{ padding: 16, gap: 8 }}>
+        <View style={{ padding: space[16], gap: space[8] }}>
           <Button
             label={props.saveLabel ?? uiText("save")}
             tone="primary"
-            size={40}
+            size={control.touch}
             disabled={props.busy || !props.valid}
             onPress={props.onSave}
           />
           <Button
             label={uiText("cancel")}
-            size={40}
+            size={control.touch}
             disabled={props.busy}
             onPress={props.onClose}
           />

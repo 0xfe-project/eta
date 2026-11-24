@@ -2,6 +2,8 @@ import type { BoardTaskView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { signal, View } from "nsh";
 import { colors, grow, Icon, Label, row, SmoothScroll } from "../../components";
+import { dotSize } from "../../components/status-dot";
+import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { ownerLine } from "./creator";
@@ -22,6 +24,26 @@ import {
   usageText,
   useLiveRate,
 } from "./usage";
+
+/** A task's row in the phone's list and in the tablet's. */
+const phoneRowHeight = 56;
+const tabletRowHeight = 52;
+
+/** The task table's columns, on the desktop and (…Tablet) on the tablet and phone. */
+const columnWidth = {
+  number: 36,
+  numberTablet: 32,
+  usage: 200,
+  usageTablet: 96,
+  hint: 184,
+  hintTablet: 180,
+  hintNested: 160,
+  hintPhone: 72,
+  owner: 152,
+  ownerTablet: 92,
+  time: 116,
+  timeTablet: 80,
+} as const;
 
 const phoneGroups = [
   { name: "Needs you", label: "taskNeedsYou", fold: false },
@@ -86,26 +108,27 @@ export function PhoneTaskList(props: {
                 }
                 style={{
                   ...row,
-                  height: group().fold ? 32 : 24,
-                  paddingLeft: 16,
-                  paddingRight: group().fold ? 12 : 16,
+                  height: group().fold ? space[32] : space[24],
+                  paddingLeft: space[16],
+                  paddingRight: group().fold ? space[12] : space[16],
                   borderBottomWidth: 1,
                   borderColor: c().border,
                   backgroundColor: group().fold ? c().canvas : c().surface,
-                  gap: 6,
+                  gap: space[4],
                 }}
               >
                 <Label
+                  tracking="caps"
                   variant="caption"
-                  weight={600}
-                  tone={group().name === "Needs you" ? "amber" : "mutedInk"}
-                  style={{ letterSpacing: 0.8, textTransform: "uppercase" }}
+                  weight={weight.strong}
+                  tone={group().name === "Needs you" ? "warning" : "mutedInk"}
+                  style={{ textTransform: "uppercase" }}
                 >
                   {uiText(group().label)}
                 </Label>
                 <Label
                   variant="caption"
-                  tone={group().name === "Needs you" ? "amber" : "muted"}
+                  tone={group().name === "Needs you" ? "warning" : "muted"}
                 >
                   {entries().length}
                 </Label>
@@ -113,7 +136,7 @@ export function PhoneTaskList(props: {
                   <View style={{ flex: 1 }} />
                   <Icon
                     name={open() ? "down" : "right"}
-                    size={14}
+                    size={icon.md}
                     tone="muted"
                   />
                 </If>
@@ -145,7 +168,7 @@ export function PhoneTaskList(props: {
                     const stateTone = () => {
                       const task = entry();
                       if (task.subtasks?.total) return undefined;
-                      if (task.status === "in_review") return "amber";
+                      if (task.status === "in_review") return "warning";
                       if (
                         task.status === "in_progress" &&
                         task.runStatus !== "queued" &&
@@ -166,28 +189,30 @@ export function PhoneTaskList(props: {
                         role="button"
                         accessibilityLabel={entry().title}
                         onPress={() => props.onOpen(entry().id)}
-                        activeStyle={{ backgroundColor: `${c().selected}80` }}
+                        activeStyle={{ backgroundColor: c().selectedSoft }}
                         style={{
                           ...row,
-                          height: 56,
-                          paddingLeft: 16,
-                          paddingRight: 12,
+                          height: phoneRowHeight,
+                          paddingLeft: space[16],
+                          paddingRight: space[12],
                           borderBottomWidth: 1,
                           borderColor: c().border,
-                          gap: 12,
+                          gap: space[12],
                         }}
                       >
-                        <View style={{ width: 28, alignItems: "center" }}>
+                        <View
+                          style={{ width: control.md, alignItems: "center" }}
+                        >
                           <TaskGlyph
                             status={
                               group().name === "Running"
                                 ? "in_progress"
                                 : entry().status
                             }
-                            size={14}
+                            size={icon.md}
                           />
                         </View>
-                        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                        <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                           <Label lines={1}>{entry().title}</Label>
                           <Label
                             variant="caption"
@@ -216,7 +241,7 @@ export function PhoneTaskList(props: {
                           task={entry()}
                           time={relativeTime(entry().updatedAt)}
                         />
-                        <Icon name="right" size={14} tone="muted" />
+                        <Icon name="right" size={icon.md} tone="muted" />
                       </View>
                     );
                   }}
@@ -225,9 +250,9 @@ export function PhoneTaskList(props: {
                   <View
                     style={{
                       ...row,
-                      height: 40,
-                      paddingLeft: 16,
-                      paddingRight: 12,
+                      height: space[40],
+                      paddingLeft: space[16],
+                      paddingRight: space[12],
                       borderBottomWidth: 1,
                       borderColor: c().border,
                     }}
@@ -260,7 +285,7 @@ function PhoneRowEnd(props: { task: BoardTaskView; time: string }) {
       : undefined,
   );
   return (
-    <View style={{ alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
+    <View style={{ alignItems: "flex-end", gap: space[2], flexShrink: 0 }}>
       <If
         when={rate()}
         else={
@@ -338,7 +363,7 @@ export function TabletTaskList(props: {
     task.subtasks?.total
       ? "muted"
       : task.status === "in_review"
-        ? "amber"
+        ? "warning"
         : task.status === "in_progress"
           ? "blue"
           : task.status === "blocked"
@@ -361,21 +386,17 @@ export function TabletTaskList(props: {
             onPress={() => props.onOpen(task().id)}
             hoverStyle={{
               backgroundColor:
-                task().id === props.selected
-                  ? c().selected
-                  : `${c().selected}80`,
+                task().id === props.selected ? c().selected : c().selectedSoft,
             }}
             activeStyle={{
               backgroundColor:
-                task().id === props.selected
-                  ? c().selected
-                  : `${c().selected}80`,
+                task().id === props.selected ? c().selected : c().selectedSoft,
             }}
             style={{
               ...row,
-              height: 52,
-              paddingHorizontal: 14,
-              gap: 10,
+              height: tabletRowHeight,
+              paddingHorizontal: space[16],
+              gap: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
               backgroundColor:
@@ -383,8 +404,8 @@ export function TabletTaskList(props: {
               cursor: "pointer",
             }}
           >
-            <TaskGlyph status={task().status} size={14} />
-            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <TaskGlyph status={task().status} size={icon.md} />
+            <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
               <Label variant="small" lines={1}>
                 {task().title}
               </Label>
@@ -420,7 +441,7 @@ export function TaskTableRow(props: {
   };
   const hintTone = () => {
     const status = props.item.status;
-    if (status === "in_review") return "amber";
+    if (status === "in_review") return "warning";
     if (status === "in_progress" && !props.item.subtasks?.total) return "blue";
     if (status === "todo" && !props.item.waitingOn?.length) return "ink";
     return status === "blocked" && !props.item.waitingOn?.length
@@ -432,26 +453,36 @@ export function TaskTableRow(props: {
       role="button"
       accessibilityLabel={props.item.title}
       onPress={props.onOpen}
-      hoverStyle={{ backgroundColor: `${c().selected}80` }}
-      focusVisibleStyle={{ backgroundColor: `${c().selected}99` }}
+      hoverStyle={{ backgroundColor: c().selectedSoft }}
+      focusVisibleStyle={{ backgroundColor: c().selectedSoft }}
       style={{
         ...row,
-        height: 32,
+        height: space[32],
         borderBottomWidth: 1,
         borderColor: c().border,
-        paddingLeft: props.nested ? (desktop() ? 38 : 34) : 14,
-        paddingRight: 14,
-        gap: desktop() ? 0 : 8,
+        // Nested under its parent's title: the row's inset, the glyph's column and its gap.
+        paddingLeft: props.nested
+          ? space[16] + (desktop() ? space[24] : space[12] + space[8])
+          : space[16],
+        paddingRight: space[16],
+        gap: desktop() ? 0 : space[8],
         cursor: "pointer",
       }}
     >
-      <View style={{ width: desktop() ? 24 : phone() ? 14 : 12 }}>
-        <TaskGlyph status={props.item.status} size={phone() ? 14 : 12} />
+      <View
+        style={{ width: desktop() ? space[24] : phone() ? icon.md : icon.sm }}
+      >
+        <TaskGlyph
+          status={props.item.status}
+          size={phone() ? icon.md : icon.sm}
+        />
       </View>
       <Label
         variant="caption"
         tone="muted"
-        style={{ width: desktop() ? 36 : 30 }}
+        style={{
+          width: desktop() ? columnWidth.number : columnWidth.numberTablet,
+        }}
       >{`#${props.item.number}`}</Label>
       <Label variant="small" lines={1} style={{ flex: 1 }}>
         {props.item.title}
@@ -459,8 +490,8 @@ export function TaskTableRow(props: {
       <If when={usageShown() && !phone()}>
         <View
           style={{
-            width: desktop() ? 200 : 96,
-            paddingRight: 12,
+            width: desktop() ? columnWidth.usage : columnWidth.usageTablet,
+            paddingRight: space[12],
             flexShrink: 0,
           }}
         >
@@ -475,8 +506,14 @@ export function TaskTableRow(props: {
       <View
         style={{
           ...row,
-          gap: 4,
-          width: phone() ? 72 : desktop() ? 183 : props.nested ? 160 : 180,
+          gap: space[4],
+          width: phone()
+            ? columnWidth.hintPhone
+            : desktop()
+              ? columnWidth.hint
+              : props.nested
+                ? columnWidth.hintNested
+                : columnWidth.hintTablet,
           flexShrink: 0,
           overflow: "hidden",
         }}
@@ -486,10 +523,16 @@ export function TaskTableRow(props: {
             props.item.status === "in_progress" && !props.item.subtasks?.total
           }
         >
-          <View style={{ width: 6, height: 6, backgroundColor: c().blue }} />
+          <View
+            style={{
+              width: dotSize,
+              height: dotSize,
+              backgroundColor: c().blue,
+            }}
+          />
         </If>
         <If when={isWaiting(props.item)}>
-          <Icon name="lock" size={10} tone="mutedInk" />
+          <Icon name="lock" size={icon.sm} tone="mutedInk" />
         </If>
         <Label
           variant="caption"
@@ -505,7 +548,9 @@ export function TaskTableRow(props: {
           variant="caption"
           tone="mutedInk"
           lines={1}
-          style={{ width: desktop() ? 150 : 90 }}
+          style={{
+            width: desktop() ? columnWidth.owner : columnWidth.ownerTablet,
+          }}
         >
           {ownerLine(props.item, host.agent)}
         </Label>
@@ -513,7 +558,10 @@ export function TaskTableRow(props: {
           variant="caption"
           tone="muted"
           lines={1}
-          style={{ width: desktop() ? 116 : 80, textAlign: "right" }}
+          style={{
+            width: desktop() ? columnWidth.time : columnWidth.timeTablet,
+            textAlign: "right",
+          }}
         >
           {phone() ? relativeTime(props.item.updatedAt) : taskTime(props.item)}
         </Label>

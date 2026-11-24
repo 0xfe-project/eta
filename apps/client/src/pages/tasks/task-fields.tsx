@@ -3,7 +3,15 @@ import type { JSX, TextStyle } from "nsh";
 import type { TaskDetailState } from "./task-detail-state";
 import { mentionLabel } from "@eta/client-contracts/composer-target";
 import { View } from "nsh";
-import { Button, colors, Icon, Label, row, textFaces } from "../../components";
+import {
+  Button,
+  colors,
+  Icon,
+  inCompact,
+  Label,
+  row,
+  textFaces,
+} from "../../components";
 import { CheckControl } from "../../components/check-control";
 import {
   chatText,
@@ -17,6 +25,8 @@ import {
 } from "../../components/eta-editor";
 import { touchScreen } from "../../components/menu";
 import { StatusDot } from "../../components/status-dot";
+import { densityDefaults } from "../../components/theme";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
 import { ActorName } from "./creator";
@@ -24,6 +34,15 @@ import { taskMoment } from "./facts";
 import { activeTaskRun } from "./run-log";
 import { statusName, TaskGlyph } from "./status";
 import { StatusSelect } from "./status-select";
+
+/** The width of a rail row's label; what goes under its value starts there. */
+const railLabelWidth = 76;
+
+/** A field's label column in the fields list. */
+const fieldLabelWidth = 68;
+
+/** The comment box's foot, under the editor, off phones. */
+const footHeight = { compact: 32, regular: 36 } as const;
 
 /**
  * The comment box: the chat's text (`chatText`: Markdown as you type, code blocks, long pastes
@@ -97,11 +116,15 @@ export function TaskCommentBox(props: {
                   backgroundColor: c().surface,
                   borderTopWidth: 1,
                   borderColor: c().border,
-                  paddingHorizontal: 12,
-                  paddingVertical: 10,
-                  gap: 8,
+                  paddingHorizontal: space[12],
+                  paddingVertical: space[12],
+                  gap: space[8],
                 }
-              : { gap: 6, marginHorizontal: props.panelInset, flexShrink: 0 }
+              : {
+                  gap: space[4],
+                  marginHorizontal: props.panelInset,
+                  flexShrink: 0,
+                }
           }
         >
           <CommentBox
@@ -133,15 +156,19 @@ function CommentBox(props: {
     props.state,
     props.origin,
   );
-  const line = () => type("body").prose;
-  const pad = 8;
+  // In the conversation panel (compact): small text, a 32px foot and a 24px button, as the
+  // panel's own rows; on a task's page the regular body text, 36 and 28.
+  const density = densityDefaults();
+  const compact = inCompact();
+  const line = () => type(density().editor).prose;
+  const pad = space[8];
   return (
     <>
       <If when={props.hint}>
         <TaskCommentHint state={props.state} />
       </If>
       <If when={limits.tooLong()}>
-        <Label tone="amber" variant="caption">
+        <Label tone="warning" variant="caption">
           {uiText("composerTooLong")}
         </Label>
       </If>
@@ -157,20 +184,23 @@ function CommentBox(props: {
           editor={editor}
           label={uiText("comment")}
           placeholder={uiText("commentPlaceholder")}
-          variant="body"
           minHeight={line() + pad * 2}
           maxHeight={line() * 6 + pad * 2}
           clip
-          padding={{ top: pad, bottom: pad, left: 10, right: 10 }}
+          padding={{ top: pad, bottom: pad, left: space[12], right: space[12] }}
         />
         <View
           style={{
             ...row,
             justifyContent: "flex-end",
-            gap: 8,
-            height: props.phone ? 44 : 36,
-            paddingLeft: 10,
-            paddingRight: 5,
+            gap: space[8],
+            height: props.phone
+              ? control.touch
+              : compact()
+                ? footHeight.compact
+                : footHeight.regular,
+            paddingLeft: space[12],
+            paddingRight: space[4],
           }}
         >
           <If when={!props.phone && !touchScreen}>
@@ -181,11 +211,13 @@ function CommentBox(props: {
           <Button
             label={uiText("comment")}
             accessibilityLabel={uiText("sendComment")}
-            size={props.phone ? 32 : 26}
+            size={
+              props.phone ? control.lg : compact() ? control.sm : control.md
+            }
             labelTone={disabled() ? "muted" : "ink"}
             dimDisabled={props.state.posting()}
             disabled={disabled()}
-            style={{ paddingHorizontal: props.phone ? 14 : 10 }}
+            style={{ paddingHorizontal: props.phone ? space[16] : space[12] }}
             onPress={() => void submit()}
           />
         </View>
@@ -215,19 +247,19 @@ export function TaskReviewActions(props: { state: TaskDetailState }) {
     <View
       style={{
         ...row,
-        gap: 8,
+        gap: space[8],
       }}
     >
       <Button
         label={uiText("sendBack")}
         disabled={!executor() || submitting()}
-        size={phone() ? 40 : 26}
+        size={phone() ? control.touch : control.md}
         style={{ flex: phone() ? 1 : undefined }}
         onPress={() => review.set("todo")}
       />
       <Button
         label={uiText("acceptAsDone")}
-        size={phone() ? 40 : 26}
+        size={phone() ? control.touch : control.md}
         tone="primary"
         style={{ flex: phone() ? 1 : undefined }}
         onPress={() => review.set("done")}
@@ -266,9 +298,13 @@ export function TaskFields(detail: {
       ["Updated", relativeTime(item().updatedAt)],
     ].filter(([, value]) => value);
   return (
-    <View style={{ gap: 10 }}>
-      <View style={{ ...row, gap: 8, alignItems: "flex-start" }}>
-        <Label variant="caption" tone="muted" style={{ width: 68 }}>
+    <View style={{ gap: space[8] }}>
+      <View style={{ ...row, gap: space[8], alignItems: "flex-start" }}>
+        <Label
+          variant="caption"
+          tone="muted"
+          style={{ width: fieldLabelWidth }}
+        >
           {uiText("status")}
         </Label>
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -277,11 +313,15 @@ export function TaskFields(detail: {
       </View>
       <Each of={fields()} key={(field) => field[0]}>
         {(field) => (
-          <View style={{ ...row, alignItems: "flex-start", gap: 8 }}>
-            <Label variant="caption" tone="muted" style={{ width: 68 }}>
+          <View style={{ ...row, alignItems: "flex-start", gap: space[8] }}>
+            <Label
+              variant="caption"
+              tone="muted"
+              style={{ width: fieldLabelWidth }}
+            >
               {field()[0]}
             </Label>
-            <Label variant="small" style={{ flex: 1 }} weight={500}>
+            <Label variant="small" style={{ flex: 1 }} weight={weight.regular}>
               {field()[1]}
             </Label>
           </View>
@@ -341,7 +381,7 @@ export function TaskRail(detail: {
     });
   }
   return (
-    <View style={{ gap: 14 }}>
+    <View style={{ gap: space[12] }}>
       <RailRow label={uiText("status")}>
         <StatusSelect item={item()} state={detail.state} />
       </RailRow>
@@ -349,7 +389,7 @@ export function TaskRail(detail: {
         <If
           when={executor()}
           else={
-            <Label variant="small" weight={600}>
+            <Label variant="small" weight={weight.strong}>
               {uiText("unassigned")}
             </Label>
           }
@@ -357,13 +397,13 @@ export function TaskRail(detail: {
           {() => (
             <ActorName
               actor={{ kind: "agent", agentId: executorId() }}
-              size={16}
+              size={avatar.sm}
             />
           )}
         </If>
       </RailRow>
       <RailRow label={uiText("taskCreator")}>
-        <ActorName actor={item().createdBy} size={16} />
+        <ActorName actor={item().createdBy} size={avatar.sm} />
       </RailRow>
       <RailRow label={uiText("taskBelongsTo")}>
         <If
@@ -381,7 +421,7 @@ export function TaskRail(detail: {
               onPress={() => detail.onTask(entry().taskId)}
               style={{ cursor: "pointer", flex: 1 }}
             >
-              <Label variant="small" weight={600}>
+              <Label variant="small" weight={weight.strong}>
                 {`#${entry().number} ${entry().title}`}
               </Label>
             </View>
@@ -389,14 +429,14 @@ export function TaskRail(detail: {
         </If>
       </RailRow>
       <RailRow label={uiText("workspace")}>
-        <Label variant="small" weight={600} style={{ flex: 1 }}>
+        <Label variant="small" weight={weight.strong} style={{ flex: 1 }}>
           {item().workspace.mode === "worktree"
             ? uiText("taskOwnWorktree")
             : (item().workspace.path ?? uiText("taskProjectDirectory"))}
         </Label>
       </RailRow>
       <RailRow label={uiText("taskRun")}>
-        <View style={{ ...row, gap: 6 }}>
+        <View style={{ ...row, gap: space[4] }}>
           <If when={run()}>
             {(last) => (
               <If
@@ -409,11 +449,11 @@ export function TaskRail(detail: {
                   />
                 }
               >
-                <Icon name="spinner" size={10} tone="muted" />
+                <Icon name="spinner" size={icon.sm} tone="muted" />
               </If>
             )}
           </If>
-          <Label variant="caption" weight={600}>
+          <Label variant="caption" weight={weight.strong}>
             {runText()}
           </Label>
           <If when={canStartOver()}>
@@ -426,14 +466,14 @@ export function TaskRail(detail: {
               hoverStyle={{ backgroundColor: c().selected }}
               style={{
                 ...row,
-                height: 20,
-                paddingHorizontal: 4,
-                gap: 4,
+                height: space[20],
+                paddingHorizontal: space[4],
+                gap: space[4],
                 cursor: "pointer",
               }}
             >
-              <Icon name="refresh" size={11} />
-              <Label variant="caption" weight={600}>
+              <Icon name="refresh" size={icon.sm} />
+              <Label variant="caption" weight={weight.strong}>
                 {uiText("rerun")}
               </Label>
             </View>
@@ -441,7 +481,7 @@ export function TaskRail(detail: {
         </View>
       </RailRow>
       <If when={canStartOver()}>
-        <View style={{ paddingLeft: 76, marginTop: -10 }}>
+        <View style={{ paddingLeft: railLabelWidth, marginTop: -space[12] }}>
           <Label variant="caption" tone="muted">
             {uiText("startOverHint")}
           </Label>
@@ -449,22 +489,28 @@ export function TaskRail(detail: {
       </If>
       <If when={item().dependsOn?.length}>
         <RailRow label={uiText("taskWaitsForLabel")} top>
-          <View style={{ gap: 6, flex: 1 }}>
+          <View style={{ gap: space[4], flex: 1 }}>
             <Each of={item().dependsOn ?? []} key={(edge) => edge.taskId}>
               {(edge) => (
-                <View style={{ gap: 6 }}>
+                <View style={{ gap: space[4] }}>
                   <View
                     role="button"
                     accessibilityLabel={edge().title}
                     onPress={() => detail.onTask(edge().taskId)}
-                    style={{ ...row, gap: 5, cursor: "pointer" }}
+                    style={{ ...row, gap: space[4], cursor: "pointer" }}
                   >
-                    <TaskGlyph status={edge().status} size={12} />
-                    <Label variant="caption" weight={600} style={{ flex: 1 }}>
+                    <TaskGlyph status={edge().status} size={icon.sm} />
+                    <Label
+                      variant="caption"
+                      weight={weight.strong}
+                      style={{ flex: 1 }}
+                    >
                       {`#${edge().number} ${edge().title}`}
                     </Label>
                   </View>
-                  <View style={{ ...row, gap: 8, paddingLeft: 17 }}>
+                  <View
+                    style={{ ...row, gap: space[8], paddingLeft: space[16] }}
+                  >
                     <Label variant="caption" tone="muted">
                       {edge().state === "resolved"
                         ? uiText("taskReady")
@@ -475,9 +521,9 @@ export function TaskRail(detail: {
                     <CheckControl
                       label={uiText("mustBeDone")}
                       checked={edge().requireDone}
-                      size={11}
+                      size={icon.sm}
                       disabled={submitting()}
-                      style={{ ...row, gap: 8 }}
+                      style={{ ...row, gap: space[8] }}
                       onChange={(checked) =>
                         mutate(() =>
                           host.call("tasks", "addDependency", {
@@ -507,7 +553,7 @@ export function TaskRail(detail: {
                       }
                       style={{ cursor: "pointer" }}
                     >
-                      <Icon name="close" size={10} />
+                      <Icon name="close" size={icon.sm} />
                     </View>
                   </View>
                 </View>
@@ -520,7 +566,7 @@ export function TaskRail(detail: {
                 search.set("");
                 replacing.set(true);
               }}
-              style={{ paddingLeft: 17, cursor: "pointer" }}
+              style={{ paddingLeft: space[16], cursor: "pointer" }}
             >
               <Label variant="caption" tone="muted">
                 {uiText("editPrerequisites")}
@@ -531,7 +577,7 @@ export function TaskRail(detail: {
       </If>
       <If when={item().dependents?.length}>
         <RailRow label={uiText("waitedOnBy")} top>
-          <View style={{ gap: 6, flex: 1 }}>
+          <View style={{ gap: space[4], flex: 1 }}>
             <Label variant="caption" tone="muted">
               {item().dependents!.length === 1
                 ? uiText("oneTaskWaitsForIt")
@@ -545,11 +591,11 @@ export function TaskRail(detail: {
                   role="button"
                   accessibilityLabel={edge().title}
                   onPress={() => detail.onTask(edge().taskId)}
-                  style={{ gap: 2, cursor: "pointer" }}
+                  style={{ gap: space[2], cursor: "pointer" }}
                 >
-                  <View style={{ ...row, gap: 5 }}>
-                    <TaskGlyph status={edge().status} size={12} />
-                    <Label variant="caption" weight={600}>
+                  <View style={{ ...row, gap: space[4] }}>
+                    <TaskGlyph status={edge().status} size={icon.sm} />
+                    <Label variant="caption" weight={weight.strong}>
                       {`#${edge().number} ${edge().title}`}
                     </Label>
                   </View>
@@ -565,7 +611,7 @@ export function TaskRail(detail: {
         </RailRow>
       </If>
       <RailRow label={uiText("taskUpdated")}>
-        <Label variant="small" weight={600}>
+        <Label variant="small" weight={weight.strong}>
           {taskMoment(item().updatedAt)}
         </Label>
       </RailRow>
@@ -583,7 +629,7 @@ function RailRow(props: {
 }) {
   return (
     <View style={{ ...row, alignItems: props.top ? "flex-start" : "center" }}>
-      <Label variant="caption" tone="muted" style={{ width: 76 }}>
+      <Label variant="caption" tone="muted" style={{ width: railLabelWidth }}>
         {props.label}
       </Label>
       {props.children}
