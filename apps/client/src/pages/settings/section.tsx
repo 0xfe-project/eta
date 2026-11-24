@@ -6,6 +6,8 @@ import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { tintedLogo } from "./models/logos";
 
+export { WarningLine } from "../../ui";
+
 /** A row's status column, wide enough for its dot and word. */
 const statusLaneWidth = 100;
 
@@ -156,34 +158,6 @@ export function PaneBack(props: {
       style={{ paddingHorizontal: 0 }}
       onPress={props.onPress}
     />
-  );
-}
-
-/**
- * A warning line with the design's 12px Warning mark before it: solid in list rows, the outline
- * where the design draws one (an external agent's sign-in, the editor's missing model).
- */
-export function WarningLine(props: { text: string; outline?: boolean }) {
-  return (
-    <View
-      style={{
-        ...row,
-        alignSelf: "stretch",
-        gap: space[4],
-        alignItems: "flex-start",
-      }}
-    >
-      <View style={{ height: space[16], justifyContent: "center" }}>
-        <Icon
-          name={props.outline ? "warning" : "warningFill"}
-          size={icon.sm}
-          tone="warning"
-        />
-      </View>
-      <Label variant="small" tone="warningInk" style={{ flex: 1, minWidth: 0 }}>
-        {props.text}
-      </Label>
-    </View>
   );
 }
 
