@@ -2,7 +2,8 @@
 export interface ContextReading {
   session: string;
   model: string;
-  runId: string | null;
+  runId?: string | null;
+  observation?: "live" | "last-observed";
   source: "oar" | "codex-last" | "acp" | "harness";
   observedAt: number;
   compactedAt: number | null;
@@ -25,6 +26,10 @@ const reasons = {
   inconsistent: ["Context reading is out of range", "上下文读数超出有效范围"],
   compacted: ["Awaiting a reading after compaction", "等待压缩后的新读数"],
   model: ["Awaiting a reading for the new model", "等待新模型的读数"],
+  nativeSession: [
+    "Awaiting a reading for the new runtime session",
+    "等待新原生会话的读数",
+  ],
 } as const;
 
 type ContextReason = keyof typeof reasons;
@@ -38,8 +43,14 @@ export function contextReason(reading: ContextReading): ContextReason | null {
     !reading.session ||
     !reading.model ||
     !Number.isFinite(reading.observedAt) ||
+    !Number.isFinite(new Date(reading.observedAt).getTime()) ||
+    (reading.observation !== undefined &&
+      reading.observation !== "live" &&
+      reading.observation !== "last-observed") ||
     !["acp", "oar", "codex-last", "harness"].includes(reading.source) ||
-    (reading.source !== "harness" && !reading.runId)
+    ((reading.observation === "live" ||
+      (reading.observation === undefined && reading.source !== "harness")) &&
+      !reading.runId)
   )
     return "unverified";
   const { used, window } = reading;
@@ -72,10 +83,21 @@ export function displayContext(
   const window = current.window!;
   const fraction = used / window;
   const approx = current.source === "harness" ? (zh ? "约 " : "≈") : "";
-  const label = `${approx}${Math.round(fraction * 100)}%`;
+  const percent = `${approx}${Math.round(fraction * 100)}%`;
+  const last =
+    current.observation === "last-observed"
+      ? zh
+        ? "上次查询"
+        : "Last checked"
+      : undefined;
+  const label = last === undefined ? percent : `${percent} · ${last}`;
+  const checkedAt =
+    last === undefined
+      ? ""
+      : ` · ${last} ${new Date(current.observedAt).toLocaleString(zh ? "zh-CN" : "en-US")}`;
   return {
     label,
-    detail: `${label} · ${used.toLocaleString("en-US")} / ${window.toLocaleString("en-US")} tokens`,
+    detail: `${percent} · ${used.toLocaleString("en-US")} / ${window.toLocaleString("en-US")} tokens${checkedAt}`,
     fraction,
   };
 }

@@ -62,7 +62,7 @@ export interface AcpDelegateOptions {
   cwd: string;
   resume: string | undefined;
   agentPrompt: () => string | undefined;
-  remember: (nativeSession: string) => void;
+  remember: (nativeSession: string) => void | Promise<void>;
   mcpServers: readonly SessionMcpServer[] | undefined;
   /** The host's tools this session is offered, by name; read when the agent's session opens. */
   hostTools: () => readonly string[];
@@ -501,7 +501,7 @@ export class AcpDelegate implements RunDelegate {
           fresh,
         );
         this.#native = answer.sessionId;
-        this.#options.remember(answer.sessionId);
+        await this.#options.remember(answer.sessionId);
         // A new agent session counts its cost from zero.
         this.#charged = 0;
         options = answer.configOptions;
@@ -594,6 +594,15 @@ export class AcpDelegate implements RunDelegate {
   ): Promise<TurnOutcome> {
     const sessionId = this.#native!;
     const { signal } = context;
+    const model = this.#choices.model?.current;
+    if (model !== undefined)
+      context.emit("context:invalidated", {
+        reason: "model",
+        model,
+        nativeSessionId: sessionId,
+        runId: context.runId,
+        at: Date.now(),
+      });
     const translator = new Translator(
       {
         runId: context.runId,
@@ -603,7 +612,8 @@ export class AcpDelegate implements RunDelegate {
       },
       {
         provider: this.#options.runtime,
-        model: this.#choices.model?.current ?? context.config().model.modelId,
+        nativeSessionId: sessionId,
+        model: model ?? context.config().model.modelId,
       },
       this.#charged,
     );
@@ -683,6 +693,7 @@ export class AcpDelegate implements RunDelegate {
           emit("context:invalidated", {
             reason: "model",
             model,
+            nativeSessionId: notification.sessionId,
             at: Date.now(),
           });
       }

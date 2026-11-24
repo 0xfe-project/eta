@@ -108,8 +108,8 @@ interface Attached {
   updated: number;
 }
 
-/** Bus event names this plugin forwards. A new kernel event means one more line here. */
-const FORWARDED_EVENTS = [
+/** Bus events that update the session target. Context changes publish through its snapshot. */
+const WATCHED_EVENTS = [
   "turn:run-start",
   "turn:run-end",
   "turn:start",
@@ -709,7 +709,9 @@ export class SessionsService extends Service implements SessionsApi {
         if (name === "turn:run-end") attached.running = false;
         attached.updated = Date.now();
         this.announce(attached);
-        this.wire.event(`sessions.${id}`, name, payload);
+        // Context observations are published through the validated projection.
+        if (name !== "context:observed" && name !== "context:invalidated")
+          this.wire.event(`sessions.${id}`, name, payload);
         // Task changes are user-visible state, not run traffic: flush immediately.
         const isTaskChange = name.startsWith("task:");
         if (isTaskChange) {
@@ -1251,7 +1253,7 @@ function subscribeBus(
   const ctx = managed.session.kernel.ctx as unknown as {
     on: (name: string, listener: (payload: unknown) => void) => () => boolean;
   };
-  const offs = FORWARDED_EVENTS.map((name) =>
+  const offs = WATCHED_EVENTS.map((name) =>
     ctx.on(name, (payload) => onEvent(name, payload)),
   );
   return () => {

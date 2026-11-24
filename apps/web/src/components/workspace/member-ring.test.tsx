@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setWire } from "@/lib/wire";
 import { productHost } from "@/test-product";
 import { cleanup, flush, mount } from "@/test-render";
-import { memberSnapshot } from "../../../../../test/fixtures/member-context";
+import {
+  lastObservedAt,
+  memberSnapshot,
+} from "../../../../../test/fixtures/member-context";
 import { MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
 
@@ -30,6 +33,11 @@ describe("member context", () => {
     ["full", "100% · 128,000 / 128,000 tokens", 1],
     ["switched", "N/A · 等待新模型的读数", 0],
     ["estimated", "约 13% · 16,000 / 128,000 tokens", 1],
+    [
+      "lastObserved",
+      `15% · 19,010 / 128,000 tokens · 上次查询 ${new Date(lastObservedAt).toLocaleString("zh-CN")}`,
+      1,
+    ],
   ] satisfies [Replay, string, number][]) {
     it(scenario, async () => {
       host.target("sessions.a", memberSnapshot("a", scenario));

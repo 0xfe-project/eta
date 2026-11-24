@@ -76,6 +76,7 @@ export interface TranslatorTarget {
 }
 
 export interface TranslatorIdentity {
+  nativeSessionId: string;
   /** The runtime, as the message's provider (`acp.gemini`). */
   provider: string;
   /** The model in effect, as far as the agent said. */
@@ -234,6 +235,7 @@ export class Translator {
       this.#identity.model = model;
       this.#target.emit("context:observed", {
         runId: this.#target.runId,
+        nativeSessionId: this.#identity.nativeSessionId,
         model,
         observedAt: Date.now(),
         used: null,
@@ -265,6 +267,7 @@ export class Translator {
         // Those come with the prompt's answer, if the agent gives them (`usageOfTurn`).
         this.#target.emit("context:observed", {
           runId: this.#target.runId,
+          nativeSessionId: this.#identity.nativeSessionId,
           model: this.#identity.model,
           observedAt: Date.now(),
           used: update.used,

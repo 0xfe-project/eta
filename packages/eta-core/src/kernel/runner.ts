@@ -54,7 +54,7 @@ import { isAbortError } from "./tools";
  */
 export interface RunnerJournal {
   /** Resolve once everything written so far is on disk. */
-  flush: () => Promise<void>;
+  flush: (runId?: string) => Promise<void>;
 }
 
 export interface RunnerBoundaryOptions {
@@ -722,7 +722,7 @@ export class Runner {
     // run. Commits were started as messages landed and are not awaited — the
     // runner never blocks on storage (§3 ruling 6). This runs even when the
     // run threw, so what was recorded before the fault is still written.
-    await this.journal?.flush().catch(() => undefined);
+    await this.journal?.flush(runId).catch(() => undefined);
     const result: RunResult = {
       turns: this.kernel.turns,
       status,

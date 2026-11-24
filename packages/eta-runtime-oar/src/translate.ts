@@ -23,7 +23,12 @@
  * A call to one of the host's tools is told as the host's: under its own name, with the `details`
  * it left, on the same terms as a call the kernel ran itself (`HostCalls`).
  */
-import type { Event, TokenTotals, ToolOutputPart } from "@botiverse/oar";
+import type {
+  Event,
+  RawEvent,
+  TokenTotals,
+  ToolOutputPart,
+} from "@botiverse/oar";
 import type {
   AgentMessage,
   AssistantMessage,
@@ -33,6 +38,7 @@ import type {
 } from "@eta/core";
 import type { HostCalls } from "./host-calls";
 import { unreportedUsage, withUsageEvidence } from "@eta/core";
+import { ClaudeTurnContext } from "./claude-context";
 
 type Block = AssistantMessage["content"][number];
 
@@ -216,6 +222,8 @@ export class Translator {
   /** The running total the runtime reported last. */
   #reported: TokenTotals | undefined;
   #model: string;
+  readonly #claude: ClaudeTurnContext | undefined;
+  #claudeUsage: { seq: number; hasReading: boolean } | undefined;
 
   constructor(
     target: TranslatorTarget,
@@ -230,11 +238,17 @@ export class Translator {
     this.#calls = calls;
     this.#model = identity.model;
     this.#charged = charged;
+    this.#claude =
+      identity.provider === "claude" ? new ClaudeTurnContext() : undefined;
   }
 
   /** The total charged so far, for the next run of the same runtime session to start from. */
   get charged(): TokenTotals | undefined {
     return this.#charged;
+  }
+
+  seeRaw(record: RawEvent): void {
+    this.#claude?.see(record);
   }
 
   see(event: Event): void {
@@ -286,9 +300,15 @@ export class Translator {
       case "compaction_ended":
         this.#observe(event, null, null, "compacted");
         break;
-      case "usage":
-        if (event.usage.context) {
-          const { tokens, contextWindow, percent } = event.usage.context;
+      case "usage": {
+        const context = event.usage.context;
+        const hasReading =
+          context !== undefined &&
+          context.tokens !== null &&
+          context.tokens !== 0;
+        if (this.#claude) this.#claudeUsage = { seq: event.seq, hasReading };
+        if (context && (this.#claude === undefined || hasReading)) {
+          const { tokens, contextWindow, percent } = context;
           // Without last, OAR leaves the Codex window null and only has cumulative input.
           const used =
             this.#identity.provider === "codex" && contextWindow === null
@@ -310,6 +330,22 @@ export class Translator {
         if (event.usage.tokens !== undefined)
           this.#reported = event.usage.tokens;
         break;
+      }
+      case "turn_ended": {
+        const result = this.#claude?.result(event.seq);
+        const usage =
+          this.#claudeUsage?.seq === event.seq ? this.#claudeUsage : undefined;
+        if (
+          (result || usage) &&
+          !usage?.hasReading &&
+          event.outcome.kind === "completed"
+        ) {
+          if (result?.reading && result.model === this.#model)
+            this.#observe(event, result.reading.used, result.reading.window);
+          else this.#observe(event, null, null, "missing");
+        }
+        break;
+      }
       case "model":
         if (this.#model !== event.model) {
           this.#model = event.model;
@@ -335,10 +371,11 @@ export class Translator {
     event: Event,
     used: number | null,
     window: number | null,
-    reason?: "compacted" | "model" | "inconsistent",
+    reason?: "compacted" | "model" | "inconsistent" | "missing",
   ): void {
     this.#target.emit("context:observed", {
       runId: this.#target.runId,
+      nativeSessionId: event.sessionId,
       model: this.#model,
       observedAt: event.receivedAt,
       ...(event.kind === "compaction_ended" && event.outcome === "completed"
@@ -355,6 +392,8 @@ export class Translator {
    * gets a result that says so, or the transcript would hold a call nobody answered.
    */
   finish(outcome: "completed" | "aborted" | "failed", error?: string): void {
+    this.#claude?.reset();
+    this.#claudeUsage = undefined;
     if (!this.#open && (this.#reported || !this.#hadMessage))
       this.#target.emit("usage:detached", { usage: this.#takeUsage() });
     this.#hadMessage = false;
