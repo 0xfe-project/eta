@@ -182,6 +182,8 @@ export interface PluginAuditView {
 
 export interface PluginsSections {
   list: PluginView[];
+  /** What `composioPlugins` answers, kept current. Absent from an older host. */
+  composio?: ComposioPluginView[];
   audit: PluginAuditView[];
 }
 
