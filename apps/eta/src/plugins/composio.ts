@@ -810,6 +810,9 @@ export class Composio {
    * in the settings, so the same host always means the same user and nothing about the person (a
    * name, an address, an account) is sent. The auth config is Composio's own managed one for the
    * toolkit: found when the project has it, made when it has not.
+   * A toolkit that only takes a key the user owns has no managed one: its own config is found or made
+   * with no credentials, and the user types the key on Composio's page; eta never asks for it or
+   * keeps it.
    */
   async link(slug: string): Promise<string> {
     if (!SLUG.test(slug)) throw new PluginError("that is not a toolkit name");
@@ -1035,7 +1038,11 @@ export class Composio {
   async #authConfig(slug: string, key: string): Promise<string> {
     const known = this.#configs.get(slug);
     if (known !== undefined) return known;
-    const found = await this.#managedConfigs(slug, key);
+    const scheme = this.#ownKeyScheme(slug);
+    const found =
+      scheme === undefined
+        ? await this.#managedConfigs(slug, key)
+        : await this.#ownConfigs(slug, key);
     const chosen =
       found.find((item) => item.is_enabled_for_tool_router === true) ??
       found[0];
@@ -1043,7 +1050,16 @@ export class Composio {
     if (chosen === undefined) {
       const made = await this.#call("POST", "/api/v3/auth_configs", key, {
         toolkit: { slug },
-        auth_config: { type: "use_composio_managed_auth" },
+        auth_config:
+          scheme === undefined
+            ? { type: "use_composio_managed_auth" }
+            : // The user types the key on Composio's page; eta holds none.
+              {
+                type: "use_custom_auth",
+                authScheme: scheme,
+                name: `eta ${slug}`,
+                credentials: {},
+              },
       });
       id =
         isPlain(made) && isPlain(made.auth_config)
@@ -1069,6 +1085,40 @@ export class Composio {
     }
     this.#configs.set(slug, id);
     return id;
+  }
+
+  /**
+   * The scheme of the config a link is made under, for a toolkit Composio has no sign-in of its own
+   * for and that takes a key the user owns; undefined for any other toolkit (and for one eta has no
+   * list entry for), which keeps the managed config. Composio refuses a managed config for the
+   * first kind (observed: HTTP 404, Auth_Config_DefaultAuthConfigNotFound, for exa).
+   */
+  #ownKeyScheme(slug: string): "API_KEY" | "BEARER_TOKEN" | undefined {
+    const one = this.#known(slug);
+    if (one === undefined || one.auth !== "api_key" || one.managed)
+      return undefined;
+    return (["API_KEY", "BEARER_TOKEN"] as const).find((scheme) =>
+      one.authSchemes.includes(scheme),
+    );
+  }
+
+  /** The project's own (not managed), enabled, key-taking auth configs for one toolkit. */
+  async #ownConfigs(
+    slug: string,
+    key: string,
+  ): Promise<Record<string, unknown>[]> {
+    const query = new URLSearchParams({ toolkit_slug: slug, limit: "25" });
+    const found = await this.#call("GET", `/api/v3/auth_configs?${query}`, key);
+    return isPlain(found) && Array.isArray(found.items)
+      ? found.items.filter(
+          (item): item is Record<string, unknown> =>
+            isPlain(item) &&
+            item.is_composio_managed !== true &&
+            item.status !== "DISABLED" &&
+            (item.auth_scheme === "API_KEY" ||
+              item.auth_scheme === "BEARER_TOKEN"),
+        )
+      : [];
   }
 
   /** The managed, enabled auth configs of the project for one toolkit, as Composio lists them. */
