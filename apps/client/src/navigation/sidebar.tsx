@@ -47,6 +47,8 @@ export function NavItem(props: {
   /** Edge to edge with a divider on that side: the sidebar's sections
    * (under them, like the rows below) and Settings (over it, at the foot). */
   flush?: "top" | "bottom";
+  /** One step down: the section rows under the wordmark, not Settings. */
+  compact?: boolean;
   onPress: () => void;
 }) {
   const c = colors();
@@ -69,21 +71,29 @@ export function NavItem(props: {
       style={{
         ...(wide() ? row : { alignItems: "center", justifyContent: "center" }),
         height: wide()
-          ? props.flush
-            ? itemHeight.flush
-            : itemHeight.wide
+          ? props.compact
+            ? space[32]
+            : props.flush
+              ? itemHeight.flush
+              : itemHeight.wide
           : phone()
             ? itemHeight.phone
             : itemHeight.rail,
         width: phone() ? phoneItemWidth : "100%",
         flexShrink: 0,
-        paddingHorizontal: wide() ? (props.flush ? space[16] : space[8]) : 0,
+        paddingHorizontal: wide()
+          ? props.compact
+            ? space[12]
+            : props.flush
+              ? space[16]
+              : space[8]
+          : 0,
         ...(props.flush === "bottom"
           ? { borderBottomWidth: 1, borderColor: c().border }
           : props.flush === "top"
             ? { borderTopWidth: 1, borderColor: c().border }
             : {}),
-        gap: wide() ? space[8] : space[4],
+        gap: wide() ? (props.compact ? space[4] : space[8]) : space[4],
         backgroundColor:
           props.selected && !phone() ? c().selected : "transparent",
         cursor: "pointer",
@@ -91,11 +101,19 @@ export function NavItem(props: {
     >
       <Icon
         name={props.item[2]}
-        size={wide() ? icon.md : phone() ? icon.lg : icon.md}
+        size={
+          wide()
+            ? props.compact
+              ? icon.sm
+              : icon.md
+            : phone()
+              ? icon.lg
+              : icon.md
+        }
         tone={props.selected || wide() ? "ink" : "muted"}
       />
       <Label
-        variant={wide() ? "body" : "caption"}
+        variant={wide() ? (props.compact ? "small" : "body") : "caption"}
         tone={wide() || props.selected ? "ink" : "muted"}
         weight={phone() && props.selected ? weight.strong : weight.regular}
         style={wide() ? { flex: 1 } : undefined}
@@ -240,6 +258,7 @@ export function DesktopSidebar(
                   item={item()}
                   layout="desktop"
                   flush="bottom"
+                  compact
                   selected={props.page === item()[0]}
                   count={item()[0] === "tasks" ? check() : 0}
                   onPress={() => props.onNavigate(item()[0])}
