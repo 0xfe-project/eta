@@ -36,9 +36,10 @@ import { avatar, control, icon, space, weight } from "../../components/tokens";
  * user decided to drop the confirmation step; the host still pins the commit and refuses what it
  * does not support).
  */
-/** A market card is as wide as an installed plugin's card; the search field and the detail sheet's
- * scrolling body have their own bounds. */
-const cardWidth = 268;
+/** A market card: four fit across the market of a 1440-wide window (267 was
+ * off the grid; 268 left room for three). The search field and the detail sheet's scrolling body
+ * have their own bounds. */
+const cardWidth = 264;
 const searchWidth = 480;
 const detailHeight = 440;
 
