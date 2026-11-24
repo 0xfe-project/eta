@@ -57,7 +57,8 @@ export function PluginSettings(props: { phone?: boolean }) {
   const problem = signal("");
   const proxyProblem = signal("");
   const busy = signal(false);
-  const hasKey = signal(false);
+  /** Whether the host holds a key; unknown (undefined) until it has said, which is not "no key". */
+  const hasKey = signal<boolean>();
   const typedKey = signal("");
   const keyProblem = signal("");
   const sources = () => settings()?.sources ?? [];
@@ -109,11 +110,18 @@ export function PluginSettings(props: { phone?: boolean }) {
       await call("marketSettings", {});
     }
   }
+  /** Read only: it holds nothing busy, and it never overwrites what a save has said since. */
+  async function readKey() {
+    const result = await host.action(() =>
+      host.call<{ hasKey: boolean }>("plugins", "composioStatus", {}),
+    );
+    if (result && hasKey() === undefined) hasKey.set(result.hasKey);
+  }
   effect(() => {
     host.subscriptionWire();
     untracked(() => {
       void call("marketSettings", {}).then((ok) => {
-        if (ok && hasComposio()) void keyCall("composioStatus", {});
+        if (ok && hasComposio()) void readKey();
       });
     });
   });
@@ -211,7 +219,9 @@ export function PluginSettings(props: { phone?: boolean }) {
                   >
                     <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                       <Label lines={1}>{item().name || item().url}</Label>
-                      <If when={item().kind === "composio" && !hasKey()}>
+                      <If
+                        when={item().kind === "composio" && hasKey() === false}
+                      >
                         <Label variant="small" tone="muted" lines={1}>
                           {uiText("composioSourceNeedsKey")}
                         </Label>
@@ -233,7 +243,8 @@ export function PluginSettings(props: { phone?: boolean }) {
                       })}
                       checked={item().enabled}
                       disabled={
-                        busy() || (item().kind === "composio" && !hasKey())
+                        busy() ||
+                        (item().kind === "composio" && hasKey() === false)
                       }
                       onChange={(enabled) =>
                         void call("marketSetSourceEnabled", {
@@ -292,9 +303,13 @@ export function PluginSettings(props: { phone?: boolean }) {
           </Label>
           {/* design-value: a cap of its own, not a token */}
           <View style={{ gap: space[8], maxWidth: 560 }}>
-            <Label variant="small" weight={weight.regular}>
-              {hasKey() ? uiText("composioKeySet") : uiText("composioKeyNone")}
-            </Label>
+            <If when={hasKey() !== undefined}>
+              <Label variant="small" weight={weight.regular}>
+                {hasKey()
+                  ? uiText("composioKeySet")
+                  : uiText("composioKeyNone")}
+              </Label>
+            </If>
             <Field
               label={uiText("composioKeyField")}
               placeholder={uiText("composioKeyField")}
