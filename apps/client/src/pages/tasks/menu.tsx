@@ -29,6 +29,8 @@ export function TaskMenu(props: {
   width: number;
   caption?: string;
   align?: "start" | "end";
+  /** Tighter caption padding: the status menu on a task page and in the panel. */
+  dense?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   children?: JSX.Element;
@@ -53,9 +55,13 @@ export function TaskMenu(props: {
         {(caption) => (
           <View
             style={{
-              paddingTop: space[8],
+              paddingTop: props.dense ? space[4] : space[8],
               paddingBottom: space[4],
-              paddingHorizontal: inSheet() ? space[16] : space[12],
+              paddingHorizontal: inSheet()
+                ? space[16]
+                : props.dense
+                  ? space[8]
+                  : space[12],
             }}
           >
             <Caption text={caption()} />
@@ -95,6 +101,8 @@ export function TaskMenuItem(props: {
   hint?: string;
   checked?: boolean;
   height?: number;
+  /** One step down on padding and gap, for the status menu. */
+  dense?: boolean;
   style?: ViewStyle;
   onSelect: () => void;
 }) {
@@ -116,9 +124,13 @@ export function TaskMenuItem(props: {
             : props.hint
               ? undefined
               : (props.height ?? control.md),
-        paddingVertical: props.hint ? space[8] : 0,
-        paddingHorizontal: inSheet() ? space[16] : space[12],
-        gap: space[8],
+        paddingVertical: props.hint ? (props.dense ? space[4] : space[8]) : 0,
+        paddingHorizontal: inSheet()
+          ? space[16]
+          : props.dense
+            ? space[8]
+            : space[12],
+        gap: props.dense ? space[4] : space[8],
         backgroundColor: props.checked ? c().selected : undefined,
         ...props.style,
       }}
@@ -217,6 +229,7 @@ export function StatusOptions(props: {
   current: BoardTaskStatus;
   /** The tasks that wait for this one, which cancelling it blocks. */
   waiting: number;
+  dense?: boolean;
   onChange: (status: BoardTaskStatus) => void;
 }) {
   return (
@@ -231,6 +244,7 @@ export function StatusOptions(props: {
             hint={statusHint(entry(), props.waiting)}
             leading={<TaskGlyph status={entry()} size={icon.sm} />}
             checked={props.current === entry()}
+            dense={props.dense}
             onSelect={() => props.onChange(entry())}
           />
         </>

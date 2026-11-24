@@ -27,7 +27,7 @@ const statusFill = {
  */
 /** The select at its narrowest, and its menu (an error under it runs as wide). */
 const selectWidth = 128;
-const menuWidth = 264;
+const menuWidth = 220;
 
 export function StatusSelect(props: {
   item: BoardTaskDetail;
@@ -114,6 +114,7 @@ export function StatusSelect(props: {
           width={menuWidth}
           align={props.align}
           caption={uiText("changeStatus")}
+          dense
           open={status()}
           onOpenChange={(next) => (next ? open() : status.set(false))}
           trigger={<Trigger />}
@@ -121,6 +122,7 @@ export function StatusSelect(props: {
           <StatusOptions
             current={props.item.status}
             waiting={props.item.dependents?.length ?? 0}
+            dense
             onChange={change}
           />
         </TaskMenu>

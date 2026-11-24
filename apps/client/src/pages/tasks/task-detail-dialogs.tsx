@@ -136,21 +136,21 @@ export function TaskDetailDialogs(props: {
                     style={{
                       ...row,
                       alignItems: "flex-start",
-                      paddingVertical: space[12],
-                      paddingHorizontal: space[16],
-                      gap: space[8],
+                      paddingVertical: space[8],
+                      paddingHorizontal: space[12],
+                      gap: space[4],
                       backgroundColor:
                         entry() === task()?.status ? c().selected : undefined,
                     }}
                   >
                     <View
-                      style={{ ...row, width: space[12], height: space[20] }}
+                      style={{ ...row, width: space[12], height: space[16] }}
                     >
                       <TaskGlyph status={entry()} size={icon.sm} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Label>{statusName(entry())}</Label>
-                      <Label variant="small" tone="muted">
+                      <Label variant="small">{statusName(entry())}</Label>
+                      <Label variant="caption" tone="muted">
                         {statusHint(entry(), task()?.dependents?.length ?? 0)}
                       </Label>
                     </View>
