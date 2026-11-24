@@ -647,6 +647,9 @@ export function pluginsPlugin(
               typeof value === "string" ? value : "";
             const asked = entries.map((raw) => {
               const one = (raw ?? {}) as Record<string, unknown>;
+              // A Composio toolkit: the address comes from the host's own list, as for `logo`.
+              if (typeof one.composio === "string")
+                return { url: composio?.logoOf(one.composio) ?? "" };
               return {
                 repo: text(one.repo),
                 ref: text(one.ref) || "HEAD",

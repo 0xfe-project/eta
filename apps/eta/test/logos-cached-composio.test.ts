@@ -52,7 +52,7 @@ const keep = (
   until = later,
 ) => store.put(KEPT, address, address, picture, until, Date.now());
 
-describe("Logos.cached for the logo address of a Composio toolkit", () => {
+describe("cached logos for the logo address of a Composio toolkit", () => {
   it("answers hit for a kept picture, miss for a kept none, unknown for the rest, and asks no server", async () => {
     const net = await stalled();
     const { store, logos } = boot();

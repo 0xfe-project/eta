@@ -516,27 +516,39 @@ export class Logos {
 
   /**
    * What is kept for entries, and nothing else: memory and the database only, no network, and not
-   * in the queue of lookups. `hit` is a picture (checked again as if it had just come, a stale one
-   * too: better than a letter), `miss` a recent answer that there is none, `unknown` anything not
-   * known (including entries past MAX_CACHED_LOGOS and hits past MAX_CACHED_BYTES).
+   * in the queue of lookups. An entry is a plugin in a repository, or `{ url }`: the logo address of
+   * a Composio toolkit (what `fromUrl` keeps; an empty one is not known). `hit` is a picture
+   * (checked again as if it had just come, a stale one too: better than a letter), `miss` a recent
+   * answer that there is none, `unknown` anything not known (including entries past
+   * MAX_CACHED_LOGOS and hits past MAX_CACHED_BYTES).
    */
   cached(
-    entries: {
-      repo: string;
-      ref: string;
-      path: string;
-      homepage: string | null;
-    }[],
+    entries: (
+      | {
+          repo: string;
+          ref: string;
+          path: string;
+          homepage: string | null;
+        }
+      | { url: string }
+    )[],
   ): CachedLogo[] {
     const now = (this.#options.now ?? Date.now)();
     let total = 0;
     return entries.map((one, index): CachedLogo => {
       if (index >= MAX_CACHED_LOGOS) return { status: "unknown" };
-      let got = this.#peek(one.repo, one.ref, one.path, now);
+      let got =
+        "url" in one
+          ? this.#peekUrl(one.url, now)
+          : this.#peek(one.repo, one.ref, one.path, now);
       // No own logo, or not known (a short "none" that has expired reads as not known): the
       // homepage's icon, kept under the entry's key for longer, is next. An own picture wins; a
       // homepage that is not known either does not turn an own logo not known into "none".
-      if ((got === null || got === undefined) && one.homepage) {
+      if (
+        !("url" in one) &&
+        (got === null || got === undefined) &&
+        one.homepage
+      ) {
         const site = this.#peek(
           one.repo,
           one.ref,
@@ -552,6 +564,17 @@ export class Logos {
       total += got.data.length;
       return { status: "hit", logo: got };
     });
+  }
+
+  /** What `fromUrl` kept for an address, read the same way as `fromUrl` does but never asked for. */
+  #peekUrl(address: string, now: number): Logo | null | undefined {
+    if (address === "") return undefined;
+    const hit = this.#kept.get(`https\n${address}`);
+    if (hit && now - hit.at < KEEP_MS) return hit.logo;
+    const row = this.#options.store?.peek(FROM_URL, address, address);
+    if (row === undefined) return undefined;
+    if (row.status === "miss") return now < row.expiresAt ? null : undefined;
+    return this.#checked(row.mime, row.bytes);
   }
 
   /** A picture, null (known: none), or undefined (not known). Reads only. */

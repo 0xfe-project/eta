@@ -313,14 +313,19 @@ export interface PluginTestResult {
  * read: nothing is fetched, so it answers at once. The answer has one item per entry asked, in order;
  * at most PLUGIN_LOGOS_CACHED_MAX entries are looked at (the rest are "unknown"), and hits past about
  * 2 MB of picture data are "unknown" too. Asked of a host without it, the call fails: treat all as unknown.
+ * An entry is a plugin in a repository, or `{ composio: slug }`, a Composio toolkit (the host finds
+ * the logo address from its own list). A host that does not know the second form answers "unknown" for it.
  */
 export interface PluginLogosCachedArgs {
-  entries: {
-    repo: string;
-    ref: string;
-    path: string;
-    homepage?: string | null;
-  }[];
+  entries: (
+    | {
+        repo: string;
+        ref: string;
+        path: string;
+        homepage?: string | null;
+      }
+    | { composio: string }
+  )[];
 }
 export const PLUGIN_LOGOS_CACHED_MAX = 200;
 export type PluginLogoCached =

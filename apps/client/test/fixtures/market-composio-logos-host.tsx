@@ -1,6 +1,6 @@
 import type { ComposioToolkit, MarketCatalog } from "@eta/client-contracts";
 import { mount, signal, View } from "nsh";
-import { Label } from "../../src/components";
+import { Button, Label } from "../../src/components";
 import { Market } from "../../src/pages/plugins/market";
 import { createHost, Host } from "../../src/services/host";
 
@@ -44,7 +44,7 @@ const catalog: MarketCatalog = {
 /**
  * What the host answers when asked, with `logosCached`, for the pictures it kept for toolkits
  * (`{ composio: slug }` entries):
- * "hit": a picture for each, at once. "slow": a picture for each, after 300 ms. "hang": never.
+ * "hit": a picture for each, at once. "slow": a picture for each, once the `release` button is pressed. "hang": never.
  * "unknown": unknown for each (a host that does not know the field). "old": the call fails.
  * Every slug asked is counted (`asked <all> distinct <different>`), and every `logo` call of a card
  * (which never answers, so its card stays a letter) is counted as `logo <n>`.
@@ -54,6 +54,8 @@ export function mountComposioLogos(
 ) {
   const asked = signal<string[]>([]);
   const logoCalls = signal(0);
+  /** The answers of "slow" that wait to be released. */
+  const waiting: (() => void)[] = [];
   mount(() => {
     const host = createHost();
     host.state.update((state) => ({ ...state, status: "open" }));
@@ -88,7 +90,7 @@ export function mountComposioLogos(
             ),
           };
           return mode === "slow"
-            ? new Promise((done) => setTimeout(done, 300, answer))
+            ? new Promise((done) => waiting.push(() => done(answer)))
             : Promise.resolve(answer);
         }
         if (method === "logo") {
@@ -104,6 +106,10 @@ export function mountComposioLogos(
         <View style={{ flex: 1 }}>
           <Label>{`asked ${asked().length} distinct ${new Set(asked()).size}`}</Label>
           <Label>{`logo ${logoCalls()}`}</Label>
+          <Button
+            label="release"
+            onPress={() => waiting.splice(0).forEach((go) => go())}
+          />
           <Market layout="desktop" tabs={() => <Label>tabs</Label>} />
         </View>
       </Host.Provider>

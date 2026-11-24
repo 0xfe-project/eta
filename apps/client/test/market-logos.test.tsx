@@ -33,10 +33,14 @@ test("a host without logosCached: the list opens with letters, nothing is lost",
   expect(letter(app, "no-logo")).toBe(1);
 });
 
-test("a market longer than one answer is asked about in batches of at most 50, each picture once", async () => {
+test("a market longer than a batch is asked about one batch of cards at a time, each picture once", async () => {
   const app = await open("./fixtures/market-logos-many.tsx", OPEN);
-  // 260 entries, one of them a twin of another: 259 pictures, in batches the host can answer whole.
-  expect(app.shows("batches 50+50+50+50+50+9")).toBe(true);
+  // 260 entries, one of them a twin of another: only the first batch of cards (ten rows of three at
+  // this width) is asked about before it is drawn, and a call is never more than the 50 the host answers whole.
+  expect(app.shows("batches 30")).toBe(true);
+  await app.press("label:Show more");
+  // The next batch asks only for the cards it adds.
+  expect(app.shows("batches 30+30")).toBe(true);
 });
 
 test("only an entry the host does not know asks for its own picture; a kept one or a known miss does not", async () => {

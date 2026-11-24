@@ -8,6 +8,7 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX, ScrollProps } from "nsh";
 import type { Layout } from "../../components";
+import type { LogoAsk } from "./plugin-logo";
 import {
   cleanup,
   effect,
@@ -39,7 +40,7 @@ import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
 import { sheetEdge } from "./configure";
-import { PluginLogo, primeLogos } from "./plugin-logo";
+import { pendingLogos, PluginLogo, primeLogos } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
 
 /**
@@ -161,18 +162,54 @@ export function Market(props: {
           1,
           Math.floor((room() + space[12]) / (CARD_SPACE + space[12])),
         );
-  /** How many rows of the matching cards (toolkits first, then the other sources' plugins) are drawn. A new search starts again from the first batch. */
   const batchRows = () => (phone() ? PHONE_ROWS : ROWS);
-  const rows = signal(batchRows());
+  /** How many rows of the matching cards (toolkits first, then the other sources' plugins) are drawn: none until the first batch's pictures were asked for. A new search starts again from the first batch. */
+  const rows = signal(0);
   const drawn = () => (known() ? rows() * columns() : 0);
   /** Everything the search matches, whatever is drawn: a search looks through all of it. */
   const total = () => toolkits().length + entries().length;
+  /** The pictures to ask the host for before the first `count` matching cards are drawn. */
+  const asksFor = (count: number): LogoAsk[] => [
+    ...toolkits()
+      .slice(0, count)
+      .map((item) => ({ composio: item.slug })),
+    ...entries()
+      .slice(0, Math.max(0, count - toolkits().length))
+      .filter((item) => item.repo !== "" && item.unsupported === null)
+      .map((item) => ({
+        repo: item.repo,
+        ref: item.rev ?? "HEAD",
+        path: item.path,
+        homepage: item.homepage,
+      })),
+  ];
+  let reaching = 0;
+  /**
+   * Draw up to `to` rows. First the host is asked, once, for the pictures it kept for the cards that
+   * come with them, and waited for (a little): so they are drawn with their pictures, and not one by
+   * one afterwards. Nothing to ask for, or no answer in time, draws at once.
+   */
+  const reach = (to: number) => {
+    const token = ++reaching;
+    const need = pendingLogos(asksFor(to * columns()));
+    if (need.length === 0) rows.set(to);
+    else
+      void primeLogos(host, need).then(() => {
+        if (token === reaching) rows.set(to);
+      });
+  };
   /** The height of the content when scrolling last drew a batch: another is drawn only once the content has grown. */
   let drawnAt = 0;
+  // The first batch, once there is something to draw and the columns are known.
+  effect(() => {
+    if (known() && total() > 0 && rows() === 0)
+      untracked(() => reach(batchRows()));
+  });
+  // A new search draws its first batch at once: what it shows is mostly drawn (and asked for) before.
   effect(() => {
     needle();
     untracked(() => {
-      rows.set(batchRows());
+      if (rows() > 0) rows.set(batchRows());
       drawnAt = 0;
     });
   });
@@ -186,7 +223,7 @@ export function Market(props: {
     )
       return;
     drawnAt = end;
-    rows.update((n) => n + batchRows());
+    reach(rows() + batchRows());
   };
   const shownToolkits = () => toolkits().slice(0, drawn());
   /** The other sources' plugins come after the toolkits, so they fill what the toolkits leave of the batch. */
@@ -378,21 +415,6 @@ export function Market(props: {
   }
   follow(() => "plugins");
 
-  /** The pictures the host already has for these entries, asked once, so the first frame shows them. */
-  const prime = (shown: MarketCatalog) =>
-    primeLogos(
-      host,
-      shown.sources
-        .flatMap((item) => item.entries ?? [])
-        .filter((item) => item.repo !== "" && item.unsupported === null)
-        .map((item) => ({
-          repo: item.repo,
-          ref: item.rev ?? "HEAD",
-          path: item.path,
-          homepage: item.homepage,
-        })),
-    );
-
   async function load() {
     if (loading()) return;
     loading.set(true);
@@ -414,7 +436,6 @@ export function Market(props: {
         }),
       };
       if (merged.sources.some((item) => item.entries !== null)) {
-        if (before === undefined) await prime(merged);
         show(merged);
       } else catalog.set(merged);
     }
@@ -939,12 +960,12 @@ export function Market(props: {
               </Each>
             </View>
             {/* At the end of the list, after both kinds of card; the list also draws the next batch by itself near its end. */}
-            <If when={known() && total() > drawn()}>
+            <If when={known() && rows() > 0 && total() > drawn()}>
               <View style={{ alignItems: "center" }}>
                 <Button
                   label={uiText("marketShowMore")}
                   tone="ghost"
-                  onPress={() => rows.update((n) => n + batchRows())}
+                  onPress={() => reach(rows() + batchRows())}
                 />
               </View>
             </If>
