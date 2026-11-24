@@ -8,6 +8,8 @@ import {
   Button,
   colors,
   dialogWidth,
+  fontFamily,
+  Fonts,
   grow,
   Icon,
   Label,
@@ -138,6 +140,7 @@ export function ClientUpdateConfirm(props: { onClose: () => void }) {
 function ChannelSelect(props: { phone: boolean }) {
   const c = colors();
   const type = textFaces();
+  const fonts = Fonts();
   const update = clientUpdate;
   const names: Record<ClientChannel, string> = {
     stable: uiText("updateFullReleases"),
@@ -181,6 +184,7 @@ function ChannelSelect(props: { phone: boolean }) {
             backgroundColor: c().canvas,
           }}
           itemStyle={{
+            fontFamily: fontFamily(fonts().interface),
             color: c().ink,
             fontSize: type("small").size,
             minHeight: itemRow,
