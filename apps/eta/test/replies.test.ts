@@ -50,9 +50,11 @@ describe("a message that arrives while the agent is answering", () => {
       joined: [agent.id],
       nobody: false,
     });
+    // Drawn in the message whose turn it joined, as an Insert from that message is.
     expect(steered.message.data).toMatchObject({
       joined: [agent.id],
       woke: [],
+      into: sent.message.id,
     });
     first.open();
 

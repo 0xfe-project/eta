@@ -4,6 +4,7 @@ import { defineMessages } from "../../../i18n/messages";
 export const feedMessages = defineMessages({
   en: {
     joined: "Joined {names}'s reply",
+    inserted: "Inserted · {clock}",
     replying: "Replying…",
     unreadable: "Replying, but its session cannot be read",
     queued: "Queued",
@@ -28,6 +29,7 @@ export const feedMessages = defineMessages({
   },
   zh: {
     joined: "插进了 {names} 的回复",
+    inserted: "插入 · {clock}",
     replying: "正在回复…",
     unreadable: "正在回复，但读不到它的会话",
     queued: "排队中",

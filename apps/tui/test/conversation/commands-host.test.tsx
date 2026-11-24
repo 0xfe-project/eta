@@ -50,7 +50,8 @@ describe("with a conversation in front", () => {
     await screenShows(r, REPLYING);
 
     await enter(r, "/steer go right");
-    await screenShows(r, "Joined Ada's reply");
+    // Drawn in the message whose turn it joined, as the client's Insert block.
+    await screenShows(r, "Inserted · ");
     expect(askedFor(world.wire, "conversations.send")).toEqual([
       {
         conversationId: world.group.id,
@@ -65,6 +66,7 @@ describe("with a conversation in front", () => {
       (row) => row.text === "go right",
     );
     expect(steered?.data.joined).toEqual([world.ada.id]);
+    expect(steered?.data.into).toBe(sent.message.id);
 
     await enter(r, "/queue @Ada after this");
     await screenShows(r, "⧗ @Ada after this");

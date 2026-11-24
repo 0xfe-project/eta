@@ -88,7 +88,7 @@ function heldTimeline(delivered: boolean): TimelineSection {
  * eta://fixture/loading (no timeline yet), /empty, /short, /offline (a phone
  * that lost the host before any message arrived), /held (Ada busy, one message
  * waiting for her, with the reply the host queued for it; "Deliver" hands it
- * to her lane as the host does).
+ * to her lane as the host does, and its Insert puts it into her turn).
  */
 function Fixture() {
   const host = createHost();
@@ -169,7 +169,42 @@ function Fixture() {
         },
       },
     }));
-  host.call = async <T,>() => undefined as T;
+  // Insert from the lane, answered as the host does: the message leaves the lane and is a
+  // message of the conversation put into the turn it joined ("ping"), its queued reply gone.
+  host.call = async <T,>(_target: string, action: string) => {
+    if (action !== "steerHeld") return undefined as T;
+    const steered: MessageView = {
+      ...message(3, "user", "Queued words"),
+      createdAt: Date.UTC(2026, 10, 24, 9, 5),
+      data: { woke: [], joined: ["Ada"], into: "m1" },
+    };
+    const { messages } = heldTimeline(false);
+    host.state.update((s) => ({
+      ...s,
+      targets: {
+        ...s.targets,
+        "conversations.group": {
+          sections: {
+            timeline: {
+              messages: [messages[0]!, messages[1]!, steered],
+              hasMore: false,
+              held: [],
+            },
+          },
+          revisions: {},
+          version: 0,
+        },
+      },
+    }));
+    return {
+      conversationId: "group",
+      steered: true,
+      joined: ["Ada"],
+      message: steered,
+      replies: [],
+      dropped: ["m4"],
+    } as T;
+  };
   const layout = (): Layout =>
     windowSize().width < 600
       ? "phone"

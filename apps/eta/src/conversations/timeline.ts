@@ -392,11 +392,14 @@ export class Timeline {
    * stops being held, becomes a message of the conversation where it was written, and the replies
    * those agents had queued for it go (the turn it joins is its answer). One transaction, and only
    * while it is still held: undefined when a lane already took it, so it can never be said twice.
-   * `dropped` is the ids of the replies that went.
+   * `dropped` is the ids of the replies that went. `into` is the user message whose turns it
+   * joins, recorded as `data.into` in the same step, so it is never a row of its own even for a
+   * moment.
    */
   steerOut(
     id: string,
     joining: readonly string[],
+    into?: string,
   ): { message: MessageView; dropped: string[] } | undefined {
     return this.#db.transaction(() => {
       const held = this.#db
@@ -420,6 +423,7 @@ export class Timeline {
         ...data,
         woke: woke.filter((agentId) => !joining.includes(agentId)),
         joined: [...joining],
+        ...(into === undefined ? {} : { into }),
       })!;
       return { message, dropped };
     })();
