@@ -10,6 +10,7 @@ import type {
 import {
   acpDraftOf,
   acpSlug,
+  ANTIGRAVITY_ACP_AGENT,
   checkAcpDraft,
   emptyAcpDraft,
 } from "@eta/client-contracts";
@@ -156,6 +157,13 @@ export function ExternalAgentForm(props: {
     outcome.set(undefined);
     // A clash was with the other machine's ids.
     problems.update(({ id: _id, ...rest }) => rest);
+  }
+
+  function useAntigravityPreset() {
+    draft.set(acpDraftOf(ANTIGRAVITY_ACP_AGENT));
+    idTouched = false;
+    problems.set({});
+    outcome.set(undefined);
   }
 
   function checked(): AcpAgentConfig | undefined {
@@ -427,6 +435,17 @@ export function ExternalAgentForm(props: {
   const fields = () => (
     <View style={{ gap: space[12] }}>
       {machineField()}
+      <If when={!editing}>
+        <View style={{ alignItems: "flex-start" }}>
+          <Button
+            label={uiText("acpAntigravityPreset")}
+            size={props.phone ? control.lg : control.md}
+            style={{ paddingHorizontal: space[12] }}
+            disabled={testing() || saving() || !usable()}
+            onPress={useAntigravityPreset}
+          />
+        </View>
+      </If>
       {field({
         name: "label",
         title: uiText("acpName"),
@@ -451,6 +470,14 @@ export function ExternalAgentForm(props: {
         hint: () => uiText("acpArgsHint"),
         multiline: true,
       })}
+      <If when={draft().command === "agy" && draft().args === "acp"}>
+        {hint(
+          uiText("runtimeHowToSignIn", {
+            command: "agy acp --login",
+            machine: machine()?.name ?? machineId(),
+          }),
+        )}
+      </If>
       {field({
         name: "env",
         title: uiText("acpEnv"),

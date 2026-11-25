@@ -20,9 +20,10 @@ import type { World } from "./support/world";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fakeAgent } from "@eta/runtime-acp/testing";
-import { describe, expect, it } from "vitest";
+import { delimiter, join } from "node:path";
+import process from "node:process";
+import { FAKE_AGENT, fakeAgent } from "@eta/runtime-acp/testing";
+import { describe, expect, it, vi } from "vitest";
 import { until } from "./support/client";
 import { machineView } from "./support/daemon";
 import { scriptedModels } from "./support/models";
@@ -77,6 +78,63 @@ async function alone(w: World, agent: AgentView) {
 }
 
 describe("an ACP agent, from the settings page to a reply", () => {
+  it.skipIf(process.platform === "win32")(
+    "offers Antigravity without a config and runs it without MCP servers",
+    async () => {
+      const fake = fakeAgent("antigravity");
+      writeFileSync(
+        join(fake.dir, "agy"),
+        '#!/bin/sh\nexec "$ETA_TEST_BUN" "$ETA_TEST_ACP"\n',
+        { mode: 0o700 },
+      );
+      vi.stubEnv("PATH", [fake.dir, process.env.PATH].join(delimiter));
+      vi.stubEnv("FAKE_ACP_DIR", fake.dir);
+      vi.stubEnv("ETA_TEST_BUN", process.execPath);
+      vi.stubEnv("ETA_TEST_ACP", FAKE_AGENT);
+      try {
+        const w = await host();
+        const config = join(w.host.dataDir, "acp.json");
+        const antigravity = async () => {
+          const { runtimes } = (await w.client.call(
+            "agents",
+            "runtimes",
+            {},
+          )) as {
+            runtimes: AgentRuntimeInfo[];
+          };
+          return runtimes.filter((item) => item.id === "acp.antigravity");
+        };
+        expect(await antigravity()).toMatchObject([
+          {
+            label: "Antigravity",
+            discovered: true,
+            status: "available",
+            models: [{ id: "model-a" }, { id: "model-b" }],
+          },
+        ]);
+        expect(existsSync(config)).toBe(false);
+
+        const agent = await w.agent("Ace", { runtime: "acp.antigravity" });
+        const chat = await alone(w, agent);
+        const sent = await w.send(chat, "hello");
+        const done = await w.settled(chat, sent.replies[0]!.id);
+        expect(done.status).toBe("done");
+        expect(done.text.trim()).not.toBe("");
+        expect(
+          fake.log().filter((entry) => entry.method === "session/new"),
+        ).toMatchObject([{ mcpServers: [] }, { mcpServers: [] }]);
+        expect(existsSync(config)).toBe(false);
+
+        await save(w, { ...fake.config, label: "My Antigravity" });
+        const customized = await antigravity();
+        expect(customized).toMatchObject([{ label: "My Antigravity" }]);
+        expect(customized[0]?.discovered).toBeUndefined();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it("is saved, listed as a runtime, and answers an agent's conversation", async () => {
     const w = await host();
     const fake = fakeAgent("fake");
@@ -242,9 +300,7 @@ describe("the acp target", () => {
     const { runtimes } = (await w.client.call("agents", "runtimes", {
       fresh: true,
     })) as { runtimes: AgentRuntimeInfo[] };
-    expect(runtimes.some((runtime) => runtime.id.startsWith("acp."))).toBe(
-      false,
-    );
+    expect(runtimes.map((runtime) => runtime.id)).not.toContain("acp.moved");
   });
 
   it("keeps an id an agent still runs on, and says which agent", async () => {

@@ -19,6 +19,14 @@ export interface AcpAgentConfig {
   env: Record<string, string>;
 }
 
+export const ANTIGRAVITY_ACP_AGENT: AcpAgentConfig = {
+  id: "antigravity",
+  label: "Antigravity",
+  command: "agy",
+  args: ["acp"],
+  env: {},
+};
+
 /** One agent in a machine's list: the configuration, and what that machine found when it looked. */
 export interface AcpAgentView extends AcpAgentConfig {
   runtime: `acp.${string}`;
