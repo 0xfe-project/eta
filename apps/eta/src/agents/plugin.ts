@@ -288,14 +288,6 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             },
           };
         }),
-
-        // There are no private chats any more: an agent is talked to in a group, Captain in its
-        // own conversation. A client from before asks anyway, and is told so.
-        wire.handle("agents", "direct", () => {
-          throw new Error(
-            "agents.direct is gone: talk to an agent in a group (conversations.create), and to Captain with captain.direct",
-          );
-        }),
       ];
       return () => {
         for (const off of offs.splice(0)) off();

@@ -57,9 +57,9 @@ describe("the conversations the TUI lists", () => {
     expect(listed.map((c) => c.id)).toEqual(["ada-alone"]);
   });
 
-  it("leave out Captain's private chat on a host from before it had a kind of its own", () => {
+  it("leave out Captain's own chat when a host lists it as the group of one it is", () => {
     const listed = conversationList(
-      state([row("old-captain", "direct", "cap"), row("web", "group", "ada")]),
+      state([row("old-captain", "group", "cap"), row("web", "group", "ada")]),
     );
     expect(listed.map((c) => c.id)).toEqual(["web"]);
   });

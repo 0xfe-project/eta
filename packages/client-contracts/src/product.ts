@@ -131,16 +131,18 @@ export interface ProjectView {
 
 /**
  * `group`, or `captain` for Captain's own conversation, which is not a row of `conversations.list`
- * and is reached through `captain.direct`. A host no longer sends `direct`: the private chats it
- * stood for are groups of one now. It stays in the type for the clients that still check for it.
+ * and is reached through `captain.direct`.
+ *
+ * A private chat is a group of one (`agentOnlyChat`), not a kind of its own: the table's CHECK has
+ * allowed only `group` and `captain` since migration 0061 rewrote every `direct` row.
  */
-export type ConversationKind = "group" | "captain" | "direct";
+export type ConversationKind = "group" | "captain";
 
 /**
  * Whether a conversation is one agent's own chat: a group whose only member is that agent.
  *
- * This is what "talk to this agent" means now that a private chat is a group of one — no host
- * sends `direct` any more. Three things are deliberately left to the caller:
+ * This is what "talk to this agent" means: a private chat is a group of one. Three things are
+ * deliberately left to the caller:
  *
  * - `archived`: an agent's own row hides a chat that is put away, the archive shows it. The
  *   predicate says what the conversation *is*, not whether it should be drawn here.
@@ -366,7 +368,6 @@ export const AGENT_ACTIONS = [
   "create",
   "update",
   "delete",
-  "direct",
   "runtimes",
   "runtimeAccount",
 ] as const;
@@ -500,8 +501,6 @@ export interface AgentArgs {
   update: { agentId: string; avatarSeed?: string } & Partial<AgentFields>;
   /** Clears it as steward, archives the chats it was alone in, and leaves its directory on disk. */
   delete: { agentId: string };
-  /** The private chat with the agent, made the first time and found every time after. */
-  direct: { agentId: string };
   /**
    * The external runtimes a machine has, with their models: the primary's, or `machineId`'s (which
    * has to be online to be asked). `fresh` asks the runtimes again.
@@ -521,7 +520,6 @@ export interface AgentResults {
     thinkingCleared?: ThinkingLevel | undefined;
   };
   delete: { agentId: string };
-  direct: { conversation: ConversationSummary };
   runtimes: { runtimes: AgentRuntimeInfo[] };
   runtimeAccount: { account: AgentRuntimeAccount };
 }

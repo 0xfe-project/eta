@@ -97,7 +97,7 @@ function sceneWire(scene: Scene): WireClient & {
   const info = {
     id: ID,
     projectId: "p1",
-    kind: "direct",
+    kind: "group",
     name: "Notes",
     readSeq: last,
     lastSeq: last,

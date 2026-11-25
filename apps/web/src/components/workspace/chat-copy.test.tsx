@@ -93,10 +93,9 @@ afterEach(async () => {
   useOutbox.setState({ drafts: {}, outgoing: [] });
 });
 
-function start(history: MessageView[], kind: "group" | "direct") {
+function start(history: MessageView[]) {
   const summary = conversationView({
     id: CONV,
-    kind,
     name: "官网改版",
     participants: [memberView(AGENT, { sessionId: "s1" })],
     lastSeq: n,
@@ -115,19 +114,16 @@ const footerButton = (message: Element | null | undefined) =>
 describe("the copy button beside a message's time", () => {
   it("is under your own message, after the time, and copies what you wrote as written", async () => {
     const text = "@Ada 把 **OG 图**换成新的\n\nSafari 下也测一下";
-    const { container } = await start(
-      [
-        row({
-          text,
-          data: {
-            attachments: [
-              { id: "f1", name: "og.png", contentType: "image/png", size: 10 },
-            ],
-          },
-        }),
-      ],
-      "direct",
-    );
+    const { container } = await start([
+      row({
+        text,
+        data: {
+          attachments: [
+            { id: "f1", name: "og.png", contentType: "image/png", size: 10 },
+          ],
+        },
+      }),
+    ]);
     await flush();
     const user = container.querySelector(".message.user");
     const footer = user?.querySelector(":scope > .message-footer");
@@ -146,18 +142,15 @@ describe("the copy button beside a message's time", () => {
 
   it("still copies a reply's Markdown, after its time", async () => {
     const user = row({ text: "问题" });
-    const { container } = await start(
-      [
-        user,
-        row({
-          author: "agent",
-          agentId: AGENT,
-          replyToId: user.id,
-          text: "已换成 **1200×630** 的新图",
-        }),
-      ],
-      "direct",
-    );
+    const { container } = await start([
+      user,
+      row({
+        author: "agent",
+        agentId: AGENT,
+        replyToId: user.id,
+        text: "已换成 **1200×630** 的新图",
+      }),
+    ]);
     await flush();
     const reply = container.querySelector(".message.assistant");
     const footer = reply?.querySelector(":scope > .message-footer");
@@ -171,30 +164,27 @@ describe("the copy button beside a message's time", () => {
 
   it("is on a group reply whose process is folded into a box", async () => {
     const user = row({ text: "问题" });
-    const { container } = await start(
-      [
-        user,
-        row({
-          author: "agent",
-          agentId: AGENT,
-          replyToId: user.id,
-          thinking: "先看 OG 图从哪里来。",
-          text: "换好了",
-          data: {
-            activity: [
-              {
-                id: "t1",
-                name: "bash",
-                input: { command: "ls" },
-                output: "",
-                status: "completed",
-              },
-            ],
-          },
-        }),
-      ],
-      "group",
-    );
+    const { container } = await start([
+      user,
+      row({
+        author: "agent",
+        agentId: AGENT,
+        replyToId: user.id,
+        thinking: "先看 OG 图从哪里来。",
+        text: "换好了",
+        data: {
+          activity: [
+            {
+              id: "t1",
+              name: "bash",
+              input: { command: "ls" },
+              output: "",
+              status: "completed",
+            },
+          ],
+        },
+      }),
+    ]);
     await flush();
     const reply = container.querySelector(".message.assistant");
     expect(reply?.querySelector(".process-fold")).not.toBeNull();
@@ -206,7 +196,7 @@ describe("the copy button beside a message's time", () => {
   });
 
   it("copies a Captain review as the platform wrote it, from the card's header", async () => {
-    const { container } = await start([review()], "group");
+    const { container } = await start([review()]);
     await flush();
     const card = container.querySelector(".captain-review");
     const button = card!.querySelector(":scope > header .message-copy-btn")!;
@@ -219,7 +209,7 @@ describe("the copy button beside a message's time", () => {
   });
 
   it("is on every message exactly once, and on no system row", async () => {
-    const { container } = await start(transcript(), "group");
+    const { container } = await start(transcript());
     await flush();
     const messages = [
       ...container.querySelectorAll(".message, .captain-review"),
@@ -251,7 +241,7 @@ describe("the copy button beside a message's time", () => {
         },
       ],
     });
-    const { container } = await start([], "direct");
+    const { container } = await start([]);
     await flush();
     const sending = container.querySelector(".message.user");
     expect(sending?.textContent).toContain("还在路上的一句");
@@ -271,7 +261,7 @@ describe("when the copy button shows, as a browser draws it", () => {
   afterAll(closeBrowser);
 
   const rendered = async () => {
-    const { container } = await start(transcript(), "group");
+    const { container } = await start(transcript());
     await flush();
     return container.innerHTML;
   };

@@ -820,8 +820,6 @@ class Conversation {
   targets(mentions: string[]): string[] {
     if (mentions.length > 0) return mentions;
     const summary = this.summary();
-    if (summary?.kind === "direct")
-      return summary.participants.map((member) => member.agentId);
     if (summary?.stewardId !== null && summary?.stewardId !== undefined)
       return [summary.stewardId];
     const members = summary?.participants ?? [];

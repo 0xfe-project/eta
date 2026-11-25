@@ -101,7 +101,7 @@ function items(input: Partial<ItemsInput>): TranscriptItem[] {
     rows: [],
     members: [],
     agents: [ADA, BEN],
-    kind: "direct",
+    kind: "group",
     sessions: new Map(),
     locale: "en",
     ...input,
@@ -337,7 +337,11 @@ describe("a finished reply", () => {
   it("in a group starts with its author's name; an unknown agent is its id's first six characters", () => {
     const a = reply({ text: "one" });
     const b = reply({ text: "two", agentId: "zz9876543210" });
-    const out = items({ rows: [a, b], kind: "group" });
+    const out = items({
+      rows: [a, b],
+      kind: "group",
+      members: [member(), member({ agentId: BEN.id })],
+    });
     expect(out.map((item) => item.kind)).toEqual([
       "author",
       "text",
@@ -349,7 +353,7 @@ describe("a finished reply", () => {
       key: `${a.id}:author`,
       name: "Ada",
       agentId: ADA.id,
-      members: [],
+      members: [ADA.id, BEN.id],
     });
     expect(out[2]).toMatchObject({ name: "zz9876", agentId: "zz9876543210" });
   });
@@ -373,7 +377,11 @@ describe("a finished reply", () => {
   it("in a group names the agent its author is, and no agent as an empty id", () => {
     const fromBen = reply({ text: "one", agentId: BEN.id });
     const fromNobody = reply({ text: "two", agentId: null });
-    const out = items({ rows: [fromBen, fromNobody], kind: "group" });
+    const out = items({
+      rows: [fromBen, fromNobody],
+      kind: "group",
+      members: [member(), member({ agentId: BEN.id })],
+    });
     expect(out[0]).toMatchObject({ kind: "author", agentId: BEN.id });
     expect(out[2]).toMatchObject({ kind: "author", agentId: "" });
   });
@@ -710,7 +718,7 @@ describe("a running reply with its session in hand", () => {
     const out = items({
       rows: [working],
       kind: "group",
-      members: [member()],
+      members: [member(), member({ agentId: BEN.id, sessionId: "s-ben" })],
       sessions: new Map([
         [
           "s-ada",
@@ -740,7 +748,10 @@ describe("a running reply with its session in hand", () => {
         ],
       ]),
     });
-    expect(out).toMatchObject([{ kind: "text", text: "ben" }]);
+    expect(out).toMatchObject([
+      { kind: "author", agentId: BEN.id },
+      { kind: "text", text: "ben" },
+    ]);
   });
 });
 
@@ -1014,7 +1025,8 @@ describe("keys", () => {
         ["s-ben", live({ streamed: same })],
       ]),
     });
-    expect(out).toHaveLength(2);
-    expect(out[0]!.key).not.toBe(out[1]!.key);
+    const blocks = out.filter((item) => item.kind === "text");
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]!.key).not.toBe(blocks[1]!.key);
   });
 });

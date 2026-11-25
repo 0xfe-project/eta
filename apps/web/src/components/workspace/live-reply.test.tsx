@@ -17,6 +17,11 @@ import { cleanup, flush, mount } from "@/test-render";
 // compare the elements themselves. Streamed text comes in plain, with no animation on it.
 
 const AGENT = "a1";
+/** A group reduced to one member in a project, and the agent's own chat in its home project. */
+const SHAPES = [
+  { kind: "group", what: "a group" },
+  { kind: "own", what: "an agent's own chat" },
+] as const;
 let conversations = 0;
 
 /** The paragraph saying `text`, which comes in without an animation. */
@@ -51,7 +56,7 @@ const asked = entry(1, { role: "user", content: "查一下", timestamp: 1 });
 
 /** A chat whose reply is at work, its session holding `rows`, and the ways the session moves. */
 async function opened(
-  kind: "group" | "direct",
+  kind: "group" | "own",
   rows: ViewMessageRow[],
   data: Record<string, unknown> = {},
 ) {
@@ -78,7 +83,7 @@ async function opened(
     conversations: [
       conversationView({
         id: conversation,
-        kind,
+        projectId: kind === "group" ? "p1" : `home-${AGENT}`,
         name: "研究员",
         participants: [memberView(AGENT, { sessionId: "s1" })],
         lastSeq: 2,
@@ -123,94 +128,91 @@ afterEach(async () => {
   setWire(undefined);
 });
 
-describe.each(["group", "direct"] as const)(
-  "a reply that is writing, in a %s",
-  (kind) => {
-    it("keeps the elements of the words it has shown, across the turns of a run", async () => {
-      const { container, stream, commit } = await opened(kind, [asked]);
-      const call = {
-        type: "toolCall",
-        id: "t1",
-        name: "bash",
-        arguments: { command: "ls" },
-      };
+describe.each(SHAPES)("a reply that is writing, in $what", ({ kind }) => {
+  it("keeps the elements of the words it has shown, across the turns of a run", async () => {
+    const { container, stream, commit } = await opened(kind, [asked]);
+    const call = {
+      type: "toolCall",
+      id: "t1",
+      name: "bash",
+      arguments: { command: "ls" },
+    };
 
-      await stream(said(10, [{ type: "text", text: "我先" }]));
-      const shown = paragraph(container, "我先");
-      await stream(said(10, [{ type: "text", text: "我先看看" }]));
-      expect(paragraph(container, "我先看看")).toBe(shown);
+    await stream(said(10, [{ type: "text", text: "我先" }]));
+    const shown = paragraph(container, "我先");
+    await stream(said(10, [{ type: "text", text: "我先看看" }]));
+    expect(paragraph(container, "我先看看")).toBe(shown);
 
-      // A call follows the words: they stay where they are, in the process box, as the step
-      // before it.
-      const first = said(10, [{ type: "text", text: "我先看看" }, call]);
-      await stream(first);
-      const step = paragraph(container, "我先看看");
-      expect(step).toBe(shown);
-      expect(processBox(container)?.contains(step)).toBe(true);
-      // The message lands in the transcript, and the tool it called runs and answers.
-      await commit([entry(2, first)]);
-      expect(paragraph(container, "我先看看")).toBe(step);
-      await commit([
-        entry(2, first),
-        entry(3, {
-          role: "toolResult",
-          toolCallId: "t1",
-          toolName: "bash",
-          content: [{ type: "text", text: "a" }],
-          isError: false,
-          timestamp: 11,
-        }),
-      ]);
-      expect(paragraph(container, "我先看看")).toBe(step);
+    // A call follows the words: they stay where they are, in the process box, as the step
+    // before it.
+    const first = said(10, [{ type: "text", text: "我先看看" }, call]);
+    await stream(first);
+    const step = paragraph(container, "我先看看");
+    expect(step).toBe(shown);
+    expect(processBox(container)?.contains(step)).toBe(true);
+    // The message lands in the transcript, and the tool it called runs and answers.
+    await commit([entry(2, first)]);
+    expect(paragraph(container, "我先看看")).toBe(step);
+    await commit([
+      entry(2, first),
+      entry(3, {
+        role: "toolResult",
+        toolCallId: "t1",
+        toolName: "bash",
+        content: [{ type: "text", text: "a" }],
+        isError: false,
+        timestamp: 11,
+      }),
+    ]);
+    expect(paragraph(container, "我先看看")).toBe(step);
 
-      // The next turn's words are a block of their own, in the box after the call, however long
-      // no call follows them: the run is not over.
-      await stream(said(20, [{ type: "text", text: "看完了" }]));
-      const next = paragraph(container, "看完了");
-      await flush(1600);
-      expect(paragraph(container, "看完了")).toBe(next);
-      expect(processBox(container)?.contains(next)).toBe(true);
-      expect(paragraph(container, "我先看看")).toBe(step);
-      expect(processFold(container)).toBeNull();
-    });
+    // The next turn's words are a block of their own, in the box after the call, however long
+    // no call follows them: the run is not over.
+    await stream(said(20, [{ type: "text", text: "看完了" }]));
+    const next = paragraph(container, "看完了");
+    await flush(1600);
+    expect(paragraph(container, "看完了")).toBe(next);
+    expect(processBox(container)?.contains(next)).toBe(true);
+    expect(paragraph(container, "我先看看")).toBe(step);
+    expect(processFold(container)).toBeNull();
+  });
 
-    // The row goes to work before the view has the message that started the run: for a moment the
-    // newest things the session holds are the last run's, and drawn here they would show twice.
-    it("draws nothing of the last reply before this one's first block", async () => {
-      const lastAnswer = said(5, [{ type: "text", text: "上一轮的回答" }]);
-      const { stream, commit, replyRow } = await opened(
-        kind,
-        [asked, entry(2, lastAnswer)],
-        { runFrom: 2 },
-      );
-      const reply = replyRow();
-      expect(reply.textContent).not.toContain("上一轮的回答");
-      expect(reply.querySelector('[role="status"]')).not.toBeNull();
+  // The row goes to work before the view has the message that started the run: for a moment the
+  // newest things the session holds are the last run's, and drawn here they would show twice.
+  it("draws nothing of the last reply before this one's first block", async () => {
+    const lastAnswer = said(5, [{ type: "text", text: "上一轮的回答" }]);
+    const { stream, commit, replyRow } = await opened(
+      kind,
+      [asked, entry(2, lastAnswer)],
+      { runFrom: 2 },
+    );
+    const reply = replyRow();
+    expect(reply.textContent).not.toContain("上一轮的回答");
+    expect(reply.querySelector('[role="status"]')).not.toBeNull();
 
-      const next = entry(3, { role: "user", content: "再查", timestamp: 6 });
-      await commit([next]);
-      expect(reply.textContent).not.toContain("上一轮的回答");
-      expect(reply.querySelector('[role="status"]')).not.toBeNull();
+    const next = entry(3, { role: "user", content: "再查", timestamp: 6 });
+    await commit([next]);
+    expect(reply.textContent).not.toContain("上一轮的回答");
+    expect(reply.querySelector('[role="status"]')).not.toBeNull();
 
-      const answer = said(10, [{ type: "text", text: "这一轮的回答" }]);
-      await stream(answer);
-      expect(reply.textContent).not.toContain("上一轮的回答");
-      expect(reply.textContent).toContain("这一轮的回答");
-      expect(reply.querySelector('[role="status"]')).toBeNull();
-    });
+    const answer = said(10, [{ type: "text", text: "这一轮的回答" }]);
+    await stream(answer);
+    expect(reply.textContent).not.toContain("上一轮的回答");
+    expect(reply.textContent).toContain("这一轮的回答");
+    expect(reply.querySelector('[role="status"]')).toBeNull();
+  });
 
-    // A runtime's stream can reach the page before the transcript's next push does.
-    it("draws only this reply when its stream overtakes the transcript", async () => {
-      const lastAnswer = said(5, [{ type: "text", text: "上一轮的回答" }]);
-      const { stream, replyRow } = await opened(
-        kind,
-        [asked, entry(2, lastAnswer)],
-        { runFrom: 2 },
-      );
-      await stream(said(10, [{ type: "text", text: "这一轮的回答" }]));
-      const reply = replyRow();
-      expect(reply.textContent).toContain("这一轮的回答");
-      expect(reply.textContent).not.toContain("上一轮的回答");
-    });
-  },
-);
+  // A runtime's stream can reach the page before the transcript's next push does.
+  it("draws only this reply when its stream overtakes the transcript", async () => {
+    const lastAnswer = said(5, [{ type: "text", text: "上一轮的回答" }]);
+    const { stream, replyRow } = await opened(
+      kind,
+      [asked, entry(2, lastAnswer)],
+      { runFrom: 2 },
+    );
+    await stream(said(10, [{ type: "text", text: "这一轮的回答" }]));
+    const reply = replyRow();
+    expect(reply.textContent).toContain("这一轮的回答");
+    expect(reply.textContent).not.toContain("上一轮的回答");
+  });
+});

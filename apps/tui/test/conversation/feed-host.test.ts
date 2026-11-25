@@ -201,13 +201,8 @@ describe("the feed on a real host", () => {
       streaming: false,
     });
     expect(state.info?.kind).toBe("group");
-    expect(items).toContainEqual({
-      kind: "author",
-      key: `${reply}:author`,
-      name: "Ada",
-      agentId: world.ada.id,
-      members: [world.ada.id],
-    });
+    // Ada is alone in it: her own chat, where the name would repeat the screen's title.
+    expect(items.map((item) => item.kind)).not.toContain("author");
     expect(kinds.indexOf("user")).toBeLessThan(kinds.indexOf("text"));
   });
 

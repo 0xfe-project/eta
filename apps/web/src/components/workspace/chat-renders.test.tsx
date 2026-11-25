@@ -53,12 +53,9 @@ const TURNS = 50;
 let CONV = "";
 let conversations = 0;
 let n = 0;
-// A group and a direct conversation draw a reply's process the same way, and the cards the turn
-// leaves beside its answer too.
-let kind: "group" | "direct" = "group";
+// The cards a turn leaves beside its answer are drawn beside it, in the layer its process is not.
 const fresh = () => {
   n = 0;
-  kind = "group";
   conversations += 1;
   CONV = `chat-renders-${conversations}`;
 };
@@ -87,7 +84,6 @@ function start(
 ) {
   summary = conversationView({
     id: CONV,
-    kind,
     name: "研究员",
     participants: members,
     lastSeq: n,
@@ -882,42 +878,6 @@ describe("a reply that is writing", () => {
     expect(settled.textContent).toBe("artifact:报告 #2");
     expect(rowOf(container, reply)?.contains(settled)).toBe(true);
     expect(settled.closest("details")).toBeNull();
-  });
-
-  // A direct conversation folds its process the same way: the card is in the same layer there.
-  it("draws a publish's card in that same layer in a direct conversation", async () => {
-    kind = "direct";
-    const user = row({ text: "发布一个页面" });
-    const reply = row({
-      author: "agent",
-      agentId: AGENT,
-      replyToId: user.id,
-      status: "done",
-      text: "发布好了",
-      data: {
-        activity: [
-          {
-            id: "t2",
-            name: "publish_artifact",
-            input: { title: "报告" },
-            status: "completed",
-            details: { artifactId: "art-1", title: "报告", version: 2 },
-          },
-        ],
-      },
-    });
-    history = [user, reply];
-    const { container } = await start();
-    await flush();
-    const fold = processFold(container);
-    expect(fold).not.toBeNull();
-    const card = container.querySelector('[data-testid="ref"]')!;
-    expect(card.textContent).toBe("artifact:报告 #2");
-    expect(rowOf(container, reply)?.contains(card)).toBe(true);
-    // Not under the tool line it came from, which stays where the process is drawn.
-    expect(fold!.contains(card)).toBe(false);
-    expect(card.closest("details")).toBeNull();
-    expect(container.textContent).toContain("publish_artifact");
   });
 
   it("shows the files a message came with under its words", async () => {

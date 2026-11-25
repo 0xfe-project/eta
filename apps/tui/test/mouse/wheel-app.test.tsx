@@ -99,7 +99,7 @@ function conversationWire(count: number, hasMore = false) {
   const info = {
     id: ID,
     projectId: "p1",
-    kind: "direct",
+    kind: "group",
     name: "Notes",
     readSeq: count,
     lastSeq: count,

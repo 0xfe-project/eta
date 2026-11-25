@@ -292,14 +292,6 @@ describe("editing the model while a session is running", () => {
 });
 
 describe("an agent alone in a group", () => {
-  it("is no private chat: agents.direct says it is gone", async () => {
-    const w = await world();
-    const agent = await w.agent("Ada");
-    await expect(
-      w.client.call("agents", "direct", { agentId: agent.id }),
-    ).rejects.toThrow(/agents\.direct is gone/);
-  });
-
   it("answers: queued, then working, then done with the model's words", async () => {
     const turn = Promise.withResolvers<void>();
     const { models } = scriptedModels(async () => {

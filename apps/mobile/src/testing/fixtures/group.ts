@@ -275,8 +275,6 @@ function installConversationOps(host: FakeHost): void {
 
   host.on("conversations.invite", ({ conversationId, agentId }) => {
     const row = existing(host, conversationId);
-    if (row.kind === "direct")
-      throw new Error("a private chat is the agent and the user");
     const participants = row.participants.some(
       (member) => member.agentId === agentId,
     )
@@ -290,8 +288,6 @@ function installConversationOps(host: FakeHost): void {
 
   host.on("conversations.remove", ({ conversationId, agentId }) => {
     const row = existing(host, conversationId);
-    if (row.kind === "direct")
-      throw new Error("a private chat is the agent and the user");
     const participants = row.participants.filter(
       (member) => member.agentId !== agentId,
     );
@@ -309,8 +305,6 @@ function installConversationOps(host: FakeHost): void {
 
   host.on("conversations.setSteward", ({ conversationId, agentId }) => {
     const row = existing(host, conversationId);
-    if (row.kind === "direct")
-      throw new Error("a private chat's steward is its agent");
     if (
       agentId !== null &&
       !row.participants.some((member) => member.agentId === agentId)
