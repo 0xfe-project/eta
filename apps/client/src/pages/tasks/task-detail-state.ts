@@ -8,9 +8,12 @@ import type {
   TaskRunView,
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { signal } from "nsh";
+import { effect, signal } from "nsh";
+import { createOptimisticStatus } from "../../components/optimistic-status";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
+import { problemText } from "../../services/problem-text";
 import { isActiveRunStatus } from "./run-log";
 
 export type TaskDetailState = ReturnType<typeof createTaskDetailState>;
@@ -21,11 +24,49 @@ export function createTaskDetailState(props: {
   docked?: boolean;
 }) {
   const host = useHost();
+  const retryTick = signal(0);
   const target = () => `tasks.${props.id}`;
-  follow(target);
+  follow(() => {
+    retryTick();
+    return target();
+  });
   const task = () => host.section<BoardTaskDetail>(target(), "task");
-  const activity = () => host.list<TaskActivityView>(target(), "activity");
+  const missing = () => Boolean(host.state().missing[target()]);
+  const retryTask = () => {
+    retryTick.update((count) => count + 1);
+    host.reconnect();
+  };
+  const load = useLoadState({
+    targets: () => [target()],
+    ready: () => task() !== undefined,
+  });
+  const listed = () =>
+    host.tasks().some((item) => item.id === props.id) ||
+    host
+      .list<{ id: string }>("tasks", "archived")
+      .some((item) => item.id === props.id);
+  // Seen on the board once: one just made, not listed yet, is not taken for deleted.
+  const seen = signal(false);
+  effect(() => {
+    if (listed()) seen.set(true);
+  });
+  /** Deleted, here or elsewhere (the board had it and has it no more), or not on this host. */
+  const gone = () =>
+    (seen() && !!host.state().targets.tasks && !listed()) ||
+    load.failure() === "missing";
+  const pendingComments = signal<TaskActivityView[]>([]);
+  const activity = () => {
+    const hostItems = host.list<TaskActivityView>(target(), "activity");
+    const pending = pendingComments();
+    if (!pending.length) return hostItems;
+    return [...hostItems, ...pending];
+  };
   const posting = signal(false);
+  const commentStatus = createOptimisticStatus();
+  const editStatus = createOptimisticStatus();
+  const statusStatus = createOptimisticStatus();
+  let lastEditAction: (() => void) | undefined;
+  let lastStatusTarget: BoardTaskStatus | undefined;
   const archive = signal(false);
   const editing = signal(false);
   const panel = signal(false);
@@ -86,7 +127,7 @@ export function createTaskDetailState(props: {
   const side = () => props.layout === "desktop" && !props.docked;
   /** The last comment tried, with its id: a retry of the same words is the same comment. */
   let attempt: { key: string; id: string } | undefined;
-  /** Posts a comment (words, files, or both); whether the host took it (the box empties then). */
+  /** Posts a comment optimistically (reusing idempotent `clientId` on retry); preserves input on failure. */
   async function post(
     text: string,
     mentions: string[] = [],
@@ -95,23 +136,48 @@ export function createTaskDetailState(props: {
     const body = text.trim();
     if ((!body && !attachments.length) || posting()) return false;
     posting.set(true);
+    commentStatus.saving();
     // The same words with the same files: a retry of the same comment.
     const key = JSON.stringify([body, attachments.map((file) => file.id)]);
     if (attempt?.key !== key) attempt = { key, id: crypto.randomUUID() };
-    const result = await host.action(() =>
-      host.call("tasks", "comment", {
+    const clientId = attempt.id;
+    const optimisticRow: TaskActivityView = {
+      id: `optimistic-${clientId}`,
+      kind: "comment",
+      actor: { kind: "user", agentId: null },
+      body,
+      runId: null,
+      data: attachments.length ? { attachments } : {},
+      createdAt: Date.now(),
+    };
+    pendingComments.update((all) => [
+      ...all.filter((entry) => entry.id !== optimisticRow.id),
+      optimisticRow,
+    ]);
+    try {
+      await host.call("tasks", "comment", {
         taskId: props.id,
         body,
-        clientId: attempt!.id,
+        clientId,
         mentions: mentions.length ? mentions : undefined,
         attachments: attachments.length
           ? attachments.map((file) => file.id)
           : undefined,
-      }),
-    );
-    posting.set(false);
-    if (result) attempt = undefined;
-    return !!result;
+      });
+      attempt = undefined;
+      commentStatus.saved();
+      return true;
+    } catch (problem) {
+      commentStatus.fail(
+        problem instanceof Error ? problem.message : String(problem),
+      );
+      return false;
+    } finally {
+      pendingComments.update((all) =>
+        all.filter((entry) => entry.id !== optimisticRow.id),
+      );
+      posting.set(false);
+    }
   }
   async function mutate(work: () => Promise<void>) {
     if (submitting()) return;
@@ -119,26 +185,62 @@ export function createTaskDetailState(props: {
     await host.action(work);
     submitting.set(false);
   }
-  /** Saves the title being edited in place; an empty or unchanged one is dropped. */
+  function applyTitle(title: string) {
+    lastEditAction = () => applyTitle(title);
+    editStatus.saving();
+    void host
+      .optimistic(props.id, { title }, () =>
+        host.call("tasks", "update", { taskId: props.id, title }),
+      )
+      .then(() => {
+        editStatus.saved();
+      })
+      .catch((problem: unknown) => {
+        editTitle.set(title);
+        editStatus.fail(
+          problem instanceof Error ? problem.message : String(problem),
+        );
+      });
+  }
+  /** Saves the title being edited in place optimistically; an empty or unchanged one is dropped. */
   function saveTitle() {
     const title = editTitle().trim();
     if (!renaming()) return;
     renaming.set(false);
     if (!title || title === task()?.title) return;
-    void mutate(async () => {
-      await host.call("tasks", "update", { taskId: props.id, title });
-    });
+    applyTitle(title);
   }
-  /** Saves `text` (the description editor's Markdown) as the task's description. */
+  function applyDescription(text: string) {
+    lastEditAction = () => applyDescription(text);
+    editStatus.saving();
+    void host
+      .optimistic(props.id, { description: text }, () =>
+        host.call("tasks", "update", {
+          taskId: props.id,
+          description: text,
+        }),
+      )
+      .then(() => {
+        editStatus.saved();
+      })
+      .catch((problem: unknown) => {
+        editDescription.set(text);
+        editStatus.fail(
+          problem instanceof Error ? problem.message : String(problem),
+        );
+      });
+  }
+  /** Saves `text` (the description editor's Markdown) optimistically; rolls back and preserves text on error. */
   function saveDescription(text: string) {
     editDescription.set(text);
-    void mutate(async () => {
-      await host.call("tasks", "update", {
-        taskId: props.id,
-        description: text,
-      });
-      describing.set(false);
-    });
+    describing.set(false);
+    applyDescription(text);
+  }
+  function retryEdit() {
+    lastEditAction?.();
+  }
+  function retryStatus() {
+    if (lastStatusTarget) change(lastStatusTarget);
   }
   /**
    * Changes the status ahead of the host (#380): every place that shows the task shows the new
@@ -153,7 +255,9 @@ export function createTaskDetailState(props: {
       status.set(false);
       return;
     }
+    lastStatusTarget = next;
     statusError.set("");
+    statusStatus.saving();
     changing.set(next);
     status.set(false);
     cancelling.set(false);
@@ -162,11 +266,14 @@ export function createTaskDetailState(props: {
       .optimistic(props.id, { status: next }, () =>
         host.call("tasks", "update", { taskId: props.id, status: next }),
       )
+      .then(() => {
+        statusStatus.saved();
+      })
       .catch((problem: unknown) => {
+        statusStatus.reset();
         statusError.set(
           uiText("statusChangeFailed", {
-            message:
-              problem instanceof Error ? problem.message : String(problem),
+            message: problemText(problem),
           }),
         );
       })
@@ -227,7 +334,16 @@ export function createTaskDetailState(props: {
     id: props.id,
     activity,
     task,
+    missing,
+    retryTask,
+    load,
+    gone,
     posting,
+    commentStatus,
+    editStatus,
+    retryEdit,
+    statusStatus,
+    retryStatus,
     archive,
     editing,
     panel,

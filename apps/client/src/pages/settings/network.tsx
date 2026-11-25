@@ -16,6 +16,7 @@ import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { SectionHeader } from "./section";
 
 /** Why an entry has no effect, in the reader's language. */
@@ -72,7 +73,7 @@ export function NetworkSettings(props: { phone?: boolean }) {
       problem.set(
         reason !== undefined && reason in entryProblem
           ? sentence(uiText(entryProblem[reason]))
-          : message,
+          : problemText(error),
       );
       return false;
     } finally {

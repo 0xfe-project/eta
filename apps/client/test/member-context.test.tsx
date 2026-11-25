@@ -1,4 +1,5 @@
 import { expect, open, test } from "nsh/test";
+import { lastObservedAt } from "../../../test/fixtures/member-context";
 
 const fixture = "./fixtures/member-context.tsx";
 const ada = "Context 50% · 64,000 / 128,000 tokens";
@@ -50,6 +51,7 @@ test("root readings change independently of billed tokens and of the other membe
     "100% · 128,000 / 128,000 tokens",
     "N/A · Awaiting a reading for the new model",
     "≈13% · 16,000 / 128,000 tokens",
+    `15% · 19,010 / 128,000 tokens · Last checked ${new Date(lastObservedAt).toLocaleString("en-US")}`,
   ]) {
     await app.press("label:Next reading");
     expect(app.shows(`label:Context ${detail}`)).toBe(true);

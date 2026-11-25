@@ -14,20 +14,24 @@ import {
   ActionMenu,
   Button,
   colors,
-  Empty,
-  emptyWidth,
   grow,
   Icon,
   Label,
   row,
   SmoothScroll,
 } from "../../components";
-import { control, icon, space, weight } from "../../components/tokens";
+import { EmptyState } from "../../components/empty-state";
+import {
+  createOptimisticStatus,
+  OptimisticStatus,
+} from "../../components/optimistic-status";
+import { control, icon, space } from "../../components/tokens";
 import { formatLocale, uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
 import { messageTime } from "../chat/message-time";
 import { TaskGlyph } from "../tasks/status";
-import { emptyStyle, EntityRow, SectionHeader } from "./section";
+import { EntityRow, SectionHeader } from "./section";
 
 /** The quiet-period menu beside its label. */
 const quietPeriodWidth = 160;
@@ -55,18 +59,73 @@ export function ArchiveSettings(props: { phone?: boolean }) {
     );
     saving.set(false);
   }
+  const restoredConversations = signal<string[]>([]);
+  const restoredTasks = signal<string[]>([]);
+  const restoreStatus = createOptimisticStatus();
+  let lastRestore: (() => void) | undefined;
   const conversations = () =>
-    host.conversations().filter((item) => item.archived);
-  const tasks = () => host.list<BoardTaskView>("tasks", "archived");
-  const restoreConversation = (id: string) =>
-    void host.action(() =>
-      host.call("conversations", "update", {
-        conversationId: id,
-        archived: false,
-      }),
+    host
+      .conversations()
+      .filter(
+        (item) => item.archived && !restoredConversations().includes(item.id),
+      );
+  const tasks = () =>
+    host
+      .list<BoardTaskView>("tasks", "archived")
+      .filter((item) => !restoredTasks().includes(item.id));
+  const tasksLoad = useLoadState({ targets: () => ["tasks"] });
+  const conversationsLoad = useLoadState({ targets: () => ["conversations"] });
+  const restoreConversation = (id: string) => {
+    lastRestore = () => restoreConversation(id);
+    restoredConversations.update((all) =>
+      all.includes(id) ? all : [...all, id],
     );
-  const restoreTask = (id: string) =>
-    void host.action(() => host.call("tasks", "unarchive", { taskId: id }));
+    restoreStatus.saving();
+    void host
+      .optimistic(id, { archived: false }, () =>
+        host.call("conversations", "update", {
+          conversationId: id,
+          archived: false,
+        }),
+      )
+      .then(() => {
+        restoreStatus.saved();
+        setTimeout(() => {
+          restoredConversations.update((all) =>
+            all.filter((item) => item !== id),
+          );
+        }, 1500);
+      })
+      .catch((problem: unknown) => {
+        restoredConversations.update((all) =>
+          all.filter((item) => item !== id),
+        );
+        restoreStatus.fail(
+          problem instanceof Error ? problem.message : String(problem),
+        );
+      });
+  };
+  const restoreTask = (id: string) => {
+    lastRestore = () => restoreTask(id);
+    restoredTasks.update((all) => (all.includes(id) ? all : [...all, id]));
+    restoreStatus.saving();
+    void host
+      .optimistic(id, { archivedAt: null }, () =>
+        host.call("tasks", "unarchive", { taskId: id }),
+      )
+      .then(() => {
+        restoreStatus.saved();
+        setTimeout(() => {
+          restoredTasks.update((all) => all.filter((item) => item !== id));
+        }, 1500);
+      })
+      .catch((problem: unknown) => {
+        restoredTasks.update((all) => all.filter((item) => item !== id));
+        restoreStatus.fail(
+          problem instanceof Error ? problem.message : String(problem),
+        );
+      });
+  };
   const quietPeriod = (style: ViewStyle) => (
     <ActionMenu
       label={uiText("autoArchiveQuietPeriod")}
@@ -135,6 +194,21 @@ export function ArchiveSettings(props: { phone?: boolean }) {
         </If>
       </If>
       <SmoothScroll style={grow} scrollbar={false}>
+        <If when={restoreStatus.state().status !== "idle"}>
+          <View
+            style={{
+              paddingHorizontal: space[16],
+              paddingVertical: space[4],
+              borderBottomWidth: 1,
+              borderColor: c().border,
+            }}
+          >
+            <OptimisticStatus
+              state={restoreStatus.state()}
+              onRetry={() => lastRestore?.()}
+            />
+          </View>
+        </If>
         <SectionHeader
           title={text("archived")}
           count={conversations().length || undefined}
@@ -143,18 +217,23 @@ export function ArchiveSettings(props: { phone?: boolean }) {
         <If
           when={conversations().length}
           else={
-            <View
+            <EmptyState
+              size="row"
+              status={conversationsLoad.shown()}
+              loading={uiText("loadingConversations")}
+              error={{
+                title: uiText("conversationsDidNotLoad"),
+                retry: conversationsLoad.retry,
+                retrying: conversationsLoad.retrying(),
+              }}
+              empty={{ title: uiText("archivedConversationsEmpty") }}
               style={{
                 paddingHorizontal: space[16],
                 paddingVertical: space[12],
                 borderBottomWidth: 1,
                 borderColor: c().border,
               }}
-            >
-              <Label variant="small" tone="muted">
-                {uiText("archivedConversationsEmpty")}
-              </Label>
-            </View>
+            />
           }
         >
           <Each
@@ -209,14 +288,21 @@ export function ArchiveSettings(props: { phone?: boolean }) {
         <If
           when={tasks().length}
           else={
-            <Empty
-              icon="archive"
-              iconSize={icon.lg}
-              title={uiText("archivedTasksEmpty")}
-              titleWeight={weight.regular}
-              description={uiText("archivedTasksEmptyHint")}
-              descriptionWidth={emptyWidth.narrow}
-              style={emptyStyle}
+            <EmptyState
+              size="card"
+              status={tasksLoad.shown()}
+              loading={uiText("loadingTasks")}
+              error={{
+                title: uiText("tasksDidNotLoad"),
+                retry: tasksLoad.retry,
+                retrying: tasksLoad.retrying(),
+              }}
+              empty={{
+                art: "archive",
+                title: uiText("archivedTasksEmpty"),
+                description: uiText("archivedTasksEmptyHint"),
+              }}
+              style={{ paddingHorizontal: space[16] }}
             />
           }
         >

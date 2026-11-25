@@ -7,6 +7,7 @@ import type {
 import { MODEL_SOURCES, modelSource } from "@eta/client-contracts";
 import { WireError } from "@eta/client-contracts/wire";
 import { uiText } from "../../../i18n";
+import { problemText } from "../../../services/problem-text";
 
 // What adding a model source is made of, apart from how it is drawn: the presets (the same list
 // and order as apps/web's add-source dialog), what a new source is called and which of its models
@@ -232,7 +233,7 @@ export function wireErrorText(error: unknown): string {
       });
     return error.message;
   }
-  return error instanceof Error ? error.message : String(error);
+  return problemText(error);
 }
 
 /** A listing's failure code (`discovery_http_404`, `discovery_network: …`) in the user's words. */

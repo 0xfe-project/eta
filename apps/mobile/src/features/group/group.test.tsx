@@ -1,4 +1,5 @@
 import { expect, open, test } from "nsh/test";
+import { lastObservedAt } from "../../../../../test/fixtures/member-context";
 
 const start = async (route: string, scenario = "") => {
   const app = await open("../../../DevApp.tsx", {
@@ -262,6 +263,10 @@ for (const [scenario, detail] of [
   ["full", "100% · 128,000 / 128,000 tokens"],
   ["switched", "N/A · 等待新模型的读数"],
   ["estimated", "约 13% · 16,000 / 128,000 tokens"],
+  [
+    "lastObserved",
+    `15% · 19,010 / 128,000 tokens · 上次查询 ${new Date(lastObservedAt).toLocaleString("zh-CN")}`,
+  ],
 ] as const) {
   test(`member context replay: ${scenario}`, async () => {
     const app = await start("group:wire", `context-${scenario}`);

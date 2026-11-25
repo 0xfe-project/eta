@@ -1,10 +1,10 @@
 import type { JSX, ViewStyle } from "nsh";
-import type { IconName } from "./icons";
-import type { light, TextVariant } from "./theme";
+import type { IconName } from "../components/icons";
+import type { light, TextVariant } from "../components/theme";
 import { View } from "nsh";
+import { grow } from "../components/theme";
+import { icon, space, weight } from "../components/tokens";
 import { Icon, Label } from "./text";
-import { grow } from "./theme";
-import { icon, space, weight } from "./tokens";
 
 /**
  * The design's empty and error state: an icon, a `body` title and a `small`

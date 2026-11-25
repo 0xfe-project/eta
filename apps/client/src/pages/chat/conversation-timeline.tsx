@@ -11,24 +11,20 @@ import { onWindows } from "../../app/platform";
 import {
   Button,
   colors,
-  Empty,
   focusRing,
   grow,
   Label,
   MessagesSkeleton,
+  row,
 } from "../../components";
-import { settled } from "../../components/pending";
+import { EmptyState } from "../../components/empty-state";
+import { settled, shownWhile } from "../../components/pending";
 import { wheelScroll } from "../../components/scroll-follow";
-import {
-  control,
-  icon,
-  opacity,
-  shadow,
-  space,
-  weight,
-} from "../../components/tokens";
+import { Spinner } from "../../components/spinner";
+import { control, icon, opacity, shadow, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
 import { Message } from "./message";
 import { questionRowIndex } from "./question-row";
 import { isSystemNotice, SystemNotice } from "./system-notice";
@@ -52,6 +48,8 @@ export function ConversationTimeline(props: {
   sendingId?: string;
   recipients: Map<string, string[]>;
   members: MemberView[];
+  /** The conversation's target (`conversations.<id>`), whose state the timeline waits for. */
+  target: string;
   loaded: boolean;
   noCachedMessages: boolean;
   hasMessages: boolean;
@@ -78,10 +76,16 @@ export function ConversationTimeline(props: {
   onVisibleRows?: (ids: ReadonlySet<string>) => void;
   /** Quote what the reader selected in a reply into the composer. */
   onQuote: (conversationId: string, text: string) => void;
+  /** Re-send the prompt that triggered a completed or failed reply. */
+  onRetryReply?: (reply: MessageView) => void;
   /** A mention's press in a message: its member, by agent id. */
   onMember?: (agentId: string) => void;
 }) {
   const host = useHost();
+  const load = useLoadState({
+    targets: () => [props.target],
+    ready: () => props.loaded,
+  });
   const c = colors();
   let transcriptList: ListRef | undefined;
   const firstVisibleId = signal<string>();
@@ -223,40 +227,51 @@ export function ConversationTimeline(props: {
   }
   // The skeleton, once it appeared, stays its least time before the messages (#380).
   const loaded = settled(() => props.loaded);
+  const pagingShown = shownWhile(() => props.paging);
   return (
     <If
       when={loaded() && !props.noCachedMessages}
       else={
-        <If
-          when={props.noCachedMessages}
-          else={
+        <EmptyState
+          size="page"
+          status={props.noCachedMessages ? "error" : load.shown()}
+          loading={
             <MessagesSkeleton
               label={uiText("loadingConversation")}
               style={{ ...grow, overflow: "hidden" }}
             />
           }
-        >
-          <Empty
-            title={uiText("lostTheConnectionToTheHost")}
-            description={uiText("agentsKeepRunningOnTheHost")}
-            icon="linkBreak"
-            iconSize={icon.xl}
-            iconTone="ink"
-            titleWeight={weight.strong}
-          >
-            <Button
-              label={uiText("retry")}
-              icon="refresh"
-              size={control.lg}
-              style={{
-                marginTop: space[8],
-                paddingHorizontal: space[12],
-                gap: space[4],
-              }}
-              onPress={host.reconnect}
-            />
-          </Empty>
-        </If>
+          error={
+            !props.noCachedMessages && load.failure() === "missing"
+              ? {
+                  tone: "quiet",
+                  title: uiText("conversationCannotOpen"),
+                  description: uiText("conversationCannotOpenHint"),
+                  actions: [
+                    {
+                      label: uiText("back"),
+                      icon: "arrowLeft",
+                      onPress: props.onAccessLost,
+                    },
+                  ],
+                }
+              : props.noCachedMessages || load.failure() === "offline"
+                ? {
+                    art: "offline",
+                    title: uiText("lostTheConnectionToTheHost"),
+                    description: uiText("agentsKeepRunningOnTheHost"),
+                    retry: load.retry,
+                    retrying: load.retrying(),
+                  }
+                : {
+                    title: uiText("conversationDidNotLoad"),
+                    description: load.why(),
+                    retry: load.retry,
+                    retrying: load.retrying(),
+                  }
+          }
+          empty={{ title: uiText("noMessagesYet") }}
+        />
       }
     >
       <View
@@ -305,18 +320,22 @@ export function ConversationTimeline(props: {
                 <View
                   role="button"
                   accessibilityLabel={uiText("loadEarlierMessages")}
-                  accessibilityState={{ disabled: props.paging }}
+                  accessibilityState={{ busy: props.paging }}
                   onPress={() => {
                     if (!props.paging) props.onPageOlder();
                   }}
                   hoverStyle={{ opacity: opacity.muted }}
                   focusVisibleStyle={focusRing(c())}
                   style={{
+                    ...row,
+                    gap: space[8],
                     paddingVertical: space[4],
-                    opacity: props.paging ? opacity.disabled : 1,
                     cursor: props.paging ? "default" : "pointer",
                   }}
                 >
+                  <If when={pagingShown()}>
+                    <Spinner size={icon.sm} tone="muted" />
+                  </If>
                   <Label variant="small" tone="muted">
                     {uiText("loadEarlierMessages")}
                   </Label>
@@ -325,9 +344,25 @@ export function ConversationTimeline(props: {
             </If>
           )}
           empty={() => (
-            <Label tone="muted" style={{ padding: space[16] }}>
-              {uiText("noMessagesYet")}
-            </Label>
+            <EmptyState
+              size="page"
+              status="empty"
+              loading={null}
+              error={null}
+              empty={
+                props.captain
+                  ? {
+                      art: "captain",
+                      title: uiText("noCaptainMessagesYet"),
+                      description: uiText("noCaptainMessagesYetHint"),
+                    }
+                  : {
+                      art: "chats",
+                      title: uiText("noMessagesYet"),
+                      description: uiText("noMessagesYetHint"),
+                    }
+              }
+            />
           )}
         >
           {(message) => {
@@ -363,6 +398,11 @@ export function ConversationTimeline(props: {
                   }
                   onSelectionChange={(event, reply) =>
                     select(message(), event, reply)
+                  }
+                  onRetry={
+                    props.onRetryReply
+                      ? () => props.onRetryReply?.(message())
+                      : undefined
                   }
                   onMember={props.onMember}
                 />

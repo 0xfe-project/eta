@@ -16,6 +16,7 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { hint } from "../../components/controls";
+import { EmptyState } from "../../components/empty-state";
 import { StatusDot } from "../../components/status-dot";
 import { avatar, icon, sizes, space } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
@@ -69,6 +70,26 @@ export function ConversationMembers(props: {
           />
         </If>
       </View>
+      <If when={!props.members.length}>
+        <EmptyState
+          size="row"
+          status="empty"
+          loading={null}
+          error={null}
+          empty={{
+            title: uiText("noMembersYet"),
+            actions:
+              props.group && !props.info?.archived
+                ? [{ label: uiText("invite2"), onPress: props.onInvite }]
+                : undefined,
+          }}
+          style={{
+            paddingHorizontal: space[12],
+            borderBottomWidth: 1,
+            borderColor: c().border,
+          }}
+        />
+      </If>
       <Each of={props.members} key={(entry) => entry.agentId}>
         {(entry) => (
           <View style={{ borderBottomWidth: 1, borderColor: c().border }}>

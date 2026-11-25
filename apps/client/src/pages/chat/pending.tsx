@@ -10,7 +10,6 @@ import { signal, View } from "nsh";
 import {
   Caption,
   colors,
-  Empty,
   grow,
   Header,
   Icon,
@@ -21,12 +20,15 @@ import {
   SmoothScroll,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { EmptyState } from "../../components/empty-state";
+import { ListSkeleton } from "../../components/loading-skeleton";
 import { CloseButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
 import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
 import { follow, relativeTime, useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
 import { TaskGlyph, taskNeedsAttention } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
 import { SectionHeading } from "./section-heading";
@@ -106,6 +108,29 @@ export function Pending(props: {
   const proposalId = signal("");
   const phone = () => props.layout === "phone";
   follow(() => "routines");
+  const load = useLoadState({ targets: () => ["inbox", "tasks"] });
+  /** Nothing waits for the user: or not yet known, or it did not load. */
+  function Nothing(nothing: { width?: "narrow" | "wide" }) {
+    return (
+      <EmptyState
+        size="page"
+        width={nothing.width}
+        status={load.shown()}
+        loading={<ListSkeleton label={uiText("loadingPending")} />}
+        error={{
+          title: uiText("pendingDidNotLoad"),
+          description: load.why(),
+          retry: load.retry,
+          retrying: load.retrying(),
+        }}
+        empty={{
+          art: "done",
+          title: uiText("nothingIsWaitingForYou"),
+          description: uiText("nothingIsWaitingForYouDescription"),
+        }}
+      />
+    );
+  }
   const items = () =>
     host
       .pending()
@@ -303,7 +328,7 @@ export function Pending(props: {
     return (
       <If
         when={asks() + reviews().length + reports().length}
-        else={<Empty title={uiText("nothingIsWaitingForYou")} />}
+        else={<Nothing width="narrow" />}
       >
         <SmoothScroll style={grow} scrollbar={false}>
           <If when={asks()}>
@@ -472,7 +497,7 @@ export function Pending(props: {
                   (props.onRoutines ? reports().length : 0) >
                 0
               }
-              else={<Empty title={uiText("nothingIsWaitingForYou")} />}
+              else={<Nothing />}
             >
               <SmoothScroll style={grow}>
                 <View style={{ gap: space[8], padding: space[12] }}>
@@ -624,6 +649,11 @@ export function Pending(props: {
             first={!reviews().length}
             onPress={() => props.onRoutines?.()}
           />
+          <If
+            when={!items().length && !proposals().length && !reviews().length}
+          >
+            <Nothing />
+          </If>
         </SmoothScroll>
       </If>
       <If when={chosen()}>

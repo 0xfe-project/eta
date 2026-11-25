@@ -18,10 +18,13 @@ import {
   textFaces,
   textStyle,
 } from "../../components";
+import { shownWhile } from "../../components/pending";
+import { Spinner } from "../../components/spinner";
 import { StatusDot } from "../../components/status-dot";
 import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 
 /** A free answer's field; a proposal card's header and its fields' label column. */
 const answerWidth = 400;
@@ -293,7 +296,7 @@ function SheetProposal(props: {
             when={pending()}
             else={
               <Label variant="small" tone="muted">
-                {op().error ?? op().status}
+                {op().error ? problemText(op().error) : op().status}
               </Label>
             }
           >
@@ -421,9 +424,13 @@ function Choice(props: {
   selected?: boolean;
   quiet?: boolean;
   disabled?: boolean;
+  busy?: boolean;
   onPress: () => void;
 }) {
   const c = colors();
+  const waiting = shownWhile(() => !!props.busy);
+  const tone = () =>
+    props.selected ? "buttonInk" : props.quiet ? "muted" : "ink";
   return (
     <View
       role="button"
@@ -431,9 +438,10 @@ function Choice(props: {
       accessibilityState={{
         selected: props.selected,
         disabled: props.disabled ?? false,
+        busy: props.busy ?? false,
       }}
       onPress={() => {
-        if (!props.disabled) props.onPress();
+        if (!props.disabled && !props.busy) props.onPress();
       }}
       hoverStyle={
         props.selected ? undefined : { backgroundColor: c().selected }
@@ -441,6 +449,7 @@ function Choice(props: {
       focusVisibleStyle={focusRing(c())}
       style={{
         ...row,
+        justifyContent: "center",
         height: control.md,
         paddingHorizontal: space[12],
         borderWidth: 1,
@@ -457,11 +466,26 @@ function Choice(props: {
       <Label
         tracking="caps"
         variant="caption"
-        tone={props.selected ? "buttonInk" : props.quiet ? "muted" : "ink"}
-        style={{ textTransform: "uppercase" }}
+        tone={tone()}
+        style={{ textTransform: "uppercase", opacity: waiting() ? 0 : 1 }}
       >
         {props.label}
       </Label>
+      <If when={waiting()}>
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Spinner size={icon.sm} tone={tone()} />
+        </View>
+      </If>
     </View>
   );
 }
@@ -483,21 +507,22 @@ function QuestionCard(props: { item: InteractionView }) {
   const type = textFaces();
   const selected = signal<string[]>([]);
   const reply = signal("");
-  const busy = signal(false);
+  const busyKey = signal("");
+  const busy = () => !!busyKey();
   const freeform = () => !props.item.options.length;
   const name = () => host.agent(props.item.agentId)?.name ?? uiText("agent");
-  async function answer(response: InboxResponse) {
+  async function answer(response: InboxResponse, key: string) {
     if (busy()) return;
-    busy.set(true);
+    busyKey.set(key);
     await host.action(() =>
       host.call("inbox", "answer", { id: props.item.id, response }),
     );
-    busy.set(false);
+    busyKey.set("");
   }
   function choose(option: string) {
     // One choice answers at once; several are sent together.
     if (!props.item.multi) {
-      void answer({ kind: "selection", selections: [option] });
+      void answer({ kind: "selection", selections: [option] }, `opt:${option}`);
       return;
     }
     selected.update((items) =>
@@ -579,7 +604,7 @@ function QuestionCard(props: { item: InteractionView }) {
             onChange={reply.set}
             onSubmit={() => {
               if (reply().trim())
-                void answer({ kind: "freeform", text: reply().trim() });
+                void answer({ kind: "freeform", text: reply().trim() }, "send");
             }}
             style={{
               width: answerWidth,
@@ -594,7 +619,8 @@ function QuestionCard(props: { item: InteractionView }) {
             <Choice
               label={option()}
               selected={selected().includes(option())}
-              disabled={busy()}
+              disabled={busy() && busyKey() !== `opt:${option()}`}
+              busy={busyKey() === `opt:${option()}`}
               onPress={() => choose(option())}
             />
           )}
@@ -603,13 +629,16 @@ function QuestionCard(props: { item: InteractionView }) {
           <Choice
             label={uiText("send")}
             disabled={
-              busy() || (freeform() ? !reply().trim() : !selected().length)
+              (busy() && busyKey() !== "send") ||
+              (freeform() ? !reply().trim() : !selected().length)
             }
+            busy={busyKey() === "send"}
             onPress={() =>
               void answer(
                 freeform()
                   ? { kind: "freeform", text: reply().trim() }
                   : { kind: "selection", selections: selected() },
+                "send",
               )
             }
           />
@@ -617,8 +646,9 @@ function QuestionCard(props: { item: InteractionView }) {
         <Choice
           label={uiText("giveUp")}
           quiet
-          disabled={busy()}
-          onPress={() => void answer({ kind: "none" })}
+          disabled={busy() && busyKey() !== "none"}
+          busy={busyKey() === "none"}
+          onPress={() => void answer({ kind: "none" }, "none")}
         />
       </View>
     </View>
@@ -722,7 +752,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
   };
   const result = () =>
     op().status === "failed"
-      ? (op().error ?? "")
+      ? problemText(op().error ?? "")
       : op().status === "applied" && op().kind === "create_agent"
         ? uiText("proposalAgentReady", { name: title() })
         : "";

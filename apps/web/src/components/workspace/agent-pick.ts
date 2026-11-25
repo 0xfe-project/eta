@@ -8,6 +8,7 @@ const RUNTIME_NAMES: Partial<Record<string, string>> = {
   claude: "Claude Code",
   codex: "Codex",
   opencode: "OpenCode",
+  qwen: "Qwen Code",
   pi: "Pi",
 };
 

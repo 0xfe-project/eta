@@ -2,7 +2,7 @@ import { expect, open, test } from "nsh/test";
 
 test("with no source the market says so and points to the settings", async () => {
   const app = await open("./fixtures/market.tsx", { width: 900, height: 700 });
-  expect(app.shows("No plugin sources")).toBe(true);
+  expect(app.shows("No plugin sources yet")).toBe(true);
   expect(
     app.shows(
       "Add a source, or switch one on, in Settings → Plugins to browse it. Installed plugins are not affected.",
@@ -29,6 +29,10 @@ test("the market lists every source, says where each entry is from, and shows a 
   });
   expect(app.shows("From Alpha")).toBe(true);
   expect(app.shows("From Beta")).toBe(true);
+  // In the user's words; the raw failure only under Details.
+  expect(app.shows("Down didn't load")).toBe(true);
+  expect(app.shows("cannot read the catalog: HTTP 404")).toBe(false);
+  await app.press("Details");
   expect(app.shows("cannot read the catalog: HTTP 404")).toBe(true);
   expect(app.shows("1.0.0 · t")).toBe(true);
   expect(app.shows("2.0.0 · t")).toBe(true);

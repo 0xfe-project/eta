@@ -1,5 +1,6 @@
 import type { BriefView, RoutineInfo, RunView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
+import type { OptimisticState } from "../../components/optimistic-status";
 import { View } from "nsh";
 import {
   ActionItem,
@@ -12,6 +13,8 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
+import { OptimisticStatus } from "../../components/optimistic-status";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -34,6 +37,7 @@ export function RoutineDetail(props: {
   layout: Layout;
   runs: RunView[];
   canRun: boolean;
+  starting?: boolean;
   onRun: () => void;
   onReport: (id: string) => void;
   onReadBrief: () => void;
@@ -42,6 +46,8 @@ export function RoutineDetail(props: {
   canDelete: boolean;
   onDelete: () => void;
   onToggle: () => void;
+  toggleState?: OptimisticState;
+  onRetryToggle?: () => void;
 }) {
   const c = colors();
   const phone = () => props.layout === "phone";
@@ -78,6 +84,20 @@ export function RoutineDetail(props: {
               {props.routine.name}
             </Label>
             <View style={{ ...row, gap: space[8] }}>
+              <If
+                when={
+                  props.toggleState && props.toggleState.status !== "idle"
+                    ? props.toggleState
+                    : undefined
+                }
+              >
+                {(state) => (
+                  <OptimisticStatus
+                    state={state()}
+                    onRetry={props.onRetryToggle}
+                  />
+                )}
+              </If>
               <ToggleSwitch
                 label={
                   props.routine.enabled ? uiText("pause") : uiText("resume")
@@ -93,6 +113,7 @@ export function RoutineDetail(props: {
                 iconOnly
                 tone="ghost"
                 disabled={!props.canRun}
+                busy={props.starting}
                 onPress={props.onRun}
               />
               <ActionMenu
@@ -223,10 +244,32 @@ export function RoutineDetail(props: {
             icon="play"
             tone="ghost"
             disabled={!props.canRun}
+            busy={props.starting}
             style={{ gap: space[4], paddingHorizontal: 0 }}
             onPress={props.onRun}
           />
         </View>
+        <If when={!props.runs.length}>
+          <EmptyState
+            size="row"
+            status="empty"
+            loading={null}
+            error={null}
+            empty={{
+              title: props.routine.nextRunAt
+                ? uiText("routineNoRunsYetNext", {
+                    time: `${dayWord(props.routine.nextRunAt)} ${clockTime(props.routine.nextRunAt)}`,
+                  })
+                : uiText("routineNoRunsYet"),
+            }}
+            style={{
+              paddingVertical: space[16],
+              paddingHorizontal: inset(),
+              borderTopWidth: 1,
+              borderColor: c().border,
+            }}
+          />
+        </If>
         <If when={latest()}>
           {(run) => (
             <View

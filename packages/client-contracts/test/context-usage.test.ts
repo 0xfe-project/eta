@@ -44,3 +44,20 @@ it("distinguishes no report, an explicit zero and partial coverage", () => {
     "0 (部分)",
   );
 });
+
+it("labels a last observation with its original time and requires a run id for live readings", () => {
+  const { runId: _runId, ...older } = sample;
+  const use = { ...older, used: 19_010 };
+  const restored = displayContext(
+    { ...use, observation: "last-observed" },
+    "a",
+    "zh",
+  );
+  expect(restored.label).toBe("15% · 上次查询");
+  expect(restored.detail).toContain(
+    new Date(sample.observedAt).toLocaleString("zh-CN"),
+  );
+  expect(displayContext({ ...use, observation: "live" }, "a", "zh").label).toBe(
+    "N/A",
+  );
+});

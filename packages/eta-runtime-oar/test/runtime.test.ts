@@ -22,6 +22,7 @@ import type { ScriptedTurn } from "@botiverse/oar/testing";
 import type { AgentMessage, KernelTool } from "@eta/core";
 import type { Served } from "@eta/runtime-kit/testing";
 import type { ManagedSession, SessionManagerOptions } from "@eta/server";
+import type { RuntimeId } from "../src/index";
 import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { createRuntimeRegistry } from "@botiverse/oar";
@@ -66,7 +67,7 @@ const tick = async (ms = 20) =>
 function setup(
   turn: (turn: ScriptedTurn) => void | Promise<void>,
   options: Partial<SessionManagerOptions> & {
-    runtimeId?: "codex" | "claude";
+    runtimeId?: RuntimeId;
     refuses?: boolean;
     /** Replaces members of every session the runtime opens. */
     patch?: (session: Session) => Partial<Session>;
@@ -1001,6 +1002,40 @@ describe("a session on an external runtime", () => {
     }
   });
 
+  it.each(["opencode", "grok", "qwen"] as const)(
+    "publishes a root context pair from %s through the shared OAR channel",
+    async (runtimeId) => {
+      const { prompts, say, patch } = handDriven();
+      const { manager } = setup(() => undefined, { patch, runtimeId });
+      const member = await manager.create({ cwd: "/work", runtime: runtimeId });
+      try {
+        const running = run(member, "context");
+        await expect.poll(() => prompts.length).toBe(1);
+        say({ kind: "turn_active" });
+        say({
+          kind: "usage",
+          usage: {
+            context: {
+              tokens: 19_010,
+              contextWindow: 128_000,
+              percent: null,
+            },
+          },
+        });
+        say({ kind: "turn_ended", outcome: { kind: "completed" } });
+        await running;
+        expect(member.session.view.snapshot().sections.context).toMatchObject({
+          source: "oar",
+          used: 19_010,
+          window: 128_000,
+          observation: "last-observed",
+        });
+      } finally {
+        await manager.closeAll();
+      }
+    },
+  );
+
   it("keeps Codex last-call occupancy apart from cumulative input and rejects stale or child samples", async () => {
     const { prompts, say, patch } = handDriven();
     const { manager } = setup(() => undefined, { patch, runtimeId: "codex" });
@@ -1082,6 +1117,7 @@ describe("a session on an external runtime", () => {
       expect(view().context).toMatchObject({ compactedAt: expect.any(Number) });
       kernelEmit(member.session.kernel.ctx)("context:observed", {
         runId,
+        nativeSessionId: "late-thread",
         model: "first",
         observedAt: observedAt - 1,
         used: 128000,
@@ -1102,6 +1138,7 @@ describe("a session on an external runtime", () => {
       });
       kernelEmit(member.session.kernel.ctx)("context:observed", {
         runId,
+        nativeSessionId: "late-thread",
         model: "first",
         observedAt: Date.now(),
         used: 128000,

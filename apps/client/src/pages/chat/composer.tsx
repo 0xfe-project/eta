@@ -123,7 +123,7 @@ function ComposerShell(props: { phone: boolean }) {
         style={{
           height: height(),
           borderWidth: 1,
-          borderColor: c().strong,
+          borderColor: c().border,
         }}
       />
     </View>
@@ -478,7 +478,7 @@ function ComposerBody(
         style={{
           position: "relative",
           borderWidth: 1,
-          borderColor: editor.focused() ? c().ink : c().strong,
+          borderColor: editor.focused() ? c().ink : c().border,
           opacity: offline() ? opacity.disabled : 1,
           pointerEvents: offline() ? "none" : undefined,
         }}

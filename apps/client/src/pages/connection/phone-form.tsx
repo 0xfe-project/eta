@@ -73,18 +73,14 @@ export function PhoneConnectionForm(props: {
         >
           <View style={{ position: "relative" }}>
             <Button
-              label={
-                props.connecting
-                  ? uiText("connecting")
-                  : props.remoteFailure
-                    ? uiText("retry")
-                    : uiText("connect")
-              }
+              label={props.remoteFailure ? uiText("retry") : uiText("connect")}
               tone="primary"
               size={control.touch}
               labelVariant="body"
-              dimDisabled={props.connecting}
-              disabled={props.busy || !props.address.trim()}
+              disabled={
+                !props.address.trim() || (props.busy && !props.connecting)
+              }
+              busy={props.connecting}
               onPress={props.onConnect}
             />
             <If when={props.scanFailure && !props.remoteFailure}>

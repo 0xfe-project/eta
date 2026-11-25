@@ -12,6 +12,7 @@ import { cleanup, computed, effect, signal, View } from "nsh";
 import {
   Button,
   colors,
+  DetailSkeleton,
   focusRing,
   grow,
   Icon,
@@ -32,6 +33,7 @@ import {
 } from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { clock, followSession, useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 import { activeReply } from "../member-status";
 import {
   replyRun,
@@ -198,13 +200,17 @@ export function MemberRun(props: {
   const failure = () => {
     if (running() || blocks().some((block) => block.type === "error"))
       return undefined;
-    if (props.taskRun) return props.taskRun.error ?? undefined;
+    if (props.taskRun)
+      return props.taskRun.error ? problemText(props.taskRun.error) : undefined;
     const from = rows()[0]?.seq;
     const failed = systems()?.rows.findLast(
       (entry) =>
         entry.kind === "run_failed" && from !== undefined && entry.seq >= from,
     );
-    if (failed) return failed.args.error || uiText("runGenericFailure");
+    if (failed)
+      return failed.args.error
+        ? problemText(failed.args.error)
+        : uiText("runGenericFailure");
     return props.reply?.status === "failed"
       ? props.reply.text || uiText("runGenericFailure")
       : undefined;
@@ -585,19 +591,32 @@ export function MemberRun(props: {
               !(props.taskRun && transcript() && online())
             }
           >
-            <Label tone="muted" variant="small">
-              {!target
-                ? uiText("noRunTranscript")
-                : host.state().missing[target]
-                  ? uiText("sessionUnavailable")
-                  : !transcript() && !online()
-                    ? uiText("offlineRunTranscript")
-                    : !transcript()
-                      ? uiText("loadingRunTranscript")
-                      : running()
-                        ? uiText("waitingForAgent")
-                        : uiText("noRunTranscript")}
-            </Label>
+            <If
+              when={
+                !!target &&
+                !host.state().missing[target] &&
+                !transcript() &&
+                online()
+              }
+              else={
+                <Label tone="muted" variant="small">
+                  {!target
+                    ? uiText("noRunTranscript")
+                    : host.state().missing[target]
+                      ? uiText("sessionUnavailable")
+                      : !transcript() && !online()
+                        ? uiText("offlineRunTranscript")
+                        : running()
+                          ? uiText("waitingForAgent")
+                          : uiText("noRunTranscript")}
+                </Label>
+              }
+            >
+              <DetailSkeleton
+                label={uiText("loadingRunTranscript")}
+                style={{ padding: 0 }}
+              />
+            </If>
           </If>
         </View>
       </SmoothScroll>

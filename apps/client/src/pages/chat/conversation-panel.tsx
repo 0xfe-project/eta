@@ -7,7 +7,7 @@ import type {
 import type { Signal } from "nsh";
 import type { Layout } from "../../components";
 import type { ArtifactFilters } from "./artifacts/filter";
-import { View } from "nsh";
+import { signal, View } from "nsh";
 import {
   Button,
   Caption,
@@ -20,6 +20,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import { ModelSelect } from "../../components/model-select";
 import { CloseButton } from "../../components/navigation-buttons";
 import { icon, space } from "../../components/tokens";
@@ -90,6 +91,7 @@ export function ConversationPanel(props: {
   const c = colors();
   const panel = props.tab;
   const model = props.model;
+  const savingModel = signal(false);
   const phone = () => props.layout === "phone";
   const tasks = () =>
     host.tasks().filter((entry) => entry.conversationId === props.id);
@@ -236,14 +238,19 @@ export function ConversationPanel(props: {
                               label={uiText("saveModel")}
                               tone="primary"
                               disabled={!model()}
-                              onPress={() =>
-                                void host.action(async () => {
-                                  await host.call("captain", "setModel", {
-                                    model: model(),
-                                  });
-                                  model.set("");
-                                })
-                              }
+                              busy={savingModel()}
+                              onPress={() => {
+                                if (savingModel() || !model()) return;
+                                savingModel.set(true);
+                                void host
+                                  .action(async () => {
+                                    await host.call("captain", "setModel", {
+                                      model: model(),
+                                    });
+                                    model.set("");
+                                  })
+                                  .finally(() => savingModel.set(false));
+                              }}
                             />
                           </View>
                           <Label variant="caption" tone="muted">
@@ -266,9 +273,16 @@ export function ConversationPanel(props: {
                           <If
                             when={approvals().length}
                             else={
-                              <Label variant="small">
-                                {uiText("nothingIsWaitingForApproval")}
-                              </Label>
+                              <EmptyState
+                                size="row"
+                                status="empty"
+                                loading={null}
+                                error={null}
+                                empty={{
+                                  title: uiText("nothingIsWaitingForApproval"),
+                                }}
+                                style={{ paddingHorizontal: 0 }}
+                              />
                             }
                           >
                             <Each of={approvals()} key={(op) => op.id}>

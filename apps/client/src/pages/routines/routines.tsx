@@ -12,25 +12,29 @@ import {
   ActionMenu,
   Button,
   colors,
+  DetailSkeleton,
   dialogWidth,
-  Empty,
-  emptyWidth,
   focusRing,
   grow,
   Header,
   Icon,
   Label,
+  ListSkeleton,
   Modal,
   row,
   sizes,
   SmoothScroll,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import { chatText, shownMentions } from "../../components/eta-editor";
+import { createOptimisticStatus } from "../../components/optimistic-status";
+import { settled } from "../../components/pending";
 import { dotSize } from "../../components/status-dot";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { follow, useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
 import { DeleteRoutine } from "./delete-routine";
 import { RoutineEditor } from "./editor";
 import { PhoneRoutineRow } from "./history";
@@ -41,7 +45,6 @@ import { RoutineReport } from "./run-report";
 
 /** How far down an empty state stands: lower in a tablet's detail column, level with the
  * list's first rows. */
-const emptyTop = { desktop: space[64], tablet: space[64] + space[48] };
 
 /** The desktop's list of routines. */
 const listWidth = 352;
@@ -69,6 +72,11 @@ export function Routines(props: {
   follow(() => "routines");
   const target = () => (selected() ? `routines.${selected()}` : undefined);
   follow(target);
+  const listLoad = useLoadState({ targets: () => ["routines"] });
+  const detailLoad = useLoadState({ targets: () => [target()] });
+  /** No routine at all and none being made: one column, the empty state, no blank detail pane. */
+  const none = () =>
+    listLoad.status() !== "ready" ? false : !list().length && !editing();
   const briefs = () => host.list<BriefView>(target() ?? "", "briefs");
   const runs = () => host.list<RunView>(target() ?? "", "runs");
   const status = () => host.section<RoutinesStatus>("routines", "status");
@@ -89,6 +97,7 @@ export function Routines(props: {
   const canDelete = () => host.can("routines.delete");
   const info = () =>
     gone() ? undefined : host.section<RoutineInfo>(target() ?? "", "info");
+  const detailSettled = settled(() => !selected() || !!info() || gone());
   const report = signal("");
   const reportIndex = () =>
     gone() ? -1 : runs().findIndex((run) => run.id === report());
@@ -100,17 +109,31 @@ export function Routines(props: {
     list().some((item) => item.unseenReports || item.unseenFailures);
   const feedback = signal("");
   const starting = signal(false);
+  const sendingFeedback = signal(false);
+  const turningCaptainOn = signal(false);
+  const toggleStatus = createOptimisticStatus();
+  let lastToggle: { id: string; enabled: boolean } | undefined;
   const canRun = () =>
-    !!status()?.captainOn &&
-    !starting() &&
-    !runs().some((run) => run.status === "running");
+    !!status()?.captainOn && !runs().some((run) => run.status === "running");
+  function applyToggle(routineId: string, enabled: boolean) {
+    lastToggle = { id: routineId, enabled };
+    toggleStatus.saving();
+    void host
+      .optimistic(routineId, { enabled }, () =>
+        host.call("routines", "update", { routineId, enabled }),
+      )
+      .then(() => toggleStatus.saved())
+      .catch((problem: unknown) =>
+        toggleStatus.fail(
+          problem instanceof Error ? problem.message : String(problem),
+        ),
+      );
+  }
   function toggle(item: RoutineInfo) {
-    void host.action(() =>
-      host.call("routines", "update", {
-        routineId: item.id,
-        enabled: !item.enabled,
-      }),
-    );
+    applyToggle(item.id, !item.enabled);
+  }
+  function retryToggle() {
+    if (lastToggle) applyToggle(lastToggle.id, lastToggle.enabled);
   }
   function select(id: string) {
     selected.set(id);
@@ -125,7 +148,7 @@ export function Routines(props: {
   }
 
   async function retry(routineId: string) {
-    if (!canRun()) return;
+    if (!canRun() || starting()) return;
     starting.set(true);
     const result = await host.action(() =>
       host.call<{ run: { id: string } }>("routines", "run", { routineId }),
@@ -335,14 +358,19 @@ export function Routines(props: {
               label={uiText("turnCaptainOn")}
               size={phone() ? control.touch : control.md}
               style={{ paddingHorizontal: phone() ? space[16] : space[12] }}
-              onPress={() =>
-                void host.action(() =>
-                  host.call("captain", "setSetting", {
-                    key: "supervisorEnabled",
-                    value: true,
-                  }),
-                )
-              }
+              busy={turningCaptainOn()}
+              onPress={() => {
+                if (turningCaptainOn()) return;
+                turningCaptainOn.set(true);
+                void host
+                  .action(() =>
+                    host.call("captain", "setSetting", {
+                      key: "supervisorEnabled",
+                      value: true,
+                    }),
+                  )
+                  .finally(() => turningCaptainOn.set(false));
+              }}
             />
           </View>
         </If>
@@ -359,14 +387,14 @@ export function Routines(props: {
         <If when={!phone() || !selected()}>
           <View
             style={{
-              ...(phone()
+              ...(phone() || none()
                 ? grow
                 : {
                     width:
                       props.layout === "desktop" ? listWidth : sizes.tabletList,
                     flexShrink: 0,
                   }),
-              borderRightWidth: phone() ? 0 : 1,
+              borderRightWidth: phone() || none() ? 0 : 1,
               borderColor: c().border,
             }}
           >
@@ -392,64 +420,32 @@ export function Routines(props: {
             <If
               when={list().length}
               else={
-                <Empty
-                  title={
-                    host.state().targets.routines
-                      ? uiText("noRoutinesYet")
-                      : uiText("loadingRoutine")
-                  }
-                  description={
-                    host.state().targets.routines
-                      ? uiText("emptyRoutineHelp")
-                      : undefined
-                  }
-                  icon="routines"
-                  iconSize={icon.lg}
-                  iconTone="ink"
-                  titleVariant="body"
-                  titleWeight={weight.regular}
-                  descriptionVariant="small"
-                  descriptionWidth={emptyWidth.wide}
-                  // The list's empty state sits at the top of the column.
-                  style={{
-                    flex: 0,
-                    justifyContent: "flex-start",
-                    paddingTop: phone()
-                      ? space[64]
-                      : tablet()
-                        ? space[48]
-                        : space[64],
-                    paddingBottom: phone() ? space[24] : 0,
-                    paddingHorizontal: tablet() ? space[20] : space[32],
+                <EmptyState
+                  size="page"
+                  status={listLoad.shown()}
+                  loading={<ListSkeleton label={uiText("loadingRoutines")} />}
+                  error={{
+                    title: uiText("routinesDidNotLoad"),
+                    description: listLoad.why(),
+                    retry: listLoad.retry,
+                    retrying: listLoad.retrying(),
                   }}
-                >
-                  <If when={host.can("routines.create") && !editing()}>
-                    <View style={{ ...row, paddingTop: space[8] }}>
-                      <Button
-                        label={uiText("newRoutine")}
-                        icon="plus"
-                        tone="primary"
-                        size={
-                          phone()
-                            ? control.touch
-                            : tablet()
-                              ? control.md
-                              : control.sm
-                        }
-                        iconSize={phone() ? icon.md : icon.sm}
-                        style={{
-                          paddingHorizontal: phone()
-                            ? space[16]
-                            : tablet()
-                              ? space[12]
-                              : space[8],
-                          gap: space[4],
-                        }}
-                        onPress={() => editing.set("new")}
-                      />
-                    </View>
-                  </If>
-                </Empty>
+                  empty={{
+                    art: "routines",
+                    title: uiText("noRoutinesYet"),
+                    description: uiText("emptyRoutineHelp"),
+                    actions:
+                      host.can("routines.create") && !editing()
+                        ? [
+                            {
+                              label: uiText("newRoutine"),
+                              icon: "plus",
+                              onPress: () => editing.set("new"),
+                            },
+                          ]
+                        : undefined,
+                  }}
+                />
               }
             >
               <SmoothScroll style={grow} scrollbar={false}>
@@ -492,7 +488,7 @@ export function Routines(props: {
             </If>
           </View>
         </If>
-        <If when={!phone() || selected()}>
+        <If when={(!phone() && !none()) || selected()}>
           <View style={grow}>
             <If when={props.layout === "tablet"}>
               {pageHeader()}
@@ -501,78 +497,50 @@ export function Routines(props: {
             <If when={!phone() && editing()}>{editor()}</If>
             <If when={(phone() && selected()) || (!phone() && !editing())}>
               <If
-                when={info()}
+                when={detailSettled() ? info() : undefined}
                 else={
-                  <If
-                    when={gone()}
-                    else={
-                      <If when={selected() || list().length}>
-                        <Empty
-                          title={
-                            selected()
-                              ? uiText("loadingRoutine")
-                              : uiText("selectARoutine")
-                          }
-                          description={
-                            selected()
-                              ? undefined
-                              : uiText("selectOneOnTheLeftTo")
-                          }
-                          icon="routines"
-                          iconSize={selected() ? undefined : icon.lg}
-                          iconTone={selected() ? undefined : "ink"}
-                          titleWeight={tablet() ? weight.regular : undefined}
-                          // Tablet runs it across the pane.
-                          descriptionWidth={
-                            tablet() ? emptyWidth.wide : emptyWidth.narrow
-                          }
-                          style={
-                            selected()
-                              ? undefined
-                              : {
-                                  justifyContent: "flex-start",
-                                  paddingTop: tablet()
-                                    ? emptyTop.tablet
-                                    : emptyTop.desktop,
-                                  paddingHorizontal: tablet()
-                                    ? space[40]
-                                    : undefined,
-                                }
-                          }
-                        />
-                      </If>
+                  <EmptyState
+                    size="page"
+                    status={
+                      gone()
+                        ? "error"
+                        : selected()
+                          ? detailLoad.status() === "error"
+                            ? "error"
+                            : "loading"
+                          : "empty"
                     }
-                  >
-                    <Empty
-                      title={uiText("routineGoneTitle")}
-                      description={uiText("routineGoneBody")}
-                      icon="routines"
-                      iconSize={icon.lg}
-                      iconTone="ink"
-                      titleWeight={tablet() ? weight.regular : undefined}
-                      // Where "Select a routine" stands, which the back button leads to.
-                      style={{
-                        justifyContent: "flex-start",
-                        paddingTop: phone()
-                          ? emptyTop.desktop
-                          : tablet()
-                            ? emptyTop.tablet
-                            : emptyTop.desktop,
-                        paddingHorizontal: tablet() ? space[40] : undefined,
-                      }}
-                    >
-                      <View style={{ ...row, paddingTop: space[8] }}>
-                        <Button
-                          label={uiText("backToRoutines")}
-                          size={phone() ? control.touch : control.md}
-                          style={{
-                            paddingHorizontal: phone() ? space[16] : space[12],
-                          }}
-                          onPress={() => select("")}
-                        />
-                      </View>
-                    </Empty>
-                  </If>
+                    loading={
+                      <DetailSkeleton label={uiText("loadingRoutine")} />
+                    }
+                    error={
+                      gone() || detailLoad.failure() === "missing"
+                        ? {
+                            art: "routines",
+                            tone: "quiet",
+                            title: uiText("routineGoneTitle"),
+                            description: uiText("routineGoneBody"),
+                            actions: [
+                              {
+                                label: uiText("backToRoutines"),
+                                icon: "arrowLeft",
+                                onPress: () => select(""),
+                              },
+                            ],
+                          }
+                        : {
+                            title: uiText("routineDidNotLoad"),
+                            description: detailLoad.why(),
+                            retry: detailLoad.retry,
+                            retrying: detailLoad.retrying(),
+                          }
+                    }
+                    empty={{
+                      art: "routines",
+                      title: uiText("selectARoutine"),
+                      description: uiText("selectOneOnTheLeftTo"),
+                    }}
+                  />
                 }
               >
                 {(item) => (
@@ -586,6 +554,7 @@ export function Routines(props: {
                         firstBrief={briefs().at(-1)}
                         runs={runs()}
                         canRun={canRun()}
+                        starting={starting()}
                         onRun={() => void retry(item().id)}
                         onReport={openReport}
                         onReadBrief={() => readingBrief.set(true)}
@@ -593,6 +562,8 @@ export function Routines(props: {
                         canDelete={canDelete()}
                         onDelete={() => deleting.set(item())}
                         onToggle={() => toggle(item())}
+                        toggleState={toggleStatus.state()}
+                        onRetryToggle={retryToggle}
                       />
                     }
                   >
@@ -609,6 +580,8 @@ export function Routines(props: {
                         if (run) openReport(run.id);
                       }}
                       canRetry={canRun()}
+                      starting={starting()}
+                      sendingFeedback={sendingFeedback()}
                       onRetry={() => void retry(item().id)}
                       onToggle={() => toggle(item())}
                       onEdit={() => {
@@ -617,16 +590,20 @@ export function Routines(props: {
                       }}
                       feedback={feedback()}
                       onFeedback={feedback.set}
-                      onSend={() =>
-                        void host.action(async () => {
-                          await host.call("routines", "feedback", {
-                            routineId: item().id,
-                            runId: report(),
-                            text: feedback().trim(),
-                          });
-                          feedback.set("");
-                        })
-                      }
+                      onSend={() => {
+                        if (sendingFeedback() || !feedback().trim()) return;
+                        sendingFeedback.set(true);
+                        void host
+                          .action(async () => {
+                            await host.call("routines", "feedback", {
+                              routineId: item().id,
+                              runId: report(),
+                              text: feedback().trim(),
+                            });
+                            feedback.set("");
+                          })
+                          .finally(() => sendingFeedback.set(false));
+                      }}
                     />
                   </If>
                 )}

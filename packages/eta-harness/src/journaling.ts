@@ -138,6 +138,7 @@ export class JournalingService extends Service {
   private readonly entryOf = new WeakMap<object, MessageEntry>();
   /** Serializes commits so the journal order is the event order. */
   private tail: Promise<unknown> = Promise.resolve();
+  private runEndHook?: (runId: string) => Promise<void>;
   /** Bumped when the journal gains an *entry*: the transcript's change signature. */
   private entryVersion = 0;
   /** How many compactions this branch has been through. */
@@ -232,24 +233,24 @@ export class JournalingService extends Service {
   /** Commit bare value writes, ordered behind whatever the loop already queued. */
   private async enqueueValues(values: ValueWrite[]): Promise<void> {
     const log = this.log;
-    if (log === undefined) return;
+    if (log === undefined || values.length === 0) return;
     this.noteWrites(values);
-    const next = this.tail.then(() =>
-      log.commit(values).catch(() => undefined),
-    );
+    const next = this.tail.then(async () => {
+      try {
+        // A failed value write must not consume the run's staged entries.
+        await log.storage.commit(values);
+      } catch {
+        this.warn(
+          `[eta-journal] value commit failed (${values.map((write) => write.namespace).join(", ")})`,
+        );
+      }
+    });
     this.tail = next;
     await next;
   }
 
-  /**
-   * Commit value writes, ordered behind whatever the loop already queued, and
-   * wait for them. This is the door the state tools use: a key the model stores
-   * has to be on disk before the turn that stored it ends.
-   */
+  /** Commit value writes in journal order and wait for them. */
   async writeValues(values: ValueWrite[]): Promise<void> {
-    // The one door value writes go through: tracking names here is what lets the
-    // view's state section be a synchronous read.
-    this.noteWrites(values);
     await this.enqueueValues(values);
     await this.tail;
   }
@@ -402,9 +403,21 @@ export class JournalingService extends Service {
    * Make everything staged durable. The run boundary awaits this, so a
    * finished run is a durable run; everything else is fire-and-forget.
    */
-  async flush(): Promise<void> {
+  async flush(runId?: string): Promise<void> {
+    if (runId !== undefined) {
+      try {
+        await this.runEndHook?.(runId);
+      } catch {
+        this.warn("[eta-journal] run-end write failed");
+      }
+    }
     await this.enqueueCommit();
     await this.tail;
+  }
+
+  /** Install the Host's write that must land before the runner reports completion. */
+  onRunEnd(hook: (runId: string) => Promise<void>): void {
+    this.runEndHook = hook;
   }
 
   /** Record one message as an entry and announce it. */

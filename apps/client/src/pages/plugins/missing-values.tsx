@@ -1,9 +1,9 @@
 import type { PluginView } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { Button, Field, Label, row } from "../../components";
+import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { space, weight } from "../../components/tokens";
 
 /** The required text fields nobody has filled in yet: what keeps the plugin from running. */
 const missingFields = (item: PluginView) =>
@@ -31,6 +31,7 @@ export function MissingValues(props: { item: PluginView }) {
   const other = () =>
     missingFields(props.item).filter((field) => field.type !== "string");
   function save() {
+    if (busy()) return;
     const values = Object.fromEntries(
       Object.entries(typed()).filter(([, value]) => value.trim() !== ""),
     );
@@ -96,7 +97,7 @@ export function MissingValues(props: { item: PluginView }) {
               label={uiText("missingSave")}
               tone="primary"
               labelVariant="small"
-              disabled={busy()}
+              busy={busy()}
               onPress={save}
             />
           </View>

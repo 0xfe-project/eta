@@ -7,18 +7,19 @@ import { signal, View } from "nsh";
 import {
   Button,
   colors,
-  Empty,
-  emptyWidth,
   grow,
   Header,
   Modal,
   row,
   SmoothScroll,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
+import { ListSkeleton } from "../../components/loading-skeleton";
 import { CloseButton } from "../../components/navigation-buttons";
 import { control, icon, space } from "../../components/tokens";
 import { uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
 import { AgentEditor } from "./agents/editor";
 import { Appearance } from "./appearance";
 import { ArchiveSettings } from "./archive";
@@ -56,6 +57,8 @@ export function Settings(
     layout: Layout;
     onConnect: () => void;
     onTask: (id: string) => void;
+    /** Start from a template instead: the workspace opens the template gallery; no link without it. */
+    onTemplates?: () => void;
     onClose: () => void;
   },
 ) {
@@ -103,13 +106,9 @@ export function Settings(
         item.machineId === selected?.machineId && item.agent.id === selected.id,
     );
   };
-  const info = (text: string) => (
-    <Empty
-      title={text}
-      descriptionWidth={emptyWidth.narrow}
-      style={emptyStyle}
-    />
-  );
+  const agentsLoad = useLoadState({ targets: () => ["agents"] });
+  const sourcesLoad = useLoadState({ targets: () => ["providers", "llm"] });
+  const acpLoad = useLoadState({ targets: () => ["acp"] });
   const { count: sourceCount } = useModelSources();
   const acpLists = () =>
     host.section<Record<string, AcpMachineList>>("acp", "machines") ?? {};
@@ -218,7 +217,33 @@ export function Settings(
               <If when={current() === "Agents"}>
                 <If
                   when={host.people().length}
-                  else={info(uiText("settingsNoAgents"))}
+                  else={
+                    <EmptyState
+                      size="page"
+                      width="narrow"
+                      style={emptyStyle}
+                      status={agentsLoad.shown()}
+                      loading={<ListSkeleton label={uiText("loadingAgents")} />}
+                      error={{
+                        title: uiText("agentsDidNotLoad"),
+                        description: agentsLoad.why(),
+                        retry: agentsLoad.retry,
+                        retrying: agentsLoad.retrying(),
+                      }}
+                      empty={{
+                        art: "agents",
+                        title: uiText("settingsNoAgents"),
+                        description: uiText("settingsNoAgentsHint"),
+                        actions: [
+                          {
+                            label: uiText("newAgent"),
+                            icon: "plus",
+                            onPress: () => agent.set("new"),
+                          },
+                        ],
+                      }}
+                    />
+                  }
                 >
                   <SmoothScroll style={grow} scrollbar={false}>
                     <Each of={host.people()} key={(item) => item.id}>
@@ -241,23 +266,34 @@ export function Settings(
                     <If
                       when={sourceCount()}
                       else={
-                        <Empty
-                          title={uiText("noModelSources")}
-                          description={uiText("noModelSourcesHint")}
-                          icon="powerPlug"
-                          iconSize={icon.lg}
-                          descriptionWidth={emptyWidth.narrow}
+                        <EmptyState
+                          size="page"
+                          width="narrow"
                           style={emptyStyle}
-                        >
-                          <Button
-                            label={uiText("addEtaTokenPlan")}
-                            style={{
-                              marginTop: space[8],
-                              paddingHorizontal: space[12],
-                            }}
-                            onPress={() => sources.set("eta")}
-                          />
-                        </Empty>
+                          status={sourcesLoad.shown()}
+                          loading={
+                            <ListSkeleton
+                              label={uiText("loadingModelSources")}
+                            />
+                          }
+                          error={{
+                            title: uiText("modelSourcesDidNotLoad"),
+                            description: sourcesLoad.why(),
+                            retry: sourcesLoad.retry,
+                            retrying: sourcesLoad.retrying(),
+                          }}
+                          empty={{
+                            art: "plug",
+                            title: uiText("noModelSources"),
+                            description: uiText("noModelSourcesHint"),
+                            actions: [
+                              {
+                                label: uiText("addEtaTokenPlan"),
+                                onPress: () => sources.set("eta"),
+                              },
+                            ],
+                          }}
+                        />
                       }
                     >
                       <SmoothScroll style={grow} scrollbar={false}>
@@ -319,13 +355,39 @@ export function Settings(
                 <If
                   when={externalAgents().length || offlineMachines().length}
                   else={
-                    <Empty
-                      title={uiText("settingsNoExternalAgents")}
-                      description={uiText("settingsNoExternalAgentsHint")}
-                      icon="terminal"
-                      iconSize={icon.lg}
-                      descriptionWidth={emptyWidth.narrow}
+                    <EmptyState
+                      size="page"
+                      width="narrow"
                       style={emptyStyle}
+                      status={acpLoad.shown()}
+                      loading={
+                        <ListSkeleton label={uiText("loadingExternalAgents")} />
+                      }
+                      error={{
+                        title: uiText("externalAgentsDidNotLoad"),
+                        description: acpLoad.why(),
+                        retry: acpLoad.retry,
+                        retrying: acpLoad.retrying(),
+                      }}
+                      empty={{
+                        art: "terminal",
+                        title: uiText("settingsNoExternalAgents"),
+                        description: uiText("settingsNoExternalAgentsHint"),
+                        actions:
+                          host.can("acp.save") && acpTarget()
+                            ? [
+                                {
+                                  label: uiText("acpAddAgent"),
+                                  icon: "plus",
+                                  onPress: () => {
+                                    const target = acpTarget();
+                                    if (target)
+                                      acpForm.set({ machineId: target.id });
+                                  },
+                                },
+                              ]
+                            : undefined,
+                      }}
                     />
                   }
                 >
@@ -406,6 +468,13 @@ export function Settings(
               agent.set(undefined);
               section.set("Runtimes");
             }}
+            onTemplates={
+              props.onTemplates &&
+              (() => {
+                agent.set(undefined);
+                props.onTemplates?.();
+              })
+            }
           />
         )}
       </If>

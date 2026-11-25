@@ -1,5 +1,13 @@
 import { View } from "nsh";
-import { colors, Icon, Label, row, textFaces } from "../../components";
+import {
+  colors,
+  fontFamily,
+  Fonts,
+  Icon,
+  Label,
+  row,
+  textFaces,
+} from "../../components";
 import { LayoutSelect } from "../../components/select";
 import { control, icon, space } from "../../components/tokens";
 import { formatLocale } from "../../i18n";
@@ -44,6 +52,7 @@ export function PluginSelect(props: {
 }) {
   const c = colors();
   const type = textFaces();
+  const fonts = Fonts();
   return (
     <LayoutSelect
       accessibilityLabel={props.label}
@@ -58,6 +67,7 @@ export function PluginSelect(props: {
         backgroundColor: c().canvas,
       }}
       itemStyle={{
+        fontFamily: fontFamily(fonts().interface),
         minHeight: control.md,
         paddingHorizontal: space[8],
         color: c().ink,

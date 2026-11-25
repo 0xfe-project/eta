@@ -2,6 +2,10 @@ import type { ComposioPluginView, PluginResults } from "@eta/client-contracts";
 import { effect, signal, untracked, View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { hint } from "../../components/controls";
+import {
+  createOptimisticStatus,
+  OptimisticStatus,
+} from "../../components/optimistic-status";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -51,8 +55,43 @@ export function ComposioPluginSwitch(props: {
 }) {
   const host = useHost();
   const c = colors();
+  const pending = signal<boolean | undefined>(undefined);
+  const status = createOptimisticStatus();
+  let lastTarget: boolean | undefined;
+  let turn = 0;
+  effect(() => {
+    if (pending() !== undefined && props.view.enabled === pending())
+      pending.set(undefined);
+  });
+  const checked = () => pending() ?? props.view.enabled;
   const words = () =>
-    props.view.enabled ? uiText("pluginSwitch") : uiText("pluginOffForAll");
+    checked() ? uiText("pluginSwitch") : uiText("pluginOffForAll");
+  function apply(enabled: boolean) {
+    const currentTurn = ++turn;
+    lastTarget = enabled;
+    pending.set(enabled);
+    status.saving();
+    void host
+      .call("plugins", "setEnabled", {
+        name: props.view.name,
+        enabled,
+      })
+      .then(() => {
+        if (turn !== currentTurn) return;
+        status.saved();
+        props.onChanged();
+        setTimeout(() => {
+          if (turn === currentTurn) pending.set(undefined);
+        }, 1500);
+      })
+      .catch((problem: unknown) => {
+        if (turn !== currentTurn) return;
+        pending.set(undefined);
+        status.fail(
+          problem instanceof Error ? problem.message : String(problem),
+        );
+      });
+  }
   return (
     <If when={props.view.state === "ready"}>
       <View
@@ -63,34 +102,37 @@ export function ComposioPluginSwitch(props: {
         <View style={{ flexShrink: 0 }}>
           <ToggleSwitch
             label={uiText("composioPluginSwitch", { name: props.view.name })}
-            checked={props.view.enabled}
-            onChange={(enabled) =>
-              void host
-                .action(() =>
-                  host.call("plugins", "setEnabled", {
-                    name: props.view.name,
-                    enabled,
-                  }),
-                )
-                .then(props.onChanged)
-            }
+            checked={checked()}
+            onChange={apply}
           />
         </View>
         <If
-          when={props.view.enabled}
+          when={status.state().status === "idle"}
           else={
-            <View testID="composio-plugin-off" style={WORDS}>
+            <OptimisticStatus
+              state={status.state()}
+              onRetry={
+                lastTarget !== undefined ? () => apply(lastTarget!) : undefined
+              }
+            />
+          }
+        >
+          <If
+            when={checked()}
+            else={
+              <View testID="composio-plugin-off" style={WORDS}>
+                <Label variant="caption" tone="muted" lines={1}>
+                  {words()}
+                </Label>
+              </View>
+            }
+          >
+            <View style={WORDS}>
               <Label variant="caption" tone="muted" lines={1}>
                 {words()}
               </Label>
             </View>
-          }
-        >
-          <View style={WORDS}>
-            <Label variant="caption" tone="muted" lines={1}>
-              {words()}
-            </Label>
-          </View>
+          </If>
         </If>
       </View>
     </If>

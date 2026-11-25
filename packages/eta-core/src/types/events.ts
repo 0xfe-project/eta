@@ -271,16 +271,19 @@ export interface UsageEvents {
     at: number;
     compactedAt?: number;
     model?: string;
+    nativeSessionId?: string;
+    runId?: string;
   };
   /** A root runtime observation, bound to the run that subscribed to the native stream. */
   "context:observed": {
     runId: string;
+    nativeSessionId: string;
     model: string;
     observedAt: number;
     compactedAt?: number;
     used: number | null;
     window: number | null;
-    reason?: "compacted" | "model" | "inconsistent";
+    reason?: "compacted" | "model" | "inconsistent" | "missing";
   };
   /** A runtime reported the prompt's bill after its last assistant message was closed. */
   "usage:detached": { usage: Usage };

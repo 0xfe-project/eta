@@ -1,4 +1,5 @@
 import type { UpgradePhase, UpgradeStatusView } from "@eta/client-contracts";
+import type { ProgressHandle } from "../../components/progress-notification";
 import type { light } from "../../components/theme";
 import type { UpgradeResult } from "../settings/updates/progress";
 import { cleanup, computed, effect, signal, untracked, View } from "nsh";
@@ -11,13 +12,18 @@ import {
   Label,
   row,
 } from "../../components";
+import { startProgress } from "../../components/progress-notification";
 import { screenInsets } from "../../components/safe-area";
 import { dotSize, StatusDot } from "../../components/status-dot";
 import { showToast } from "../../components/toast";
 import { space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { megabytes, resultNotice } from "../settings/updates/progress";
+import {
+  downloadPercent,
+  megabytes,
+  resultNotice,
+} from "../settings/updates/progress";
 
 // What covers the whole window while the Host is replaced (Paper: Eta · Settings › Supplement /
 // Update flow, full-window screens). Downloading and waiting for work leave the app alone; from
@@ -115,12 +121,72 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
   const watched = signal<string>();
   const dismissed = signal<string>();
   const downloaded = signal<number>();
+  let hostProgress: ProgressHandle | undefined;
   effect(() => {
     const now = status();
     if (now?.state === "running" && now.id !== untracked(watched))
       watched.set(now.id);
     const download = now?.download;
     if (download) downloaded.set(download.total ?? download.received);
+  });
+  // Mirror non-blocking host upgrade phases (starting / downloading / waiting) into the
+  // cross-page top-right ProgressNotification stack; dismiss once the full-window restart screen
+  // takes over or the run finishes.
+  effect(() => {
+    const now = status();
+    const inBackground =
+      now?.state === "running" &&
+      (now.phase === "starting" ||
+        now.phase === "downloading" ||
+        now.phase === "waiting");
+    if (!inBackground) {
+      hostProgress?.dismiss();
+      hostProgress = undefined;
+      return;
+    }
+    const percent = downloadPercent(now.download);
+    const detail =
+      now.phase === "downloading" && now.download
+        ? now.download.total
+          ? uiText("updateDownloadedOf", {
+              received: megabytes(now.download.received),
+              total: megabytes(now.download.total),
+            })
+          : uiText("updateDownloadedSome", {
+              received: megabytes(now.download.received),
+            })
+        : now.phase === "waiting"
+          ? uiText("updateWaiting")
+          : uiText("updatePreparing");
+    const onCancel = host.can("upgrade.cancel")
+      ? () => {
+          hostProgress = undefined;
+          void host.call("upgrade", "cancel", {}).catch(() => {});
+        }
+      : undefined;
+    const fraction =
+      now.phase === "downloading" && percent !== undefined
+        ? percent / 100
+        : undefined;
+    const title = now.to
+      ? uiText("updateToVersion", { version: now.to })
+      : uiText("updatingTheHost");
+    if (!hostProgress) {
+      hostProgress = startProgress({
+        id: "host-update",
+        icon: "arrowCircleUp",
+        title,
+        detail,
+        progress: fraction,
+        onCancel,
+      });
+    } else {
+      hostProgress.update({ title, detail, progress: fraction, onCancel });
+    }
+  });
+  cleanup(() => {
+    hostProgress?.dismiss();
+    hostProgress = undefined;
   });
   const ended = () => {
     const now = status();

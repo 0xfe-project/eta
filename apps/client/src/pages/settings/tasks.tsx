@@ -16,11 +16,12 @@ import {
   Label,
   row,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { SectionHeader } from "./section";
+import { emptyStyle, SectionHeader } from "./section";
 
 /** The draft timeout's minutes field and its action menu. */
 const minutesWidth = 72;
@@ -101,6 +102,22 @@ export function TaskSettings(props: { phone?: boolean }) {
   };
   return (
     <View style={grow}>
+      <If when={!host.can("tasks.setSettings")}>
+        <EmptyState
+          size="page"
+          width="narrow"
+          style={emptyStyle}
+          status={host.state().ops.length ? "error" : "loading"}
+          loading={uiText("loadingEllipsis")}
+          error={{
+            art: "tasks",
+            tone: "quiet",
+            title: uiText("taskSettingsUnsupported"),
+            description: uiText("loadFailedUnsupported"),
+          }}
+          empty={{ title: uiText("taskSettingsUnsupported") }}
+        />
+      </If>
       <If when={host.can("tasks.setSettings")}>
         <SectionHeader title={uiText("taskFollowUp")} phone={props.phone} />
         <View

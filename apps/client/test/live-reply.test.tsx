@@ -13,29 +13,41 @@ const note = "I'll check config.json first.";
 const answer = "The baseUrl is missing /v1.";
 
 for (const width of [1440, 390]) {
-  test(`a reply at work is all in its window, and its answer comes out at the end (${width}px)`, async () => {
+  test(`a reply streams its answer directly with a caret while steps stay collapsible above (${width}px)`, async () => {
     const app = await open("./fixtures/live-reply.tsx", { width, height: 900 });
-    // At work: one window with every block in order and nothing outside it.
+    // At work: collapsible process window for steps + live streaming answer with caret.
     expect(app.shows("id:process-window")).toBe(true);
-    expect(app.shows("Process · 4 steps")).toBe(true);
+    expect(app.shows("Process · 3 steps")).toBe(true);
     expect(app.enabled("Stop")).toBe(true);
-    expect(app.count("label:Note")).toBe(2);
+    expect(app.count("label:Note")).toBe(1);
     expect(app.shows(note)).toBe(true);
-    expect(app.shows(answer)).toBe(true);
     expect(app.shows("label:Thinking")).toBe(true);
     // A thought starts folded; its words open on a press.
     expect(app.shows("Look at the provider config.")).toBe(false);
-    expect(app.shows("id:reply-answer")).toBe(false);
-    expect(app.shows("label:Thinking process")).toBe(false);
+    // Streaming answer is visible directly in reply-answer with 2px accent caret.
+    expect(app.shows("id:reply-answer")).toBe(true);
+    expect(app.shows("id:streaming-caret")).toBe(true);
+    expect(app.shows(answer)).toBe(true);
+    // Completed tool step renders check icon instead of text badge.
+    expect(app.shows("id:step-check")).toBe(true);
+
+    // Collapsing the live process window hides the step rows while keeping Stop & streaming answer.
+    await app.press("label:Thinking process");
+    expect(app.shows(note)).toBe(false);
+    expect(app.shows("id:reply-answer")).toBe(true);
+    expect(app.enabled("Stop")).toBe(true);
 
     await app.press("Finish");
-    // Over: the window folds to one row, and the last words come out under it.
+    // Over: the window folds to one row, caret disappears, Copy & Retry appear.
     expect(app.shows("id:process-window")).toBe(false);
+    expect(app.shows("id:streaming-caret")).toBe(false);
     expect(app.shows("label:Thinking process")).toBe(true);
     expect(reads(app, "3 steps")).toBe(true);
     expect(app.shows("id:reply-answer")).toBe(true);
     expect(app.shows(answer)).toBe(true);
     expect(app.shows(note)).toBe(false);
+    expect(app.shows("label:Copy")).toBe(true);
+    expect(app.shows("label:Retry")).toBe(true);
     const finished = app.texts();
 
     // Afresh from the saved row, it reads the same.
@@ -43,6 +55,39 @@ for (const width of [1440, 390]) {
     expect(app.texts()).toEqual(finished);
   });
 }
+
+test("running tool step shows spinner turning into check when completed", async () => {
+  const app = await open("./fixtures/live-reply.tsx", {
+    width: 1440,
+    height: 900,
+  });
+  await app.press("Running tool");
+  expect(app.shows("id:step-spinner")).toBe(true);
+  expect(app.shows("id:step-check")).toBe(false);
+
+  await app.press("Complete tool");
+  expect(app.shows("id:step-spinner")).toBe(false);
+  expect(app.shows("id:step-check")).toBe(true);
+});
+
+test("Copy and Retry actions work on completed and failed replies", async () => {
+  const app = await open("./fixtures/live-reply.tsx", {
+    width: 1440,
+    height: 900,
+  });
+  await app.press("Finish");
+  await app.press("label:Copy");
+  expect(app.shows("id:toast")).toBe(true);
+  expect(app.texts()).toContain("Copied");
+
+  await app.press("label:Retry");
+  expect(app.texts()).toContain("Retried: 1");
+
+  await app.press("End failed");
+  expect(app.shows("label:Retry")).toBe(true);
+  await app.press("label:Retry");
+  expect(app.texts()).toContain("Retried: 2");
+});
 
 test("an insert leaves a trace in the window", async () => {
   const app = await open("./fixtures/live-reply.tsx", {
@@ -53,18 +98,20 @@ test("an insert leaves a trace in the window", async () => {
   expect(app.shows("Also check the key.")).toBe(false);
 });
 
-test("a reply without tools is written in the window and comes out whole", async () => {
+test("a reply without tools streams directly in reply-answer with Stop header", async () => {
   const app = await open("./fixtures/live-reply.tsx", {
     width: 1440,
     height: 900,
   });
   await app.press("Write without tools");
   expect(app.shows("id:process-window")).toBe(true);
-  expect(app.shows("Process · 1 step")).toBe(true);
+  expect(app.shows("Working…")).toBe(true);
+  expect(app.shows("id:reply-answer")).toBe(true);
+  expect(app.shows("id:streaming-caret")).toBe(true);
   expect(app.shows("Nothing to look up: the answer is 42.")).toBe(true);
-  expect(app.shows("id:reply-answer")).toBe(false);
   await app.press("Finish");
   expect(app.shows("id:process-window")).toBe(false);
+  expect(app.shows("id:streaming-caret")).toBe(false);
   expect(app.shows("label:Thinking process")).toBe(false);
   expect(app.shows("id:reply-answer")).toBe(true);
   expect(app.shows("Nothing to look up: the answer is 42.")).toBe(true);
@@ -72,7 +119,7 @@ test("a reply without tools is written in the window and comes out whole", async
 
 for (const [ending, status] of [
   ["End stopped", "Stopped"],
-  ["End failed", "Provider said 500."],
+  ["End failed", "The run failed."],
 ] as const)
   test(`a reply that ends on a call says how it ended, and takes no words for an answer (${ending})`, async () => {
     const app = await open("./fixtures/live-reply.tsx", {
@@ -103,12 +150,12 @@ for (const [width, height] of [
     await app.press("label:View more");
     expect(app.shows(panel)).toBe(true);
     // The window under it is as it was: nothing opened in place.
-    expect(app.shows("Process · 4 steps")).toBe(true);
+    expect(app.shows("Process · 3 steps")).toBe(true);
     // The panel's timing strip and the whole process.
     expect(app.shows("label:Generation")).toBe(true);
     expect(app.count(`text:${note}`)).toBe(2);
     expect(app.texts().some((text) => text.includes("config.json"))).toBe(true);
-    // What the run writes next comes into the open panel.
+    // What the run writes next comes into the open panel and streams live.
     expect(app.shows("Checking the key next.")).toBe(false);
     await app.waitUntil(() => app.count("text:Checking the key next.") === 2);
   });

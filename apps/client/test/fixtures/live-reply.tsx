@@ -5,7 +5,8 @@ import type {
   ViewMessageRow,
 } from "@eta/client-contracts";
 import { mount, signal, View, windowSize } from "nsh";
-import { Button } from "../../src/components";
+import { Button, Label } from "../../src/components";
+import { ToastLayer } from "../../src/components/toast";
 import { Message } from "../../src/pages/chat/message";
 import { createHost, Host } from "../../src/services/host";
 
@@ -51,6 +52,22 @@ const working = [
   }),
   row(4, { role: "user", content: "Also check the key." }),
   row(5, { role: "assistant", content: [{ type: "text", text: answer }] }),
+];
+
+/** A session with a tool still running (no toolResult yet). */
+const runningTool = [
+  row(1, { role: "user", content: "Check config.json" }),
+  row(2, {
+    role: "assistant",
+    content: [
+      {
+        type: "toolCall",
+        id: "t-run",
+        name: "read",
+        arguments: { path: "config.json" },
+      },
+    ],
+  }),
 ];
 
 /** A reply that calls nothing: its words alone. */
@@ -109,6 +126,8 @@ function Fixture() {
   host.address.set({ origin: "http://example.invalid" });
   const ending = signal<Ending>("working");
   const plainSession = signal(false);
+  const runningToolSession = signal(false);
+  const retried = signal(0);
   /** Rows the run wrote after the fixture's own. */
   const later = signal<ViewMessageRow[]>([]);
   const reloaded = signal(false);
@@ -117,7 +136,14 @@ function Fixture() {
     revisions: {},
     sections: {
       transcript: {
-        messages: [...(plainSession() ? plainRun : working), ...later()],
+        messages: [
+          ...(runningToolSession()
+            ? runningTool
+            : plainSession()
+              ? plainRun
+              : working),
+          ...later(),
+        ],
       },
       core: { session: "s-ada", running: true },
     },
@@ -175,12 +201,36 @@ function Fixture() {
           onArtifact={() => {}}
           onWidgetDraft={() => {}}
           onTask={() => {}}
+          onRetry={() => retried.update((n) => n + 1)}
           onReadDraft={() => {}}
           registerAction={() => () => {}}
+        />
+        <Label>{`Retried: ${retried()}`}</Label>
+        <Button
+          label="Running tool"
+          onPress={() => {
+            runningToolSession.set(true);
+            plainSession.set(false);
+            host.state.update((state) => ({
+              ...state,
+              targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
+            }));
+          }}
+        />
+        <Button
+          label="Complete tool"
+          onPress={() => {
+            runningToolSession.set(false);
+            host.state.update((state) => ({
+              ...state,
+              targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
+            }));
+          }}
         />
         <Button
           label="Write without tools"
           onPress={() => {
+            runningToolSession.set(false);
             plainSession.set(true);
             host.state.update((state) => ({
               ...state,
@@ -227,6 +277,7 @@ function Fixture() {
             });
           }}
         />
+        <ToastLayer />
       </View>
     </Host.Provider>
   );

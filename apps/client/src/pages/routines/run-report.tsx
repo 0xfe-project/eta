@@ -30,6 +30,7 @@ import {
 } from "../../components/tokens";
 import { formatLocale, localizedText, uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
+import { problemText } from "../../services/problem-text";
 import { reportBody, RoutineHistory } from "./history";
 import {
   clockTime,
@@ -49,6 +50,8 @@ interface RoutineReportProps {
   onBack: () => void;
   onMove: (by: number) => void;
   canRetry: boolean;
+  starting?: boolean;
+  sendingFeedback?: boolean;
   onRetry: () => void;
   onToggle: () => void;
   onEdit: () => void;
@@ -115,7 +118,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
       ? localizedText("Skipped", "已跳过")
       : uiText("failed");
   const error = () =>
-    props.run.error ??
+    (props.run.error && problemText(props.run.error)) ??
     (props.run.status === "skipped"
       ? uiText("theRoutineWasSkipped")
       : localizedText(
@@ -295,6 +298,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
           labelWeight={weight.strong}
           style={{ paddingHorizontal: space[16], gap: space[4] }}
           disabled={!props.canRetry}
+          busy={props.starting}
           onPress={props.onRetry}
         />
       </View>
@@ -451,7 +455,9 @@ export function RoutineReport(props: RoutineReportProps) {
                   </Label>
                 </View>
                 <Label tone={props.phone ? "muted" : "mutedInk"}>
-                  {props.run.error ?? uiText("theRoutineWasSkipped")}
+                  {props.run.error
+                    ? problemText(props.run.error)
+                    : uiText("theRoutineWasSkipped")}
                 </Label>
                 <View
                   style={{ ...row, paddingTop: props.phone ? space[4] : 0 }}
@@ -459,6 +465,7 @@ export function RoutineReport(props: RoutineReportProps) {
                   <Button
                     label={uiText("retry")}
                     disabled={!props.canRetry}
+                    busy={props.starting}
                     onPress={props.onRetry}
                     size={props.phone ? control.touch : undefined}
                     style={
@@ -559,6 +566,7 @@ export function RoutineReport(props: RoutineReportProps) {
                   // The glyph sits on the box's 10px inset.
                   style={{ marginRight: -space[4] }}
                   disabled={!sendable()}
+                  busy={props.sendingFeedback}
                   onPress={props.onSend}
                 />
               </View>

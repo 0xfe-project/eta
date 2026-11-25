@@ -32,11 +32,7 @@ test("delivered, failed and dependency lines stand alone; the rest folds between
   // Their own lines, open.
   expect(said).toContain("added prerequisite “Design the login flow”");
   expect(said).toContain("published artifact “Login API benchmark”");
-  expect(
-    texts.some((t) =>
-      t.includes("This turn failed: the provider returned 529"),
-    ),
-  ).toBe(true);
+  expect(texts.includes("This turn failed.")).toBe(true);
   expect(said).toContain("was blocked: “Design the login flow” was cancelled");
   // Status changes, run bookkeeping and the rename are folded, each run of them into one line.
   expect(texts.some((t) => t.includes("changed status from"))).toBe(false);

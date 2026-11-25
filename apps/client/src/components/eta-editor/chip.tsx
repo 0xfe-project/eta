@@ -5,6 +5,7 @@ import { canHover } from "../menu";
 import { Icon } from "../text";
 import {
   colors,
+  focusRing,
   fontFamily,
   Fonts,
   monoFontFamily,
@@ -43,6 +44,8 @@ export function Chip(props: {
   cursor?: "pointer" | "zoom-in";
   selected?: boolean;
   dim?: boolean;
+  /** Determinate 0..1 inline 4px progress bar along the bottom edge without changing chip size. */
+  progress?: number;
   accessibilityLabel: string;
   onPress?: () => void;
   onRemove?: () => void;
@@ -103,6 +106,7 @@ export function Chip(props: {
         tooltip={props.tooltip}
         accessibilityLabel={props.accessibilityLabel}
         onPress={props.onPress}
+        focusVisibleStyle={focusRing(c(), "inset")}
         style={{
           ...row,
           gap: space[4],
@@ -147,6 +151,7 @@ export function Chip(props: {
           accessibilityLabel={props.removeLabel ?? "Remove"}
           onPress={props.onRemove}
           hoverStyle={{ backgroundColor: c().border }}
+          focusVisibleStyle={focusRing(c(), "inset")}
           style={{
             width: type("small").line,
             height: type("small").line,
@@ -156,6 +161,36 @@ export function Chip(props: {
           }}
         >
           {text(c().muted, "×")}
+        </View>
+      </If>
+      <If when={props.progress !== undefined}>
+        <View
+          role="progressbar"
+          accessibilityLabel={props.accessibilityLabel}
+          accessibilityValue={{
+            min: 0,
+            max: 100,
+            now: Math.round(
+              Math.max(0, Math.min(1, props.progress ?? 0)) * 100,
+            ),
+          }}
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: space[4],
+            backgroundColor: c().border,
+            pointerEvents: "none",
+          }}
+        >
+          <View
+            style={{
+              height: space[4],
+              width: `${Math.round(Math.max(0, Math.min(1, props.progress ?? 0)) * 100)}%`,
+              backgroundColor: c().ink,
+            }}
+          />
         </View>
       </If>
     </View>
@@ -229,6 +264,7 @@ export function MentionChip(props: {
         onPress={props.onPress}
         onMouseEnter={() => hovered.set(true)}
         onMouseLeave={() => hovered.set(false)}
+        focusVisibleStyle={focusRing(c(), "inset")}
         style={{ cursor: "pointer" }}
       >
         {chip()}

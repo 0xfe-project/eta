@@ -8,9 +8,9 @@ import { signal, View, windowSize } from "nsh";
 import {
   Button,
   colors,
+  dialogWidth,
   grow,
   Label,
-  dialogWidth,
   Modal,
   row,
   SmoothScroll,
@@ -18,6 +18,7 @@ import {
 import { control, space, weight } from "../../components/tokens";
 import { localizedText, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { Callout } from "../../ui";
 import { ConversationMembers } from "./conversation-members";
 import { DirectoryOptions } from "./directory-options";
 import { failureText, placeFailure } from "./place-errors";
@@ -257,14 +258,16 @@ export function NewConversation(props: {
         </If>
         <If when={error()}>
           {(failure) => (
-            <View role="alert" style={{ padding: space[16], gap: space[4] }}>
-              <Label tone="red">{failureText(failure())}</Label>
-              <If when={failure().detail && failure().code !== "other"}>
-                <Label tone="muted" variant="small">
-                  {failure().detail}
-                </Label>
-              </If>
-            </View>
+            <Callout
+              tone="danger"
+              inline
+              title={failureText(failure())}
+              description={
+                failure().detail && failure().code !== "other"
+                  ? failure().detail
+                  : undefined
+              }
+            />
           )}
         </If>
       </SmoothScroll>
@@ -308,9 +311,8 @@ export function NewConversation(props: {
             label={localizedText("Start", "开始")}
             tone="primary"
             size={control.sm}
-            disabled={
-              !agents().length || saving() || !host.can("conversations.create")
-            }
+            disabled={!agents().length || !host.can("conversations.create")}
+            busy={saving()}
             onPress={() => void start()}
           />
         </If>

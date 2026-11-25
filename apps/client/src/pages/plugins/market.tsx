@@ -18,12 +18,11 @@ import {
   untracked,
   View,
 } from "nsh";
-import { Input } from "nsh/base";
 import {
   Button,
   colors,
-  fontFamily,
-  Fonts,
+  CompactSkeleton,
+  Field,
   grow,
   Header,
   Label,
@@ -31,13 +30,15 @@ import {
   row,
   SmoothScroll,
   textFaces,
-  textStyle,
 } from "../../components";
 import { hint } from "../../components/controls";
+import { EmptyState } from "../../components/empty-state";
+import { ListSkeleton } from "../../components/loading-skeleton";
 import { CloseButton } from "../../components/navigation-buttons";
 import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
 import { sheetEdge } from "./configure";
 import { pendingLogos, PluginLogo, primeLogos } from "./plugin-logo";
@@ -95,7 +96,6 @@ export function Market(props: {
   const host = useHost();
   const c = colors();
   const type = textFaces();
-  const fonts = Fonts();
   const catalog = signal<MarketCatalog | undefined>(lastCatalog);
   const show = (next: MarketCatalog) => {
     lastCatalog = next;
@@ -531,25 +531,17 @@ export function Market(props: {
     value: () => string,
     onChange: (value: string) => void,
   ) => (
-    <Input
-      accessibilityLabel={label}
+    <Field
+      label={label}
       placeholder={label}
       value={value()}
-      submitBehavior="submit"
-      onChange={(event) => onChange(event.value)}
-      focusStyle={{ borderColor: c().ink }}
-      style={{
-        color: c().ink,
-        placeholderColor: c().faint,
-        backgroundColor: c().canvas,
-        fontFamily: fontFamily(fonts().interface),
-        ...textStyle(type("small")),
-        height: phone() ? control.touch : control.md,
-        paddingHorizontal: phone() ? space[12] : space[8],
-        borderWidth: 1,
-        borderColor: c().strong,
-        borderRadius: 0,
-      }}
+      compact
+      onChange={onChange}
+      style={
+        phone()
+          ? { height: control.touch, paddingHorizontal: space[12] }
+          : undefined
+      }
     />
   );
   const authLabel = (auth: ComposioAuth) =>
@@ -708,6 +700,8 @@ export function Market(props: {
           <Button
             label={uiText("refreshPlugins")}
             icon="refresh"
+            spinIcon
+            busy={loading()}
             iconOnly
             iconSize={icon.md}
             size={control.sm}
@@ -732,31 +726,59 @@ export function Market(props: {
             gap: space[12],
           }}
         >
-          <If when={catalog() && !catalog()!.sources.length}>
-            <View style={{ gap: space[8] }}>
-              <Label weight={weight.regular}>{uiText("marketNoSources")}</Label>
-              <Label variant="small" tone="muted">
-                {uiText("marketNoSourcesHint")}
-              </Label>
-            </View>
+          <If
+            when={
+              !catalog() ||
+              !catalog()!.sources.length ||
+              (!all().length && !failed().length)
+            }
+          >
+            <EmptyState
+              size="page"
+              status={catalog() ? "empty" : loading() ? "loading" : "error"}
+              loading={<ListSkeleton label={uiText("marketLoading")} />}
+              error={{
+                title: uiText("marketDidNotLoad"),
+                description: uiText("marketDidNotLoadHint"),
+                retry: () => void load(),
+              }}
+              empty={
+                catalog()?.sources.length
+                  ? {
+                      art: "plugins",
+                      title: uiText("marketEmpty"),
+                      description: uiText("marketEmptyHint"),
+                    }
+                  : {
+                      art: "plugins",
+                      title: uiText("marketNoSources"),
+                      description: uiText("marketNoSourcesHint"),
+                    }
+              }
+              style={{ paddingHorizontal: 0, paddingVertical: space[24] }}
+            />
           </If>
           <Each of={failed()} key={(item) => item.source.url}>
             {(item) => (
-              <View style={{ gap: space[4] }}>
-                <Label weight={weight.regular}>
-                  {item().source.name || item().source.url}
-                </Label>
-                <Label variant="small" tone="muted">
-                  {uiText("marketUnavailable")}
-                </Label>
-                <Label
-                  variant="small"
-                  tone="muted"
-                  style={{ userSelect: "text" }}
-                >
-                  {item().error ?? ""}
-                </Label>
-              </View>
+              <EmptyState
+                size="card"
+                status="error"
+                loading={null}
+                error={{
+                  title: uiText("marketSourceDidNotLoad", {
+                    name: item().source.name || item().source.url,
+                  }),
+                  description: uiText("marketUnavailable"),
+                  problem: item().error ?? undefined,
+                  retry: () => void load(),
+                }}
+                empty={{ title: item().source.name || item().source.url }}
+                style={{
+                  paddingHorizontal: 0,
+                  borderBottomWidth: 1,
+                  borderColor: c().border,
+                }}
+              />
             )}
           </Each>
           <Each of={stale()} key={(item) => item.source.url}>
@@ -769,7 +791,7 @@ export function Market(props: {
                 {uiText("marketKeptCopy", {
                   name: item().source.name || item().source.url,
                   time: new Date(item().updatedAt ?? 0).toLocaleString(),
-                  reason: item().stale ?? "",
+                  reason: problemText(item().stale ?? ""),
                 })}
               </Label>
             )}
@@ -814,9 +836,25 @@ export function Market(props: {
               {field(uiText("marketSearch"), query, query.set)}
             </View>
             <If when={!entries().length && !toolkits().length}>
-              <Label variant="small" tone="muted">
-                {uiText("marketNothingFound")}
-              </Label>
+              <EmptyState
+                size="page"
+                status="empty"
+                loading={null}
+                error={null}
+                empty={{
+                  title: uiText("marketNothingFound", {
+                    query: query().trim(),
+                  }),
+                  actions: [
+                    {
+                      label: uiText("clearSearch"),
+                      onPress: () => query.set(""),
+                    },
+                  ],
+                }}
+                announce
+                style={{ paddingHorizontal: 0, paddingVertical: space[8] }}
+              />
             </If>
             <View
               onLayout={({ bounds }) => room.set(bounds.size.width)}
@@ -1092,7 +1130,7 @@ export function Market(props: {
                     label={uiText("composioAdd")}
                     tone="primary"
                     size={phone() ? control.touch : control.md}
-                    disabled={busy()}
+                    busy={busy()}
                     onPress={() => void add(currentToolkit()!)}
                   />
                 }
@@ -1101,7 +1139,7 @@ export function Market(props: {
                   label={uiText("composioRemove")}
                   tone="plain"
                   size={phone() ? control.touch : control.md}
-                  disabled={busy()}
+                  busy={busy()}
                   onPress={() => void removeAdded(currentToolkit()!)}
                 />
               </If>
@@ -1119,15 +1157,13 @@ export function Market(props: {
                 </If>
                 <Button
                   label={
-                    busy()
-                      ? uiText("composioConnecting")
-                      : isConnected(currentToolkit()!.slug)
-                        ? uiText("composioReconnect")
-                        : uiText("composioConnect")
+                    isConnected(currentToolkit()!.slug)
+                      ? uiText("composioReconnect")
+                      : uiText("composioConnect")
                   }
                   tone="primary"
                   size={phone() ? control.touch : control.md}
-                  disabled={busy()}
+                  busy={busy()}
                   onPress={() => void connect(currentToolkit()!)}
                 />
               </View>
@@ -1207,9 +1243,7 @@ export function Market(props: {
                 {line(uiText("marketHomepage"), current()!.homepage ?? "")}
               </If>
               <If when={infoLoading()}>
-                <Label variant="small" tone="muted">
-                  {uiText("marketReading")}
-                </Label>
+                <CompactSkeleton label={uiText("marketReading")} />
               </If>
               <If when={infoError()}>
                 <Label

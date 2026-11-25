@@ -11,8 +11,12 @@ import type { ViewRef } from "nsh";
 import type { EntityStatus } from "../section";
 import type { DisplayedSourceSummary } from "./source-summaries";
 import { keyMissing, providerLabel } from "@eta/client-contracts";
-import { View, windowSize } from "nsh";
+import { signal, View, windowSize } from "nsh";
 import { ActionItem, colors, Label, row } from "../../../components";
+import {
+  createOptimisticStatus,
+  OptimisticStatus,
+} from "../../../components/optimistic-status";
 import { opacity, space } from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
@@ -47,7 +51,52 @@ export function ModelSourceList(props: {
   const now = billingClock();
   const narrow = () => props.phone && windowSize().width <= 320;
   const c = colors();
-  const { providers, accounts } = useModelSources();
+  const { providers, accounts: rawAccounts } = useModelSources();
+  const pendingEnabled = signal<Record<string, boolean>>({});
+  const toggleStatus = createOptimisticStatus();
+  let lastAccountToggle: { id: string; enabled: boolean } | undefined;
+  const accounts = () => {
+    const overrides = pendingEnabled();
+    if (!Object.keys(overrides).length) return rawAccounts();
+    return rawAccounts().map((account) => {
+      if (!(account.id in overrides)) return account;
+      const enabled = overrides[account.id];
+      return {
+        ...account,
+        state: enabled
+          ? account.state === "disabled"
+            ? ("active" as const)
+            : account.state
+          : ("disabled" as const),
+      };
+    });
+  };
+  function toggleAccount(id: string, enabled: boolean) {
+    lastAccountToggle = { id, enabled };
+    pendingEnabled.update((all) => ({ ...all, [id]: enabled }));
+    toggleStatus.saving();
+    void host
+      .call("llm", "setEnabled", { id, enabled })
+      .then(() => {
+        toggleStatus.saved();
+        setTimeout(() => {
+          pendingEnabled.update((all) => {
+            if (all[id] !== enabled) return all;
+            const { [id]: _, ...rest } = all;
+            return rest;
+          });
+        }, 1500);
+      })
+      .catch((problem: unknown) => {
+        pendingEnabled.update((all) => {
+          const { [id]: _, ...rest } = all;
+          return rest;
+        });
+        toggleStatus.fail(
+          problem instanceof Error ? problem.message : String(problem),
+        );
+      });
+  }
   const logo = useSourceLogos();
   const checks = () =>
     host.section<Record<string, ProviderCheck>>("providers", "checks") ?? {};
@@ -137,6 +186,22 @@ export function ModelSourceList(props: {
   };
   return (
     <>
+      <If when={toggleStatus.state().status !== "idle"}>
+        <View style={{ paddingHorizontal: space[16], paddingTop: space[4] }}>
+          <OptimisticStatus
+            state={toggleStatus.state()}
+            onRetry={
+              lastAccountToggle
+                ? () =>
+                    toggleAccount(
+                      lastAccountToggle!.id,
+                      lastAccountToggle!.enabled,
+                    )
+                : undefined
+            }
+          />
+        </View>
+      </If>
       <Each of={accounts()} key={(item) => item.id}>
         {(item) => (
           <EntityRow
@@ -252,12 +317,7 @@ export function ModelSourceList(props: {
                     : uiText("disable")
                 }
                 onSelect={() =>
-                  void host.action(() =>
-                    host.call("llm", "setEnabled", {
-                      id: item().id,
-                      enabled: item().state === "disabled",
-                    }),
-                  )
+                  toggleAccount(item().id, item().state === "disabled")
                 }
               />
             }

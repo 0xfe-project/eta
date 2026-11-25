@@ -10,15 +10,7 @@ import type {
 import type { JSX } from "nsh";
 import type { SourcePreset } from "./add-source-model";
 import { modelSource } from "@eta/client-contracts";
-import {
-  cleanup,
-  Clipboard,
-  effect,
-  openUrl,
-  signal,
-  untracked,
-  View,
-} from "nsh";
+import { cleanup, effect, openUrl, signal, untracked, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -47,6 +39,7 @@ import {
 } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { CopyButton } from "../../../ui";
 import { EntityRow, LetterBox, SectionHeader } from "../section";
 import {
   abilityTags,
@@ -499,33 +492,25 @@ export function AddSource(props: {
           </If>
           <If when={step() === 1 && !connector()}>
             <Button
-              label={
-                connecting()
-                  ? uiText("addSourceConnecting")
-                  : uiText("addSourceConnect")
-              }
+              label={uiText("addSourceConnect")}
               tone="primary"
               size={props.phone ? control.lg : undefined}
               style={{ paddingHorizontal: props.phone ? space[16] : space[12] }}
               disabled={
-                connecting() ||
                 (keyRequired() && apiKey().trim().length === 0) ||
                 baseUrl().trim().length === 0
               }
+              busy={connecting()}
               onPress={() => void connect()}
             />
           </If>
           <If when={step() === 1 && connector()?.flow === "api_key"}>
             <Button
-              label={
-                connecting()
-                  ? uiText("addSourceConnecting")
-                  : uiText("addSourceConnect")
-              }
+              label={uiText("addSourceConnect")}
               tone="primary"
               size={props.phone ? control.lg : undefined}
               style={{ paddingHorizontal: props.phone ? space[16] : space[12] }}
-              disabled={connecting()}
+              busy={connecting()}
               onPress={() => gatewaySubmit?.()}
             />
           </If>
@@ -880,12 +865,7 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
                 {code()}
               </Label>
             </View>
-            <Button
-              label={uiText("addSourceCopyCode")}
-              onPress={() =>
-                void host.action(() => Clipboard.writeText(code()))
-              }
-            />
+            <CopyButton label={uiText("addSourceCopyCode")} value={code} />
           </View>
         )}
       </If>
@@ -931,7 +911,7 @@ function DeviceLogin(props: { connector: LlmConnector; onDone: () => void }) {
             <Alert text={text()} />
             <Button
               label={uiText("addSourceRetry")}
-              disabled={starting()}
+              busy={starting()}
               onPress={() => void start()}
             />
           </View>

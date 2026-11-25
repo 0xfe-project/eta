@@ -3,9 +3,10 @@ import type { Layout } from "./theme";
 import { context, platform, reduceMotion, signal, View } from "nsh";
 import { Menu, MenuItem, MenuSeparator, Popover, Sheet } from "nsh/base";
 import { Compact } from "./density";
+import { EmptyState } from "./empty-state";
 import { menuMotion } from "./motion";
 import { SmoothScroll } from "./smooth-scroll";
-import { colors, Screen } from "./theme";
+import { colors, focusRing, Screen } from "./theme";
 import { space } from "./tokens";
 
 /** The grabber atop a phone sheet. */
@@ -131,6 +132,8 @@ export function MenuFrame(props: {
   /** The trigger opens nothing. */
   disabled?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** What the menu says while it has no options to choose (one muted line): pass it only then. */
+  empty?: string;
   children?: JSX.Element;
 }) {
   const c = colors();
@@ -163,7 +166,12 @@ export function MenuFrame(props: {
         <Grabber />
         {props.sheetHeader}
       </If>
-      <Compact>{props.children}</Compact>
+      <Compact>
+        {props.children}
+        <If when={props.empty}>
+          {(text) => <MenuEmpty text={text()} native={native} />}
+        </If>
+      </Compact>
     </MenuHost.Provider>
   );
   const viaMenu = () => (
@@ -214,6 +222,7 @@ export function MenuFrame(props: {
         role="button"
         accessibilityState={{ expanded: opened() }}
         onPress={() => change(!opened())}
+        focusVisibleStyle={focusRing(c())}
         style={{ minWidth: 0 }}
       >
         {props.trigger}
@@ -241,6 +250,28 @@ export function MenuFrame(props: {
       }
     >
       {viaMenu()}
+    </If>
+  );
+}
+
+/** A menu with nothing to choose: one muted line, no art, no button. In a menu the platform
+ * draws, a disabled item holds it. */
+function MenuEmpty(props: { text: string; native: boolean }) {
+  const line = (
+    <EmptyState
+      size="menu"
+      status="empty"
+      loading={null}
+      error={null}
+      empty={{ title: props.text }}
+      style={inSheet() ? { paddingHorizontal: space[16] } : undefined}
+    />
+  );
+  return (
+    <If when={props.native} else={line}>
+      <MenuItem disabled accessibilityLabel={props.text}>
+        {line}
+      </MenuItem>
     </If>
   );
 }
@@ -282,6 +313,7 @@ export function MenuRow(props: {
           }}
           hoverStyle={hover}
           activeStyle={{ backgroundColor: c().selected }}
+          focusVisibleStyle={focusRing(c(), "inset")}
           style={{ cursor: "pointer", ...props.style }}
         >
           {props.children}

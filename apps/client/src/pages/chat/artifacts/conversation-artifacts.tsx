@@ -5,9 +5,7 @@ import { keymap, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
-  Button,
   colors,
-  Empty,
   Field,
   grow,
   Icon,
@@ -18,7 +16,7 @@ import {
   textFaces,
   textStyle,
 } from "../../../components";
-import { settled } from "../../../components/pending";
+import { EmptyState } from "../../../components/empty-state";
 import {
   control,
   icon,
@@ -28,6 +26,7 @@ import {
 } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { useLoadState } from "../../../services/load-status";
 import { SectionHeading, ViewAll } from "../section-heading";
 import {
   applyFilters,
@@ -79,14 +78,11 @@ export function ConversationArtifacts(props: {
 }) {
   const c = colors();
   const host = useHost();
+  const load = useLoadState({ targets: () => ["artifacts"] });
   const artifacts = () =>
     host
       .artifacts()
       .filter((entry) => entry.conversationId === props.conversationId);
-  // Whether the artifacts came (or could not): the skeleton, once it appeared, stays its least time.
-  const artifactsShown = settled(
-    () => !!(host.state().targets.artifacts || host.state().missing.artifacts),
-  );
   return (
     <If
       when={props.tab === "Artifacts"}
@@ -102,44 +98,28 @@ export function ConversationArtifacts(props: {
     >
       <View style={grow}>
         <If
-          when={artifacts().length && artifactsShown()}
+          when={artifacts().length && load.status() === "ready"}
           else={
-            <If
-              when={artifactsShown()}
-              else={<ListSkeleton label={uiText("artifactsLoading")} />}
-            >
-              <Empty
-                icon={host.state().missing.artifacts ? "warning" : "appWindow"}
-                iconSize={icon.lg}
-                iconTone={host.state().missing.artifacts ? "red" : "muted"}
-                descriptionVariant="caption"
-                style={{
-                  flex: 0,
-                  marginTop: space[16],
-                  paddingVertical: space[48],
-                }}
-                title={
-                  host.state().missing.artifacts
-                    ? uiText("artifactLoadError")
-                    : uiText("noArtifactsYet")
-                }
-                description={
-                  host.state().missing.artifacts
-                    ? uiText("theHostDidNotRespondIn")
-                    : uiText("artifactsEmptyHelp")
-                }
-              >
-                <If when={host.state().missing.artifacts}>
-                  <Button
-                    label={uiText("retry")}
-                    icon="refresh"
-                    size={control.md}
-                    style={{ marginTop: space[4] }}
-                    onPress={props.reload}
-                  />
-                </If>
-              </Empty>
-            </If>
+            <EmptyState
+              size="page"
+              width="narrow"
+              status={load.shown()}
+              loading={<ListSkeleton label={uiText("artifactsLoading")} />}
+              error={{
+                title: uiText("artifactLoadError"),
+                description: load.why(),
+                retry: props.reload,
+              }}
+              empty={{
+                art: "artifacts",
+                title: uiText("noArtifactsYet"),
+                description: uiText("artifactsEmptyHelp"),
+              }}
+              style={{
+                paddingHorizontal: space[16],
+                paddingVertical: space[24],
+              }}
+            />
           }
         >
           <ArtifactBrowser
@@ -174,18 +154,23 @@ export function ConversationArtifacts(props: {
           </If>
         </SectionHeading>
         <If when={!recent.artifacts.length}>
-          <Label
-            variant="small"
-            tone="muted"
+          <EmptyState
+            size="row"
+            status={load.shown()}
+            loading={uiText("artifactsLoading")}
+            error={{
+              title: uiText("artifactLoadError"),
+              retry: props.reload,
+            }}
+            empty={{ title: uiText("noArtifactsYet") }}
             style={{
               paddingHorizontal: space[12],
+              paddingTop: 0,
               paddingBottom: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
-          >
-            {uiText("noArtifactsYet")}
-          </Label>
+          />
         </If>
         <Each of={recentArtifacts(recent.artifacts)} key={(a) => a.id}>
           {(artifact) => (
@@ -328,32 +313,28 @@ export function ArtifactBrowser(props: {
         <If
           when={shown().length}
           else={
-            <View
-              style={{
-                alignItems: "center",
-                gap: space[12],
-                paddingHorizontal: space[20],
-                paddingVertical: space[40],
-              }}
-            >
-              <Label
-                variant="small"
-                tone="muted"
-                style={{ textAlign: "center" }}
-              >
-                {filters().query.trim()
+            <EmptyState
+              size="page"
+              width="narrow"
+              status="empty"
+              loading={null}
+              error={null}
+              empty={{
+                title: filters().query.trim()
                   ? uiText("artifactsNoMatch", {
                       query: filters().query.trim(),
                     })
-                  : uiText("artifactsNoFilterMatch")}
-              </Label>
-              <Button
-                label={uiText("artifactsClearFilters")}
-                size={props.phone ? control.lg : control.sm}
-                labelVariant="caption"
-                onPress={clear}
-              />
-            </View>
+                  : uiText("artifactsNoFilterMatch"),
+                actions: [
+                  { label: uiText("artifactsClearFilters"), onPress: clear },
+                ],
+              }}
+              announce
+              style={{
+                paddingHorizontal: space[16],
+                paddingVertical: space[24],
+              }}
+            />
           }
         >
           <Each of={view().rows} key={(entry) => entry.artifact.id}>

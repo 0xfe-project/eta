@@ -10,11 +10,21 @@ import { space } from "./tokens";
 export const motion = {
   /** A wait shorter than this shows nothing: a spinner or a skeleton appears only once a wait
    * has lasted this long (#380). */
-  reveal: 150,
+  reveal: 300,
   /** A spinner or a skeleton that appeared stays at least this long, so it never flashes. */
-  minShown: 300,
-  /** One turn of a spinner, or of a button's own icon while its action runs. */
+  minShown: 500,
+  /** One turn of a continuous indeterminate spinner. */
   spin: 800,
+  /** Action-icon spin (SpinningIcon): accelerates over the first 18%, sustains at ~600°/s,
+   * decelerates over the last 18%, minimum 640 ms for one full turn, landing on a whole turn. */
+  spinAction: {
+    rampMs: 120,
+    rampDeg: 36,
+    sustainFirstMs: 480,
+    sustainNextMs: 540,
+    finishLinearMs: 60,
+    minTurnMs: 640,
+  },
   /** A dialog, sheet or drawer coming in (`Modal`): the phone's and the larger windows'. The
    * phone's is longer, as the spec of #379 asks for sheets (350–500 ms), the others about 2/3. */
   dialogIn: { phone: 360, window: 240 },
@@ -41,6 +51,14 @@ export const motion = {
   open: [0.32, 0.72, 0, 1] as Easing,
   /** Going away: eases in, so it leaves quickly once it starts. */
   close: [0.32, 0, 0.67, 0] as Easing,
+  /** The avatar editor: each face passing over before one lands, the landed face settling, a
+   * face taken back from the recent ones fading in. */
+  avatarFlick: 60,
+  avatarSettle: 160,
+  avatarFade: 120,
+  /** How long an agent face's idle motion takes to come in or die away, as
+   * `@blobatar/react-native` ramps it. */
+  faceRamp: 400,
 } as const;
 
 /** Where something comes from as it fades in: below (a dialog, a sheet), the trailing edge (a

@@ -1,9 +1,9 @@
 import type { ConversationInfo, MemberView } from "@eta/client-contracts";
-import { signal, View } from "nsh";
-import { Button, dialogWidth, Label, Modal } from "../../components";
-import { space } from "../../components/tokens";
+import { signal } from "nsh";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
+import { ConfirmDialog } from "../../ui";
 
 /** The confirmation a member row's "Remove member" opens. */
 export function RemoveMember(props: {
@@ -27,45 +27,27 @@ export function RemoveMember(props: {
       });
       props.onClose();
     } catch (cause) {
-      error.set(cause instanceof Error ? cause.message : String(cause));
+      error.set(problemText(cause));
     } finally {
       busy.set(false);
     }
   }
   return (
-    <Modal
+    <ConfirmDialog
       title={uiText("removeMember")}
-      width={dialogWidth.md}
+      description={uiText("removeFrom", {
+        memberName: host.agent(props.agentId)?.name ?? props.agentId,
+        name: props.info.name,
+      })}
+      confirmLabel={uiText("removeMember")}
+      tone="danger"
       phone={props.phone}
-      sheet={props.phone}
-      overPhoneNavigation
+      busy={busy()}
+      disabled={props.members.length <= 1}
+      error={error()}
       modalFocus
-      dismissible={!busy()}
+      onConfirm={() => void remove()}
       onClose={props.onClose}
-    >
-      <View style={{ padding: space[16], gap: space[8] }}>
-        <Label>
-          {uiText("removeFrom", {
-            memberName: host.agent(props.agentId)?.name ?? props.agentId,
-            name: props.info.name,
-          })}
-        </Label>
-        <Button
-          label={uiText("removeMember")}
-          disabled={props.members.length <= 1}
-          busy={busy()}
-          onPress={() => void remove()}
-        />
-        <If when={error()}>
-          <Label tone="red">{error()}</Label>
-        </If>
-        <Button
-          label={uiText("cancel")}
-          tone="ghost"
-          disabled={busy()}
-          onPress={props.onClose}
-        />
-      </View>
-    </Modal>
+    />
   );
 }

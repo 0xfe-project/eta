@@ -1,16 +1,13 @@
 import type { AgentUsage, AgentView } from "@eta/client-contracts";
 import type { IconName } from "../../components/icons";
-import { View } from "nsh";
-import { ActionItem, colors, Icon, Label, row } from "../../components";
+import { ActionItem, colors, Icon, Label } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { useModels } from "../../components/model-select";
-import { avatar, icon, space, weight } from "../../components/tokens";
+import { avatar } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { ListRow } from "../../ui";
 import { EntityRow, leadingBoxWidth, WarningLine } from "./section";
-
-/** A setting: its title and the line under it. */
-const settingRow = 56;
 
 /** 48,213 → "48k": a token count the way a row's meta line says it. */
 export function tokens(count: number) {
@@ -28,33 +25,13 @@ export function SettingRow(props: {
   detail?: string;
   onPress?: () => void;
 }) {
-  const c = colors();
   return (
-    <View
-      role={props.onPress ? "button" : undefined}
+    <ListRow
+      title={props.title}
+      detail={props.detail}
+      leading={<Icon name={props.icon} />}
       onPress={props.onPress}
-      hoverStyle={props.onPress ? { backgroundColor: c().selected } : undefined}
-      style={{
-        ...row,
-        minHeight: settingRow,
-        gap: space[8],
-        paddingHorizontal: space[16],
-        paddingVertical: space[8],
-        borderBottomWidth: 1,
-        borderColor: c().border,
-      }}
-    >
-      <Icon name={props.icon} />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Label weight={weight.regular}>{props.title}</Label>
-        <Label variant="small" tone="muted" lines={2}>
-          {props.detail}
-        </Label>
-      </View>
-      <If when={props.onPress}>
-        <Icon name="right" size={icon.sm} tone="muted" />
-      </If>
-    </View>
+    />
   );
 }
 

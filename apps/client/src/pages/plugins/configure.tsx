@@ -6,15 +6,13 @@ import type {
   PluginView,
 } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { Dialog, Input } from "nsh/base";
+import { Dialog } from "nsh/base";
 import {
   Button,
   colors,
   dialogWidth,
   Field,
   fill,
-  fontFamily,
-  Fonts,
   grow,
   Label,
   Modal,
@@ -24,6 +22,7 @@ import {
   textStyle,
 } from "../../components";
 import { CloseButton } from "../../components/navigation-buttons";
+import { startProgress } from "../../components/progress-notification";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import {
   control,
@@ -51,25 +50,41 @@ export const sheetEdge = {
 
 export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
   const host = useHost();
-  const c = colors();
-  const type = textFaces();
-  const fonts = Fonts();
   const repo = signal("");
   const rev = signal("");
   const path = signal("");
   const busy = signal(false);
   const submit = async () => {
-    if (busy() || !repo().trim()) return;
+    const repoValue = repo().trim();
+    if (busy() || !repoValue) return;
     busy.set(true);
-    const result = await host.action(() =>
-      host.call("plugins", "add", {
-        repo: repo().trim(),
+    const progress = startProgress({
+      id: `plugin-add-${repoValue}`,
+      icon: "plugins",
+      title: uiText("addPluginTitle"),
+      detail: repoValue,
+    });
+    try {
+      await host.call("plugins", "add", {
+        repo: repoValue,
         rev: rev().trim() || undefined,
         path: path().trim() || undefined,
-      }),
-    );
-    busy.set(false);
-    if (result) props.onClose();
+      });
+      progress.complete({
+        title: uiText("addPluginTitle"),
+        detail: repoValue,
+      });
+      props.onClose();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      host.error.set(message);
+      progress.fail({
+        title: uiText("addPluginTitle"),
+        detail: message,
+      });
+    } finally {
+      busy.set(false);
+    }
   };
   // Placeholder-only fields, the first one focused, as the design draws them.
   const field = (
@@ -78,27 +93,19 @@ export function AddPlugin(props: { phone: boolean; onClose: () => void }) {
     onChange: (value: string) => void,
     first = false,
   ) => (
-    <Input
-      accessibilityLabel={label}
+    <Field
+      label={label}
       placeholder={label}
       value={value()}
       autoFocus={first && !props.phone}
-      submitBehavior="submit"
+      compact
       onSubmit={() => void submit()}
-      onChange={(event) => onChange(event.value)}
-      focusStyle={{ borderColor: c().ink }}
-      style={{
-        color: c().ink,
-        placeholderColor: c().faint,
-        backgroundColor: c().canvas,
-        fontFamily: fontFamily(fonts().interface),
-        ...textStyle(type("small")),
-        height: props.phone ? space[40] : control.md,
-        paddingHorizontal: props.phone ? space[12] : space[8],
-        borderWidth: 1,
-        borderColor: c().strong,
-        borderRadius: 0,
-      }}
+      onChange={onChange}
+      style={
+        props.phone
+          ? { height: space[40], paddingHorizontal: space[12] }
+          : undefined
+      }
     />
   );
   return (
@@ -548,11 +555,11 @@ export function ConfigurePlugin(props: {
           labelVariant="caption"
           style={{ paddingHorizontal: props.phone ? space[20] : space[12] }}
           disabled={
-            busy() ||
             accessBusy() ||
             props.item.fields.some(numericIssue) ||
             !(Object.keys(values()).length || Object.keys(numberInput()).length)
           }
+          busy={busy()}
           onPress={() => void submit()}
         />
       </View>
