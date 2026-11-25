@@ -19,6 +19,7 @@ import {
   View,
   windowSize,
 } from "nsh";
+import { BackHandler } from "nsh/mobile";
 import { colors, fill, grow, keyboardShown, row, sizes } from "../components";
 import { useModels } from "../components/model-select";
 import { fadeIn, motion, passing, pushed } from "../components/motion";
@@ -44,6 +45,7 @@ import { TaskWorkspace } from "../pages/tasks/task-workspace";
 import { TemplateGallery } from "../pages/templates/gallery";
 import { requestedTemplate } from "../pages/templates/link";
 import { follow, useHost } from "../services/host";
+import { dismissTop } from "../ui/behaviors";
 
 /** The conversation list on a tablet narrower than 960. */
 const narrowListWidth = 280;
@@ -196,6 +198,35 @@ export function Workspace(props: {
         settings.set(next.page === "settings" ? "Agents" : undefined);
         conversation.set(next.conversation);
         showConversation(Boolean(next.conversation));
+      }),
+    );
+  // The system back key on Android closes the app's own layers innermost first: a dismissable
+  // overlay (a modal, sheet, popover, menu or select), then Settings, a task pushed over its
+  // page, the conversation over the chat list, onboarding, and only then leaves the app. The
+  // web and desktop builds never register it, so their behavior is unchanged.
+  if (platform.os === "android")
+    cleanup(
+      BackHandler.on("press", () => {
+        // 1. A modal, sheet, popover, menu or select on the dismissable stack.
+        if (dismissTop()) return true;
+        if (settings() !== undefined) {
+          // 2. Settings, on top of every pane.
+          closeSettings(settings() as SettingsSection);
+        } else if (task() && taskLayer()) {
+          // 3. A task pushed over the page it opened from.
+          closeTask();
+        } else if (phone() && page() === "chat" && mobileOpen()) {
+          // 4. The conversation over the chat list.
+          back();
+        } else if (setup()) {
+          // 5. Onboarding.
+          setup.set(false);
+          link("chat");
+        } else {
+          // 6. Nothing left to close: leave the app.
+          BackHandler.exitApp();
+        }
+        return true;
       }),
     );
   // The groups opened before this one, newest last: archiving the open group goes back to them.
