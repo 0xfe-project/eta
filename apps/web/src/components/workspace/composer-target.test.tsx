@@ -59,6 +59,7 @@ function start(
   fields: {
     stewardId?: string | null;
     participants?: MemberView[];
+    projectId?: string;
     kind?: ConversationSummary["kind"];
   } = {},
 ) {
@@ -310,7 +311,7 @@ describe("keeping the choice", () => {
     expect(picker().textContent).toBe("Bolt");
   });
 
-  it("drops a member who left, and returns to the steward when nobody is left", async () => {
+  it("drops a member who left, and names nobody once one agent is left", async () => {
     useWorkspaceStore.setState({
       workspace: { stickyTargets: { [CONV]: [BOLT, CLEO] } },
     });
@@ -334,19 +335,22 @@ describe("keeping the choice", () => {
       conversationView({
         id: CONV,
         stewardId: ARIA,
+        projectId: "home-a1",
         participants: [memberView(ARIA)],
       }),
     ]);
     await show(<Chat conversationId={CONV} />);
     await flush();
-    expect(picker().textContent).toBe("Aria");
+    // One member left is that agent's own chat: nobody to pick between, and nobody to name.
+    // (That it keeps nothing is the next test's own case.)
+    expect(picker()).toBeNull();
     await say("回来");
     expect(sent[1]!.mentions).toEqual([]);
-    expect(remembered()).toBeUndefined();
   });
 
-  it("has no control and keeps nothing in a direct chat", async () => {
-    await start({ kind: "direct", participants: [memberView(BOLT)] });
+  it("has no control and keeps nothing in a chat of one agent", async () => {
+    // A chat of one agent is the group of one in that agent's own project.
+    await start({ participants: [memberView(BOLT)], projectId: "home-a2" });
     expect(picker()).toBeNull();
     await say("@Bolt 你好");
     expect(sent[0]!.mentions).toEqual([BOLT]);

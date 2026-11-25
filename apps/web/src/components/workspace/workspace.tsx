@@ -29,6 +29,7 @@ import { NewConversationDialog } from "./new-conversation-dialog";
 import { usePaneWidth } from "./pane";
 import { SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
+import { ownChatAgent } from "./use-chat-list";
 import { useComposerTarget } from "./use-composer-target";
 import { useGroups } from "./use-groups";
 import { WorkspacePanel } from "./workspace-panel";
@@ -151,8 +152,9 @@ export function Workspace({
     document.addEventListener("visibilitychange", mark);
     return () => document.removeEventListener("visibilitychange", mark);
   }, [group, groupId, markRead]);
-  // A direct chat has no group info; its agent's settings stand in.
-  const direct = group?.kind === "direct" ? members[0] : undefined;
+  // A chat of one agent has no group info of its own; its agent's settings stand in.
+  const direct =
+    ownChatAgent(group, agents) === undefined ? undefined : members[0];
   const showInfo = () => {
     if (direct) return openEditor(direct.agentId);
     onViewChange("context");

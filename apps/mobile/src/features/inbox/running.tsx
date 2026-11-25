@@ -24,6 +24,7 @@ import { t } from "../../i18n";
 import { go } from "../../nav/links";
 import { AgentAvatar } from "../../ui/AgentAvatar";
 import { Icon } from "../../ui/Icon";
+import { ownChatAgent } from "../conversations/list";
 
 export interface Run {
   key: string;
@@ -71,7 +72,9 @@ const memberRun = (
 ): Run => {
   const agent = agentById(member.agentId);
   const where =
-    conversation.kind === "direct" ? t("inbox.direct") : conversation.name;
+    ownChatAgent(conversation) !== undefined
+      ? t("inbox.direct")
+      : conversation.name;
   return {
     key: `member:${conversation.id}:${member.agentId}`,
     agentId: member.agentId,

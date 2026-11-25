@@ -89,6 +89,7 @@ import { ProcessBox } from "./transcript/process-box";
 import { SlashMenu } from "./transcript/slash-menu";
 import { ThinkingBlock } from "./transcript/thinking-block";
 import { ToolDetailCard } from "./transcript/tool-detail";
+import { ownChatAgent } from "./use-chat-list";
 import { useComposerTarget } from "./use-composer-target";
 import { useInputMethod } from "./use-input-method";
 import { WidgetFrame } from "./widget-frame";
@@ -1239,6 +1240,9 @@ export function ChatPanel({
       })),
     [group, agents],
   );
+  // A chat of one agent is not a group: there is nobody to pick between, and who said what is the
+  // whole screen's subject already.
+  const ownChat = ownChatAgent(group, agents) !== undefined;
   const questionByAgent = useMemo(() => {
     const byAgent = new Map<string, Question>();
     for (const question of questions)
@@ -1633,7 +1637,7 @@ export function ChatPanel({
                           message.author === "captain"
                             ? agentName(agents, message.agentId)
                             : message.author === "agent" &&
-                                (group?.kind === "group" ||
+                                ((group?.kind === "group" && !ownChat) ||
                                   (group?.participants.length ?? 0) > 1 ||
                                   message.kind === "mention")
                               ? agentName(agents, message.agentId)
@@ -1809,7 +1813,7 @@ export function ChatPanel({
               />
               <div className="composer-toolbar">
                 <div className="composer-controls flex min-w-0 items-center gap-2">
-                  {group?.kind === "direct" ? null : (
+                  {ownChat ? null : (
                     <MemberPicker
                       members={members}
                       steward={steward}

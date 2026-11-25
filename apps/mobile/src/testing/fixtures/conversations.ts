@@ -44,11 +44,12 @@ const row = (
 });
 
 const EXTRA: ConversationSummary[] = [
+  // An agent's own chat: a group of one, in that agent's home project.
   row(
     "dm-ache",
     "Ache",
     "home-agent-ache",
-    "direct",
+    "group",
     [member("agent-ache", "working")],
     {
       lastMessageAt: minutesAgo(2),
@@ -58,7 +59,7 @@ const EXTRA: ConversationSummary[] = [
     "dm-mori",
     "Mori",
     "home-agent-mori",
-    "direct",
+    "group",
     [member("agent-mori", "idle")],
     {
       preview: "The column-width plan is ready, take a look.",

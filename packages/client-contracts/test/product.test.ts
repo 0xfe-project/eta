@@ -1,10 +1,12 @@
 import type {
   AgentCall,
   ConversationCall,
+  ConversationSummary,
   MessageView,
   SendResult,
 } from "../src/index";
 import { describe, expect, it } from "vitest";
+import { agentOnlyChat } from "../src/index";
 
 const reply: MessageView = {
   id: "m2",
@@ -64,5 +66,77 @@ describe("the product's targets on the generic pipe", () => {
       nobody: false,
     };
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+  });
+});
+
+/** A conversation as a host publishes one: only the fields the predicate reads are asked for. */
+const conversation = (
+  fields: Pick<ConversationSummary, "kind" | "participants"> &
+    Partial<ConversationSummary>,
+): ConversationSummary => ({
+  id: "c1",
+  projectId: "home-a1",
+  name: "Ada",
+  archived: false,
+  stewardId: null,
+  lastSeq: 0,
+  readSeq: 0,
+  unread: 0,
+  preview: "",
+  lastMessageAt: null,
+  createdAt: 1,
+  updatedAt: 1,
+  ...fields,
+});
+
+const member = (
+  agentId: string,
+): ConversationSummary["participants"][number] => ({
+  agentId,
+  sessionId: null,
+  lastSeq: 0,
+  status: "idle",
+});
+
+describe("an agent's own chat", () => {
+  it("is a group whose only member is that agent", () => {
+    const chat = conversation({ kind: "group", participants: [member("a1")] });
+    expect(agentOnlyChat(chat, "a1")).toBe(true);
+    // Somebody else's chat, whatever else is true of it.
+    expect(agentOnlyChat(chat, "a2")).toBe(false);
+  });
+
+  it("is not a group of two, nor a group of one that is another agent", () => {
+    const pair = conversation({
+      kind: "group",
+      participants: [member("a1"), member("a2")],
+    });
+    expect(agentOnlyChat(pair, "a1")).toBe(false);
+    expect(agentOnlyChat(pair, "a2")).toBe(false);
+    expect(
+      agentOnlyChat(conversation({ kind: "group", participants: [] }), "a1"),
+    ).toBe(false);
+  });
+
+  it("is not Captain's own conversation, which is its own kind", () => {
+    expect(
+      agentOnlyChat(
+        conversation({ kind: "captain", participants: [member("captain")] }),
+        "captain",
+      ),
+    ).toBe(false);
+  });
+
+  it("is still that chat once it is archived: putting it away is the caller's business", () => {
+    expect(
+      agentOnlyChat(
+        conversation({
+          kind: "group",
+          participants: [member("a1")],
+          archived: true,
+        }),
+        "a1",
+      ),
+    ).toBe(true);
   });
 });

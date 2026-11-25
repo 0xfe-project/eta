@@ -2,18 +2,20 @@ import type { AgentView, ConversationSummary } from "@eta/client-contracts";
 import type { StickyTarget } from "@/lib/mentions";
 import { composerTarget } from "@/lib/mentions";
 import { agentName } from "@/queries/agents";
+import { ownChatAgent } from "./use-chat-list";
 import { useWorkspaceStore } from "./workspace-store";
 
 /**
  * Who this conversation's next message reaches, and the group's memory of it. Everything that acts
- * on the composer reads `targetOf`, so what the button says is what happens. A direct chat has one
- * reader and no choice, so it keeps nothing.
+ * on the composer reads `targetOf`, so what the button says is what happens. A chat of one agent
+ * has one reader and no choice, so it keeps nothing.
  */
 export function useComposerTarget(
   group: ConversationSummary | undefined,
-  agents: readonly Pick<AgentView, "id" | "name">[],
+  agents: readonly Pick<AgentView, "id" | "name" | "homeProjectId">[],
 ) {
-  const conversationId = group?.kind === "direct" ? undefined : group?.id;
+  const conversationId =
+    ownChatAgent(group, agents) === undefined ? group?.id : undefined;
   const sticky = useWorkspaceStore((state) =>
     conversationId === undefined
       ? undefined

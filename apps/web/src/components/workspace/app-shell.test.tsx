@@ -264,11 +264,11 @@ describe("左栏的两块", () => {
     ];
     // `useGroups` hands the conversations over newest activity first.
     state.groups = [
+      // An agent's own chat: a group of one, in that agent's home project.
       conversationView({
         id: "d1",
         name: "乐子人",
-        kind: "direct",
-        projectId: "p",
+        projectId: "home-a1",
         participants: [memberView("a1")],
         lastMessageAt: now - 60_000,
       }),

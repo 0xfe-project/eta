@@ -113,7 +113,8 @@ const group = (
     ...extra,
   });
 
-const direct = (
+/** An agent's own chat: a group of one, in that agent's home project. */
+const ownChat = (
   id: string,
   agentId: string,
   extra: Partial<ConversationSummary> = {},
@@ -121,7 +122,6 @@ const direct = (
   conversationView({
     id,
     name: agentId,
-    kind: "direct",
     projectId: `home-${agentId}`,
     participants: [memberView(agentId)],
     lastMessageAt: Date.now() - 60_000,
@@ -374,7 +374,7 @@ describe("侧边栏的两块", () => {
     const { container } = await tree([
       group("g1", "装配", "p-eta"),
       group("g2", "旧的", "p-eta", { archived: true }),
-      direct("d1", "a2", { archived: true }),
+      ownChat("d1", "a2", { archived: true }),
     ]);
     expect(groupRows(container)).toEqual(["装配"]);
     // a1 has no chat at all, a2's chat is archived: only a1 is offered.
@@ -505,7 +505,7 @@ describe("折叠成图标栏", () => {
   });
 
   it("有未读时 rail 卡片角上是数字", async () => {
-    const { container } = await tree([direct("d1", "a1", { unread: 3 })], {
+    const { container } = await tree([ownChat("d1", "a1", { unread: 3 })], {
       open: false,
     });
     expect(
@@ -797,7 +797,7 @@ describe("拖动智能体区域的上边缘", () => {
 
   it("没拖过的人布局不变：不写高度，区域按内容高、最多五分之二屏", async () => {
     laidOut();
-    const { container } = await tree([direct("d1", "a1")]);
+    const { container } = await tree([ownChat("d1", "a1")]);
     const divider = line(container)!;
     expect(divider.getAttribute("aria-label")).toBe(
       translate("navigation:accessibility.resizeAgents"),
@@ -816,7 +816,7 @@ describe("拖动智能体区域的上边缘", () => {
 
   it("往上拖变高、往下拖变矮，落下的高度写进 workspace 状态", async () => {
     laidOut();
-    const { container } = await tree([direct("d1", "a1")]);
+    const { container } = await tree([ownChat("d1", "a1")]);
     await drag(line(container)!, 400, 300);
     expect(agentsSection(container)!.style.maxHeight).toBe("300px");
     expect(shelfBody(container).className).not.toContain("max-h-[40dvh]");
@@ -832,7 +832,7 @@ describe("拖动智能体区域的上边缘", () => {
 
   it("上下限：至少标题加一张卡，最多给群聊留下标题加两行半；窗口变小就收进来", async () => {
     laidOut();
-    const { container } = await tree([direct("d1", "a1")]);
+    const { container } = await tree([ownChat("d1", "a1")]);
     const divider = line(container)!;
     expect(divider.getAttribute("aria-valuemin")).toBe("70");
     expect(divider.getAttribute("aria-valuemax")).toBe("570");
@@ -856,7 +856,7 @@ describe("拖动智能体区域的上边缘", () => {
 
   it("窗口变小再变大：高度回到拖时设的值，存的值一直没被改写", async () => {
     laidOut();
-    const { container } = await tree([direct("d1", "a1")]);
+    const { container } = await tree([ownChat("d1", "a1")]);
     const resize = async () =>
       act(async () => {
         window.dispatchEvent(new Event("resize"));
@@ -887,7 +887,7 @@ describe("拖动智能体区域的上边缘", () => {
   it("拖不过内容的高度：内容少时线跟着手，区域不留空白", async () => {
     laidOut();
     layout.content = 120;
-    const { container } = await tree([direct("d1", "a1")]);
+    const { container } = await tree([ownChat("d1", "a1")]);
     // The head's 30px and the 120px of cards: 150, under the groups' 570.
     expect(line(container)!.getAttribute("aria-valuemax")).toBe("150");
     await drag(line(container)!, 400, -1000);
@@ -898,7 +898,7 @@ describe("拖动智能体区域的上边缘", () => {
 
   it("获得焦点后用上下方向键调整", async () => {
     laidOut();
-    const { container } = await tree([direct("d1", "a1")]);
+    const { container } = await tree([ownChat("d1", "a1")]);
     const divider = line(container)!;
     expect(divider.tabIndex).toBe(0);
     await key(divider, "ArrowUp");
@@ -915,7 +915,7 @@ describe("拖动智能体区域的上边缘", () => {
 
   it("双击分隔线恢复成按内容高", async () => {
     laidOut();
-    const { container } = await tree([direct("d1", "a1")]);
+    const { container } = await tree([ownChat("d1", "a1")]);
     await drag(line(container)!, 400, 300);
     await act(async () => {
       line(container)!.dispatchEvent(
@@ -935,7 +935,7 @@ describe("拖动智能体区域的上边缘", () => {
     localStorage.setItem(storageKey, JSON.stringify({ agentsHeight: 250 }));
     await useWorkspaceStore.persist.rehydrate();
     expect(useWorkspaceStore.getState().workspace.agentsHeight).toBe(250);
-    const { container } = await tree([direct("d1", "a1")]);
+    const { container } = await tree([ownChat("d1", "a1")]);
     expect(agentsSection(container)!.style.maxHeight).toBe("250px");
     await cleanup();
 
@@ -954,19 +954,19 @@ describe("拖动智能体区域的上边缘", () => {
     useWorkspaceStore.setState({
       workspace: { agentsCollapsed: true, agentsHeight: 300 },
     });
-    let mounted = await tree([direct("d1", "a1")]);
+    let mounted = await tree([ownChat("d1", "a1")]);
     expect(line(mounted.container)).toBeNull();
     expect(agentsSection(mounted.container)!.style.maxHeight).toBe("");
     await cleanup();
 
     useWorkspaceStore.setState({ workspace: { agentsHeight: 300 } });
-    mounted = await tree([direct("d1", "a1")], { open: false });
+    mounted = await tree([ownChat("d1", "a1")], { open: false });
     expect(line(mounted.container)).toBeNull();
     expect(agentsSection(mounted.container)!.style.maxHeight).toBe("");
     await cleanup();
 
     Object.assign(window, { innerWidth: 390 });
-    mounted = await tree([direct("d1", "a1")]);
+    mounted = await tree([ownChat("d1", "a1")]);
     expect(agentsSection(mounted.container)).not.toBeNull();
     expect(line(mounted.container)).toBeNull();
     expect(agentsSection(mounted.container)!.style.maxHeight).toBe("");

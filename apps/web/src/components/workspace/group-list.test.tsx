@@ -32,8 +32,8 @@ const member = (agentId: string, status: MemberView["status"]): MemberView => ({
 });
 
 async function render(node: React.ReactNode) {
-  // The private chats are rows an agent gives its name to: the list pairs each agent with the
-  // direct conversation it speaks in, so a conversation alone is not enough to make one appear.
+  // A chat of one agent is a row the agent gives its name to: the list pairs each agent with the
+  // group of one in its home project, so a conversation alone is not enough to make one appear.
   productHost({ conversations: groups.list, agents });
   return (await mount(node)).container;
 }
@@ -73,12 +73,12 @@ describe("最近对话的一行", () => {
     expect(container.textContent).toContain("周五发版");
   });
 
-  it("shows a direct chat's agent as busy, and says nothing of its kind", async () => {
+  it("shows a chat of one agent's agent as busy, and says nothing of its kind", async () => {
     groups.list = [
       conversationView({
         id: "d1",
         name: "小明",
-        kind: "direct",
+        projectId: "home-a1",
         participants: [member("a1", "working")],
       }),
     ];
@@ -115,7 +115,7 @@ describe("最近对话的一行", () => {
       conversationView({
         id: "d1",
         name: "小明",
-        kind: "direct",
+        projectId: "home-a1",
         preview: "晚安",
         participants: [member("a1", "idle")],
       }),

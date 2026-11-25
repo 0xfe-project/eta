@@ -99,7 +99,7 @@ function GroupAvatars({
 /**
  * The line under a name.
  *
- * It is the row's content slot, not its type slot. A direct chat and a group are already told
+ * It is the row's content slot, not its type slot. A chat of one agent and a group are already told
  * apart by their avatars — one face, or a stack — so 「Direct message」 and 「No messages」 were words that carried
  * nothing: the first restated the row's shape, the second restated its emptiness. What is left to
  * say is what actually differs between two rows at a glance: whether that agent is busy, what was
@@ -108,11 +108,14 @@ function GroupAvatars({
  * A busy agent wins over the preview: it is the one fact on the row that changes on its own while
  * the list sits still, and the preview of a conversation someone is working in is stale by design.
  */
-function conversationLine(conversation: ConversationSummary): string | null {
-  if (conversation.kind === "direct") {
-    const status = conversation.participants[0]?.status;
-    if (status !== undefined && status !== "idle") {
-      return memberStatusLabel(status);
+function conversationLine(
+  conversation: ConversationSummary,
+  ownChat: boolean,
+): string | null {
+  if (ownChat) {
+    const only = conversation.participants[0];
+    if (only !== undefined && only.status !== "idle") {
+      return memberStatusLabel(only.status);
     }
     return conversation.preview || null;
   }
@@ -135,22 +138,28 @@ export function GroupList() {
   ] as const);
   const { directories, directs, loaded } = useChatList();
   // The phone keeps one list — there is no room for two headings on a screen you scroll with a
-  // thumb — so the two sections are flattened back into one, newest activity first.
+  // thumb — so the two sections are flattened back into one, newest activity first. A row keeps
+  // the section it came from: only the agents section's own chats are chats of one agent.
   const rows = [
     ...[
-      ...directories.flatMap((directory) => directory.conversations),
+      ...directories
+        .flatMap((directory) => directory.conversations)
+        .map((conversation) => ({ conversation, ownChat: false })),
       ...directs.flatMap((entry) =>
-        entry.conversation === undefined ? [] : [entry.conversation],
+        entry.conversation === undefined
+          ? []
+          : [{ conversation: entry.conversation, ownChat: true }],
       ),
     ]
       .sort(
         (left, right) =>
-          (right.lastMessageAt ?? right.updatedAt) -
-          (left.lastMessageAt ?? left.updatedAt),
+          (right.conversation.lastMessageAt ?? right.conversation.updatedAt) -
+          (left.conversation.lastMessageAt ?? left.conversation.updatedAt),
       )
-      .map((conversation) => ({
+      .map(({ conversation, ownChat }) => ({
         kind: "conversation" as const,
         conversation,
+        ownChat,
       })),
     ...directs
       .filter((entry) => entry.conversation === undefined)
@@ -221,7 +230,7 @@ export function GroupList() {
                     )}
                   </span>
                   <span className="mt-1 block truncate text-xs text-muted-foreground">
-                    {conversationLine(row.conversation)}
+                    {conversationLine(row.conversation, row.ownChat)}
                   </span>
                 </span>
                 {row.conversation.unread > 0 && (
@@ -253,6 +262,7 @@ export function ArchivedGroups() {
     "settings",
   ] as const);
   const { groups } = useGroups();
+  const { owned } = useChatList();
   const open = useOpenGroup();
   const { update } = useConversationActions();
   const setSettings = useWorkspaceStore((s) => s.setSettings);
@@ -280,7 +290,7 @@ export function ArchivedGroups() {
                   <span className="block truncate text-xs text-muted-foreground">
                     {[
                       g.lastMessageAt !== null ? when(g.lastMessageAt) : null,
-                      conversationLine(g),
+                      conversationLine(g, owned.has(g.id)),
                     ]
                       .filter((part) => part !== null && part !== "")
                       .join(" · ")}

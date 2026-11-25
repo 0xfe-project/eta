@@ -199,12 +199,20 @@ export function useInsert() {
   });
 }
 
+/**
+ * A conversation made here rather than by the host: an agent's own chat is a group of one, made in
+ * its home project the first time somebody talks to it (`useOpenAgent`).
+ */
+export function useCreateConversation() {
+  return useWireMutation<
+    ConversationArgs["create"],
+    ConversationResults["create"]
+  >("conversations", "create");
+}
+
 export function useConversationActions() {
   return {
-    create: useWireMutation<
-      ConversationArgs["create"],
-      ConversationResults["create"]
-    >("conversations", "create"),
+    create: useCreateConversation(),
     update: useWireMutation<
       ConversationArgs["update"],
       ConversationResults["update"]

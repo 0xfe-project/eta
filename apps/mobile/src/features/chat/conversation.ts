@@ -19,6 +19,7 @@ import {
   projectById,
 } from "../../app/lists";
 import { call, useTarget } from "../../wire/target";
+import { ownChatAgent } from "../conversations/list";
 import {
   ACTIVE_STATUSES,
   mergeRows,
@@ -52,7 +53,12 @@ export function useChat(id: string) {
       target.section<MemberView[]>("members") ?? summary()?.participants ?? [],
   );
   const kind = () => summary()?.kind ?? info()?.kind;
-  const direct = () => kind() === "direct";
+  /**
+   * Whether this is one agent's own chat: a group of one, in that agent's home project. What it
+   * changes is the shape of the screen — no composer target, the agent's own page behind the header
+   * — not which conversation this is.
+   */
+  const direct = () => ownChatAgent(summary()) !== undefined;
   const stewardId = () => info()?.stewardId ?? summary()?.stewardId ?? null;
   const held = computed(() => timeline()?.held ?? NONE);
 

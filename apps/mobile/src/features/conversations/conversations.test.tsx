@@ -51,8 +51,23 @@ test("02a: the first press makes a group of the agent alone (conversations.creat
   await app.press("label:私聊");
   await app.press("id:direct-agent-mori");
   await app.waitFor("id:chat-members");
-  expect(app.shows("label:群信息")).toBe(true);
-  expect(app.shows("text:/主理人：Mori/")).toBe(true);
+  // A group of the agent alone is that agent's own chat: its name over the screen, and its own
+  // page behind the header rather than the group's.
+  expect(app.shows("text:/^Mori$/")).toBe(true);
+  expect(app.shows("label:智能体信息")).toBe(true);
+});
+
+test("02a: the second press opens that same chat instead of making another", async () => {
+  const app = await start({ "eta.fake.scenario": "empty" });
+  await app.press("label:私聊");
+  await app.press("id:direct-agent-mori");
+  await app.waitFor("id:chat-members");
+  await app.press("id:back");
+  await app.waitFor("id:direct-agent-mori");
+  await app.press("id:direct-agent-mori");
+  // The host refuses a second chat of the same agent (see the fixture), so being back in a chat
+  // is what says the press found the first one.
+  await app.waitFor("id:chat-members");
 });
 
 test("02a: the private chats, a waiting one strong and the busy status over the preview", async () => {

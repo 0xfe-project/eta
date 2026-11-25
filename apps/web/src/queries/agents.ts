@@ -21,9 +21,9 @@ import { useMachines } from "@/queries/projects";
 import { useModels } from "@/queries/providers";
 import { useListTarget, useWireMutation } from "@/queries/wire";
 
-// Agents on the wire: the `agents` target (one eager `list` section) and its four actions. An
-// agent is a configuration, not a container; its workspace is a project of its own and its private
-// chat is the conversation `direct` returns.
+// Agents on the wire: the `agents` target (one eager `list` section) and its three actions. An
+// agent is a configuration, not a container; its workspace is a project of its own and its own chat
+// is a group of one in that project (see `useOpenAgent`: there is no `agents.direct` any more).
 
 /** Every agent, newest last (the order the host keeps them in). */
 export function useAgentList() {
@@ -60,14 +60,6 @@ export function useDeleteAgent() {
   return useWireMutation<AgentArgs["delete"], AgentResults["delete"]>(
     "agents",
     "delete",
-  );
-}
-
-/** The private chat with an agent: made the first time, found every time after. */
-export function useDirectChat() {
-  return useWireMutation<AgentArgs["direct"], AgentResults["direct"]>(
-    "agents",
-    "direct",
   );
 }
 

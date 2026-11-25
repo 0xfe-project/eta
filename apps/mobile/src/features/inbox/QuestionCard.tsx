@@ -9,6 +9,7 @@ import { clock, reason } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { toast } from "../../ui/toast";
 import { call } from "../../wire/target";
+import { ownChatAgent } from "../conversations/list";
 
 /** To the inbox an approval is a question with these two options; the words are the host's. */
 const isApproval = (interaction: InteractionView) =>
@@ -147,7 +148,7 @@ export function QuestionCard(props: {
       (row) => row.id === props.interaction.conversationId,
     );
     if (conversation === undefined) return "";
-    return conversation.kind === "direct"
+    return ownChatAgent(conversation) !== undefined
       ? t("inbox.direct")
       : conversation.name;
   };
