@@ -24,6 +24,7 @@ import { Body, Header, Page } from "../../ui/Page";
 import { Sheet } from "../../ui/Sheet";
 import { Empty, Loading } from "../../ui/States";
 import { call, useTarget } from "../../wire/target";
+import { makeAgentChat } from "../conversations/agentChat";
 import { ContextPanel } from "./context";
 import {
   act,
@@ -216,14 +217,11 @@ function MemberBody(props: {
       <If when={known()}>
         <SheetRow
           title={t("group.member.talkAlone", { name: name() })}
-          onPress={() =>
-            act(
-              call<{ conversation: { id: string } }>("agents", "direct", {
-                agentId: id(),
-              }),
-              (result) => leave(() => go.chat(result.conversation.id)),
-            )
-          }
+          onPress={() => {
+            const agent = agentById(id());
+            if (agent === undefined) return;
+            act(makeAgentChat(agent), (chat) => leave(() => go.chat(chat)));
+          }}
         />
       </If>
       <SheetRow

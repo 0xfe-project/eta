@@ -349,31 +349,6 @@ function installConversationOps(host: FakeHost): void {
       hasMore: false,
     }));
   }
-
-  if (!host.ops.has("agents.direct")) {
-    host.on("agents.direct", ({ agentId }) => {
-      const conversation = list(host).find(
-        (row) =>
-          row.kind === "direct" && row.participants[0]?.agentId === agentId,
-      );
-      if (conversation !== undefined) return { conversation };
-      const name =
-        host
-          .section<AgentView[]>("agents", "list")
-          .find((agent) => agent.id === agentId)?.name ?? "";
-      const made: ConversationSummary = {
-        ...existing(host, "dm-xiaoman"),
-        id: `dm-${agentId}`,
-        projectId: `home-${agentId}`,
-        name,
-        participants: [
-          { agentId, sessionId: null, lastSeq: 0, status: "idle" },
-        ],
-      };
-      host.patch("conversations", "list", [...list(host), made]);
-      return { conversation: made };
-    });
-  }
 }
 
 function installArtifactOps(host: FakeHost): void {

@@ -1,4 +1,4 @@
-import type { AgentResults, ConversationSummary } from "@eta/client-contracts";
+import type { AgentView, ConversationSummary } from "@eta/client-contracts";
 import type { GroupSection, StatusLine } from "./list";
 import { cleanup, Scroll, signal, Text, View } from "nsh";
 import { projectById } from "../../app/lists";
@@ -11,8 +11,9 @@ import { Header, Page } from "../../ui/Page";
 import { Segmented } from "../../ui/Segmented";
 import { Empty } from "../../ui/States";
 import { toast } from "../../ui/toast";
-import { call, useTarget } from "../../wire/target";
+import { useTarget } from "../../wire/target";
 import { CreateSheet } from "../create/CreateSheet";
+import { makeAgentChat } from "./agentChat";
 import { ConversationSheet, updateConversation } from "./ConversationSheet";
 import {
   activityOf,
@@ -144,15 +145,10 @@ function DirectRow(props: {
   );
 }
 
-/** The chat with an agent is made the first time it is asked for, and found after that. */
-async function openDirect(agentId: string): Promise<void> {
+/** A group of the agent alone, made when its row is pressed. */
+async function openDirect(agent: AgentView): Promise<void> {
   try {
-    const { conversation } = await call<AgentResults["direct"]>(
-      "agents",
-      "direct",
-      { agentId },
-    );
-    go.chat(conversation.id);
+    go.chat(await makeAgentChat(agent));
   } catch (error) {
     failed(error);
   }
@@ -248,7 +244,7 @@ export function ConversationsTab() {
                         const conversation = chat();
                         if (conversation !== undefined)
                           go.chat(conversation.id);
-                        else void openDirect(entry().agent.id);
+                        else void openDirect(entry().agent);
                       }}
                       onLongPress={() => {
                         const conversation = chat();

@@ -228,7 +228,11 @@ export function installCreate(host: FakeHost): void {
   });
 
   host.on("conversations.create", (args: ConversationArgs["create"]) => {
-    const project = projects().find((each) => each.id === args.projectId);
+    // An agent's home directory is a project too, though the project list does not show it.
+    const home = agents().find((each) => each.homeProjectId === args.projectId);
+    const project =
+      projects().find((each) => each.id === args.projectId) ??
+      (home && { id: home.homeProjectId, name: home.name });
     if (project === undefined) throw new Error("no such project");
     const members = args.agentIds ?? [];
     // As the host: a group needs a member, and its steward is one of them, null for none, or
@@ -245,30 +249,6 @@ export function installCreate(host: FakeHost): void {
     const made = conversation(project.id, "group", name, members, stewardId);
     open(made);
     return { conversation: made };
-  });
-
-  host.on("agents.direct", ({ agentId }: AgentArgs["direct"]) => {
-    const agent = agents().find((each) => each.id === agentId);
-    if (agent === undefined) throw new Error("no such agent");
-    const found = conversations().find(
-      (each) =>
-        each.kind === "direct" && each.participants[0]?.agentId === agentId,
-    );
-    if (found === undefined) {
-      const made = conversation(agent.homeProjectId, "direct", agent.name, [
-        agentId,
-      ]);
-      open(made);
-      return { conversation: made };
-    }
-    if (!found.archived) return { conversation: found };
-    const back = { ...found, archived: false };
-    host.patch(
-      "conversations",
-      "list",
-      conversations().map((each) => (each.id === found.id ? back : each)),
-    );
-    return { conversation: back };
   });
 
   let refused = host.scenario !== "agent-create-fails";
