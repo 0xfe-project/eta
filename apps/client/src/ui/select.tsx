@@ -218,6 +218,8 @@ export function ModelSelect(props: {
   value: string;
   placeholder?: string;
   onChange: (value: string) => void;
+  /** Drawn as the caller's form draws its other fields, when it has an opinion. */
+  triggerStyle?: ViewStyle;
 }) {
   const c = colors();
   const type = textFaces();
@@ -332,6 +334,7 @@ export function ModelSelect(props: {
             borderColor: c().border,
             backgroundColor: c().canvas,
             cursor: "pointer",
+            ...props.triggerStyle,
           }}
         >
           <Label variant="small" lines={1} style={{ flex: 1 }}>

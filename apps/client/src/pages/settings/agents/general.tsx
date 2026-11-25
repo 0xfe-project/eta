@@ -18,6 +18,8 @@ import { MachineField } from "./machine-field";
 /** The name field, and the runtime menu: wide enough for a name and its reason on one line. */
 const nameWidth = 200;
 const runtimeMenuWidth = 260;
+/** The model row, wide enough for a provider's long id on one line. */
+const modelWidth = 256;
 
 const agentNameLimit = 100;
 export function AgentGeneral(props: {
@@ -235,6 +237,7 @@ export function AgentGeneral(props: {
         label={uiText("model")}
         stack={stacked()}
         phone={phoneEditor()}
+        width={modelWidth}
         hint={modelWarning()}
       >
         <If
@@ -281,7 +284,11 @@ export function AgentGeneral(props: {
             </If>
           }
         >
-          <ModelSelect value={model()} onChange={chooseModel} />
+          <ModelSelect
+            value={model()}
+            onChange={chooseModel}
+            triggerStyle={selectStyle()}
+          />
         </If>
       </EditorRow>
       <EditorRow
