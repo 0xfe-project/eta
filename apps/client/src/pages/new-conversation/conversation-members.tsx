@@ -3,9 +3,11 @@ import { View } from "nsh";
 import { Button, colors, grow, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { CheckControl } from "../../components/check-control";
+import { EmptyState } from "../../components/empty-state";
 import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { localizedText, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
 
 /** A member row: a finger's row on phones, a list row elsewhere. */
 const memberRowHeight = { phone: 52, desktop: 36 } as const;
@@ -23,6 +25,7 @@ export function ConversationMembers(props: {
   onSteward: (id: string | null) => void;
 }) {
   const host = useHost();
+  const load = useLoadState({ targets: () => ["agents"] });
   const c = colors();
   return (
     <>
@@ -135,9 +138,18 @@ export function ConversationMembers(props: {
         }}
       </Each>
       <If when={!host.agents().length}>
-        <Label tone="muted" style={{ padding: space[16] }}>
-          {uiText("createAnAgentFirstInSettings")}
-        </Label>
+        <EmptyState
+          size="row"
+          status={load.shown()}
+          loading={uiText("loadingAgents")}
+          error={{
+            title: uiText("agentsDidNotLoad"),
+            retry: load.retry,
+            retrying: load.retrying(),
+          }}
+          empty={{ title: uiText("createAnAgentFirstInSettings") }}
+          style={{ padding: space[16] }}
+        />
       </If>
     </>
   );

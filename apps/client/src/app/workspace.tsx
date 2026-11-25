@@ -1,5 +1,5 @@
 import type {
-  AgentResults,
+  AgentView,
   CaptainResults,
   ProvidersView,
 } from "@eta/client-contracts";
@@ -19,6 +19,7 @@ import {
   View,
   windowSize,
 } from "nsh";
+import { BackHandler } from "nsh/mobile";
 import { colors, fill, grow, keyboardShown, row, sizes } from "../components";
 import { useModels } from "../components/model-select";
 import { fadeIn, motion, passing, pushed } from "../components/motion";
@@ -41,9 +42,12 @@ import { Settings } from "../pages/settings/settings";
 import { NewTask } from "../pages/tasks/new-task";
 import { TaskDetail } from "../pages/tasks/task-detail";
 import { TaskWorkspace } from "../pages/tasks/task-workspace";
+import { openAgentChat } from "../pages/templates/agent-chat";
 import { TemplateGallery } from "../pages/templates/gallery";
 import { requestedTemplate } from "../pages/templates/link";
 import { follow, useHost } from "../services/host";
+import { dismissTop, topDismissable } from "../ui/behaviors";
+import { backAction } from "./back";
 
 /** The conversation list on a tablet narrower than 960. */
 const narrowListWidth = 280;
@@ -198,6 +202,45 @@ export function Workspace(props: {
         showConversation(Boolean(next.conversation));
       }),
     );
+  // The system back key on Android: what closes next comes from backAction, which reads the
+  // layers in the order a user sees them. The web and desktop builds never register it, so their
+  // behavior is unchanged.
+  if (platform.os === "android")
+    cleanup(
+      BackHandler.on("press", () => {
+        const action = backAction({
+          overlay: topDismissable(),
+          settings: settings(),
+          task: Boolean(task() && taskLayer()),
+          phone: phone(),
+          page: page(),
+          conversation: mobileOpen(),
+          onboarding: setup(),
+        });
+        switch (action.kind) {
+          case "dismiss-overlay":
+            dismissTop();
+            break;
+          case "close-settings":
+            closeSettings(action.section);
+            break;
+          case "close-task":
+            closeTask();
+            break;
+          case "back-to-list":
+            back();
+            break;
+          case "leave-onboarding":
+            setup.set(false);
+            link("chat");
+            break;
+          case "exit-app":
+            BackHandler.exitApp();
+            break;
+        }
+        return true;
+      }),
+    );
   // The groups opened before this one, newest last: archiving the open group goes back to them.
   const previous: string[] = [];
   function open(id: string) {
@@ -230,22 +273,30 @@ export function Workspace(props: {
     }
     if (phone()) void settingsPush.leave();
   }
-  /** The private chat with an agent, made the first time and found every time after. */
-  async function direct(agentId: string) {
-    const result = await host.action(() =>
-      host.call<AgentResults["direct"]>("agents", "direct", { agentId }),
-    );
-    if (result) open(result.conversation.id);
+  /** The chat of an agent just made from a template: a group of its own, opened. */
+  async function chatWith(agent: AgentView) {
+    const id = await openAgentChat(host, agent);
+    if (id) open(id);
   }
   let openingCaptain = false;
+  /** Why Captain's conversation did not open: shown in its pane, with Retry. */
+  const captainProblem = signal<unknown>(undefined);
   async function openCaptain() {
     if (openingCaptain || captain() || !host.can("captain.direct")) return;
     openingCaptain = true;
-    const result = await host.action(() =>
-      host.call<CaptainResults["direct"]>("captain", "direct", {}),
-    );
-    openingCaptain = false;
-    if (result) captain.set(result.conversationId);
+    captainProblem.set(undefined);
+    try {
+      const result = await host.call<CaptainResults["direct"]>(
+        "captain",
+        "direct",
+        {},
+      );
+      captain.set(result.conversationId);
+    } catch (problem) {
+      captainProblem.set(problem ?? new Error("failed"));
+    } finally {
+      openingCaptain = false;
+    }
   }
   function navigate(next: Page) {
     openTask("");
@@ -360,6 +411,8 @@ export function Workspace(props: {
           else={
             <ConversationEmpty
               captain={page() === "captain"}
+              captainProblem={captainProblem()}
+              onRetryCaptain={() => void openCaptain()}
               onCreate={() => newGroup.set(true)}
             />
           }
@@ -628,9 +681,9 @@ export function Workspace(props: {
           phone={phone()}
           initialId={templateGallery() || undefined}
           onClose={() => templateGallery.set(undefined)}
-          onCreated={(agentId) => {
+          onCreated={(agent) => {
             templateGallery.set(undefined);
-            void direct(agentId);
+            void chatWith(agent);
           }}
           onModelServices={() => {
             templateGallery.set(undefined);

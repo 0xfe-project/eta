@@ -148,7 +148,8 @@ export function PhonePairing(props: {
           />
           <Button
             label={uiText("generateCode")}
-            disabled={busy() || !address().trim()}
+            disabled={!address().trim()}
+            busy={busy()}
             onPress={() => void generate(address().trim())}
           />
         </If>

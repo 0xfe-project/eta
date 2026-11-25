@@ -1,6 +1,7 @@
 import type { ArtifactResults, ArtifactView } from "@eta/client-contracts";
 import type { WebViewRef } from "nsh";
 import type { Layout } from "../../../components";
+import type { ProgressHandle } from "../../../components/progress-notification";
 import type { CaptureArtifactPdf } from "./pdf-preview";
 import {
   cleanup,
@@ -19,15 +20,22 @@ import {
   ActionMenu,
   Button,
   colors,
-  Empty,
+  DetailSkeleton,
   grow,
   Label,
   Modal,
   row,
 } from "../../../components";
+import { EmptyState } from "../../../components/empty-state";
+import { settled } from "../../../components/pending";
+import { startProgress } from "../../../components/progress-notification";
+import { showToast } from "../../../components/toast";
 import { icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
+import { readResponseBytes } from "../../../services/attachment-files";
 import { useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
+import { CopyButton } from "../../../ui";
 import { createArtifactFileSaver } from "./file";
 import { ArtifactPdfPreview, ArtifactPdfResourcesError } from "./pdf-preview";
 
@@ -69,7 +77,8 @@ export function ArtifactPreview(props: {
   const item = () =>
     artifact().versions.find((entry) => entry.number === version());
   const url = signal<URL | undefined>(undefined);
-  const problem = signal("");
+  /** Why the preview did not open: the raw failure, or `noVersion` for an artifact with none. */
+  const problem = signal<unknown>(undefined);
   const retry = signal(0);
   const busy = signal(false);
   const copied = signal(false);
@@ -79,14 +88,23 @@ export function ArtifactPreview(props: {
   const downloading = signal(false);
   const downloadProblem = signal("");
   let downloadRequest: AbortController | undefined;
+  let downloadProgress: ProgressHandle | undefined;
   const viewer = computed(() => item()?.viewer);
+  const previewSettled = settled(
+    () => Boolean(url()) || Boolean(problem()) || viewer() === "download",
+  );
   const pdfCapture = signal<CaptureArtifactPdf>();
   const exportingPdf = signal(false);
-  const pdfProblem = signal("");
   const reloadingPdf = signal(false);
   let exportController: AbortController | undefined;
+  let exportProgress: ProgressHandle | undefined;
   let frame: WebViewRef | undefined;
-  cleanup(() => exportController?.abort());
+  cleanup(() => {
+    exportController?.abort();
+    exportProgress?.dismiss();
+    downloadRequest?.abort();
+    downloadProgress?.dismiss();
+  });
   function hostUrl(value: string, prefix: string): URL {
     const address = host.address();
     if (!address) throw new Error("Connect to an Eta host first.");
@@ -109,16 +127,25 @@ export function ArtifactPreview(props: {
     cleanup(() => {
       active = false;
       downloadRequest?.abort();
+      downloadProgress?.dismiss();
     });
     url.set(undefined);
-    problem.set("");
+    problem.set(undefined);
     copied.set(false);
     pdfCapture.set(undefined);
     downloadProblem.set("");
     files.savedPath.set("");
-    pdfProblem.set("");
     exportController?.abort();
-    if (number === undefined || !address || kind !== "iframe") return;
+    exportProgress?.dismiss();
+    if (kind !== "iframe") return;
+    if (number === undefined) {
+      problem.set("noVersion");
+      return;
+    }
+    if (!address) {
+      problem.set(new Error("not connected"));
+      return;
+    }
     void host
       .call<ArtifactResults["preview"]>("artifacts", "preview", {
         artifactId: props.artifact.id,
@@ -128,8 +155,7 @@ export function ArtifactPreview(props: {
         if (active) url.set(hostUrl(result.url, "/preview/"));
       })
       .catch((error: unknown) => {
-        if (active)
-          problem.set(error instanceof Error ? error.message : String(error));
+        if (active) problem.set(error ?? new Error("failed"));
       });
   });
   async function share() {
@@ -163,18 +189,13 @@ export function ArtifactPreview(props: {
     if (current) void host.action(() => openUrl(current.href));
   }
 
-  function dismissPdf() {
-    exportController?.abort();
-    pdfProblem.set("");
-    exportingPdf.set(false);
-  }
-
   function retryPdf() {
     if (!reloadingPdf()) {
       void exportPdf();
       return;
     }
-    dismissPdf();
+    exportController?.abort();
+    exportingPdf.set(false);
     retry.update((attempt) => attempt + 1);
   }
 
@@ -190,30 +211,65 @@ export function ArtifactPreview(props: {
     const controller = new AbortController();
     exportController = controller;
     exportingPdf.set(true);
-    pdfProblem.set("");
     reloadingPdf.set(false);
+    const progress = startProgress({
+      id: `artifact-pdf-${props.artifact.id}-${number}`,
+      icon: "file",
+      title: uiText("exportPdf"),
+      detail: props.artifact.title,
+      onCancel: () => controller.abort(),
+    });
+    exportProgress = progress;
     try {
       const bytes = await capture(controller.signal);
-      if (!controller.signal.aborted)
-        await saveArtifactFile(
-          bytes,
-          props.artifact.title,
-          number,
-          "pdf",
-          controller.signal,
-        );
+      if (controller.signal.aborted) {
+        progress.dismiss();
+        return;
+      }
+      await saveArtifactFile(
+        bytes,
+        props.artifact.title,
+        number,
+        "pdf",
+        controller.signal,
+      );
+      if (controller.signal.aborted) {
+        progress.dismiss();
+        return;
+      }
+      const saved = files.savedPath();
+      progress.complete({
+        title: uiText("exportPdf"),
+        detail: saved
+          ? uiText("artifactSavedTo", { path: saved })
+          : props.artifact.title,
+        onOpen: saved
+          ? () =>
+              void host.action(async () => {
+                await Clipboard.writeText(saved);
+                showToast({ title: uiText("copied") });
+              })
+          : undefined,
+        showWhenQuick: Boolean(saved),
+      });
     } catch (error) {
-      if (!controller.signal.aborted) {
+      if (controller.signal.aborted) {
+        progress.dismiss();
+      } else {
         reloadingPdf.set(error instanceof ArtifactPdfResourcesError);
-        pdfProblem.set(
-          error instanceof Error && error.message
-            ? error.message
-            : uiText("artifactPdfRenderError"),
-        );
+        progress.fail({
+          title: uiText("exportPdf"),
+          detail:
+            error instanceof Error && error.message
+              ? error.message
+              : uiText("artifactPdfRenderError"),
+          onRetry: retryPdf,
+        });
       }
     } finally {
       exportingPdf.set(false);
-      exportController = undefined;
+      if (exportController === controller) exportController = undefined;
+      if (exportProgress === progress) exportProgress = undefined;
     }
   }
   async function download() {
@@ -224,10 +280,19 @@ export function ArtifactPreview(props: {
     downloadRequest = request;
     downloading.set(true);
     downloadProblem.set("");
+    const progress = startProgress({
+      id: `artifact-zip-${props.artifact.id}-${current.number}`,
+      icon: "download",
+      title: uiText("download"),
+      detail: props.artifact.title,
+      onCancel: () => request.abort(),
+    });
+    downloadProgress = progress;
     try {
       const link = hostUrl(current.archiveUrl, "/artifacts/");
       if (platform.os === "web") {
         await openUrl(link.href);
+        progress.dismiss();
         return;
       }
       const response = await fetch(link.href, {
@@ -243,25 +308,57 @@ export function ArtifactPreview(props: {
         );
       if (!response.headers.get("content-type")?.includes("application/zip"))
         throw new Error(uiText("artifactUnexpectedDownload"));
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (!request.signal.aborted)
-        await saveArtifactFile(
-          bytes,
-          props.artifact.title,
-          current.number,
-          "zip",
-          request.signal,
-        );
+      const bytes = await readResponseBytes(response, (fraction) =>
+        progress.update({ progress: fraction }),
+      );
+      if (request.signal.aborted) {
+        progress.dismiss();
+        return;
+      }
+      await saveArtifactFile(
+        bytes,
+        props.artifact.title,
+        current.number,
+        "zip",
+        request.signal,
+      );
+      if (request.signal.aborted) {
+        progress.dismiss();
+        return;
+      }
+      const saved = files.savedPath();
+      progress.complete({
+        title: uiText("download"),
+        detail: saved
+          ? uiText("artifactSavedTo", { path: saved })
+          : props.artifact.title,
+        onOpen: saved
+          ? () =>
+              void host.action(async () => {
+                await Clipboard.writeText(saved);
+                showToast({ title: uiText("copied") });
+              })
+          : undefined,
+        showWhenQuick: Boolean(saved),
+      });
     } catch (error) {
-      if (!request.signal.aborted)
-        downloadProblem.set(
-          error instanceof Error ? error.message : String(error),
-        );
+      if (request.signal.aborted) {
+        progress.dismiss();
+      } else {
+        const message = problemText(error);
+        downloadProblem.set(message);
+        progress.fail({
+          title: uiText("download"),
+          detail: message,
+          onRetry: () => void download(),
+        });
+      }
     } finally {
       if (downloadRequest === request) {
         downloadRequest = undefined;
         downloading.set(false);
       }
+      if (downloadProgress === progress) downloadProgress = undefined;
     }
   }
   function phoneMenu() {
@@ -343,11 +440,9 @@ export function ArtifactPreview(props: {
           <Label variant="small" style={{ flex: 1 }}>
             {uiText("artifactSavedTo", { path: files.savedPath() })}
           </Label>
-          <Button
+          <CopyButton
             label={uiText("artifactCopyPath")}
-            onPress={() =>
-              void host.action(() => Clipboard.writeText(files.savedPath()))
-            }
+            value={files.savedPath}
           />
         </View>
       </If>
@@ -387,17 +482,25 @@ export function ArtifactPreview(props: {
         )}
       </If>
       <If
-        when={problem()}
+        when={problem() !== undefined}
         else={
           <If
-            when={url()}
+            when={previewSettled() ? url() : undefined}
             else={
-              <Empty
-                title={
-                  item()?.viewer === "download"
-                    ? uiText("availableAsAZipDownload")
-                    : uiText("openingPreview")
+              <EmptyState
+                size="page"
+                status={item()?.viewer === "download" ? "empty" : "loading"}
+                loading={
+                  <DetailSkeleton
+                    label={uiText("openingPreview")}
+                    style={grow}
+                  />
                 }
+                error={null}
+                empty={{
+                  art: "artifacts",
+                  title: uiText("availableAsAZipDownload"),
+                }}
               />
             }
           >
@@ -416,46 +519,34 @@ export function ArtifactPreview(props: {
                   ref={(node) => {
                     frame = node;
                   }}
-                  onError={(error) => problem.set(error.message)}
+                  onError={(error) => problem.set(error)}
                 />
               )
             }
           </If>
         }
       >
-        <Empty title={uiText("previewUnavailable")} description={problem()}>
-          <Button
-            label={uiText("retry")}
-            onPress={() => retry.update((attempt) => attempt + 1)}
-          />
-          <If when={url()}>
-            <Button label={uiText("openInBrowser")} onPress={openPreview} />
-          </If>
-        </Empty>
-      </If>
-      <If when={exportingPdf() || !!pdfProblem()}>
-        <Modal
-          title={uiText("exportPdf")}
-          phone={phone()}
-          sheet={phone()}
-          onClose={dismissPdf}
-        >
-          <View style={{ padding: space[16], gap: space[12] }}>
-            <Label variant="small">
-              {pdfProblem() || uiText("artifactPdfPreparing")}
-            </Label>
-            <View style={{ ...row, justifyContent: "flex-end", gap: space[8] }}>
-              <Button label={uiText("cancel")} onPress={dismissPdf} />
-              <If when={pdfProblem()}>
-                <Button
-                  label={uiText("retry")}
-                  tone="primary"
-                  onPress={retryPdf}
-                />
-              </If>
-            </View>
-          </View>
-        </Modal>
+        <EmptyState
+          size="page"
+          status="error"
+          loading={null}
+          error={{
+            title: uiText("previewUnavailable"),
+            description:
+              problem() === "noVersion"
+                ? uiText("previewNoVersion")
+                : `${problemText(problem())} ${uiText("previewSafe")}`,
+            problem: problem() === "noVersion" ? undefined : problem(),
+            retry:
+              problem() === "noVersion"
+                ? undefined
+                : () => retry.update((attempt) => attempt + 1),
+            actions: url()
+              ? [{ label: uiText("openInBrowser"), onPress: openPreview }]
+              : undefined,
+          }}
+          empty={{ title: uiText("previewUnavailable") }}
+        />
       </If>
       <If when={confirmingShare()}>
         <Modal
@@ -475,7 +566,7 @@ export function ArtifactPreview(props: {
               <Button
                 label={uiText("sharePublicly")}
                 tone="primary"
-                disabled={busy()}
+                busy={busy()}
                 onPress={() => void share()}
               />
             </View>

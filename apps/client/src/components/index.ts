@@ -1,12 +1,14 @@
 export { ActionItem, ActionMenu, Button, Field } from "./controls";
 export { Compact } from "./density";
-export { Empty, emptyWidth } from "./empty";
 export { Header } from "./header";
 export {
+  CompactSkeleton,
   DetailSkeleton,
   ListSkeleton,
   MessagesSkeleton,
   Revealed,
+  SkeletonBar,
+  SkeletonReveal,
 } from "./loading-skeleton";
 export { dialogWidth, Modal } from "./modal";
 export { PaneHandle } from "./pane-handle";

@@ -19,6 +19,7 @@ import {
 import { createAppearancePreferences } from "./src/app/appearance-preferences";
 import { ClientUpdateNotice } from "./src/app/client-update-notice";
 import { Workspace } from "./src/app/workspace";
+import { showsWorkspace } from "./src/app/workspace-gate";
 import {
   Button,
   Fonts,
@@ -36,6 +37,8 @@ import {
   ElementPicking,
 } from "./src/components/element-picker";
 import { settled } from "./src/components/pending";
+import { ProgressNotificationLayer } from "./src/components/progress-notification";
+import { monoFontFamily } from "./src/components/theme";
 import { ToastLayer } from "./src/components/toast";
 import { control, icon, layer, space } from "./src/components/tokens";
 import { createLanguagePreference, LanguageSettings, uiText } from "./src/i18n";
@@ -81,6 +84,8 @@ function pairingAddress(
 
 function App() {
   const host = createHost();
+  /** The global error bar's Details: the raw failure behind its words. */
+  const errorOpen = signal(false);
   resumeComposerOutbox(host);
   const pictureMode = createPictureMode();
   const attachmentFiles = createAttachmentFiles(host);
@@ -241,12 +246,12 @@ function App() {
                       style={{ backgroundColor: c().canvas }}
                     >
                       <If
-                        when={
-                          host.hasConnected() &&
-                          !host.paused() &&
-                          !forcedConnect() &&
-                          workspaceSettled()
-                        }
+                        when={showsWorkspace({
+                          connected: host.hasConnected(),
+                          everConnected: host.everConnected(),
+                          changingHost: forcedConnect(),
+                          settled: workspaceSettled(),
+                        })}
                         else={
                           <If
                             when={loadingWebWorkspace() || !workspaceSettled()}
@@ -286,6 +291,7 @@ function App() {
                         />
                       </If>
                       <ToastLayer />
+                      <ProgressNotificationLayer />
                       <If when={!forcedConnect()}>
                         <HostRestartScreen
                           onConnect={() => {
@@ -336,6 +342,8 @@ function App() {
                       <ClientUpdateNotice />
                       <If when={host.error()}>
                         <View
+                          role="alert"
+                          accessibilityLiveRegion="assertive"
                           style={{
                             ...row,
                             position: "absolute",
@@ -350,15 +358,41 @@ function App() {
                             borderColor: c().red,
                           }}
                         >
-                          <Label variant="small" tone="red" style={{ flex: 1 }}>
-                            {host.error()}
-                          </Label>
+                          <View style={{ flex: 1, gap: space[4] }}>
+                            <Label variant="small" tone="red">
+                              {host.error()}
+                            </Label>
+                            <If when={errorOpen() && host.errorDetail()}>
+                              <Label
+                                variant="caption"
+                                tone="muted"
+                                style={{ fontFamily: monoFontFamily(fonts()) }}
+                              >
+                                {host.errorDetail()}
+                              </Label>
+                            </If>
+                          </View>
+                          <If when={host.errorDetail()}>
+                            <Button
+                              label={
+                                errorOpen()
+                                  ? uiText("hideDetails")
+                                  : uiText("showDetails")
+                              }
+                              tone="ghost"
+                              expanded={errorOpen()}
+                              onPress={() => errorOpen.set(!errorOpen())}
+                            />
+                          </If>
                           <Button
                             label={uiText("dismissError")}
                             icon="close"
                             iconOnly
                             tone="ghost"
-                            onPress={() => host.error.set("")}
+                            onPress={() => {
+                              host.error.set("");
+                              errorOpen.set(false);
+                            }}
                           />
                         </View>
                       </If>

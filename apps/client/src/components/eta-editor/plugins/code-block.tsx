@@ -16,6 +16,7 @@ import {
 import { uiText } from "../../../i18n";
 import { canHover } from "../../menu";
 import { colors, row, textFaces } from "../../theme";
+import { showToast } from "../../toast";
 import { opacity, space } from "../../tokens";
 import { modKey } from "../keys";
 import { blocksOf } from "../positions";
@@ -190,7 +191,9 @@ function CodeBlockChrome(props: { editor: EtaEditorHandle }) {
                     role="button"
                     accessibilityLabel={uiText("copyCode")}
                     onPress={() =>
-                      void Clipboard.writeText(codeOf(block().node))
+                      void Clipboard.writeText(codeOf(block().node)).then(() =>
+                        showToast({ title: uiText("copied") }),
+                      )
                     }
                     hoverStyle={{ opacity: opacity.muted }}
                     style={{ cursor: "pointer" }}

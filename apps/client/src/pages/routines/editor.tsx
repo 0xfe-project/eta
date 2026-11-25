@@ -7,7 +7,6 @@ import type {
 import type { JSX, ViewStyle } from "nsh";
 import { HOURLY_STEPS } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { TimeField } from "nsh/base";
 import {
   ActionItem,
   ActionMenu,
@@ -16,8 +15,6 @@ import {
   dialogWidth,
   Field,
   focusRing,
-  fontFamily,
-  Fonts,
   grow,
   Icon,
   Label,
@@ -43,7 +40,8 @@ import {
 } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { upcomingTimes, weekday } from "./schedule";
+import { TimeField } from "../../ui";
+import { timeZones, upcomingTimes, weekday } from "./schedule";
 
 interface ScheduleOption {
   label: string;
@@ -324,7 +322,6 @@ export function RoutineEditor(props: {
       "UTC",
   );
   const busy = signal(false);
-  const fonts = Fonts();
   const preview = () => {
     const selected = schedule();
     return selected ? upcomingTimes(selected, timezone()) : "";
@@ -354,10 +351,7 @@ export function RoutineEditor(props: {
       props.onSave(result.routine.id);
     }
   }
-  const zones = () => {
-    const all = Intl.supportedValuesOf("timeZone");
-    return all.includes(timezone()) ? all : [timezone(), ...all];
-  };
+  const zones = () => timeZones(timezone());
   // The phone sheet: 36px controls with 14px text, a footer bar under the fields.
   const sheet = () => props.phone && !props.inline;
   // The tablet form uses 32px controls with a 10px inset; the desktop one 28px and 8px.
@@ -391,44 +385,22 @@ export function RoutineEditor(props: {
   );
   const time = () => (
     <If when={kind() === "weekly" || kind() === "daily"}>
-      <View
+      <TimeField
+        label={uiText("time")}
+        value={at()}
+        hourCycle={formatLocale() === "zh-CN" ? "h23" : "h12"}
+        height={control()}
+        paddingHorizontal={controlInset()}
+        iconSize={sheet() ? icon.md : icon.sm}
         style={{
-          ...row,
           width: sheet()
             ? timeFieldWidth.sheet
             : props.tablet
               ? timeFieldWidth.tablet
               : timeFieldWidth.desktop,
-          height: control(),
-          gap: space[8],
-          paddingHorizontal: controlInset(),
-          justifyContent: "space-between",
-          borderWidth: 1,
-          borderColor: c().border,
         }}
-      >
-        <TimeField
-          accessibilityLabel={uiText("time")}
-          value={at()}
-          hourCycle={formatLocale() === "zh-CN" ? "h23" : "h12"}
-          onChange={({ value }) => at.set(value)}
-          style={{ ...row }}
-          renderSegment={(entry) => (
-            <Label
-              variant="small"
-              style={{ marginLeft: entry.segment === "period" ? space[4] : 0 }}
-            >
-              {entry.label}
-            </Label>
-          )}
-          separatorStyle={{
-            fontFamily: fontFamily(fonts().interface),
-            ...textStyle(type("small")),
-            color: c().ink,
-          }}
-        />
-        <Icon name="routines" size={sheet() ? icon.md : icon.sm} />
-      </View>
+        onChange={at.set}
+      />
     </If>
   );
   const actions = () => (

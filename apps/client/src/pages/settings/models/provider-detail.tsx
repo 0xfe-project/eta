@@ -31,6 +31,8 @@ import {
 } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
+import { Tabs } from "../../../ui";
 import { LetterBox, PaneBack, SectionHeader, WarningLine } from "../section";
 import { logoKey, useSourceLogos } from "./logos";
 import { ProviderEditor } from "./provider-editor";
@@ -237,64 +239,22 @@ export function ProviderDetail(props: {
           onPress={() => void test()}
         />
       </SectionHeader>
-      <View
-        role="tablist"
-        style={{
-          ...row,
-          alignItems: "stretch",
-          height: space[40],
-          flexShrink: 0,
-          gap: props.phone ? 0 : space[20],
-          paddingHorizontal: props.phone ? 0 : space[16],
-          borderBottomWidth: 1,
-          borderColor: c().border,
-        }}
-      >
-        <Each of={["models", "connection"] as const}>
-          {(item) => (
-            <View
-              role="tab"
-              accessibilityState={{ selected: tab() === item() }}
-              accessibilityLabel={
-                item() === "models"
-                  ? uiText("models2")
-                  : uiText("sourceConnectionTab")
-              }
-              onPress={() => tab.set(item())}
-              style={{
-                ...row,
-                gap: space[4],
-                ...(props.phone ? { flex: 1, justifyContent: "center" } : {}),
-                borderBottomWidth: border.thick,
-                borderColor: tab() === item() ? c().ink : "transparent",
-                cursor: "pointer",
-              }}
-            >
-              <Label
-                weight={
-                  tab() === item()
-                    ? props.phone
-                      ? weight.strong
-                      : weight.regular
-                    : weight.regular
-                }
-                tone={
-                  tab() === item() ? "ink" : props.phone ? "mutedInk" : "muted"
-                }
-              >
-                {item() === "models"
-                  ? uiText("models2")
-                  : uiText("sourceConnectionTab")}
-              </Label>
-              <If when={item() === "models" && !props.phone}>
-                <Label variant="small" tone="muted">
-                  {provider()?.models.length ?? 0}
-                </Label>
-              </If>
-            </View>
-          )}
-        </Each>
-      </View>
+      <Tabs
+        value={tab()}
+        stretch={props.phone}
+        options={[
+          {
+            value: "models" as const,
+            label: uiText("models2"),
+            count: props.phone ? undefined : (provider()?.models.length ?? 0),
+          },
+          {
+            value: "connection" as const,
+            label: uiText("sourceConnectionTab"),
+          },
+        ]}
+        onChange={tab.set}
+      />
       <If when={check()?.error}>
         <Label
           tone="red"
@@ -306,7 +266,7 @@ export function ProviderDetail(props: {
             borderColor: c().border,
           }}
         >
-          {check()?.error}
+          {problemText(check()?.error ?? "")}
         </Label>
       </If>
       <If

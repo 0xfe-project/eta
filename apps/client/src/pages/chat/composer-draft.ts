@@ -10,6 +10,7 @@ import type { useHost } from "../../services/host";
 import { legacyDraftToDoc } from "@eta/client-contracts/composer-doc";
 import { WireError } from "@eta/client-contracts/wire";
 import { cleanup, computed, effect, signal, Storage } from "nsh";
+import { problemText } from "../../services/problem-text";
 import {
   conversationUploads,
   createUploadQueue,
@@ -304,7 +305,7 @@ export async function drainOutbox(
           );
           continue;
         }
-        const failure = cause instanceof Error ? cause.message : String(cause);
+        const failure = problemText(cause);
         edit({
           outgoing: outgoing().map((item) =>
             item.id === message.id ? { ...item, failure } : item,

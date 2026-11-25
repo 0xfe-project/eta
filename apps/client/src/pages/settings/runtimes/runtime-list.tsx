@@ -8,12 +8,17 @@ import type { JSX } from "nsh";
 import type { RuntimeListing } from "./listing";
 import { signal, View } from "nsh";
 import { Button, colors, Label, row } from "../../../components";
+import { EmptyState } from "../../../components/empty-state";
+import { ListSkeleton } from "../../../components/loading-skeleton";
 import { StatusDot } from "../../../components/status-dot";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
+import { useLoadState } from "../../../services/load-status";
+import { problemText } from "../../../services/problem-text";
 import { localTime, percentText } from "../models/quota";
 import {
+  emptyStyle,
   EntityRow,
   leadingBoxWidth,
   LetterBox,
@@ -370,6 +375,7 @@ function MachineRuntimes(props: {
   onExternalAgent: (machineId: string, id: string) => void;
 }) {
   const c = colors();
+  const host = useHost();
   const runtimes = () => props.listing.runtimes(props.machine);
   const online = () => reachable(props.machine);
   const count = () => {
@@ -426,7 +432,7 @@ function MachineRuntimes(props: {
         </If>
       </SectionHeader>
       <If when={props.listing.error(props.machine)}>
-        {(error) => notice(error())}
+        {(error) => notice(problemText(error()))}
       </If>
       <If
         when={online()}
@@ -436,30 +442,41 @@ function MachineRuntimes(props: {
           when={runtimes()}
           else={
             <If
-              when={runtimes() === null}
+              when={runtimes() === null || !host.can("agents.runtimes")}
               else={notice(uiText("modelReadLoading"))}
             >
               {notice(
-                uiText("runtimesMachineUnreachable", {
-                  name: props.machine.name,
-                }),
+                host.can("agents.runtimes")
+                  ? uiText("runtimesMachineUnreachable", {
+                      name: props.machine.name,
+                    })
+                  : uiText("runtimesHostUnsupported"),
               )}
             </If>
           }
         >
           {(list) => (
-            <Each of={list()} key={(item) => item.id}>
-              {(item) => (
-                <RuntimeRow
-                  listing={props.listing}
-                  machine={props.machine}
-                  runtime={item()}
-                  weekTokens={props.usage?.get(item().id)?.windows["7d"].total}
-                  phone={props.phone}
-                  onExternalAgent={props.onExternalAgent}
-                />
-              )}
-            </Each>
+            <>
+              <If when={!list().length}>
+                {notice(
+                  uiText("runtimesNoneFound", { name: props.machine.name }),
+                )}
+              </If>
+              <Each of={list()} key={(item) => item.id}>
+                {(item) => (
+                  <RuntimeRow
+                    listing={props.listing}
+                    machine={props.machine}
+                    runtime={item()}
+                    weekTokens={
+                      props.usage?.get(item().id)?.windows["7d"].total
+                    }
+                    phone={props.phone}
+                    onExternalAgent={props.onExternalAgent}
+                  />
+                )}
+              </Each>
+            </>
           )}
         </If>
       </If>
@@ -493,17 +510,40 @@ export function RuntimeList(props: {
     ...props.listing.machines().filter(reachable),
     ...props.listing.machines().filter((machine) => !reachable(machine)),
   ];
+  const load = useLoadState({ targets: () => ["machines"] });
   return (
-    <Each of={machines()} key={(machine) => machine.id}>
-      {(machine) => (
-        <MachineRuntimes
-          listing={props.listing}
-          machine={machine()}
-          usage={usage()}
-          phone={props.phone}
-          onExternalAgent={props.onExternalAgent}
+    <>
+      <If when={!machines().length}>
+        <EmptyState
+          size="page"
+          width="narrow"
+          style={emptyStyle}
+          status={load.shown()}
+          loading={<ListSkeleton label={uiText("loadingMachines")} />}
+          error={{
+            title: uiText("machinesDidNotLoad"),
+            description: load.why(),
+            retry: load.retry,
+            retrying: load.retrying(),
+          }}
+          empty={{
+            art: "machines",
+            title: uiText("noMachinesYet"),
+            description: uiText("noMachinesYetHint"),
+          }}
         />
-      )}
-    </Each>
+      </If>
+      <Each of={machines()} key={(machine) => machine.id}>
+        {(machine) => (
+          <MachineRuntimes
+            listing={props.listing}
+            machine={machine()}
+            usage={usage()}
+            phone={props.phone}
+            onExternalAgent={props.onExternalAgent}
+          />
+        )}
+      </Each>
+    </>
   );
 }

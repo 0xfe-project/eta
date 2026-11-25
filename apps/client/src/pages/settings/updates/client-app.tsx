@@ -8,6 +8,8 @@ import {
   Button,
   colors,
   dialogWidth,
+  fontFamily,
+  Fonts,
   grow,
   Icon,
   Label,
@@ -16,7 +18,6 @@ import {
   SmoothScroll,
   textFaces,
 } from "../../../components";
-import { DownloadProgressBar } from "../../../components/download-progress";
 import { LayoutSelect } from "../../../components/select";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
@@ -122,11 +123,9 @@ export function ClientUpdateConfirm(props: { onClose: () => void }) {
             onPress={props.onClose}
           />
           <Button
-            label={
-              update.restarting() ? uiText("restarting") : uiText("restartNow")
-            }
+            label={uiText("restartNow")}
             tone="primary"
-            disabled={update.restarting()}
+            busy={update.restarting()}
             onPress={() => void update.restart()}
           />
         </View>
@@ -138,6 +137,7 @@ export function ClientUpdateConfirm(props: { onClose: () => void }) {
 function ChannelSelect(props: { phone: boolean }) {
   const c = colors();
   const type = textFaces();
+  const fonts = Fonts();
   const update = clientUpdate;
   const names: Record<ClientChannel, string> = {
     stable: uiText("updateFullReleases"),
@@ -181,6 +181,7 @@ function ChannelSelect(props: { phone: boolean }) {
             backgroundColor: c().canvas,
           }}
           itemStyle={{
+            fontFamily: fontFamily(fonts().interface),
             color: c().ink,
             fontSize: type("small").size,
             minHeight: itemRow,
@@ -240,14 +241,13 @@ export function ClientAppUpdate(props: { phone: boolean }) {
         </Label>
         <Button
           label={
-            update.checking()
-              ? uiText("checking")
-              : update.checked()
-                ? uiText("checkAgain")
-                : uiText("checkAppUpdate")
+            update.checked() ? uiText("checkAgain") : uiText("checkAppUpdate")
           }
           size={props.phone ? control.md : control.sm}
-          disabled={update.busy() || update.ready()}
+          disabled={
+            update.downloading() || update.restarting() || update.ready()
+          }
+          busy={update.checking()}
           onPress={() => void update.check()}
         />
       </View>
@@ -266,16 +266,22 @@ export function ClientAppUpdate(props: { phone: boolean }) {
               <Label variant="small" style={{ flex: 1 }}>
                 {uiText("versionAvailable", { version: offer().version })}
               </Label>
-              <Button
-                label={clientUpdateAction(offer())}
-                tone={update.ready() ? "primary" : undefined}
-                disabled={update.downloading() || update.restarting()}
-                onPress={() => pressClientUpdate(() => confirm.set(true))}
-              />
+              <If
+                when={!update.downloading()}
+                else={
+                  <Label variant="small" tone="muted">
+                    {clientUpdateAction(offer())}
+                  </Label>
+                }
+              >
+                <Button
+                  label={clientUpdateAction(offer())}
+                  tone={update.ready() ? "primary" : undefined}
+                  busy={update.restarting()}
+                  onPress={() => pressClientUpdate(() => confirm.set(true))}
+                />
+              </If>
             </View>
-            <If when={update.downloading() ? update.percentage() : undefined}>
-              {(value) => <DownloadProgressBar value={value()} />}
-            </If>
             <If when={update.ready() && offer().kind === "package"}>
               <Label variant="small" tone="muted">
                 {uiText("reopenEtaToUse", { version: offer().version })}

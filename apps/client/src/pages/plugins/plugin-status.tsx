@@ -1,8 +1,12 @@
 import type { PluginView } from "@eta/client-contracts";
 import { View } from "nsh";
-import { colors, Empty, Icon, Label } from "../../components";
-import { icon, space } from "../../components/tokens";
+import { colors, Icon, Label } from "../../components";
+import { EmptyState } from "../../components/empty-state";
+import { ListSkeleton } from "../../components/loading-skeleton";
+import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { useLoadState } from "../../services/load-status";
+import { Badge } from "../../ui";
 
 export function PluginGlyph(props: { size: number }) {
   const c = colors();
@@ -108,42 +112,61 @@ export function Status(props: {
   phone?: boolean;
   hideOff?: boolean;
 }) {
-  const c = colors();
   const missing = () => props.item.state === "needs_config";
   const off = () => !props.item.enabled && props.hideOff !== true;
   return (
     <If when={off() || missing()}>
-      <Label
-        variant="caption"
-        lines={1}
-        tone={missing() ? "warningInk" : "muted"}
-        style={{
-          alignSelf: props.phone ? "flex-start" : "center",
-          paddingHorizontal: missing() ? space[8] : 0,
-          paddingVertical: 1,
-          borderWidth: missing() ? 1 : 0,
-          borderColor: c().warning,
-        }}
+      <If
+        when={missing() && !off()}
+        else={
+          <Label
+            variant="caption"
+            lines={1}
+            tone="muted"
+            style={{ alignSelf: props.phone ? "flex-start" : "center" }}
+          >
+            {uiText("pluginOffForAll")}
+          </Label>
+        }
       >
-        {off() ? uiText("pluginOffForAll") : uiText("needsConfiguring")}
-      </Label>
+        <Badge
+          label={uiText("needsConfiguring")}
+          tone="warning"
+          variant="outline"
+          size="caption"
+          style={{ alignSelf: props.phone ? "flex-start" : "center" }}
+        />
+      </If>
     </If>
   );
 }
 
-/** No plugins: the design's empty state, under the intro. */
-export function NoPlugins() {
+/** No plugins, under the intro: or not loaded yet, or the list did not load. */
+export function NoPlugins(props: { onAdd: () => void; onMarket?: () => void }) {
+  const load = useLoadState({ targets: () => ["plugins"] });
   return (
-    <Empty
-      title={uiText("noPluginsYet")}
-      description={uiText("noPluginsHint")}
-      icon="plugins"
-      iconSize={icon.xl}
-      style={{
-        flex: undefined,
-        justifyContent: "flex-start",
-        paddingVertical: space[40],
+    <EmptyState
+      size="page"
+      status={load.shown()}
+      loading={<ListSkeleton label={uiText("loadingPlugins")} />}
+      error={{
+        title: uiText("pluginsDidNotLoad"),
+        description: load.why(),
+        retry: load.retry,
+        retrying: load.retrying(),
       }}
+      empty={{
+        art: "plugins",
+        title: uiText("noPluginsYet"),
+        description: uiText("noPluginsHint"),
+        actions: [
+          { label: uiText("addFromGit"), icon: "plus", onPress: props.onAdd },
+          ...(props.onMarket
+            ? [{ label: uiText("browseMarket"), onPress: props.onMarket }]
+            : []),
+        ],
+      }}
+      style={{ paddingHorizontal: 0, paddingVertical: space[24] }}
     />
   );
 }

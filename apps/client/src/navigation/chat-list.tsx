@@ -9,14 +9,15 @@ import {
   Field,
   grow,
   Header,
-  Label,
   row,
   sizes,
   SmoothScroll,
 } from "../components";
+import { EmptyState } from "../components/empty-state";
 import { control, icon, space } from "../components/tokens";
-import { useText } from "../i18n";
+import { uiText, useText } from "../i18n";
 import { useHost } from "../services/host";
+import { useLoadState } from "../services/load-status";
 import { GroupRow } from "./chat-list-rows";
 import { ArchiveGroup, GroupMenu, RenameGroup } from "./group-actions";
 import { RailButton } from "./rail-controls";
@@ -41,6 +42,7 @@ export function ChatList(
   const host = useHost();
   const searching = signal(false);
   const query = signal("");
+  const load = useLoadState({ targets: () => ["conversations"] });
   // The group whose menu is open, and where in its row; then the dialog it chose.
   const menu = signal<{ id: string; at: Point } | undefined>(undefined);
   const renaming = signal("");
@@ -198,9 +200,39 @@ export function ChatList(
             )}
           </Each>
           <If when={!props.collapsed && groups().length === 0}>
-            <Label variant="small" tone="muted" style={{ padding: space[16] }}>
-              {text(query() ? "noMatchingConversations" : "noConversations")}
-            </Label>
+            <EmptyState
+              size="row"
+              status={query() ? "empty" : load.shown()}
+              loading={uiText("loadingConversations")}
+              error={{
+                title: uiText("conversationsDidNotLoad"),
+                retry: load.retry,
+                retrying: load.retrying(),
+              }}
+              empty={
+                query()
+                  ? {
+                      title: uiText("noGroupsMatch", { query: query() }),
+                      actions: [
+                        {
+                          label: uiText("clearSearch"),
+                          onPress: () => query.set(""),
+                        },
+                      ],
+                    }
+                  : {
+                      title: text("noConversations"),
+                      actions: [
+                        { label: text("newGroup"), onPress: props.onCreate },
+                      ],
+                    }
+              }
+              announce={!!query()}
+              style={{
+                paddingHorizontal: space[16],
+                paddingVertical: space[12],
+              }}
+            />
           </If>
         </SmoothScroll>
         <If when={named(renaming())}>

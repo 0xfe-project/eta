@@ -23,12 +23,14 @@ import {
   row,
 } from "../../components";
 import { AgentFace, UserFace } from "../../components/agent-face";
+import { EmptyState } from "../../components/empty-state";
 import { chatText, shownFiles } from "../../components/eta-editor";
 import { canHover, touchScreen } from "../../components/menu";
 import { densityDefaults } from "../../components/theme";
 import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { problemReason } from "../../services/problem-text";
 import { taskMoment } from "./facts";
 import { isActiveRunStatus } from "./run-log";
 import { statusKeys, statusName } from "./status";
@@ -119,13 +121,18 @@ const targetName = (target: ActivityTarget) =>
  */
 function taskActivitySentence(entry: TaskActivityView, name?: string): string {
   const quoted = (title: string) => name ?? title;
-  if (inlineBody(entry))
-    return uiText(
-      entry.kind === "run_failed"
-        ? "activityTurnFailed"
-        : "activityTurnStopped",
-      { reason: entry.body!.trim().replace(/\s+/g, " ") },
-    );
+  if (inlineBody(entry)) {
+    // A raw code ("returned 529") is not a reason: the line then just says how the turn ended.
+    const reason = problemReason(entry.body!.trim().replace(/\s+/g, " "));
+    const failed = entry.kind === "run_failed";
+    if (!reason)
+      return uiText(
+        failed ? "activityTurnFailedBare" : "activityTurnStoppedBare",
+      );
+    return uiText(failed ? "activityTurnFailed" : "activityTurnStopped", {
+      reason,
+    });
+  }
   if (entry.kind === "status") {
     const from = entry.data.from as BoardTaskStatus;
     const to = entry.data.to as BoardTaskStatus;
@@ -635,6 +642,16 @@ export function TaskActivity(props: {
           );
         }}
       </Each>
+      <If when={props.heading && !items().length}>
+        <EmptyState
+          size="row"
+          status="empty"
+          loading={null}
+          error={null}
+          empty={{ title: uiText("noActivityYet") }}
+          style={{ paddingHorizontal: 0 }}
+        />
+      </If>
     </View>
   );
 }

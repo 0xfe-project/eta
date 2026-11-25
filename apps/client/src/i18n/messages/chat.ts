@@ -81,8 +81,8 @@ export const chatMessages = {
   offlineRunSteps: ["Steps unavailable offline.", "离线时无法查看步骤。"],
   stepCount: ["Steps {{completed}}/{{total}}", "步骤 {{completed}}/{{total}}"],
   allAgentsAreAlreadyMembers: [
-    "All agents are already members.",
-    "所有智能体都已加入。",
+    "Every agent is already in this group",
+    "所有智能体都在这个群组里了",
   ],
   answer: ["Answer", "回答"],
   attachFiles: ["Attach files", "添加附件"],
@@ -192,9 +192,46 @@ export const chatMessages = {
   messageWithCount: ["Message {{name}}…", "发消息给 {{name}}…"],
   newReport: ["{{unseenReports}} new report", "{{unseenReports}} 份新报告"],
   jumpToSource: ["Jump to source", "跳转到来源"],
-  noMessagesYet: ["No messages yet", "暂无消息"],
+  noMessagesYet: ["No messages yet", "还没有消息"],
   noSteward: ["No steward", "没有主理人"],
-  nothingIsWaitingForYou: ["Nothing is waiting for you.", "暂无待处理事项。"],
+  nothingIsWaitingForYou: ["Nothing is waiting for you", "没有等你处理的事"],
+  nothingIsWaitingForYouDescription: [
+    "Questions, proposals and tasks for you to check appear here.",
+    "需要你回答、批准或验收的事会出现在这里。",
+  ],
+  loadingConversations: ["Loading conversations…", "正在读取对话…"],
+  conversationsDidNotLoad: ["Conversations didn't load", "对话没加载出来"],
+  conversationCannotOpen: ["Can't open this conversation", "打不开这个对话"],
+  conversationCannotOpenHint: [
+    "It may have been deleted, or it isn't on this host.",
+    "它可能已被删除，或这台主机上没有它。",
+  ],
+  conversationDidNotLoad: ["The conversation didn't load", "对话没加载出来"],
+  noMessagesYetHint: ["Send the first message below.", "在下面发第一条消息。"],
+  noCaptainMessagesYet: [
+    "No conversation with Captain yet",
+    "还没有和 Captain 说过话",
+  ],
+  noCaptainMessagesYetHint: [
+    "Ask it anything, or have it set up groups and hand out tasks.",
+    "问它任何事，或让它帮你建群组、派任务。",
+  ],
+  noGroupsMatch: [
+    "No groups match “{{query}}”",
+    "没有找到「{{query}}」相关的群组",
+  ],
+  noMentionsMatch: [
+    "No members or files match “{{query}}”",
+    "没有匹配「{{query}}」的成员或文件",
+  ],
+  noMentions: ["No members or files to mention", "没有可以提及的成员或文件"],
+  noTaskSuggestionsMatch: [
+    "No tasks match “{{query}}”",
+    "没有匹配「{{query}}」的任务",
+  ],
+  noTaskSuggestions: ["No tasks to mention", "没有可以提及的任务"],
+  loadingPending: ["Loading what's waiting…", "正在读取待处理…"],
+  pendingDidNotLoad: ["Pending didn't load", "待处理没加载出来"],
   openConversation: ["Open conversation", "打开对话"],
   orWriteYourOwnAnswer: ["Or write your own answer…", "或输入自己的回答…"],
   prerequisiteCancelledDecide: [
@@ -313,6 +350,7 @@ export const chatMessages = {
   ],
   draftNeedsConfirming: ["Needs confirming", "待确认"],
   noModelsMatch: ["No matching models", "没有匹配的模型"],
+  noModelsYet: ["No models yet", "还没有模型"],
   reviewTaskNumber: ["Task #{{number}}", "任务 #{{number}}"],
   reviewInboxChip: ["Inbox", "Inbox"],
   reviewSettled: ["Settled", "已落定"],
@@ -402,8 +440,8 @@ export const chatMessages = {
     "打开对话，看看 Captain 是怎么得出这个提议的。",
   ],
   nothingIsWaitingForApproval: [
-    "Nothing is waiting for approval.",
-    "没有等待批准的事项。",
+    "Nothing is waiting for your approval",
+    "没有等你批准的事",
   ],
   openPicture: [
     "View picture {{name}} · {{size}}",

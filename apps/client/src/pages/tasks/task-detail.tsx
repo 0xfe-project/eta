@@ -21,6 +21,7 @@ import { activeTaskRun, latestExecutorRun } from "./run-log";
 import { Segmented } from "./segmented";
 import { TaskDetailSkeleton } from "./skeleton";
 import { TaskDetailDialogs } from "./task-detail-dialogs";
+import { TaskDetailMissing } from "./task-detail-missing";
 import { createTaskDetailState } from "./task-detail-state";
 import { TaskCommentBox, TaskReviewActions } from "./task-fields";
 import { TaskOverview } from "./task-overview";
@@ -249,8 +250,14 @@ export function TaskDetail(props: {
         </TaskTopBar>
       </If>
       <If
-        when={shown() ? task() : undefined}
-        else={<TaskDetailSkeleton label={uiText("loadingTask")} />}
+        when={state.gone() || !shown() ? undefined : task()}
+        else={
+          <TaskDetailMissing
+            state={state}
+            skeleton={<TaskDetailSkeleton label={uiText("loadingTask")} />}
+            onBack={props.onClose}
+          />
+        }
       >
         {(item) => (
           <>

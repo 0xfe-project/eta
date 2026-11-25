@@ -3,7 +3,7 @@ import type { JSX, TextStyle } from "nsh";
 import type { TaskDetailState } from "./task-detail-state";
 import { MAX_ATTACHMENTS } from "@eta/client-contracts";
 import { mentionLabel } from "@eta/client-contracts/composer-target";
-import { effect, View } from "nsh";
+import { effect, signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -27,6 +27,8 @@ import {
   submitKeys,
 } from "../../components/eta-editor";
 import { touchScreen } from "../../components/menu";
+import { OptimisticStatus } from "../../components/optimistic-status";
+import { Spinner } from "../../components/spinner";
 import { StatusDot } from "../../components/status-dot";
 import { densityDefaults } from "../../components/theme";
 import {
@@ -285,6 +287,12 @@ function CommentBox(props: {
           />
         </View>
       </View>
+      <If when={props.state.commentStatus.state().status !== "idle"}>
+        <OptimisticStatus
+          state={props.state.commentStatus.state()}
+          onRetry={() => void submit()}
+        />
+      </If>
     </>
   );
 }
@@ -429,6 +437,7 @@ export function TaskRail(detail: {
   const host = useHost();
   const c = colors();
   const { replacing, search, submitting } = detail.state;
+  const rerunning = signal(false);
   const item = () => detail.item;
   const executorId = () => item().assigneeAgentId ?? item().createdBy.agentId;
   const executor = () => host.agent(executorId());
@@ -512,7 +521,7 @@ export function TaskRail(detail: {
                   />
                 }
               >
-                <Icon name="spinner" size={icon.sm} tone="muted" />
+                <Spinner size={icon.sm} tone="muted" />
               </If>
             )}
           </If>
@@ -520,26 +529,28 @@ export function TaskRail(detail: {
             {runText()}
           </Label>
           <If when={canStartOver()}>
-            <View
-              role="button"
-              accessibilityLabel={uiText("rerun")}
-              onPress={() =>
-                mutate(() => host.call("tasks", "rerun", { taskId: item().id }))
-              }
-              hoverStyle={{ backgroundColor: c().selected }}
-              style={{
-                ...row,
-                height: space[20],
-                paddingHorizontal: space[4],
-                gap: space[4],
-                cursor: "pointer",
+            <Button
+              label={uiText("rerun")}
+              icon="refresh"
+              spinIcon
+              tone="ghost"
+              size={space[20]}
+              iconSize={icon.sm}
+              labelVariant="caption"
+              labelWeight={weight.strong}
+              busy={rerunning()}
+              disabled={submitting() && !rerunning()}
+              style={{ paddingHorizontal: space[4], gap: space[4] }}
+              onPress={() => {
+                if (rerunning()) return;
+                rerunning.set(true);
+                void detail.state
+                  .mutate(async () => {
+                    await host.call("tasks", "rerun", { taskId: item().id });
+                  })
+                  .finally(() => rerunning.set(false));
               }}
-            >
-              <Icon name="refresh" size={icon.sm} />
-              <Label variant="caption" weight={weight.strong}>
-                {uiText("rerun")}
-              </Label>
-            </View>
+            />
           </If>
         </View>
       </RailRow>

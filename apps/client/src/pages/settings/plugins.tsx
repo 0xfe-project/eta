@@ -1,26 +1,19 @@
 import type { MarketSettings, MarketSource } from "@eta/client-contracts";
 import { effect, signal, untracked, View } from "nsh";
-import { Input } from "nsh/base";
 import {
   Button,
   colors,
-  Empty,
-  emptyWidth,
   Field,
-  fontFamily,
-  Fonts,
   grow,
   Label,
   row,
   SmoothScroll,
-  textFaces,
-  textStyle,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { control, icon, space, weight } from "../../components/tokens";
+import { control, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { emptyStyle } from "./section";
 
 /** How wide the source and proxy fields grow, and the hint above the proxy. */
 const fieldWidth = 560;
@@ -48,8 +41,6 @@ function sourceProblem(
 export function PluginSettings(props: { phone?: boolean }) {
   const host = useHost();
   const c = colors();
-  const type = textFaces();
-  const fonts = Fonts();
   const settings = signal<MarketSettings>();
   const name = signal("");
   const address = signal("");
@@ -117,13 +108,18 @@ export function PluginSettings(props: { phone?: boolean }) {
     );
     if (result && hasKey() === undefined) hasKey.set(result.hasKey);
   }
+  /** Whether the sources have been read: an empty list is "none" only once they were. */
+  const read = signal<"loading" | "error" | "empty">("loading");
+  const readSources = () => {
+    read.set("loading");
+    void call("marketSettings", {}).then((ok) => {
+      read.set(ok ? "empty" : "error");
+      if (ok && hasComposio()) void readKey();
+    });
+  };
   effect(() => {
     host.subscriptionWire();
-    untracked(() => {
-      void call("marketSettings", {}).then((ok) => {
-        if (ok && hasComposio()) void readKey();
-      });
-    });
+    untracked(readSources);
   });
 
   async function add() {
@@ -152,26 +148,18 @@ export function PluginSettings(props: { phone?: boolean }) {
     onChange: (value: string) => void,
     onSubmit?: () => void,
   ) => (
-    <Input
-      accessibilityLabel={label}
+    <Field
+      label={label}
       placeholder={label}
       value={value()}
-      submitBehavior="submit"
+      compact
       onSubmit={onSubmit}
-      onChange={(event) => onChange(event.value)}
-      focusStyle={{ borderColor: c().ink }}
-      style={{
-        color: c().ink,
-        placeholderColor: c().faint,
-        backgroundColor: c().canvas,
-        fontFamily: fontFamily(fonts().interface),
-        ...textStyle(type("small")),
-        height: props.phone ? control.touch : control.md,
-        paddingHorizontal: props.phone ? space[12] : space[8],
-        borderWidth: 1,
-        borderColor: c().strong,
-        borderRadius: 0,
-      }}
+      onChange={onChange}
+      style={
+        props.phone
+          ? { height: control.touch, paddingHorizontal: space[12] }
+          : undefined
+      }
     />
   );
   const inset = props.phone ? space[16] : space[24];
@@ -186,91 +174,92 @@ export function PluginSettings(props: { phone?: boolean }) {
         }}
       >
         <Label weight={weight.regular}>{uiText("pluginsSourcesTitle")}</Label>
-        {/* Until the host has answered the page knows nothing, which is not "no sources". */}
-        <If when={settings()}>
-          <If
-            when={sources().length}
-            else={
-              <Empty
-                title={uiText("pluginsNoSources")}
-                description={uiText("pluginsNoSourcesHint")}
-                icon="plugins"
-                iconSize={icon.lg}
-                descriptionWidth={emptyWidth.narrow}
-                style={{
-                  ...emptyStyle,
-                  paddingVertical: space[24],
-                  flexBasis: "auto",
-                }}
-              />
-            }
-          >
-            <View style={{ borderWidth: 1, borderColor: c().border }}>
-              <Each of={sources()} key={(item) => item.url}>
-                {(item) => (
-                  <View
-                    style={{
-                      ...row,
-                      gap: space[12],
-                      padding: space[8],
-                      borderBottomWidth: 1,
-                      borderColor: c().border,
-                    }}
-                  >
-                    <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-                      <Label lines={1}>{item().name || item().url}</Label>
-                      <If
-                        when={item().kind === "composio" && hasKey() === false}
+        <Label variant="small" tone="muted">
+          {uiText("pluginsSourcesHint")}
+        </Label>
+        <If
+          when={sources().length}
+          else={
+            <EmptyState
+              size="card"
+              status={read()}
+              loading={uiText("loadingPluginSources")}
+              error={{
+                title: uiText("pluginSourcesDidNotLoad"),
+                retry: readSources,
+              }}
+              empty={{
+                art: "plugins",
+                title: uiText("pluginsNoSources"),
+                description: uiText("pluginsNoSourcesHint"),
+              }}
+              style={{ borderWidth: 1, borderColor: c().border }}
+            />
+          }
+        >
+          <View style={{ borderWidth: 1, borderColor: c().border }}>
+            <Each of={sources()} key={(item) => item.url}>
+              {(item) => (
+                <View
+                  style={{
+                    ...row,
+                    gap: space[12],
+                    padding: space[8],
+                    borderBottomWidth: 1,
+                    borderColor: c().border,
+                  }}
+                >
+                  <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+                    <Label lines={1}>{item().name || item().url}</Label>
+                    <If when={item().kind === "composio" && hasKey() === false}>
+                      <Label variant="small" tone="muted" lines={1}>
+                        {uiText("composioSourceNeedsKey")}
+                      </Label>
+                    </If>
+                    <If when={item().name && item().kind !== "composio"}>
+                      <Label
+                        variant="small"
+                        tone="muted"
+                        lines={1}
+                        style={{ userSelect: "text" }}
                       >
-                        <Label variant="small" tone="muted" lines={1}>
-                          {uiText("composioSourceNeedsKey")}
-                        </Label>
-                      </If>
-                      <If when={item().name && item().kind !== "composio"}>
-                        <Label
-                          variant="small"
-                          tone="muted"
-                          lines={1}
-                          style={{ userSelect: "text" }}
-                        >
-                          {item().url}
-                        </Label>
-                      </If>
-                    </View>
-                    <ToggleSwitch
-                      label={uiText("pluginsSourceEnabled", {
-                        name: item().name || item().url,
-                      })}
-                      checked={item().enabled}
-                      disabled={
-                        busy() ||
-                        (item().kind === "composio" && hasKey() === false)
-                      }
-                      onChange={(enabled) =>
-                        void call("marketSetSourceEnabled", {
-                          url: item().url,
-                          enabled,
-                        })
-                      }
-                    />
-                    <If when={item().kind !== "composio"}>
-                      <Button
-                        label={uiText("pluginsRemove")}
-                        accessibilityLabel={uiText("pluginsRemoveSource", {
-                          name: item().name || item().url,
-                        })}
-                        size={props.phone ? control.touch : control.md}
-                        disabled={busy()}
-                        onPress={() =>
-                          void call("marketRemoveSource", { url: item().url })
-                        }
-                      />
+                        {item().url}
+                      </Label>
                     </If>
                   </View>
-                )}
-              </Each>
-            </View>
-          </If>
+                  <ToggleSwitch
+                    label={uiText("pluginsSourceEnabled", {
+                      name: item().name || item().url,
+                    })}
+                    checked={item().enabled}
+                    disabled={
+                      busy() ||
+                      (item().kind === "composio" && hasKey() === false)
+                    }
+                    onChange={(enabled) =>
+                      void call("marketSetSourceEnabled", {
+                        url: item().url,
+                        enabled,
+                      })
+                    }
+                  />
+                  <If when={item().kind !== "composio"}>
+                    <Button
+                      label={uiText("pluginsRemove")}
+                      accessibilityLabel={uiText("pluginsRemoveSource", {
+                        name: item().name || item().url,
+                      })}
+                      size={props.phone ? control.touch : control.md}
+                      disabled={busy()}
+                      onPress={() =>
+                        void call("marketRemoveSource", { url: item().url })
+                      }
+                    />
+                  </If>
+                </View>
+              )}
+            </Each>
+          </View>
         </If>
         <View style={{ gap: space[8], maxWidth: fieldWidth }}>
           {field(uiText("pluginsSourceName"), name, name.set)}

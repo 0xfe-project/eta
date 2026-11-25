@@ -33,6 +33,12 @@ import {
 } from "nsh";
 import { connect } from "websocket";
 import { formatLocale } from "../i18n";
+import {
+  logProblem,
+  problemDetail,
+  problemHasDetail,
+  problemText,
+} from "./problem-text";
 import { createUpgradeWatch } from "./upgrade-watch";
 
 export interface HostAddress {
@@ -160,9 +166,13 @@ export interface HostOptions {
 export function createHost(options: HostOptions = {}) {
   const open = options.openSocket ?? openSocket;
   const state = signal<WireState>(initialWireState());
+  /** The last failed action in the user's words, and as it came (for Details and the console). */
   const error = signal("");
+  const errorDetail = signal("");
   const address = signal<HostAddress | null>(null);
   const hasConnected = signal(false);
+  /** This run has been online at least once: the workspace, once shown, is not thrown away. */
+  const everConnected = signal(false);
   const failures = signal(0);
   const paused = signal(false);
   const lastOnline = signal<number | null>(null);
@@ -199,18 +209,28 @@ export function createHost(options: HostOptions = {}) {
     if (now && !active)
       untracked(() => {
         const at = address();
-        if (paused() && at) start(at);
+        if (paused() && at) start(at, { keepWorkspace: true });
         else wire?.wake();
       });
     active = now;
   });
 
-  function start(next: HostAddress | null) {
+  /**
+   * Opens the wire to `next`, or closes it. `keepWorkspace` is for the app waking up and
+   * reconnecting by itself: the user did not ask for anything, so what they had open stays on
+   * screen. Every other call starts over at the connection page.
+   */
+  function start(
+    next: HostAddress | null,
+    options: { keepWorkspace?: boolean } = {},
+  ) {
     wire?.close();
     wire = undefined;
+    if (!options.keepWorkspace) everConnected.set(false);
     address.set(next);
     state.set(initialWireState());
     error.set("");
+    errorDetail.set("");
     failures.set(0);
     paused.set(false);
     hasConnected.set(false);
@@ -234,6 +254,7 @@ export function createHost(options: HostOptions = {}) {
         hello: () => {
           lastOnline.set(Date.now());
           hasConnected.set(true);
+          everConnected.set(true);
           failures.set(0);
           if (untracked(state).ops.includes("upgrade.check"))
             upgrades.refresh();
@@ -338,10 +359,13 @@ export function createHost(options: HostOptions = {}) {
 
   async function action<T>(work: () => Promise<T>): Promise<T | undefined> {
     error.set("");
+    errorDetail.set("");
     try {
       return await work();
     } catch (problem) {
-      error.set(problem instanceof Error ? problem.message : String(problem));
+      logProblem(problem);
+      error.set(problemText(problem));
+      errorDetail.set(problemHasDetail(problem) ? problemDetail(problem) : "");
       return undefined;
     }
   }
@@ -364,10 +388,12 @@ export function createHost(options: HostOptions = {}) {
     state,
     disconnected,
     error,
+    errorDetail,
     failures,
     paused,
     lastOnline,
     hasConnected,
+    everConnected,
     start,
     subscriptionWire,
     section,
@@ -387,6 +413,8 @@ export function createHost(options: HostOptions = {}) {
       if (address()) start(address());
     },
     reconnect: () => wire?.retryNow(),
+    /** Reconnect now if the connection is down, else check the one that looks open. */
+    wake: () => wire?.wake(),
     can: (op: string) => state().ops.includes(op),
     agents: () => list<AgentView>("agents"),
     people: () =>

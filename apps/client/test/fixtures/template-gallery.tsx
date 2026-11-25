@@ -1,20 +1,25 @@
 import { mount, signal, Storage, Text, View } from "nsh";
+import { ToastLayer } from "../../src/components/toast";
+import { openAgentChat } from "../../src/pages/templates/agent-chat";
 import { TemplateGallery } from "../../src/pages/templates/gallery";
 import { createHost, Host } from "../../src/services/host";
 
 // The template gallery over a host with one model, `source:model`. Storage `phone` opens the
 // phone layout, `initial` the template a link named, `models` "0" takes the models away and
-// `create` "fail" makes the host refuse. What the gallery asked the host is listed under "Sent:"
-// (target.action and the arguments as JSON), and the agent it made under "Created:".
+// `create` "fail" makes the host refuse the agent and `chat` "fail" the chat made for it. What the
+// gallery asked the host is listed under "Sent:" (target.action and the arguments as JSON), the
+// agent the host made under "Created:" and the conversation opened for it under "Opened:".
 function Fixture(props: {
   phone: boolean;
   initial?: string;
   models: boolean;
   fail: boolean;
+  chatFail: boolean;
 }) {
   const host = createHost();
   const sent = signal<string[]>([]);
   const created = signal("");
+  const opened = signal("");
   host.state.update((state) => ({
     ...state,
     status: "open",
@@ -43,9 +48,14 @@ function Fixture(props: {
   }));
   host.call = (async (target: string, action: string, args: unknown) => {
     sent.set([...sent(), `${target}.${action} ${JSON.stringify(args)}`]);
-    if (action === "create") {
+    if (target === "agents" && action === "create") {
       if (props.fail) throw new Error("name taken");
-      return { agent: { id: "new-agent" } };
+      created.set("new-agent");
+      return { agent: { id: "new-agent", homeProjectId: "home-new-agent" } };
+    }
+    if (target === "conversations" && action === "create") {
+      if (props.chatFail) throw new Error("no such project");
+      return { conversation: { id: "new-conversation" } };
     }
     return {};
   }) as typeof host.call;
@@ -55,13 +65,17 @@ function Fixture(props: {
       <View style={{ flex: 1 }}>
         <Text>{`Sent: ${sent().join(" | ")}`}</Text>
         <Text>{`Created: ${created()}`}</Text>
+        <Text>{`Opened: ${opened()}`}</Text>
         <TemplateGallery
           phone={props.phone}
           initialId={props.initial}
           onClose={noop}
-          onCreated={(id) => created.set(id)}
+          onCreated={(agent) =>
+            void openAgentChat(host, agent).then((id) => opened.set(id ?? ""))
+          }
           onModelServices={noop}
         />
+        <ToastLayer />
       </View>
     </Host.Provider>
   );
@@ -72,13 +86,15 @@ void Promise.all([
   Storage.getItem("initial"),
   Storage.getItem("models"),
   Storage.getItem("create"),
-]).then(([phone, initial, models, create]) =>
+  Storage.getItem("chat"),
+]).then(([phone, initial, models, create, chat]) =>
   mount(() => (
     <Fixture
       phone={phone === "1"}
       initial={initial || undefined}
       models={models !== "0"}
       fail={create === "fail"}
+      chatFail={chat === "fail"}
     />
   )),
 );

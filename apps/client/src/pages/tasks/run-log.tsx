@@ -9,6 +9,7 @@ import { Button, colors, grow, Label, row } from "../../components";
 import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { MemberRun } from "../chat/run/member-run";
 import { RunPanel } from "../chat/run/run-panel";
 
@@ -190,7 +191,7 @@ export function TaskRunLog(props: {
         else={
           <View style={{ ...grow, padding: space[16], gap: space[8] }}>
             <Label variant="small" tone={props.run.error ? "red" : "muted"}>
-              {props.run.error ??
+              {(props.run.error && problemText(props.run.error)) ??
                 (props.run.status === "queued"
                   ? uiText("awaitingTaskSession")
                   : uiText("noLogEntriesYet"))}

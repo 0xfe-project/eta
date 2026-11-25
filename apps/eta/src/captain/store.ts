@@ -383,9 +383,15 @@ export class CaptainStore {
     return (row?.n ?? 0) + 1;
   }
 
+  /**
+   * The newest assignment target of this agent in this conversation that is still open. With a
+   * `replyId`, only a target dispatched with that very reply: the one turn the assignment started,
+   * not every turn the agent takes in the group while it stays open.
+   */
   openAssignmentFor(
     conversationId: string,
     agentId: string,
+    replyId?: string,
   ):
     | {
         assignmentId: string;
@@ -396,16 +402,17 @@ export class CaptainStore {
     const row = this.#db
       .query<
         { assignment_id: string; message_id: string; target_id: string },
-        [string, string]
+        [string, string, string | null, string | null]
       >(
         `SELECT a.id AS assignment_id, a.message_id, t.id AS target_id
            FROM captain_assignment_target t
            JOIN captain_assignment a ON a.id = t.assignment_id
           WHERE a.conversation_id = ? AND t.agent_id = ?
             AND t.status IN ('dispatched', 'working')
+            AND (? IS NULL OR t.reply_id = ?)
           ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1`,
       )
-      .get(conversationId, agentId);
+      .get(conversationId, agentId, replyId ?? null, replyId ?? null);
     return row === null
       ? undefined
       : {
@@ -452,6 +459,32 @@ export class CaptainStore {
         )
         .run(now, input.assignmentId);
     })();
+  }
+
+  /**
+   * The reply a target was dispatched with has ended. A target still `dispatched` then made no task
+   * in it (one made in the turn moved it to `working` at once), so nothing more is coming from it:
+   * it is `completed`, and `openAssignmentFor` stops returning it. A target with a task is left to
+   * `refreshAssignments`. True when a target was closed.
+   */
+  closeAnswered(replyId: string): boolean {
+    const now = Date.now();
+    const closed = this.#db
+      .query<{ assignment_id: string }, [number, string]>(
+        `UPDATE captain_assignment_target
+            SET status = 'completed', updated_at = ?
+          WHERE reply_id = ? AND status = 'dispatched'
+            AND NOT EXISTS (
+              SELECT 1 FROM task
+               WHERE captain_assignment_id = captain_assignment_target.assignment_id
+                 AND created_by_agent = captain_assignment_target.agent_id
+            )
+          RETURNING assignment_id`,
+      )
+      .all(now, replyId);
+    for (const { assignment_id } of closed)
+      this.refreshAssignment(assignment_id, now);
+    return closed.length > 0;
   }
 
   setAssignmentTargetStatus(
@@ -518,7 +551,12 @@ export class CaptainStore {
       .run();
     for (const { id } of this.#db
       .query<{ id: string }, []>(
-        "SELECT id FROM captain_assignment WHERE status IN ('dispatched', 'working')",
+        `SELECT id FROM captain_assignment a
+          WHERE a.status IN ('dispatched', 'working')
+             OR (a.status = 'completed' AND EXISTS (
+               SELECT 1 FROM captain_assignment_target t
+                WHERE t.assignment_id = a.id AND t.status IN ('dispatched', 'working')
+             ))`,
       )
       .all())
       this.refreshAssignment(id);

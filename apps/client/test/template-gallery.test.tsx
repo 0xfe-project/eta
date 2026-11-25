@@ -11,6 +11,7 @@ function gallery(
     initial?: string;
     models?: boolean;
     fail?: boolean;
+    chatFail?: boolean;
   } = {},
 ) {
   return open(fixture, {
@@ -23,6 +24,7 @@ function gallery(
       initial: options.initial ?? "",
       models: options.models === false ? "0" : "1",
       create: options.fail ? "fail" : "ok",
+      chat: options.chatFail ? "fail" : "ok",
     },
   });
 }
@@ -74,6 +76,30 @@ test("an agent left unnamed takes the template's name", async () => {
   await app.press("label:Import");
   await app.waitFor("text:Created: new-agent");
   expect(screen(app)).toContain('agents.create {"name":"Triage"');
+});
+
+test("the agent made gets a chat of its own in its home project: conversations.create, then it opens", async () => {
+  const app = await gallery({ initial: "triage" });
+  await app.waitFor("label:Import");
+  await app.press("label:Import");
+  await app.waitFor("text:Opened: new-conversation");
+  const sent = screen(app);
+  expect(sent).toContain(
+    'conversations.create {"projectId":"home-new-agent","agentIds":["new-agent"],"stewardId":"new-agent"}',
+  );
+  expect(sent.split("conversations.create").length).toBe(2);
+  // agents.direct is gone from the host: asking for it is an error.
+  expect(sent).not.toContain("agents.direct");
+});
+
+test("a chat that cannot be opened says why in a toast; the agent stays made", async () => {
+  const app = await gallery({ initial: "triage", chatFail: true });
+  await app.waitFor("label:Import");
+  await app.press("label:Import");
+  await app.waitFor("id:toast");
+  expect(screen(app)).toContain("Created: new-agent");
+  expect(screen(app)).toContain("no such project");
+  expect(screen(app)).toContain("Opened: \n");
 });
 
 test("a refused import says why and makes nothing", async () => {

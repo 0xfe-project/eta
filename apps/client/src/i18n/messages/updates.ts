@@ -191,6 +191,10 @@ export const updatesMessages = {
   channel: ["Channel", "更新通道"],
   checkAppUpdate: ["Check for app update", "检查应用更新"],
   androidApp: ["Android app", "Android 应用"],
+  appUpdateNotOpened: [
+    "The download didn't open. Try again, or download it from the Eta site.",
+    "下载页没打开。再试一次，或者到 Eta 网站下载。",
+  ],
   appUpdateChannel: ["App update channel", "应用更新通道"],
   downloadApk: ["Download APK", "下载 APK"],
   closeEtaToUpdate: ["Close Eta to update", "关闭 Eta 以完成更新"],

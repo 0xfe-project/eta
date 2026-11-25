@@ -11,6 +11,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { Spinner } from "../../components/spinner";
 import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { ToolOutput } from "./run/tool-code";
@@ -92,26 +93,33 @@ export function ProcessStep(props: { value: RunBlock }) {
             <Label variant="small" lines={1} style={{ flex: 1 }}>
               {title()}
             </Label>
-            <Caption
-              text={
-                step().status === "running"
-                  ? uiText("inProgress")
-                  : step().status === "completed"
-                    ? uiText("done")
-                    : uiText("failed")
+            <If
+              when={step().status === "running"}
+              else={
+                <If
+                  when={step().status === "completed"}
+                  else={
+                    <View
+                      testID="step-failed"
+                      accessibilityLabel={uiText("failed")}
+                    >
+                      <Icon name="warning" size={icon.md} tone="red" />
+                    </View>
+                  }
+                >
+                  <View testID="step-check" accessibilityLabel={uiText("done")}>
+                    <Icon name="check" size={icon.md} tone="green" />
+                  </View>
+                </If>
               }
-              style={
-                step().status === "running"
-                  ? {
-                      backgroundColor: c().button,
-                      color: c().buttonInk,
-                      paddingHorizontal: space[8],
-                      paddingVertical: space[2],
-                      fontWeight: weight.strong,
-                    }
-                  : { color: c().faint }
-              }
-            />
+            >
+              <View
+                testID="step-spinner"
+                accessibilityLabel={uiText("inProgress")}
+              >
+                <Spinner size={icon.md} tone="ink" />
+              </View>
+            </If>
           </View>
           <If when={expanded() && step().output}>
             <View style={{ padding: space[8], backgroundColor: c().surface }}>

@@ -33,6 +33,7 @@ import { StatusDot } from "../../components/status-dot";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { acpStatus } from "./external-agent";
 
 /** A multi-line field (the command's arguments, its environment), and the machine menu off
@@ -91,8 +92,7 @@ type Outcome =
   | { kind: "testError"; message: string }
   | { kind: "saveFailed"; message: string };
 
-const messageOf = (cause: unknown) =>
-  cause instanceof Error ? cause.message : String(cause);
+const messageOf = (cause: unknown) => problemText(cause);
 
 /**
  * Add an agent (`agent` absent: on the machine chosen in the form, `machineId` to begin with) or

@@ -14,10 +14,12 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
+import { EmptyState } from "../../../components/empty-state";
 import { StatusDot } from "../../../components/status-dot";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, relativeTime, useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 import { TaskGlyph } from "../../tasks/status";
 import { EntityRow, leadingBoxWidth, SectionHeader } from "../section";
 import { SettingRow } from "../setting-row";
@@ -227,6 +229,16 @@ export function MachineDetail(props: {
                   phone
                 />
               </If>
+              <If when={!active().length}>
+                <EmptyState
+                  size="row"
+                  status="empty"
+                  loading={null}
+                  error={null}
+                  empty={{ title: uiText("nothingRunningOnThisMachine") }}
+                  style={{ paddingHorizontal: space[16] }}
+                />
+              </If>
               <Each of={active()} key={(item) => item.id}>
                 {(item) => (
                   <If
@@ -307,7 +319,7 @@ export function MachineDetail(props: {
         </If>
         <If when={props.item.updateError}>
           <Label tone="red" variant="small" style={{ padding: space[16] }}>
-            {props.item.updateError}
+            {problemText(props.item.updateError ?? "")}
           </Label>
         </If>
       </SmoothScroll>

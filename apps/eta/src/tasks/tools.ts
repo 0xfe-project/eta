@@ -77,7 +77,13 @@ export interface TaskToolDeps {
       conversationId: string,
       agentId: string,
     ) =>
-      | { assignmentId: string; messageId: string; targetId: string }
+      | {
+          assignmentId: string;
+          messageId: string;
+          targetId: string;
+          /** The turn asking is the one the assignment started. */
+          forThisTurn: boolean;
+        }
       | undefined;
     isCaptain: (agentId: string) => boolean;
     taskCreated: (input: {
@@ -490,11 +496,13 @@ function conversationTools(
           args.workspace,
         );
         const { base, assignee, ...rest } = args;
-        const captain = assignment();
-        if (captain !== undefined && assignee !== undefined)
+        const open = assignment();
+        if (open?.forThisTurn === true && assignee !== undefined)
           throw new Error(
             "Captain assignments do not use task.assignee; create the task yourself",
           );
+        // A task handed to another agent in some other turn is that agent's, not the assignment's.
+        const captain = assignee === undefined ? open : undefined;
         const row = board.draft({
           conversationId: who.conversationId,
           agentId: who.agentId,
@@ -573,11 +581,12 @@ function conversationTools(
           args.workspace,
         );
         const { base, assignee, ...rest } = args;
-        const captain = assignment();
-        if (captain !== undefined && assignee !== undefined)
+        const open = assignment();
+        if (open?.forThisTurn === true && assignee !== undefined)
           throw new Error(
             "Captain assignments do not use task.assignee; create the task yourself",
           );
+        const captain = assignee === undefined ? open : undefined;
         const task = board.create(
           {
             ...rest,

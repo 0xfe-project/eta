@@ -13,9 +13,7 @@ import {
 } from "nsh";
 import { Host } from "../services/host";
 import { faceFrame } from "./face-frame";
-
-/** How long the motion takes to come in or die away, as `@blobatar/react-native` ramps it. */
-const RAMP_MS = 400;
+import { motion } from "./motion";
 
 /** `translate(…)`, `rotate(…)`, `scale(…)`: the only steps `blobatar/idle` writes. */
 const STEP = /(translate|rotate|scale)\(([^)]*)\)/g;
@@ -88,7 +86,7 @@ export function AnimatedAgentFace(props: {
   const on = () => (props.animate ?? true) && !reduceMotion();
   let from = { at: 0, level: 0, target: 0 };
   const amplitude = (t: number) => {
-    const done = Math.min(1, (t - from.at) / RAMP_MS);
+    const done = Math.min(1, (t - from.at) / motion.faceRamp);
     return from.level + (from.target - from.level) * done;
   };
 

@@ -6,7 +6,6 @@ import { signal, View } from "nsh";
 import {
   Caption,
   colors,
-  Empty,
   grow,
   Icon,
   Label,
@@ -15,6 +14,7 @@ import {
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
+import { EmptyState } from "../../components/empty-state";
 import { BackButton, CloseButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
 import {
@@ -27,6 +27,7 @@ import {
 } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
 import { statusName, TaskGlyph } from "../tasks/status";
 import { ArtifactBrowser } from "./artifacts/conversation-artifacts";
 import { RECENT, recentArtifacts } from "./artifacts/filter";
@@ -42,6 +43,8 @@ import { ViewAll } from "./section-heading";
  */
 /** A task's row, and a row with a second line (an artifact, a member). */
 const rowHeight = { task: 48, twoLine: 52 } as const;
+/** An empty section's line, in from the edge as the rows are. */
+const infoEmpty = { paddingHorizontal: space[16] };
 
 export function PhoneConversationInfo(props: {
   id: string;
@@ -55,6 +58,8 @@ export function PhoneConversationInfo(props: {
   artifactFilters: Signal<ArtifactFilters>;
 }) {
   const host = useHost();
+  const tasksLoad = useLoadState({ targets: () => ["tasks"] });
+  const artifactsLoad = useLoadState({ targets: () => ["artifacts"] });
   const c = colors();
   const allArtifacts = signal(false);
   const tasks = () =>
@@ -119,7 +124,31 @@ export function PhoneConversationInfo(props: {
               />
             )}
           </Each>
+          <If when={!props.members.length}>
+            <EmptyState
+              size="row"
+              status="empty"
+              loading={null}
+              error={null}
+              empty={{ title: uiText("noMembersYet") }}
+              style={infoEmpty}
+            />
+          </If>
           <Section label={uiText("tasks2")} count={tree().count} />
+          <If when={!tree().rows.length}>
+            <EmptyState
+              size="row"
+              status={tasksLoad.shown()}
+              loading={uiText("loadingTasks")}
+              error={{
+                title: uiText("tasksDidNotLoad"),
+                retry: tasksLoad.retry,
+                retrying: tasksLoad.retrying(),
+              }}
+              empty={{ title: uiText("noTasksYet") }}
+              style={infoEmpty}
+            />
+          </If>
           <Each of={tree().rows} key={(entry) => entry.task.id}>
             {(entry) => (
               <InfoRow
@@ -192,13 +221,21 @@ export function PhoneConversationInfo(props: {
             )}
           </Each>
           <If when={!artifacts().length}>
-            <Empty
-              icon="appWindow"
-              iconSize={icon.lg}
-              title={uiText("noArtifactsYet")}
-              description={uiText("artifactsEmptyHelp")}
-              descriptionVariant="caption"
-              style={{ flex: 0, paddingVertical: space[32] }}
+            <EmptyState
+              size="card"
+              status={artifactsLoad.shown()}
+              loading={uiText("artifactsLoading")}
+              error={{
+                title: uiText("artifactLoadError"),
+                retry: artifactsLoad.retry,
+                retrying: artifactsLoad.retrying(),
+              }}
+              empty={{
+                art: "artifacts",
+                title: uiText("noArtifactsYet"),
+                description: uiText("artifactsEmptyHelp"),
+              }}
+              style={{ paddingHorizontal: space[16] }}
             />
           </If>
         </SmoothScroll>

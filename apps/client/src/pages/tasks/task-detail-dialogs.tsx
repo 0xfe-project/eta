@@ -15,6 +15,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import { sendShortcut } from "../../components/eta-editor";
 import { CloseButton } from "../../components/navigation-buttons";
 import { showToast } from "../../components/toast";
@@ -65,6 +66,19 @@ export function TaskDetailDialogs(props: {
     task,
     updateFeedback,
   } = props.state;
+  /** The tasks the blocked one may wait on instead, matching the search. */
+  const waitable = () =>
+    host
+      .tasks()
+      .filter(
+        (item) =>
+          item.id !== props.id &&
+          item.status !== "cancelled" &&
+          !item.archivedAt &&
+          !task()?.dependsOn?.some((edge) => edge.taskId === item.id) &&
+          (item.title.toLowerCase().includes(search().trim().toLowerCase()) ||
+            `#${item.number}`.includes(search().trim())),
+      );
   const archiveTitle = () =>
     activeArchiveTargets().length === 1
       ? uiText("isRunningArchivingStopsItsRun", {
@@ -200,24 +214,7 @@ export function TaskDetailDialogs(props: {
               onChange={search.set}
             />
             <SmoothScroll style={grow}>
-              <Each
-                of={host
-                  .tasks()
-                  .filter(
-                    (item) =>
-                      item.id !== props.id &&
-                      item.status !== "cancelled" &&
-                      !item.archivedAt &&
-                      !task()?.dependsOn?.some(
-                        (edge) => edge.taskId === item.id,
-                      ) &&
-                      (item.title
-                        .toLowerCase()
-                        .includes(search().trim().toLowerCase()) ||
-                        `#${item.number}`.includes(search().trim())),
-                  )}
-                key={(item) => item.id}
-              >
+              <Each of={waitable()} key={(item) => item.id}>
                 {(item) => (
                   <Button
                     label={`#${item().number} ${item().title}`}
@@ -229,6 +226,20 @@ export function TaskDetailDialogs(props: {
                   />
                 )}
               </Each>
+              <If when={!waitable().length}>
+                <EmptyState
+                  size="row"
+                  status="empty"
+                  loading={null}
+                  error={null}
+                  empty={{
+                    title: search().trim()
+                      ? uiText("noTasksMatchQuery", { query: search().trim() })
+                      : uiText("noTasksToWaitFor"),
+                  }}
+                  announce={!!search().trim()}
+                />
+              </If>
             </SmoothScroll>
           </View>
         </Modal>
@@ -334,7 +345,7 @@ export function TaskDetailDialogs(props: {
                     label={archiveLabel()}
                     size={control.md}
                     tone="primary"
-                    disabled={submitting()}
+                    busy={submitting()}
                     onPress={archiveTask}
                   />
                 </View>
@@ -545,10 +556,9 @@ function EditTask(props: {
     text: untracked(() => editDescription()),
     onSubmit: () => save(),
   });
-  const ready = () =>
-    !submitting() && !!editTitle().trim() && !description.tooLong();
+  const canSave = () => !!editTitle().trim() && !description.tooLong();
   function save() {
-    if (!ready()) return;
+    if (!canSave() || submitting()) return;
     void mutate(async () => {
       await host.call("tasks", "update", {
         taskId: props.id,
@@ -576,7 +586,8 @@ function EditTask(props: {
           label={uiText("saveTask")}
           tone="primary"
           shortcut={props.phone ? undefined : sendShortcut}
-          disabled={!ready()}
+          disabled={!canSave()}
+          busy={submitting()}
           onPress={save}
         />
       </View>
@@ -598,6 +609,10 @@ function archiveAhead(host: ReturnType<typeof useHost>, taskId: string) {
       title: uiText("taskArchiveFailed"),
       body: problem instanceof Error ? problem.message : String(problem),
       tone: "red",
+      action: {
+        label: uiText("retry"),
+        onPress: () => archiveAhead(host, taskId),
+      },
     }),
   );
   showToast({

@@ -33,12 +33,15 @@ export function TaskMenu(props: {
   dense?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** What it says while it has no options: pass it only then. */
+  empty?: string;
   children?: JSX.Element;
 }) {
   const c = colors();
   return (
     <MenuFrame
       align={props.align ?? "start"}
+      empty={props.empty}
       margin={8}
       open={props.open}
       onOpenChange={(open) => props.onOpenChange?.(open)}

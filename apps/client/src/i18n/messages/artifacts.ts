@@ -1,9 +1,10 @@
 export const artifactsMessages = {
-  artifactLoadError: ["Unable to load Artifacts", "无法加载产物"],
+  artifactDeleted: ["This artifact was deleted", "这个产物已删除"],
+  artifactLoadError: ["Artifacts didn't load", "产物没加载出来"],
   artifactsLoading: ["Loading artifacts…", "正在加载产物…"],
   artifactsEmptyHelp: [
     "Pages published by agents in this group appear here.",
-    "此群组中的智能体发布的页面会出现在这里。",
+    "群组里的智能体发布的页面会出现在这里。",
   ],
   artifactVersionOption: [
     "Version {{number}}{{latest}}",
@@ -63,11 +64,11 @@ export const artifactsMessages = {
   artifactsClearSearch: ["Clear search", "清空搜索"],
   artifactsNoMatch: [
     "No artifacts match “{{query}}”",
-    "没有找到匹配『{{query}}』的产物",
+    "没有找到「{{query}}」相关的产物",
   ],
   artifactsNoFilterMatch: [
     "No artifacts match these filters",
-    "没有符合筛选的产物",
+    "没有符合这些筛选条件的产物",
   ],
   artifactsRange: [
     "{{first}}–{{last}} / {{total}}",
@@ -77,11 +78,16 @@ export const artifactsMessages = {
   artifactsPreviousPage: ["Previous page", "上一页"],
   artifactsNextPage: ["Next page", "下一页"],
   artifactsViewAll: ["View all artifacts", "查看全部产物"],
-  noArtifactsYet: ["No Artifacts yet", "暂无产物"],
+  noArtifactsYet: ["No artifacts yet", "还没有产物"],
   openInBrowser: ["Open in browser", "在浏览器中打开"],
   openingPreview: ["Opening preview…", "正在打开预览…"],
   openInNewWindow: ["Open in new window", "新窗口打开"],
-  previewUnavailable: ["Preview unavailable", "无法预览"],
+  previewUnavailable: ["The preview didn't open", "预览没打开"],
+  previewNoVersion: [
+    "This artifact has no version to show yet.",
+    "这个产物还没有可以预览的版本。",
+  ],
+  previewSafe: ["The page itself is fine.", "页面本身没有问题。"],
   searchArtifacts: ["Search artifacts", "搜索产物"],
   searchTitles: ["Search titles", "搜索标题"],
   sharePublicly: ["Share publicly", "公开分享"],

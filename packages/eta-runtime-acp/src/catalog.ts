@@ -308,7 +308,14 @@ export class AcpCatalog {
       };
     } finally {
       await process?.stop().catch(() => undefined);
-      rmSync(scratch, { recursive: true, force: true });
+      // The directory is only a place to stand: failing to remove it must not change the answer.
+      try {
+        rmSync(scratch, { recursive: true, force: true });
+      } catch (error) {
+        this.#warn(
+          `[eta-runtime-acp] ${agent.id}: could not remove ${scratch}: ${messageOf(error)}`,
+        );
+      }
     }
   }
 }

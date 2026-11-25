@@ -5,8 +5,16 @@ import type {
   LlmQuota,
 } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { colors, grow, Label, row, SmoothScroll } from "../../../components";
-import { border, space, weight } from "../../../components/tokens";
+import {
+  Button,
+  colors,
+  grow,
+  Label,
+  row,
+  SmoothScroll,
+} from "../../../components";
+import { showToast } from "../../../components/toast";
+import { border, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { LetterBox, PaneBack, SectionHeader } from "../section";
@@ -21,6 +29,14 @@ export function SubscriptionDetail(props: {
   const c = colors();
   const logo = useSourceLogos();
   const tab = signal<"models" | "connection">("models");
+  const refreshing = signal(false);
+  async function refresh() {
+    if (refreshing() || !host.can("llm.refresh")) return;
+    refreshing.set(true);
+    const ok = await host.action(() => host.call("llm", "refresh", {}));
+    refreshing.set(false);
+    if (ok) showToast({ title: uiText("refreshList") });
+  }
   const accounts = () => host.section<LlmAccounts>("llm", "accounts");
   const connections = () =>
     accounts()?.connections.filter(
@@ -62,7 +78,20 @@ export function SubscriptionDetail(props: {
           </>
         }
         phone={props.phone}
-      />
+      >
+        <If when={host.can("llm.refresh")}>
+          <Button
+            label={uiText("refreshList")}
+            icon="refresh"
+            spinIcon
+            busy={refreshing()}
+            iconOnly
+            iconSize={icon.md}
+            tone="ghost"
+            onPress={() => void refresh()}
+          />
+        </If>
+      </SectionHeader>
       <SmoothScroll style={grow} scrollbar={false}>
         <View
           role="tablist"

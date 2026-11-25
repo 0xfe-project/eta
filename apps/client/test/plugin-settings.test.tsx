@@ -43,7 +43,7 @@ test("a source is added with its name, and removed; an emptied list says so", as
   expect(app.shows("text:https://mine.test/marketplace.json")).toBe(false);
   await app.press("label:Remove source Cursor");
   await app.press("label:Remove source https://plain.test/marketplace.json");
-  expect(app.shows("No plugin sources")).toBe(true);
+  expect(app.shows("No plugin sources yet")).toBe(true);
 });
 
 test("a proxy prefix that is not http(s) is refused", async () => {
@@ -74,7 +74,7 @@ for (const [name, size] of [
     const app = await open("./fixtures/plugin-settings.tsx", size);
     await app.press("label:Remove source Cursor");
     await app.press("label:Remove source https://plain.test/marketplace.json");
-    const title = app.layout("text:No plugin sources")!;
+    const title = app.layout("text:No plugin sources yet")!;
     const form = app.layout("label:Name (optional)")!;
     expect(title).toBeDefined();
     expect(form).toBeDefined();

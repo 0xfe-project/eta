@@ -4,6 +4,7 @@ import { Image, View } from "nsh";
 import { Caption, colors, focusRing, Icon, Label, row } from "../../components";
 import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { Badge, Card } from "../../ui";
 import { UsageLine } from "./usage";
 
 export const statusKeys = {
@@ -115,47 +116,31 @@ function ShapeImage(props: { shape: string; size?: number }) {
   );
 }
 
-const fills = {
-  backlog: "selected",
-  todo: "selected",
-  in_progress: "blueFill",
-  in_review: "warningFill",
-  blocked: "redFill",
-  done: "greenFill",
-  cancelled: "selected",
+const badgeTones = {
+  backlog: "neutral",
+  todo: "neutral",
+  in_progress: "blue",
+  in_review: "warning",
+  blocked: "red",
+  done: "green",
+  cancelled: "neutral",
 } as const;
 
 export function TaskStatus(props: { task: BoardTaskView }) {
-  const c = colors();
   const waiting = () =>
-    props.task.waitingOn?.length && props.task.status === "todo";
+    Boolean(props.task.waitingOn?.length && props.task.status === "todo");
   return (
-    <View
-      style={{
-        ...row,
-        paddingVertical: 1,
-        paddingLeft: waiting() ? space[4] : space[8],
-        paddingRight: space[8],
-        gap: space[4],
-        flexShrink: 0,
-        backgroundColor: waiting() ? c().canvas : c()[fills[props.task.status]],
-        borderWidth: waiting() ? 1 : 0,
-        borderColor: c().strong,
-      }}
-    >
-      <If when={waiting()}>
-        <Icon name="lock" size={icon.sm} tone="mutedInk" />
-      </If>
-      <Label
-        variant="small"
-        lines={1}
-        tone={waiting() ? "mutedInk" : tones[props.task.status]}
-      >
-        {waiting()
+    <Badge
+      label={
+        waiting()
           ? uiText("waitingForPrerequisites")
-          : statusName(props.task.status)}
-      </Label>
-    </View>
+          : statusName(props.task.status)
+      }
+      tone={waiting() ? "neutral" : badgeTones[props.task.status]}
+      textTone={waiting() ? "mutedInk" : tones[props.task.status]}
+      variant={waiting() ? "outline" : "soft"}
+      icon={waiting() ? "lock" : undefined}
+    />
   );
 }
 
@@ -203,7 +188,6 @@ export function SubtaskSegments(props: {
 
 /** The status pill of a task card in the transcript: glyph, then what it waits on. */
 function TaskCardStatus(props: { task: BoardTaskView }) {
-  const c = colors();
   const task = () => props.task;
   const waitingFor = () =>
     task().status === "todo" ? task().waitingOn?.[0] : undefined;
@@ -218,38 +202,20 @@ function TaskCardStatus(props: { task: BoardTaskView }) {
       : statusName(task().status);
   };
   return (
-    <View
-      style={{
-        ...row,
-        paddingVertical: 1,
-        paddingLeft: space[4],
-        paddingRight: space[8],
-        gap: space[4],
-        flexShrink: 1,
-        minWidth: 0,
-        backgroundColor: waitingFor()
-          ? c().canvas
-          : blocked()
-            ? c().selected
-            : c()[fills[task().status]],
-        borderWidth: waitingFor() ? 1 : 0,
-        borderColor: c().strong,
-      }}
-    >
-      <If when={!waitingFor()}>
-        <TaskGlyph status={task().status} size={icon.sm} />
-      </If>
-      <Label
-        variant="small"
-        lines={1}
-        tone={
-          waitingFor() ? "mutedInk" : blocked() ? "ink" : tones[task().status]
-        }
-        style={{ flexShrink: 1, minWidth: 0 }}
-      >
-        {label()}
-      </Label>
-    </View>
+    <Badge
+      label={label()}
+      tone={waitingFor() || blocked() ? "neutral" : badgeTones[task().status]}
+      textTone={
+        waitingFor() ? "mutedInk" : blocked() ? "ink" : tones[task().status]
+      }
+      variant={waitingFor() ? "outline" : "soft"}
+      leading={
+        !waitingFor() ? (
+          <TaskGlyph status={task().status} size={icon.sm} />
+        ) : undefined
+      }
+      style={{ flexShrink: 1, minWidth: 0 }}
+    />
   );
 }
 
@@ -320,7 +286,7 @@ export function TaskSummary(props: {
   const openTask = () =>
     uiText("taskCardOpenTask", { number: props.task.number });
   return (
-    <View style={{ borderWidth: 1, borderColor: c().border }}>
+    <Card>
       <View
         ref={(node) => props.controlRef?.(node)}
         role="button"
@@ -436,6 +402,6 @@ export function TaskSummary(props: {
           </If>
         </View>
       </If>
-    </View>
+    </Card>
   );
 }

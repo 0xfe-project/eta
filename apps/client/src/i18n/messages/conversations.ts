@@ -23,8 +23,8 @@ export const conversationsMessages = {
   renameGroupTitle: ["Rename group", "重命名群组"],
   browseDirectories: ["Browse directories", "浏览目录"],
   createAnAgentFirstInSettings: [
-    "Create an agent first in Settings.",
-    "请先在设置中创建一个智能体。",
+    "No agents yet. Make one in Settings first.",
+    "还没有智能体。先在设置里建一个。",
   ],
   searchDirectories: ["Search directories", "搜索目录"],
   useThisDirectory: ["Use this directory", "使用此目录"],

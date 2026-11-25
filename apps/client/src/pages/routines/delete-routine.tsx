@@ -3,11 +3,11 @@
  * with it (`routine` cascades), and refuses while a run is going, so the dialog says both.
  */
 import type { RoutineInfo } from "@eta/client-contracts";
-import { signal, View } from "nsh";
-import { Button, Label, Modal, row } from "../../components";
-import { control, space, weight } from "../../components/tokens";
+import { signal } from "nsh";
+import { Label } from "../../components";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { ConfirmDialog } from "../../ui";
 
 export function DeleteRoutine(props: {
   routine: RoutineInfo;
@@ -29,96 +29,23 @@ export function DeleteRoutine(props: {
     busy.set(false);
     if (result !== undefined) props.onDeleted(id);
   }
-  const title = () =>
-    uiText("deleteRoutineTitle", { name: props.routine.name });
-  const body = () => (
-    <>
-      <Label variant="small" tone="muted">
-        {uiText("deleteRoutineBody")}
-      </Label>
+  return (
+    <ConfirmDialog
+      title={uiText("deleteRoutineTitle", { name: props.routine.name })}
+      description={uiText("deleteRoutineBody")}
+      confirmLabel={uiText("delete")}
+      tone="danger"
+      phone={props.phone}
+      busy={busy()}
+      disabled={props.running}
+      onConfirm={() => void remove()}
+      onClose={props.onClose}
+    >
       <If when={props.running}>
         <Label variant="small" tone="warning">
           {uiText("deleteRoutineRunning")}
         </Label>
       </If>
-    </>
-  );
-  return (
-    <Modal
-      title={title()}
-      phone={props.phone}
-      sheet={props.phone}
-      plainSheetHeader={props.phone}
-      overPhoneNavigation
-      hideHeader={props.phone}
-      compact={!props.phone}
-      titleWeight={weight.regular}
-      dismissible={!busy()}
-      onClose={props.onClose}
-    >
-      <If
-        when={props.phone}
-        else={
-          <View style={{ paddingTop: space[8], gap: space[8] }}>
-            {body()}
-            <View
-              style={{
-                ...row,
-                gap: space[8],
-                justifyContent: "flex-end",
-                paddingTop: space[12],
-              }}
-            >
-              <Button
-                label={uiText("cancel")}
-                size={control.md}
-                disabled={busy()}
-                onPress={props.onClose}
-              />
-              <Button
-                label={uiText("delete")}
-                tone="danger"
-                size={control.md}
-                disabled={props.running}
-                busy={busy()}
-                onPress={() => void remove()}
-              />
-            </View>
-          </View>
-        }
-      >
-        <View
-          style={{
-            ...row,
-            height: control.touch,
-            paddingLeft: space[16],
-            paddingRight: space[8],
-          }}
-        >
-          <Label weight={weight.strong} style={{ flex: 1 }}>
-            {title()}
-          </Label>
-        </View>
-        <View style={{ paddingHorizontal: space[16], gap: space[8] }}>
-          {body()}
-        </View>
-        <View style={{ padding: space[16], gap: space[8] }}>
-          <Button
-            label={uiText("delete")}
-            tone="danger"
-            size={control.touch}
-            disabled={props.running}
-            busy={busy()}
-            onPress={() => void remove()}
-          />
-          <Button
-            label={uiText("cancel")}
-            size={control.touch}
-            disabled={busy()}
-            onPress={props.onClose}
-          />
-        </View>
-      </If>
-    </Modal>
+    </ConfirmDialog>
   );
 }

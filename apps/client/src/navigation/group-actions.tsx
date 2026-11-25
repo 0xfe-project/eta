@@ -14,6 +14,7 @@ import { showToast } from "../components/toast";
 import { control, shadow, space, weight } from "../components/tokens";
 import { uiText } from "../i18n";
 import { useHost } from "../services/host";
+import { problemText } from "../services/problem-text";
 
 const menuWidth = 188;
 /** The group's name atop the phone's action sheet. */
@@ -123,7 +124,9 @@ export function RenameGroup(props: {
         problem instanceof Error ? problem.message : String(problem);
       // The host refuses a live group's name in the same project.
       error.set(
-        /already exists/.test(message) ? uiText("groupNameTaken") : message,
+        /already exists/.test(message)
+          ? uiText("groupNameTaken")
+          : problemText(problem),
       );
     } finally {
       busy.set(false);
@@ -297,6 +300,10 @@ function archiveGroupAhead(host: ReturnType<typeof useHost>, id: string) {
       title: uiText("groupArchiveFailed"),
       body: problem instanceof Error ? problem.message : String(problem),
       tone: "red",
+      action: {
+        label: uiText("retry"),
+        onPress: () => archiveGroupAhead(host, id),
+      },
     }),
   );
   showToast({

@@ -1,4 +1,4 @@
-import type { AgentResults } from "@eta/client-contracts";
+import type { AgentResults, AgentView } from "@eta/client-contracts";
 import type { ScrollRef } from "nsh";
 import type { AgentTemplate } from "./template";
 import { computed, signal, View } from "nsh";
@@ -16,11 +16,11 @@ import {
   textStyle,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
-import { ModelSelect, useModels } from "../../components/model-select";
 import { BackButton } from "../../components/navigation-buttons";
 import { avatar, control, icon, space } from "../../components/tokens";
 import { localizedText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { ModelSelect, useModels } from "../../ui";
 import { templates, templateSource } from "./catalog";
 import {
   fillTemplate,
@@ -45,7 +45,7 @@ export interface TemplateGalleryProps {
   initialId?: string;
   onClose: () => void;
   /** The agent made from a template. */
-  onCreated: (agentId: string) => void;
+  onCreated: (agent: AgentView) => void;
   onModelServices: () => void;
 }
 
@@ -118,7 +118,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
           avatarSeed: template.id,
         })
         .catch(() => {});
-      props.onCreated(agent.id);
+      props.onCreated(agent);
     } catch (cause) {
       error.set(cause instanceof Error ? cause.message : String(cause));
     } finally {

@@ -2,10 +2,11 @@ import type { UpgradeArgs, UpgradeResults } from "@eta/client-contracts";
 import { cleanup, effect, signal } from "nsh";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 import { recentResult } from "./progress";
 
 function describeError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return problemText(error);
 }
 
 export function useHostUpdate() {

@@ -6,6 +6,7 @@ import type {
 } from "@eta/client-contracts";
 import { effect, signal } from "nsh";
 import { follow, useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 import { askRuntimes, RUNTIMES_TIMEOUT_MS } from "./status";
 
 /** The primary and every daemon not revoked: the primary first, then by name. */
@@ -36,8 +37,7 @@ type Account =
   | { state: "ready"; account: AgentRuntimeAccount }
   | { state: "error"; message: string };
 
-const messageOf = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
+const messageOf = (error: unknown) => problemText(error);
 
 /**
  * Every machine's runtimes, from the list the agent editor reads (`agents.runtimes`, one call per

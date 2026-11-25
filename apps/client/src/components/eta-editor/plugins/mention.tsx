@@ -19,6 +19,7 @@ import {
   suggestion,
 } from "nsh/base";
 import { uiText } from "../../../i18n";
+import { EmptyState } from "../../empty-state";
 import { SmoothScroll } from "../../smooth-scroll";
 import { Caption, Label } from "../../text";
 import { colors, row } from "../../theme";
@@ -114,6 +115,10 @@ export function mention(options: {
   >(null);
   const index = signal(0);
   const anchor = signal(0);
+  /** An `@` or `#` being typed that nothing matches: the list says so, and ⏎ still sends. */
+  const missed = signal<{ key: "mention" | "task"; query: string } | null>(
+    null,
+  );
   let editor: EtaEditorHandle | undefined;
   const lastKeys = { mention: 0, task: 0 };
   const choices = () => menu()?.items ?? [];
@@ -150,8 +155,14 @@ export function mention(options: {
       const previous = menu();
       if (!built) {
         menu.set(null);
+        missed.set({ key, query: state.query ?? "" });
+        const at = editor.session.coordsAtPos(state.range.from) as {
+          x: number;
+        } | null;
+        anchor.set(at?.x ?? 0);
         return;
       }
+      missed.set(null);
       if (previous?.query !== built.query || previous.key !== key) index.set(0);
       menu.set({ ...built, key, from: state.range.from, to: state.range.to });
       const coords = editor.session.coordsAtPos(state.range.from) as {
@@ -173,6 +184,7 @@ export function mention(options: {
       return;
     }
     menu.set(null);
+    missed.set(null);
   }
   return {
     name: "mention",
@@ -245,6 +257,7 @@ export function mention(options: {
       overlay: () => (
         <SuggestionList
           menu={menu}
+          missed={missed}
           selected={selected}
           anchor={() =>
             // Under the `@`, kept inside the box.
@@ -255,9 +268,9 @@ export function mention(options: {
           onHover={(i) => index.set(i)}
           onPick={pick}
           onDismiss={() => {
-            const current = menu();
-            if (current && editor)
-              editor.session.run(exitSuggestion(current.key));
+            const current = menu()?.key ?? missed()?.key;
+            if (current && editor) editor.session.run(exitSuggestion(current));
+            missed.set(null);
           }}
         />
       ),
@@ -267,6 +280,7 @@ export function mention(options: {
 
 function SuggestionList(props: {
   menu: () => (MenuState & { key: string }) | null;
+  missed: () => { key: "mention" | "task"; query: string } | null;
   selected: () => number;
   anchor: () => number;
   wide?: () => boolean;
@@ -276,7 +290,19 @@ function SuggestionList(props: {
   onDismiss: () => void;
 }) {
   const c = colors();
-  const open = computed(() => (props.menu()?.items.length ?? 0) > 0);
+  const open = computed(
+    () => (props.menu()?.items.length ?? 0) > 0 || props.missed() !== null,
+  );
+  const missedText = () => {
+    const missed = props.missed();
+    if (!missed) return "";
+    const query = missed.query.trim();
+    if (missed.key === "task")
+      return query
+        ? uiText("noTaskSuggestionsMatch", { query })
+        : uiText("noTaskSuggestions");
+    return query ? uiText("noMentionsMatch", { query }) : uiText("noMentions");
+  };
   const wide = () => props.wide?.() ?? false;
   return (
     <If when={open()}>
@@ -300,7 +326,9 @@ function SuggestionList(props: {
       >
         <Caption
           text={uiText(
-            props.menu()?.kind === "hash" ? "taskSuggestions" : "mentions",
+            props.menu()?.kind === "hash" || props.missed()?.key === "task"
+              ? "taskSuggestions"
+              : "mentions",
           )}
           style={{
             paddingHorizontal: space[12],
@@ -361,6 +389,17 @@ function SuggestionList(props: {
             )}
           </Each>
         </SmoothScroll>
+        <If when={!props.menu() && props.missed()}>
+          <EmptyState
+            size="menu"
+            status="empty"
+            loading={null}
+            error={null}
+            empty={{ title: missedText() }}
+            announce
+            style={{ paddingHorizontal: space[12] }}
+          />
+        </If>
       </View>
     </If>
   );

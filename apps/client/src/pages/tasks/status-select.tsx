@@ -1,7 +1,8 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
 import type { TaskDetailState } from "./task-detail-state";
 import { View } from "nsh";
-import { colors, Icon, inCompact, Label, row } from "../../components";
+import { Button, colors, Icon, inCompact, Label, row } from "../../components";
+import { OptimisticStatus } from "../../components/optimistic-status";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { StatusOptions, TaskMenu } from "./menu";
@@ -127,16 +128,32 @@ export function StatusSelect(props: {
           />
         </TaskMenu>
       </If>
+      <If
+        when={
+          !statusError() && props.state.statusStatus.state().status !== "idle"
+        }
+      >
+        <OptimisticStatus state={props.state.statusStatus.state()} />
+      </If>
       <If when={statusError()}>
         {(message) => (
-          <Label
-            variant="caption"
-            tone="red"
-            lines={2}
-            style={{ maxWidth: menuWidth }}
-          >
-            {message()}
-          </Label>
+          <View style={{ ...row, gap: space[4], maxWidth: menuWidth }}>
+            <Label
+              variant="caption"
+              tone="red"
+              lines={2}
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              {message()}
+            </Label>
+            <Button
+              label={uiText("retry")}
+              tone="ghost"
+              labelTone="red"
+              size={control.sm}
+              onPress={props.state.retryStatus}
+            />
+          </View>
         )}
       </If>
     </View>

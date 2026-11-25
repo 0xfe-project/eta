@@ -1,6 +1,6 @@
 import type { ProvidersView } from "@eta/client-contracts";
 import type { Persona } from "./persona-step";
-import { signal, View } from "nsh";
+import { cleanup, effect, signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -14,10 +14,12 @@ import {
   SmoothScroll,
 } from "../../components";
 import { useModels } from "../../components/model-select";
+import { formatRemaining } from "../../components/progress-notification";
 import { StatusDot } from "../../components/status-dot";
 import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { AddSource } from "../settings/models/add-source";
 import { ProviderDetail } from "../settings/models/provider-detail";
 import { PersonaStep } from "./persona-step";
@@ -58,10 +60,32 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
   const activeCard = signal("");
   const error = signal("");
   const total = signal(0);
+  const installStartedAt = signal(0);
+  const installClock = signal(0);
+  const retryTick = signal(0);
+  effect(() => {
+    if (!working()) return;
+    const timer = setInterval(() => installClock.set(Date.now()), 1000);
+    cleanup(() => clearInterval(timer));
+  });
+  const installEta = () => {
+    if (!working()) return "";
+    const started = installStartedAt();
+    const completed = installedHere().length;
+    const target = total();
+    if (!started || target <= 0) return "";
+    const elapsed = Math.max(0, installClock() - started);
+    if (elapsed < 1000 || completed <= 0) return uiText("progressEstimating");
+    if (completed >= target) return "";
+    return formatRemaining((elapsed * (target - completed)) / completed);
+  };
   const cardsMissing = () =>
     host.state().missing.personas || host.state().status === "reconnecting";
   const loadingCards = () => !host.state().targets.personas && !cardsMissing();
-  follow(() => "personas");
+  follow(() => {
+    retryTick();
+    return "personas";
+  });
   const providers = () => host.section<ProvidersView>("providers", "config");
   const models = useModels();
   const sources = () =>
@@ -89,6 +113,9 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
     const model = chosenModel();
     if (!model || working()) return;
     const queue = selected();
+    const now = Date.now();
+    installStartedAt.set(now);
+    installClock.set(now);
     working.set(true);
     error.set("");
     total.set(installedHere().length + queue.length);
@@ -102,10 +129,11 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
           model,
         });
         installedHere.update((ids) => [...ids, card.id]);
+        installClock.set(Date.now());
       }
       step.set(3);
     } catch (cause) {
-      error.set(cause instanceof Error ? cause.message : String(cause));
+      error.set(problemText(cause));
     } finally {
       working.set(false);
       activeCard.set("");
@@ -342,6 +370,10 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                     : [...ids, id],
                 )
               }
+              onRetry={() => {
+                retryTick.update((count) => count + 1);
+                host.reconnect();
+              }}
             />
           </If>
           <If when={step() === 3}>
@@ -446,11 +478,6 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
             </If>
           </View>
           <View style={{ ...row, flexShrink: 1, gap: space[12] }}>
-            <If when={step() === 2 && loadingCards()}>
-              <Label variant="small" tone="muted">
-                {uiText("loadingEllipsis")}
-              </Label>
-            </If>
             <If when={showCount()}>
               <Label
                 variant="small"
@@ -464,10 +491,15 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
                         ? uiText("alreadyInstalled", { length: already() })
                         : "",
                     })
-                  : uiText("ofInstalled", {
-                      length: installedHere().length,
-                      total: total(),
-                    })}
+                  : [
+                      uiText("ofInstalled", {
+                        length: installedHere().length,
+                        total: total(),
+                      }),
+                      installEta(),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
               </Label>
             </If>
             <If when={step() === 0}>

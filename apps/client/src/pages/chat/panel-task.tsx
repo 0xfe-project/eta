@@ -9,6 +9,7 @@ import { signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
+  Button,
   colors,
   DetailSkeleton,
   grow,
@@ -20,14 +21,7 @@ import {
 import { AgentFace } from "../../components/agent-face";
 import { settled } from "../../components/pending";
 import { StatusDot } from "../../components/status-dot";
-import {
-  avatar,
-  border,
-  control,
-  icon,
-  space,
-  weight,
-} from "../../components/tokens";
+import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { TaskActivity } from "../tasks/activity";
@@ -42,6 +36,7 @@ import {
 import { statusName, TaskGlyph } from "../tasks/status";
 import { StatusSelect } from "../tasks/status-select";
 import { TaskDetailDialogs } from "../tasks/task-detail-dialogs";
+import { TaskDetailMissing } from "../tasks/task-detail-missing";
 import { createTaskDetailState } from "../tasks/task-detail-state";
 import { TaskCommentBox, TaskCommentHint } from "../tasks/task-fields";
 import { TaskTopBar } from "../tasks/top-bar";
@@ -82,8 +77,14 @@ export function PanelTask(props: {
   const shown = settled(() => !!task());
   return (
     <If
-      when={shown() ? task() : undefined}
-      else={<DetailSkeleton label={uiText("loadingTask")} />}
+      when={state.gone() || !shown() ? undefined : task()}
+      else={
+        <TaskDetailMissing
+          state={state}
+          skeleton={<DetailSkeleton label={uiText("loadingTask")} />}
+          onBack={props.onClose}
+        />
+      }
     >
       {(item) => {
         // What is going on the task: one line per run that has not ended, each its own agent's.
@@ -291,24 +292,19 @@ export function PanelTask(props: {
                       {uiText("executionLog")}
                     </Label>
                   </View>
-                  <View
-                    role="button"
+                  <Button
+                    label={uiText("stop")}
                     accessibilityLabel={`${uiText("stop")} · ${runName(line().run)}`}
+                    icon="stop"
+                    tone="ghost"
+                    size={space[20]}
+                    iconSize={icon.sm}
+                    labelVariant="caption"
+                    labelWeight={weight.strong}
+                    busy={state.submitting()}
+                    style={{ paddingHorizontal: space[4], gap: space[4] }}
                     onPress={() => state.stop(line().run)}
-                    style={{ ...row, gap: space[4], cursor: "pointer" }}
-                  >
-                    <View
-                      style={{
-                        width: space[8],
-                        height: space[8],
-                        borderWidth: border.hair,
-                        borderColor: c().ink,
-                      }}
-                    />
-                    <Label variant="caption" weight={weight.strong}>
-                      {uiText("stop")}
-                    </Label>
-                  </View>
+                  />
                 </View>
               )}
             </Each>

@@ -1,8 +1,11 @@
 import type { MachineView } from "@eta/client-contracts";
+import type { ProgressHandle } from "../../../components/progress-notification";
 import { effect, signal, untracked } from "nsh";
+import { startProgress } from "../../../components/progress-notification";
 import { showToast } from "../../../components/toast";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 
 // A machine's update as its row and its detail tell it (Paper: Eta · Settings › Supplement /
 // Settings / Update flow, 9 and P7): pressed or being replaced → "Updating to 0.9.1…", then
@@ -10,6 +13,7 @@ import { useHost } from "../../../services/host";
 
 /** The build each machine was on when this window saw its update begin. */
 const before = signal<Record<string, string | null>>({});
+const progressHandles = new Map<string, ProgressHandle>();
 
 function remember(item: MachineView) {
   before.update((all) => ({ ...all, [item.id]: item.version }));
@@ -39,6 +43,52 @@ export function useMachineUpdate(item: () => MachineView) {
       return "updated";
     return undefined;
   };
+  // Mirror daemon upgrade into cross-page ProgressNotification while running, and complete or fail it.
+  effect(() => {
+    const current = state();
+    const now = untracked(item);
+    if (current === "updating") {
+      const target = host.upgradeCheck()?.version;
+      const detail = target
+        ? uiText("machineUpdatingTo", { version: target })
+        : uiText("updating");
+      const existing = progressHandles.get(now.id);
+      if (existing) {
+        existing.update({ title: now.name, detail });
+      } else {
+        progressHandles.set(
+          now.id,
+          startProgress({
+            id: `machine-update-${now.id}`,
+            icon: "arrowCircleUp",
+            title: now.name,
+            detail,
+          }),
+        );
+      }
+      return;
+    }
+    const existing = progressHandles.get(now.id);
+    if (!existing) return;
+    progressHandles.delete(now.id);
+    if (current === "updated") {
+      existing.complete({
+        title: uiText("machineUpdatedToast", {
+          name: now.name,
+          version: now.version ?? "",
+        }),
+        detail: undefined,
+      });
+    } else if (current === "failed") {
+      existing.fail({
+        title: now.name,
+        detail: now.updateError ?? uiText("machineUpdateFailed"),
+        onRetry: () => void start(),
+      });
+    } else {
+      existing.dismiss();
+    }
+  });
   // Back on another build: a toast says so once and the row is an ordinary row again.
   effect(() => {
     if (state() !== "updated") return;
@@ -96,7 +146,8 @@ export function useMachineUpdate(item: () => MachineView) {
       // A reason the Host keeps is on the row already; anything else is said once, app-wide.
       const message =
         problem instanceof Error ? problem.message : String(problem);
-      if (untracked(item).updateError !== message) host.error.set(message);
+      if (untracked(item).updateError !== message)
+        host.error.set(problemText(message));
     } finally {
       pressed.set(false);
     }

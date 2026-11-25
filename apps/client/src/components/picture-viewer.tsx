@@ -1,13 +1,14 @@
 import type { JSX } from "nsh";
 import { Image, keymap, Scroll, signal, View, windowSize } from "nsh";
-import { Dialog, Tooltip } from "nsh/base";
+import { Dialog } from "nsh/base";
 import { uiText } from "../i18n";
+import { Tooltip } from "../ui";
 import { Button } from "./controls";
 import { CloseButton } from "./navigation-buttons";
 import { screenInsets } from "./safe-area";
 import { Label } from "./text";
 import { colors, fill, Fonts, monoFontFamily, row } from "./theme";
-import { shadow, space } from "./tokens";
+import { space } from "./tokens";
 
 /** The viewer's bottom bar. */
 const barHeight = 32;
@@ -133,7 +134,6 @@ export function picturePreview(
   /** How long the pointer rests before it shows (shown text waits 300ms). */
   delay = 200,
 ): JSX.Element {
-  const c = colors();
   const outer = () => Math.min(windowSize().width * 0.9, size ?? 720);
   const width = () => outer() - 10;
   const height = () => (size ? size * 0.75 : windowSize().height * 0.7);
@@ -148,10 +148,6 @@ export function picturePreview(
         gap: space[4],
         padding: space[4],
         maxWidth: outer(),
-        borderWidth: 1,
-        borderColor: c().strong,
-        backgroundColor: c().canvas,
-        boxShadow: [shadow.popover],
       }}
     >
       <PictureImage picture={picture} maxWidth={width()} maxHeight={height()} />
