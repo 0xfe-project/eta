@@ -195,6 +195,7 @@ export class AcpProcess {
         );
       return new AcpProcess(child, connection, init, stderr);
     } catch (error) {
+      await killTree(child);
       connection.close();
       if (died === undefined && !(error instanceof AcpStartError))
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -227,6 +228,7 @@ export class AcpProcess {
   /** Let the process go: close its input, then make sure it ends. */
   async stop(): Promise<void> {
     this.#gone = true;
+    await killTree(this.#child);
     this.#connection.close();
     await kill(this.#child);
   }
@@ -253,6 +255,25 @@ export function messageOf(error: unknown): string {
   if (typeof error === "object" && error !== null && "message" in error)
     return String((error as { message: unknown }).message);
   return String(error);
+}
+
+/**
+ * On Windows, end a child and everything it started, and wait for that. A signal there ends only
+ * the process itself, and an agent started through a shim leaves its real process behind, still
+ * in the directory it was started in. It goes before the pipes are closed: a parent that has
+ * exited can no longer be asked for its children. Elsewhere there is nothing to do here.
+ */
+async function killTree(child: ChildProcessWithoutNullStreams): Promise<void> {
+  if (process.platform !== "win32" || child.pid === undefined) return;
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise<void>((resolve) => {
+    spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true,
+    })
+      .once("error", () => resolve())
+      .once("close", () => resolve());
+  });
 }
 
 /** End a child: its stdin first (an agent on stdio exits on EOF), then the signals. */
