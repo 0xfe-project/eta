@@ -190,16 +190,18 @@ try {
     const generated = join(cwd, ".nsh");
     mkdirSync(generated, { recursive: true });
     staging = mkdtempSync(join(generated, "desktop-source-"));
+    // nsh reads the app of the directory it is given, for a manifest as much as for a
+    // package: it wants the App.tsx entry there, not only the nsh.json written below.
+    for (const file of readdirSync(cwd)) {
+      if (
+        file.endsWith(".tsx") ||
+        file.endsWith(".ts") ||
+        file === "assets" ||
+        file === "src"
+      )
+        cpSync(join(cwd, file), join(staging, file), { recursive: true });
+    }
     if (updateEnabled) {
-      for (const file of readdirSync(cwd)) {
-        if (
-          file.endsWith(".tsx") ||
-          file.endsWith(".ts") ||
-          file === "assets" ||
-          file === "src"
-        )
-          cpSync(join(cwd, file), join(staging, file), { recursive: true });
-      }
       const entry = command.indexOf("App.tsx", 1);
       if (entry === -1)
         throw new Error(
