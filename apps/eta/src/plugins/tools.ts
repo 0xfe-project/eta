@@ -150,25 +150,22 @@ export function pluginSessionTools(deps: {
         "List the Composio toolkits you have enabled: each one's slug, display name, and whether its connection is ready (`null` when eta does not know yet). Use the slugs when you ask Composio's tools to search or connect a toolkit. This reads eta's own state; it does not call Composio.",
       parameters: Type.Object({}),
       execute() {
-        const toolkits = deps.plugins.toolkitsOf(agentId);
         return text(
           JSON.stringify(
-            toolkits.length > 0
-              ? { toolkits }
-              : {
-                  toolkits,
-                  message:
-                    "No Composio toolkits are enabled for this agent. The user can enable one in eta's plugin settings.",
-                },
+            { toolkits: deps.plugins.toolkitsOf(agentId) },
             null,
             2,
           ),
         );
       },
     });
+    // Offered only to an agent that has a Composio toolkit when the session opens; what it
+    // answers is read when it is called.
     return [
       toKernelTool(tool, () => undefined),
-      toKernelTool(listToolkits, () => undefined),
+      ...(deps.plugins.toolkitsOf(agentId).length > 0
+        ? [toKernelTool(listToolkits, () => undefined)]
+        : []),
     ];
   };
 }
