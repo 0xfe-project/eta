@@ -2,9 +2,9 @@
  * Abort (REFACTOR.md §2.4, ported from eta-agent's execution/effect-gate.ts).
  *
  * Cancellation cannot un-run an effect, so it does the two things it can: stop
- * admitting new ones, and abort the signal the running ones observe — then wait
- * for them to drain. The run reports `aborted`, which is not a failure: the
- * work stopped where it was, and what it had already committed stands.
+ * admitting new ones, and abort the signal the running ones observe — then it
+ * stops waiting for them. The run reports `aborted`, which is not a failure:
+ * the work stopped where it was, and what it had already committed stands.
  */
 
 import { Kernel, Runner } from "@eta/core";
@@ -23,7 +23,7 @@ const userMsg = (text: string) => ({
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("aborting a run", () => {
-  it("waits for a tool that already started before returning", async () => {
+  it("stops waiting for a tool that already started", async () => {
     const kernel = Kernel.create({
       config: { model: { provider: "p", modelId: "m" } },
     });
@@ -48,8 +48,9 @@ describe("aborting a run", () => {
     await sleep(5);
     runner.abort();
     const result = await run;
-    // The effect could not be un-run, so the abort waited for it.
-    expect(finished).toBe(true);
+    // The effect cannot be un-run, but the run does not hang on it either: it
+    // ends where the signal ends, and the tool's own promise carries on unread.
+    expect(finished).toBe(false);
     expect(result.status).toBe("aborted");
     void kernel.dispose();
   });

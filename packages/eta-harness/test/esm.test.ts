@@ -390,6 +390,78 @@ describe("realm cwd", () => {
   });
 });
 
+describe("cancelling the realm", () => {
+  /** Polls until `check` holds; the realm's first wake is not instant. */
+  const until = async (check: () => boolean, ms: number): Promise<boolean> => {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+      if (check()) return true;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    return check();
+  };
+
+  /** A script that says it started, then parks on an await that never settles. */
+  const parked = (marker: string) =>
+    [
+      'import { writeFile } from "node:fs/promises";',
+      `await writeFile("${marker}", "");`,
+      "await new Promise(() => undefined);",
+      '"never"',
+    ].join("\n");
+
+  it("ends a run whose tool call is a script that never settles", async () => {
+    const { session, cwd } = await open([
+      call("esmrun", { script: parked("parked.txt") }),
+      stop(),
+    ]);
+    session.kernel.nextRun(userMsg("go"));
+    const run = session.runner.run();
+    // Aborting before the script is parked would prove nothing: it has to be
+    // sitting on the await when the cancellation arrives.
+    expect(await until(() => existsSync(join(cwd, "parked.txt")), 5000)).toBe(
+      true,
+    );
+    const started = Date.now();
+    session.runner.abort();
+    const status = await Promise.race([
+      run.then((result) => result.status),
+      new Promise<string>((resolve) =>
+        setTimeout(resolve, 1500, "still running"),
+      ),
+    ]);
+    expect(status).toBe("aborted");
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(session.runner.running).toBe(false);
+    session.stop();
+  });
+
+  it("ends an evaluation whose script is parked when its signal aborts", async () => {
+    const { session, cwd } = await open([]);
+    const controller = new AbortController();
+    const running = session.kernel.tools.execute(
+      "esmrun",
+      { script: parked("signal.txt") },
+      { turn: 1, toolCallId: "c-parked", signal: controller.signal },
+    );
+    expect(await until(() => existsSync(join(cwd, "signal.txt")), 5000)).toBe(
+      true,
+    );
+    controller.abort(new DOMException("cancelled by the test", "AbortError"));
+    const outcome = await Promise.race([
+      running.then(
+        () => "returned",
+        (error: unknown) => `threw: ${String(error)}`,
+      ),
+      new Promise<string>((resolve) =>
+        setTimeout(resolve, 1500, "still running"),
+      ),
+    ]);
+    expect(outcome).toBe("threw: AbortError: cancelled by the test");
+    session.stop();
+  });
+});
+
 describe("a session opened with the realm", () => {
   /** A storage that counts what lands in it, because a replay must add nothing. */
   class CountingStorage extends MemoryStorage {
