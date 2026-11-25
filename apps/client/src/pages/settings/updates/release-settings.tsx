@@ -18,13 +18,11 @@ import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
 import { GroupHeading } from "./group-heading";
 
-/** A setting, the channel row with its two lines, the channel menu and one of its items, and
- * the Advanced toggle. */
+/** A setting, the channel row with its two lines, and the channel menu with one of its items. */
 const settingRow = 56;
 const channelRow = 72;
 const channelWidth = 160;
 const itemRow = 28;
-const advancedWidth = 100;
 
 function SettingBand(props: {
   title: string;
@@ -186,15 +184,11 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
           style={{
             ...row,
             height: props.phone ? control.md : space[24],
-            width: advancedWidth,
-            paddingHorizontal: space[12],
-            justifyContent: "space-between",
-            borderWidth: 1,
-            borderColor: c().strong,
+            width: space[24],
+            justifyContent: "center",
             cursor: "pointer",
           }}
         >
-          <Label variant="small">{uiText("advanced")}</Label>
           <View
             style={{
               transform: advancedOpen() ? [{ rotate: "180deg" }] : undefined,
