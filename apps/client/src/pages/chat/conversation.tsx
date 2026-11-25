@@ -9,6 +9,7 @@ import type {
   MessageView,
   TimelineSection,
 } from "@eta/client-contracts";
+import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
 import type { ArtifactFilters } from "./artifacts/filter";
 import type { PanelTab } from "./conversation-panel";
@@ -39,8 +40,9 @@ import {
   space,
   weight,
 } from "../../components/tokens";
-import { uiText } from "../../i18n";
+import { uiText, useText } from "../../i18n";
 import { CaptainFace } from "../../navigation/captain";
+import { RailButton } from "../../navigation/rail-controls";
 import { follow, useHost } from "../../services/host";
 import { isActiveRunStatus } from "../tasks/run-log";
 import { flashQuestion, PendingStrip, pendingStripHeight } from "./approvals";
@@ -74,6 +76,9 @@ export function Conversation(props: {
   layout: Layout;
   captain?: boolean;
   onBack?: () => void;
+  /** A tablet's group list is folded away: the button that brings it back, before the title. */
+  onExpandList?: () => void;
+  attachExpandList?: (node: ViewRef | null) => void;
   onTask: (id: string) => void;
   onRelatedTask: (id: string) => void;
   onReadDraft?: () => void;
@@ -88,6 +93,7 @@ export function Conversation(props: {
   onCloseTask: () => void;
 }) {
   const host = useHost();
+  const text = useText();
   const c = colors();
   const panel = signal<PanelTab>("Context");
   const drawer = signal(false);
@@ -471,7 +477,17 @@ export function Conversation(props: {
           end={phone() && !props.captain ? space[4] : undefined}
           compact={phone() && !props.captain}
           leading={
-            phone() && props.captain ? (
+            props.onExpandList ? (
+              <RailButton
+                label={text("expandSidebar")}
+                icon="sidebar"
+                size={control.md}
+                iconSize={icon.md}
+                expanded={false}
+                attach={props.attachExpandList}
+                onPress={() => props.onExpandList?.()}
+              />
+            ) : phone() && props.captain ? (
               <CaptainFace size={avatar.md} />
             ) : undefined
           }

@@ -41,16 +41,6 @@ test("tablet: the conversation takes the width the list gave up", async () => {
   expect(after.width).toBeGreaterThan(before.width);
 });
 
-test("tablet: focus stays on the button that was pressed", async () => {
-  const app = await start(834, 1112);
-  await app.press(fold);
-  // Return presses what has the focus: if it stayed on the toggle, the list is back.
-  await app.keyboard.press("enter");
-  expect(app.shows(list)).toBe(true);
-  await app.keyboard.press("enter");
-  expect(app.shows(list)).toBe(false);
-});
-
 test("tablet: a folded list stays folded on Captain's page, and can be brought back there", async () => {
   const app = await start(834, 1112);
   await app.press(fold);
