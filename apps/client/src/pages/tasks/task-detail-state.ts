@@ -8,10 +8,12 @@ import type {
   TaskRunView,
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { signal } from "nsh";
+import { effect, signal } from "nsh";
 import { createOptimisticStatus } from "../../components/optimistic-status";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
+import { problemText } from "../../services/problem-text";
 import { isActiveRunStatus } from "./run-log";
 
 export type TaskDetailState = ReturnType<typeof createTaskDetailState>;
@@ -34,6 +36,24 @@ export function createTaskDetailState(props: {
     retryTick.update((count) => count + 1);
     host.reconnect();
   };
+  const load = useLoadState({
+    targets: () => [target()],
+    ready: () => task() !== undefined,
+  });
+  const listed = () =>
+    host.tasks().some((item) => item.id === props.id) ||
+    host
+      .list<{ id: string }>("tasks", "archived")
+      .some((item) => item.id === props.id);
+  // Seen on the board once: one just made, not listed yet, is not taken for deleted.
+  const seen = signal(false);
+  effect(() => {
+    if (listed()) seen.set(true);
+  });
+  /** Deleted, here or elsewhere (the board had it and has it no more), or not on this host. */
+  const gone = () =>
+    (seen() && !!host.state().targets.tasks && !listed()) ||
+    load.failure() === "missing";
   const pendingComments = signal<TaskActivityView[]>([]);
   const activity = () => {
     const hostItems = host.list<TaskActivityView>(target(), "activity");
@@ -253,8 +273,7 @@ export function createTaskDetailState(props: {
         statusStatus.reset();
         statusError.set(
           uiText("statusChangeFailed", {
-            message:
-              problem instanceof Error ? problem.message : String(problem),
+            message: problemText(problem),
           }),
         );
       })
@@ -317,6 +336,8 @@ export function createTaskDetailState(props: {
     task,
     missing,
     retryTask,
+    load,
+    gone,
     posting,
     commentStatus,
     editStatus,

@@ -33,6 +33,7 @@ import {
 } from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { clock, followSession, useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 import { activeReply } from "../member-status";
 import {
   replyRun,
@@ -199,13 +200,17 @@ export function MemberRun(props: {
   const failure = () => {
     if (running() || blocks().some((block) => block.type === "error"))
       return undefined;
-    if (props.taskRun) return props.taskRun.error ?? undefined;
+    if (props.taskRun)
+      return props.taskRun.error ? problemText(props.taskRun.error) : undefined;
     const from = rows()[0]?.seq;
     const failed = systems()?.rows.findLast(
       (entry) =>
         entry.kind === "run_failed" && from !== undefined && entry.seq >= from,
     );
-    if (failed) return failed.args.error || uiText("runGenericFailure");
+    if (failed)
+      return failed.args.error
+        ? problemText(failed.args.error)
+        : uiText("runGenericFailure");
     return props.reply?.status === "failed"
       ? props.reply.text || uiText("runGenericFailure")
       : undefined;

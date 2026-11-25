@@ -3,7 +3,6 @@ import { signal, View } from "nsh";
 import {
   Button,
   colors,
-  Empty,
   grow,
   Header,
   Icon,
@@ -22,6 +21,7 @@ import { activeTaskRun, latestExecutorRun } from "./run-log";
 import { Segmented } from "./segmented";
 import { TaskDetailSkeleton } from "./skeleton";
 import { TaskDetailDialogs } from "./task-detail-dialogs";
+import { TaskDetailMissing } from "./task-detail-missing";
 import { createTaskDetailState } from "./task-detail-state";
 import { TaskCommentBox, TaskReviewActions } from "./task-fields";
 import { TaskOverview } from "./task-overview";
@@ -250,26 +250,13 @@ export function TaskDetail(props: {
         </TaskTopBar>
       </If>
       <If
-        when={shown() ? task() : undefined}
+        when={state.gone() || !shown() ? undefined : task()}
         else={
-          <If
-            when={state.missing()}
-            else={<TaskDetailSkeleton label={uiText("loadingTask")} />}
-          >
-            <Empty
-              title={uiText("taskUnavailable")}
-              icon="warning"
-              iconSize={icon.xl}
-              iconTone="red"
-            >
-              <Button
-                label={uiText("retry")}
-                icon="refresh"
-                style={{ marginTop: space[8], paddingHorizontal: space[12] }}
-                onPress={state.retryTask}
-              />
-            </Empty>
-          </If>
+          <TaskDetailMissing
+            state={state}
+            skeleton={<TaskDetailSkeleton label={uiText("loadingTask")} />}
+            onBack={props.onClose}
+          />
         }
       >
         {(item) => (

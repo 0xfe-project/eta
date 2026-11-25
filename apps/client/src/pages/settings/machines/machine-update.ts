@@ -5,6 +5,7 @@ import { startProgress } from "../../../components/progress-notification";
 import { showToast } from "../../../components/toast";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 
 // A machine's update as its row and its detail tell it (Paper: Eta · Settings › Supplement /
 // Settings / Update flow, 9 and P7): pressed or being replaced → "Updating to 0.9.1…", then
@@ -145,7 +146,8 @@ export function useMachineUpdate(item: () => MachineView) {
       // A reason the Host keeps is on the row already; anything else is said once, app-wide.
       const message =
         problem instanceof Error ? problem.message : String(problem);
-      if (untracked(item).updateError !== message) host.error.set(message);
+      if (untracked(item).updateError !== message)
+        host.error.set(problemText(message));
     } finally {
       pressed.set(false);
     }

@@ -6,6 +6,7 @@ import { startProgress } from "../components/progress-notification";
 import { showToast } from "../components/toast";
 import { uiText } from "../i18n";
 import { createFileSaver } from "../pages/chat/artifacts/file";
+import { problemText } from "./problem-text";
 
 // A file a message carried, saved on a press: the host's copy (`GET /attachments/<id>`, served as
 // bytes to save), through the share sheet where there is one, else into the app's storage; a
@@ -114,7 +115,7 @@ export function createAttachmentFiles(host: ReturnType<typeof useHost>) {
       } else {
         progress.fail({
           title: uiText("fileSaveFailed", { name: file.name }),
-          detail: error instanceof Error ? error.message : String(error),
+          detail: problemText(error),
           onRetry: () => void save(file),
         });
       }

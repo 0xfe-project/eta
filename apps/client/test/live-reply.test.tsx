@@ -119,7 +119,7 @@ test("a reply without tools streams directly in reply-answer with Stop header", 
 
 for (const [ending, status] of [
   ["End stopped", "Stopped"],
-  ["End failed", "Provider said 500."],
+  ["End failed", "The run failed."],
 ] as const)
   test(`a reply that ends on a call says how it ended, and takes no words for an answer (${ending})`, async () => {
     const app = await open("./fixtures/live-reply.tsx", {

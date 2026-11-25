@@ -11,6 +11,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import { CloseButton } from "../../components/navigation-buttons";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -79,7 +80,16 @@ function WarningsText(props: { item: PluginView; inline?: boolean }) {
   return (
     <If
       when={warnings().length}
-      else={<Label tone="muted">{uiText("noWarnings")}</Label>}
+      else={
+        <EmptyState
+          size="row"
+          status="empty"
+          loading={null}
+          error={null}
+          empty={{ title: uiText("noWarnings") }}
+          style={{ paddingHorizontal: 0 }}
+        />
+      }
     >
       <Each of={warnings()} key={(warning) => warning.text}>
         {(warning) => (

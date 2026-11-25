@@ -353,6 +353,29 @@ export const tasksMessages = {
   loadingTasks: ["Loading tasks…", "正在加载任务…"],
   taskUnavailable: ["Couldn’t load this task", "无法加载此任务"],
   newTask: ["New task", "新建任务"],
+  noExecutorsYet: ["No agent has a task yet", "还没有智能体在执行任务"],
+  noParentTasksYet: ["No task has subtasks yet", "还没有带子任务的任务"],
+  noAgentsToPick: ["No agents yet", "还没有智能体"],
+  noTasksToWaitFor: ["No tasks to wait for", "没有可以等待的任务"],
+  noActivityYet: [
+    "No activity yet. Each step appears here once the agent starts.",
+    "还没有动态。智能体开始工作后，每一步都会记在这里。",
+  ],
+  taskGone: ["This task no longer exists", "这个任务已不存在"],
+  taskGoneHint: [
+    "It may have been deleted, or it isn't on this host.",
+    "它可能已被删除，或这台主机上没有它。",
+  ],
+  taskDidNotLoad: ["This task didn't load", "这个任务没加载出来"],
+  tasksDidNotLoad: ["Tasks didn't load", "任务没加载出来"],
+  noTasksMatchQuery: [
+    "No tasks match “{{query}}”",
+    "没有找到「{{query}}」相关的任务",
+  ],
+  noArchivedTasksMatchQuery: [
+    "No archived tasks match “{{query}}”",
+    "没有找到「{{query}}」相关的已归档任务",
+  ],
   noLogEntriesYet: ["No log entries yet.", "暂无日志。"],
   notPartOfAnything: ["Not part of anything", "独立任务"],
   ofDoneTheParentDoesNo: [
@@ -533,6 +556,8 @@ export const tasksMessages = {
     "This turn stopped: {{reason}}",
     "这一轮已停止：{{reason}}",
   ],
+  activityTurnStoppedBare: ["This turn stopped.", "这一轮已停止。"],
+  activityTurnFailedBare: ["This turn failed.", "这一轮失败了。"],
   activityTurnFailed: [
     "This turn failed: {{reason}}",
     "这一轮失败了：{{reason}}",

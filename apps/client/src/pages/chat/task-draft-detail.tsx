@@ -27,6 +27,7 @@ import { showToast } from "../../components/toast";
 import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { createDescription, DescriptionBox } from "../tasks/description-box";
 import { Segmented } from "../tasks/segmented";
 
@@ -144,7 +145,7 @@ export function TaskDraftDetail(props: {
       );
     } catch (problem) {
       busy.set(false);
-      failure.set(problem instanceof Error ? problem.message : String(problem));
+      failure.set(problemText(problem));
       return;
     }
     busy.set(false);

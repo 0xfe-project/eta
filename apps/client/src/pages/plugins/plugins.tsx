@@ -226,7 +226,10 @@ export function Plugins(props: {
         }}
       >
         <If when={!list().length}>
-          <NoPlugins />
+          <NoPlugins
+            onAdd={() => add.set(true)}
+            onMarket={() => tab.set("Market")}
+          />
         </If>
         <View
           style={{
@@ -356,7 +359,10 @@ export function Plugins(props: {
                         {uiText("pluginsIntroPhone")}
                       </Label>
                       <If when={!list().length}>
-                        <NoPlugins />
+                        <NoPlugins
+                          onAdd={() => add.set(true)}
+                          onMarket={() => tab.set("Market")}
+                        />
                       </If>
                       <If when={needsConfig().length}>
                         <PluginRows
@@ -394,6 +400,7 @@ export function Plugins(props: {
           onSelect={selected.set}
           onRefresh={refreshPlugins}
           onAdd={() => add.set(true)}
+          onMarket={() => tab.set("Market")}
           detail={detailView()}
           extra={<ComposioConnected layout="tablet" />}
         />

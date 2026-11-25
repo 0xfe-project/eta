@@ -24,6 +24,7 @@ import { StatusDot } from "../../components/status-dot";
 import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 
 /** A free answer's field; a proposal card's header and its fields' label column. */
 const answerWidth = 400;
@@ -295,7 +296,7 @@ function SheetProposal(props: {
             when={pending()}
             else={
               <Label variant="small" tone="muted">
-                {op().error ?? op().status}
+                {op().error ? problemText(op().error) : op().status}
               </Label>
             }
           >
@@ -751,7 +752,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
   };
   const result = () =>
     op().status === "failed"
-      ? (op().error ?? "")
+      ? problemText(op().error ?? "")
       : op().status === "applied" && op().kind === "create_agent"
         ? uiText("proposalAgentReady", { name: title() })
         : "";

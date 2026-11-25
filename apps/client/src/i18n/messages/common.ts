@@ -15,8 +15,8 @@ export const commonMessages = {
   agent: ["Agent", "智能体"],
   agentName: ["Agent name", "智能体名称"],
   agentsKeepRunningOnTheHost: [
-    "Agents keep running on the host.",
-    "智能体会继续在主机上运行。",
+    "Agents keep working on the host; this syncs when you're back.",
+    "智能体还在主机上继续工作，连上后会同步。",
   ],
   approve: ["Approve", "批准"],
   archive: ["Archive", "归档"],
@@ -24,10 +24,9 @@ export const commonMessages = {
   artifacts: ["Artifacts {{length}}", "产物 {{length}}"],
   back: ["Back", "返回"],
   cancel: ["Cancel", "取消"],
-  captainWillAppearWhenItIs: [
-    "Captain will appear when it is ready.",
-    "Captain 就绪后会显示在这里。",
-  ],
+  openingCaptain: ["Opening Captain…", "正在打开 Captain…"],
+  captainDidNotOpen: ["Captain didn't open", "Captain 没打开"],
+  captainUnavailable: ["Captain isn't on this host", "这台主机上没有 Captain"],
   changeHost: ["Change host", "切换主机"],
   check: ["Check", "检测"],
   checkAgain: ["Check again", "重新检查"],
@@ -83,10 +82,7 @@ export const commonMessages = {
   lastStep: ["Last step", "最后一步"],
   loadingDirectories: ["Loading directories…", "正在加载目录…"],
   loadingExecutionLog: ["Loading execution log…", "正在加载执行日志…"],
-  lostTheConnectionToTheHost: [
-    "Lost the connection to the host.",
-    "主机连接已断开。",
-  ],
+  lostTheConnectionToTheHost: ["Can't reach the host", "连不上主机"],
   markThisTaskCompleted: [
     "Mark this task completed.",
     "将此任务标记为已完成。",
@@ -101,9 +97,12 @@ export const commonMessages = {
   new: ["New", "新建"],
   newConversation: ["New conversation", "新对话"],
   next: ["Next", "下一张"],
-  noConversationSelected: ["No conversation selected", "尚未选择对话"],
+  noConversationSelected: ["No conversation open", "没有打开的对话"],
   none: ["None", "无"],
   noTasksYet: ["No tasks yet", "还没有任务"],
+  noMembersYet: ["No members yet", "还没有成员"],
+  noOpenTasks: ["No open tasks", "没有进行中的任务"],
+  noTasksInThisGroupYet: ["No tasks in this group yet", "这个群组还没有任务"],
   viewAll: ["View all", "查看全部"],
   tasksViewAll: ["View all tasks", "查看全部任务"],
   on: ["On", "启用"],
@@ -192,4 +191,35 @@ export const commonMessages = {
   progressCount: ["{{completed}} / {{total}}", "{{completed}} / {{total}}"],
   takingLongerThanUsual: ["Taking longer than usual…", "耗时比平时更长…"],
   openResult: ["Open result", "打开结果"],
+  // Empty, loading and failed states (#378).
+  retrying: ["Retrying…", "正在重试…"],
+  showDetails: ["Details", "详情"],
+  hideDetails: ["Hide details", "收起详情"],
+  clearFilters: ["Clear filters", "清除筛选"],
+  problemOffline: [
+    "Can't reach the host. Try again once it's connected.",
+    "连不上主机。连上后再试一次。",
+  ],
+  problemTimeout: [
+    "The host didn't answer in time. Try again.",
+    "主机没有及时回应，再试一次。",
+  ],
+  problemOther: [
+    "That didn't go through. The host reported a problem.",
+    "没有完成，主机那边出了问题。",
+  ],
+  loadFailedOffline: [
+    "Can't reach the host. Nothing is lost; this fills in once it's connected.",
+    "连不上主机。内容都还在，连上后会自动补上。",
+  ],
+  loadFailedSlow: [
+    "The host didn't answer in time. Nothing is lost.",
+    "主机没有及时回应。内容都还在。",
+  ],
+  loadFailedMissing: ["This host doesn't have it.", "这台主机上没有它。"],
+  loadFailedUnsupported: [
+    "This host can't do this yet. Updating the host adds it.",
+    "这台主机还不支持。更新主机后就能用。",
+  ],
+  nothingToChoose: ["Nothing to choose", "没有可选的"],
 } as const;

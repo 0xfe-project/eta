@@ -70,7 +70,7 @@ export const routinesMessages = {
   newer: ["Newer", "较新的"],
   newRoutine: ["New routine", "新建定时任务"],
   nextWithCount: ["Next · {{clockDistance}}", "下次 · {{clockDistance}}"],
-  noReport: ["No report", "暂无报告"],
+  noReport: ["No report", "没有报告"],
   noRoutinesYet: ["No routines yet", "还没有定时任务"],
   noUpcomingRun: ["No upcoming run", "暂无下次运行"],
   older: ["Older", "较早的"],
@@ -127,4 +127,17 @@ export const routinesMessages = {
   backToRoutines: ["Back to routines", "返回定时任务列表"],
   viewRun: ["View run", "查看运行"],
   olderReports: ["Older reports", "较早的报告"],
+  noNewReports: ["No new reports", "没有新的报告"],
+  noNewReportsHint: [
+    "Reports from finished runs appear here.",
+    "运行完的报告会出现在这里。",
+  ],
+  routineNoRunsYet: ["Not run yet", "还没有运行过"],
+  routineNoRunsYetNext: [
+    "Not run yet. The first report comes after the run on {{time}}.",
+    "还没有运行过。{{time}} 运行后，报告会出现在这里。",
+  ],
+  loadingRoutines: ["Loading routines…", "正在读取定时任务…"],
+  routinesDidNotLoad: ["Routines didn't load", "定时任务没加载出来"],
+  routineDidNotLoad: ["This routine didn't load", "这个定时任务没加载出来"],
 } as const;

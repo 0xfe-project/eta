@@ -37,6 +37,7 @@ import {
 } from "./src/components/element-picker";
 import { settled } from "./src/components/pending";
 import { ProgressNotificationLayer } from "./src/components/progress-notification";
+import { monoFontFamily } from "./src/components/theme";
 import { ToastLayer } from "./src/components/toast";
 import { control, icon, layer, space } from "./src/components/tokens";
 import { createLanguagePreference, LanguageSettings, uiText } from "./src/i18n";
@@ -82,6 +83,8 @@ function pairingAddress(
 
 function App() {
   const host = createHost();
+  /** The global error bar's Details: the raw failure behind its words. */
+  const errorOpen = signal(false);
   resumeComposerOutbox(host);
   const pictureMode = createPictureMode();
   const attachmentFiles = createAttachmentFiles(host);
@@ -354,15 +357,41 @@ function App() {
                             borderColor: c().red,
                           }}
                         >
-                          <Label variant="small" tone="red" style={{ flex: 1 }}>
-                            {host.error()}
-                          </Label>
+                          <View style={{ flex: 1, gap: space[4] }}>
+                            <Label variant="small" tone="red">
+                              {host.error()}
+                            </Label>
+                            <If when={errorOpen() && host.errorDetail()}>
+                              <Label
+                                variant="caption"
+                                tone="muted"
+                                style={{ fontFamily: monoFontFamily(fonts()) }}
+                              >
+                                {host.errorDetail()}
+                              </Label>
+                            </If>
+                          </View>
+                          <If when={host.errorDetail()}>
+                            <Button
+                              label={
+                                errorOpen()
+                                  ? uiText("hideDetails")
+                                  : uiText("showDetails")
+                              }
+                              tone="ghost"
+                              expanded={errorOpen()}
+                              onPress={() => errorOpen.set(!errorOpen())}
+                            />
+                          </If>
                           <Button
                             label={uiText("dismissError")}
                             icon="close"
                             iconOnly
                             tone="ghost"
-                            onPress={() => host.error.set("")}
+                            onPress={() => {
+                              host.error.set("");
+                              errorOpen.set(false);
+                            }}
                           />
                         </View>
                       </If>

@@ -10,11 +10,13 @@ import {
   row,
   Screen,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import { foldNext } from "../../components/motion";
 import { dotSize, StatusDot } from "../../components/status-dot";
 import { control, icon, sizes, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
 import { taskTime } from "../tasks/facts";
 import { Segmented } from "../tasks/segmented";
 import {
@@ -107,6 +109,7 @@ export function ContextTasks(props: {
 }) {
   const host = useHost();
   const c = colors();
+  const load = useLoadState({ targets: () => ["tasks"] });
   const open = () =>
     taskRoots(
       props.tasks.filter((task) => !closed(task)),
@@ -178,19 +181,33 @@ export function ContextTasks(props: {
           </View>
         )}
       </Each>
-      <If when={!props.tasks.length}>
-        <Label
-          variant="small"
-          tone="muted"
+      <If when={!shown().length}>
+        <EmptyState
+          size="row"
+          status={props.tasks.length ? "empty" : load.shown()}
+          loading={uiText("loadingTasks")}
+          error={{
+            title: uiText("tasksDidNotLoad"),
+            retry: load.retry,
+            retrying: load.retrying(),
+          }}
+          empty={
+            props.tasks.length
+              ? {
+                  title: uiText("noOpenTasks"),
+                  actions: [
+                    { label: uiText("tasksViewAll"), onPress: props.onViewAll },
+                  ],
+                }
+              : { title: uiText("noTasksYet") }
+          }
           style={{
             paddingHorizontal: space[12],
-            paddingBottom: space[8],
+            paddingTop: 0,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
-        >
-          {uiText("noTasksYet")}
-        </Label>
+        />
       </If>
     </View>
   );
@@ -235,6 +252,7 @@ export function TasksTab(props: {
 }) {
   const host = useHost();
   const c = colors();
+  const load = useLoadState({ targets: () => ["tasks"] });
   const everywhere = signal(false);
   const open = signal<BoardTaskStatus[]>([]);
   const tasks = () =>
@@ -403,13 +421,22 @@ export function TasksTab(props: {
         }}
       </Each>
       <If when={!tasks().length}>
-        <Label
-          variant="small"
-          tone="muted"
+        <EmptyState
+          size="row"
+          status={load.shown()}
+          loading={uiText("loadingTasks")}
+          error={{
+            title: uiText("tasksDidNotLoad"),
+            retry: load.retry,
+            retrying: load.retrying(),
+          }}
+          empty={{
+            title: everywhere()
+              ? uiText("noTasksYet")
+              : uiText("noTasksInThisGroupYet"),
+          }}
           style={{ paddingHorizontal: inset }}
-        >
-          {uiText("noTasksYet")}
-        </Label>
+        />
       </If>
     </View>
   );

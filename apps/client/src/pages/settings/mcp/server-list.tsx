@@ -4,15 +4,16 @@ import { signal } from "nsh";
 import {
   ActionItem,
   colors,
-  Empty,
-  emptyWidth,
   grow,
   Icon,
   SmoothScroll,
 } from "../../../components";
-import { icon, weight } from "../../../components/tokens";
+import { EmptyState } from "../../../components/empty-state";
+import { ListSkeleton } from "../../../components/loading-skeleton";
+import { icon } from "../../../components/tokens";
 import { uiText, useText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { useLoadState } from "../../../services/load-status";
 
 import { emptyStyle, EntityRow, SectionHeader } from "../section";
 import { McpDetail } from "./server-detail";
@@ -33,6 +34,7 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
   const text = useText();
   const selected = signal("");
   const list = () => host.list<McpServerView>("mcp");
+  const load = useLoadState({ targets: () => ["mcp"] });
   const server = () => list().find((item) => key(item) === selected());
   const groups = () => {
     const agents = new Map<string, McpServerView[]>();
@@ -73,14 +75,23 @@ export function McpSettings(props: { layout: Layout; onBack: () => void }) {
           <If
             when={list().length}
             else={
-              <Empty
-                icon="plug"
-                iconSize={icon.lg}
-                title={uiText("mcpEmptyTitle")}
-                titleWeight={weight.regular}
-                description={uiText("mcpEmptyHint")}
-                descriptionWidth={emptyWidth.narrow}
+              <EmptyState
+                size="page"
+                width="narrow"
                 style={emptyStyle}
+                status={load.shown()}
+                loading={<ListSkeleton label={uiText("loadingMcpServers")} />}
+                error={{
+                  title: uiText("mcpDidNotLoad"),
+                  description: load.why(),
+                  retry: load.retry,
+                  retrying: load.retrying(),
+                }}
+                empty={{
+                  art: "servers",
+                  title: uiText("mcpEmptyTitle"),
+                  description: uiText("mcpEmptyHint"),
+                }}
               />
             }
           >

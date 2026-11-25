@@ -3,8 +3,10 @@ import { Buffer } from "buffer";
 import { cleanup, signal, WebView } from "nsh";
 import lexerAsset from "../../../../assets/artifact-pdf-module-lexer.txt?url";
 import renderer from "../../../../assets/artifact-pdf-renderer.txt?url";
-import { Empty, grow } from "../../../components";
+import { grow } from "../../../components";
+import { EmptyState } from "../../../components/empty-state";
 import { uiText } from "../../../i18n";
+import { LOAD_PATIENCE_MS } from "../../../services/load-status";
 import { artifactPdf, decodePdfPage } from "./pdf";
 import {
   artifactDocumentOrigin,
@@ -115,6 +117,12 @@ export function ArtifactPdfPreview(props: {
   });
 
   async function readDocument() {
+    // The fetches have no deadline of their own: one that hangs ends in "did not open", not in
+    // "Opening preview…" for ever.
+    startup = setTimeout(() => {
+      loading.abort();
+      props.onError(uiText("artifactPreviewLoadError"));
+    }, LOAD_PATIENCE_MS);
     try {
       const [page, code, parser] = await Promise.all([
         fetch(props.url, {
@@ -141,6 +149,7 @@ export function ArtifactPdfPreview(props: {
       if (source.length > maxDocumentBytes || !rasterizer || !lexer)
         throw new Error("Artifact document exceeds render limits");
       if (!loading.signal.aborted) {
+        clearTimeout(startup);
         startup = setTimeout(
           () => props.onError(uiText("artifactPreviewLoadError")),
           20_000,
@@ -227,7 +236,18 @@ export function ArtifactPdfPreview(props: {
   }
 
   return (
-    <If when={html()} else={<Empty title={uiText("openingPreview")} />}>
+    <If
+      when={html()}
+      else={
+        <EmptyState
+          size="page"
+          status="loading"
+          loading={uiText("openingPreview")}
+          error={null}
+          empty={{ title: uiText("openingPreview") }}
+        />
+      }
+    >
       <WebView
         baseUrl={artifactDocumentOrigin}
         html={html()}

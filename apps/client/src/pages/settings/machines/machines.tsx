@@ -15,12 +15,16 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
+import { EmptyState } from "../../../components/empty-state";
+import { ListSkeleton } from "../../../components/loading-skeleton";
 import { MenuRule } from "../../../components/menu";
 import { StatusDot } from "../../../components/status-dot";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText, useText } from "../../../i18n";
 import { relativeTime, useHost } from "../../../services/host";
-import { SectionHeader } from "../section";
+import { useLoadState } from "../../../services/load-status";
+import { problemText } from "../../../services/problem-text";
+import { emptyStyle, SectionHeader } from "../section";
 import { AddMachine } from "./add-machine";
 import { MachineDetail, machineSystem } from "./machine-detail";
 import {
@@ -239,7 +243,7 @@ function MachineRow(props: {
         <If
           when={
             machineUpdate.state() === "failed"
-              ? props.item.updateError
+              ? problemText(props.item.updateError ?? "")
               : undefined
           }
         >
@@ -351,6 +355,7 @@ export function Machines(props: {
   const visible = () =>
     props.machines.filter((item) => item.status !== "revoked");
   const machine = () => visible().find((item) => item.id === machineId());
+  const load = useLoadState({ targets: () => ["machines"] });
   return (
     <>
       <If when={!adding() || phone()}>
@@ -397,6 +402,35 @@ export function Machines(props: {
           </View>
         </SectionHeader>
         <SmoothScroll style={grow} scrollbar={false}>
+          <If when={!visible().length}>
+            <EmptyState
+              size="page"
+              width="narrow"
+              style={emptyStyle}
+              status={load.shown()}
+              loading={<ListSkeleton label={uiText("loadingMachines")} />}
+              error={{
+                title: uiText("machinesDidNotLoad"),
+                description: load.why(),
+                retry: load.retry,
+                retrying: load.retrying(),
+              }}
+              empty={{
+                art: "machines",
+                title: uiText("noMachinesYet"),
+                description: uiText("noMachinesYetHint"),
+                actions: host.can("machines.enroll")
+                  ? [
+                      {
+                        label: uiText("addMachine"),
+                        icon: "plus",
+                        onPress: () => adding.set(true),
+                      },
+                    ]
+                  : undefined,
+              }}
+            />
+          </If>
           <Each of={visible()} key={(item) => item.id}>
             {(item) => (
               <MachineRow

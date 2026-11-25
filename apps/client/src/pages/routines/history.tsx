@@ -6,6 +6,7 @@ import { StatusDot } from "../../components/status-dot";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
+import { problemText } from "../../services/problem-text";
 import { clockDistance, feedTime, runHistory, scheduleLabel } from "./schedule";
 
 export function RoutineHistory(props: {
@@ -290,7 +291,7 @@ export function EarlierReportCard(props: {
               {uiText("noReport")}
             </Label>
             <Label tone="muted" lines={1} style={{ flex: 1, minWidth: 0 }}>
-              {props.run.error ?? ""}
+              {problemText(props.run.error ?? "")}
             </Label>
             {retry()}
           </View>
@@ -303,7 +304,7 @@ export function EarlierReportCard(props: {
             </Label>
           </View>
           <Label tone="muted" lines={1} style={{ flex: 1 }}>
-            {props.run.error ?? ""}
+            {problemText(props.run.error ?? "")}
           </Label>
           {retry()}
         </If>

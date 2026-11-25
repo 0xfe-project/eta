@@ -30,6 +30,7 @@ import {
 } from "../../components/tokens";
 import { formatLocale, localizedText, uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
+import { problemText } from "../../services/problem-text";
 import { reportBody, RoutineHistory } from "./history";
 import {
   clockTime,
@@ -117,7 +118,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
       ? localizedText("Skipped", "已跳过")
       : uiText("failed");
   const error = () =>
-    props.run.error ??
+    (props.run.error && problemText(props.run.error)) ??
     (props.run.status === "skipped"
       ? uiText("theRoutineWasSkipped")
       : localizedText(
@@ -454,7 +455,9 @@ export function RoutineReport(props: RoutineReportProps) {
                   </Label>
                 </View>
                 <Label tone={props.phone ? "muted" : "mutedInk"}>
-                  {props.run.error ?? uiText("theRoutineWasSkipped")}
+                  {props.run.error
+                    ? problemText(props.run.error)
+                    : uiText("theRoutineWasSkipped")}
                 </Label>
                 <View
                   style={{ ...row, paddingTop: props.phone ? space[4] : 0 }}

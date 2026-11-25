@@ -182,4 +182,8 @@ export const modelSourcesMessages = {
     "Unknown error ({{code}}): {{message}}",
     "未知错误（{{code}}）：{{message}}",
   ],
+  modelReadOffline: [
+    "Offline. The balance is read again once connected.",
+    "离线中，连上后再读余额。",
+  ],
 } as const;

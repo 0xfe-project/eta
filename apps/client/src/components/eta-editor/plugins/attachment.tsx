@@ -16,6 +16,7 @@ import {
   fileSize as pictureSize,
   useAttachmentPictures,
 } from "../../../services/pictures";
+import { problemText } from "../../../services/problem-text";
 import { hint } from "../../controls";
 import { Lightbox, picturePreview } from "../../picture-viewer";
 import { colors } from "../../theme";
@@ -270,10 +271,7 @@ export function attachment(options: {
       void Promise.all(
         files.map((file) =>
           pastedFile(file).catch((error: unknown) =>
-            refusedFile(
-              file.name,
-              error instanceof Error ? error.message : String(error),
-            ),
+            refusedFile(file.name, problemText(error)),
           ),
         ),
       ).then((converted) => place(converted, editor));

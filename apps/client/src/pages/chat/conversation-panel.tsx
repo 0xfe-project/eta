@@ -20,6 +20,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import { ModelSelect } from "../../components/model-select";
 import { CloseButton } from "../../components/navigation-buttons";
 import { icon, space } from "../../components/tokens";
@@ -272,9 +273,16 @@ export function ConversationPanel(props: {
                           <If
                             when={approvals().length}
                             else={
-                              <Label variant="small">
-                                {uiText("nothingIsWaitingForApproval")}
-                              </Label>
+                              <EmptyState
+                                size="row"
+                                status="empty"
+                                loading={null}
+                                error={null}
+                                empty={{
+                                  title: uiText("nothingIsWaitingForApproval"),
+                                }}
+                                style={{ paddingHorizontal: 0 }}
+                              />
                             }
                           >
                             <Each of={approvals()} key={(op) => op.id}>

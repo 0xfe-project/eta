@@ -1,6 +1,5 @@
 export { ActionItem, ActionMenu, Button, Field } from "./controls";
 export { Compact } from "./density";
-export { Empty, emptyWidth } from "./empty";
 export { Header } from "./header";
 export {
   CompactSkeleton,

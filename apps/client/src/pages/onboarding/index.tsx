@@ -19,6 +19,7 @@ import { StatusDot } from "../../components/status-dot";
 import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { AddSource } from "../settings/models/add-source";
 import { ProviderDetail } from "../settings/models/provider-detail";
 import { PersonaStep } from "./persona-step";
@@ -132,7 +133,7 @@ export function Onboard(props: { phone: boolean; onClose: () => void }) {
       }
       step.set(3);
     } catch (cause) {
-      error.set(cause instanceof Error ? cause.message : String(cause));
+      error.set(problemText(cause));
     } finally {
       working.set(false);
       activeCard.set("");

@@ -76,6 +76,7 @@ function Fixture() {
           additions={new Map()}
           recipients={new Map()}
           members={[]}
+          target="conversations.fixture"
           loaded
           noCachedMessages={false}
           hasMessages

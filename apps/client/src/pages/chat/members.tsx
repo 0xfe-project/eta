@@ -16,6 +16,7 @@ import {
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { CheckControl } from "../../components/check-control";
+import { EmptyState } from "../../components/empty-state";
 import {
   canHover,
   inSheet,
@@ -40,6 +41,7 @@ import {
 } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
 
 /** The steward menu's rows: a sheet's on phones, a list row elsewhere (a touch screen's are
  * `touchRow`). */
@@ -197,6 +199,7 @@ export function InviteAgents(props: {
   const title = () => uiText("inviteAgents");
   const selected = signal<string[]>([]);
   const saving = signal(false);
+  const agentsLoad = useLoadState({ targets: () => ["agents"] });
   const candidates = () =>
     host
       .people()
@@ -315,7 +318,22 @@ export function InviteAgents(props: {
             )}
           </Each>
           <If when={!candidates().length}>
-            <Label tone="muted">{uiText("allAgentsAreAlreadyMembers")}</Label>
+            <EmptyState
+              size="row"
+              status={agentsLoad.shown()}
+              loading={uiText("loadingAgents")}
+              error={{
+                title: uiText("agentsDidNotLoad"),
+                retry: agentsLoad.retry,
+                retrying: agentsLoad.retrying(),
+              }}
+              empty={{
+                title: host.people().length
+                  ? uiText("allAgentsAreAlreadyMembers")
+                  : uiText("settingsNoAgents"),
+              }}
+              style={{ paddingHorizontal: 0 }}
+            />
           </If>
         </SmoothScroll>
       </View>

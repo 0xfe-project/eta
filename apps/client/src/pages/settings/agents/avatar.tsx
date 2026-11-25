@@ -11,6 +11,7 @@ import {
 } from "nsh";
 import { Button, colors, focusRing, Label, row } from "../../../components";
 import { AgentFace } from "../../../components/agent-face";
+import { motion as appMotion } from "../../../components/motion";
 import {
   avatar,
   control,
@@ -20,6 +21,7 @@ import {
 } from "../../../components/tokens";
 import { localizedText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 import { EditorRow } from "./editor-row";
 
 /** The avatar row's picker beside its label. */
@@ -29,12 +31,6 @@ const avatarFieldWidth = 300;
 const HISTORY = 8;
 /** Faces the large avatar passes over before it lands. */
 const FLICKS = 3;
-/** How long each passing face shows. */
-const FLICK_MS = 60;
-/** How long the landed face settles. */
-const SETTLE_MS = 160;
-/** How long a face taken back from the recent ones fades in. */
-const FADE_MS = 120;
 const settleEasing: Easing = [0.2, 0, 0, 1];
 
 /** The one source of faces: passing and landed alike. */
@@ -90,17 +86,24 @@ export function createAvatarDraw(agentId: string) {
     if (reduceMotion()) return;
     if (motion === "fade") {
       opacity.set(0);
-      void opacity.timing(1, { duration: FADE_MS, easing: "linear" });
+      void opacity.timing(1, {
+        duration: appMotion.avatarFade,
+        easing: "linear",
+      });
       return;
     }
     scale.set(motion === "flick" ? 0.94 : 0.9);
     void scale.timing(1, {
-      duration: motion === "flick" ? FLICK_MS : SETTLE_MS,
+      duration:
+        motion === "flick" ? appMotion.avatarFlick : appMotion.avatarSettle,
       easing: motion === "flick" ? "linear" : settleEasing,
     });
     if (motion === "settle") {
       turn.set(-6);
-      void turn.timing(0, { duration: SETTLE_MS, easing: settleEasing });
+      void turn.timing(0, {
+        duration: appMotion.avatarSettle,
+        easing: settleEasing,
+      });
     }
   }
 
@@ -120,9 +123,7 @@ export function createAvatarDraw(agentId: string) {
           // A later face has taken its place: that one's answer settles it.
           if (untracked(pending) !== next) return;
           pending.set(null);
-          failure.set(
-            problem instanceof Error ? problem.message : String(problem),
-          );
+          failure.set(problemText(problem));
         },
       );
   }
@@ -142,12 +143,13 @@ export function createAvatarDraw(agentId: string) {
     const at = (ms: number, step: () => void) =>
       timers.push(setTimeout(step, ms));
     flick();
-    for (let frame = 1; frame < FLICKS; frame++) at(frame * FLICK_MS, flick);
-    at(FLICKS * FLICK_MS, () => {
+    for (let frame = 1; frame < FLICKS; frame++)
+      at(frame * appMotion.avatarFlick, flick);
+    at(FLICKS * appMotion.avatarFlick, () => {
       passing.set(null);
       wear(drawSeed(), "settle");
     });
-    at(FLICKS * FLICK_MS + SETTLE_MS, () => {
+    at(FLICKS * appMotion.avatarFlick + appMotion.avatarSettle, () => {
       timers.length = 0;
       rolling.set(false);
     });

@@ -22,6 +22,7 @@ import {
   row,
   textFaces,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import { shownWhile } from "../../components/pending";
 import { Spinner } from "../../components/spinner";
 import { control, icon, opacity, space } from "../../components/tokens";
@@ -102,6 +103,35 @@ export function DirectoryOptions(props: {
     }
   };
 
+  const waiting = () =>
+    localizedText("Waiting for the machine…", "正在等待机器响应…");
+  /** What an empty step says: what it lists, and the search that found none. */
+  const nothing = () => {
+    const words = query().trim();
+    if (kind() === "machine")
+      return words
+        ? localizedText(
+            `No machines match “${words}”`,
+            `没有匹配「${words}」的机器`,
+          )
+        : localizedText("No machines yet", "还没有机器");
+    if (kind() === "browse")
+      return words
+        ? localizedText(
+            `No folders match “${words}”`,
+            `没有匹配「${words}」的目录`,
+          )
+        : localizedText("No folders in here", "这个目录里没有子目录");
+    return words
+      ? localizedText(
+          `No directories match “${words}”`,
+          `没有匹配「${words}」的目录`,
+        )
+      : localizedText(
+          "No recent places yet. Search, or enter a path.",
+          "还没有最近用过的位置。搜索或输入路径。",
+        );
+  };
   // The bindings leave with these rows, so Enter can edit the conversation name on the members step.
   const move = (direction: "next" | "previous") => {
     if (!busy() && !clone())
@@ -345,21 +375,28 @@ export function DirectoryOptions(props: {
           style={{ paddingHorizontal: space[8] }}
         />
       </If>
+      <If when={rows().length > 0 && (loading() || busy())}>
+        <Label tone="muted" style={{ padding: space[16] }}>
+          {waiting()}
+        </Label>
+      </If>
       <If
         when={
-          kind() === "search" &&
-          query() &&
-          !loading() &&
           rows().length === 0 &&
-          !error()
+          !error() &&
+          kind() !== "github" &&
+          kind() !== "new-name"
         }
       >
-        <Label tone="muted" style={{ padding: space[16] }}>
-          {localizedText(
-            "No directories match this search.",
-            "没有匹配的目录。",
-          )}
-        </Label>
+        <EmptyState
+          size="row"
+          status={loading() || busy() ? "loading" : "empty"}
+          loading={waiting()}
+          error={null}
+          empty={{ title: nothing() }}
+          announce={!!query()}
+          style={{ padding: space[16] }}
+        />
       </If>
       <If when={kind() === "github" && rows().length === 0 && !loading()}>
         <Label tone="muted" style={{ padding: space[16] }}>

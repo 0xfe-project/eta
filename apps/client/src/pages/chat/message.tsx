@@ -39,6 +39,7 @@ import {
   row,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { EmptyState } from "../../components/empty-state";
 import {
   chatText,
   shownFiles,
@@ -55,6 +56,7 @@ import {
 } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
+import { problemReason } from "../../services/problem-text";
 import { Popover } from "../../ui";
 import { subtasksOf, TaskSummary } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
@@ -262,6 +264,14 @@ export function Message(props: {
         .find((entry) => entry.id === ref.artifactId);
       return artifact ? [{ ref, artifact }] : [];
     });
+  /** Artifacts the reply published that the host's list no longer has: deleted. */
+  const goneArtifacts = () =>
+    host.state().targets.artifacts
+      ? publishedRefs(active() ? [] : steps()).filter(
+          (ref) =>
+            !host.artifacts().some((entry) => entry.id === ref.artifactId),
+        )
+      : [];
   // While it works, everything is in the window and nothing outside it.
   const widgets = () =>
     (active() ? [] : steps()).flatMap((step) => {
@@ -295,8 +305,9 @@ export function Message(props: {
     const code = String(item().data.code ?? "");
     const reason = failureReasons[code] ?? "replyFailed";
     // The host's own words say why; after a restart they only repeat it.
-    const detail = code === "restart" || !item().text ? "" : ` ${item().text}`;
-    return `${uiText(reason)}${detail}`;
+    const detail =
+      code === "restart" || !item().text ? "" : problemReason(item().text);
+    return detail ? `${uiText(reason)} ${detail}` : uiText(reason);
   };
   const discarded = () => item().data.discarded === true;
   const busy = signal(false);
@@ -457,6 +468,26 @@ export function Message(props: {
         </View>
       </If>
       <If when={item().kind === "task_card" || item().kind === "task_draft"}>
+        <If
+          when={
+            item().kind === "task_card" &&
+            !task() &&
+            !!host.state().targets.tasks
+          }
+        >
+          <EmptyState
+            size="row"
+            status="empty"
+            loading={null}
+            error={null}
+            empty={{ title: uiText("taskGone") }}
+            style={{
+              paddingHorizontal: space[12],
+              borderWidth: 1,
+              borderColor: c().border,
+            }}
+          />
+        </If>
         <If when={task()}>
           {(value) => (
             <TaskSummary
@@ -881,6 +912,18 @@ export function Message(props: {
               onPress={() =>
                 props.onArtifact(entry().artifact, entry().ref.version)
               }
+            />
+          )}
+        </Each>
+        <Each of={goneArtifacts()} key={(ref) => ref.id}>
+          {() => (
+            <EmptyState
+              size="row"
+              status="empty"
+              loading={null}
+              error={null}
+              empty={{ title: uiText("artifactDeleted") }}
+              style={{ paddingHorizontal: 0 }}
             />
           )}
         </Each>

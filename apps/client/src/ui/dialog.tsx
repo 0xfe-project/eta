@@ -3,9 +3,9 @@ import { cleanup, Overlay, platform, signal, View, windowSize } from "nsh";
 import { Dialog } from "nsh/base";
 import { Regular } from "../components/density";
 import { fade, fadeIn, fadeOut, motion, passing } from "../components/motion";
+import { ProgressNotificationLayer } from "../components/progress-notification";
 import { screenInsets } from "../components/safe-area";
 import { colors, fill, row } from "../components/theme";
-import { ProgressNotificationLayer } from "../components/progress-notification";
 import { ToastLayer } from "../components/toast";
 import {
   control,

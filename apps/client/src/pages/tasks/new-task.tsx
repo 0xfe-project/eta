@@ -134,6 +134,9 @@ export function NewTask(props: {
               value={host.agent(executor())?.name ?? uiText("unassigned")}
               truncateValue
               triggerStyle={select}
+              empty={
+                host.people().length ? undefined : uiText("noAgentsToPick")
+              }
             >
               <Each of={host.people()} key={(entry) => entry.id}>
                 {(entry) => (
@@ -207,6 +210,7 @@ export function NewTask(props: {
               }
               truncateValue
               triggerStyle={{ ...link, maxWidth: waitsForWidth }}
+              empty={tasks().length ? undefined : uiText("noTasksToWaitFor")}
             >
               <Each of={tasks()} key={(task) => task.id}>
                 {(task) => (

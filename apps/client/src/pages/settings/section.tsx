@@ -23,11 +23,9 @@ const statusLaneWidth = 100;
 /** The box a row's leading avatar, logo or glyph sits in when it is not the default 24. */
 export const leadingBoxWidth = 28;
 
-/** An empty pane says so right under its header, not in the middle of the pane. */
+/** An empty pane says so right under its header, in line with it: an `EmptyState`'s inset in
+ * Settings. */
 export const emptyStyle: ViewStyle = {
-  flex: 0,
-  justifyContent: "flex-start",
-  gap: space[4],
   paddingVertical: space[24],
   paddingHorizontal: space[16],
 };
