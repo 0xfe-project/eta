@@ -30,6 +30,11 @@ export class CredentialRows implements CredentialStore {
     return this.#table.read(INTEGRATION, serverKey, kind) !== undefined;
   }
 
+  /** When this credential was saved (epoch milliseconds); undefined when none is stored. */
+  savedAt(serverKey: string, kind: CredentialKind): number | undefined {
+    return this.#table.writtenAt(INTEGRATION, serverKey, kind);
+  }
+
   /** A short stamp of the stored value (never the value): changes when a new sign-in is stored. */
   stamp(serverKey: string, kind: CredentialKind): string | undefined {
     const value = this.#table.read(INTEGRATION, serverKey, kind);

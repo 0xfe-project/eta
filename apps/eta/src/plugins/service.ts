@@ -24,7 +24,12 @@ import type {
   Redaction,
   SessionMcpServer,
 } from "@eta/client-contracts";
-import type { McpConfigSource, McpServerEntry } from "@eta/mcp";
+import type {
+  CredentialRecord,
+  McpConfigSource,
+  McpServerEntry,
+  RefreshStoredTokensOptions,
+} from "@eta/mcp";
 import type { RuntimeExtras, SessionMeta } from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { Buffer } from "node:buffer";
@@ -43,6 +48,7 @@ import {
 } from "@eta/client-contracts/plugin-fields";
 import {
   claimServerNames,
+  mcpServerKey,
   plainRemote,
   pluginChunks,
   pluginMcpSources,
@@ -52,6 +58,8 @@ import {
   toMcpEntries,
   withSessionServers,
 } from "@eta/daemon";
+import { createRefreshDedupingFetch, refreshStoredTokens } from "@eta/mcp";
+import { CredentialRows } from "../mcp/credentials";
 import { CURSOR_AUTH_HEADER, isCursorServer } from "./cursor-login";
 import {
   envProblem,
@@ -74,7 +82,12 @@ export interface PluginsOptions {
   /** Say that what plugins are, or what agents make of them, moved. */
   changed: () => void;
   warn: (message: string) => void;
+  /** What refreshes a sign-in, shared with the connections that use it (`McpService.refreshFetch`). */
+  fetchFn?: RefreshStoredTokensOptions["fetchFn"];
 }
+
+/** A sign-in token this close to its end is refreshed before it is handed out. */
+const EXPIRY_MARGIN_MS = 60_000;
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -126,6 +139,11 @@ export class Plugins {
   readonly #hub: MachineHub;
   readonly #changed: () => void;
   readonly #warn: (message: string) => void;
+  /** The MCP sign-ins: what an external runtime's remote servers are sent as their token. */
+  readonly #signIns: CredentialRows;
+  readonly #refreshFetch: RefreshStoredTokensOptions["fetchFn"];
+  /** The sign-in tokens handed to external runtimes, by `plugin.server`: no session may read them. */
+  readonly #handedOut = new Map<string, string>();
   /** What a daemon has, by machine, of the commands asked about. */
   readonly #found = new Map<string, Set<string>>();
   /** The sends in flight, by `machine:hash`. */
@@ -149,6 +167,8 @@ export class Plugins {
     this.#hub = options.hub;
     this.#changed = options.changed;
     this.#warn = options.warn;
+    this.#signIns = new CredentialRows(options.db, options.key);
+    this.#refreshFetch = options.fetchFn ?? createRefreshDedupingFetch();
     // A machine that connects (or reconnects) is asked again what it has.
     options.hub.onReady(() => void this.recheck());
   }
@@ -393,13 +413,18 @@ export class Plugins {
     const { agentId } = meta;
     if (agentId === undefined) return {};
     const { active } = this.#split(agentId);
+    const external = meta.runtime !== undefined && meta.runtime !== "eta";
     return withSessionServers(
       await runtimeExtras(
-        active.map((entry) => ({
-          plugin: entry.plugin!,
-          hash: entry.hash!,
-          config: this.#config(entry),
-        })),
+        await Promise.all(
+          active.map(async (entry) => ({
+            plugin: entry.plugin!,
+            hash: entry.hash!,
+            config: external
+              ? await this.#withSignIns(entry, this.#config(entry))
+              : this.#config(entry),
+          })),
+        ),
         { dataDir: this.#dataDir, runtime: meta.runtime, warn: this.#warn },
       ),
       this.toolkitServersFor(agentId),
@@ -436,6 +461,87 @@ export class Plugins {
             },
           ],
     );
+  }
+
+  /**
+   * A plugin's servers' configuration with the sign-in of each remote OAuth server in its headers,
+   * for a runtime that cannot sign in itself: `Authorization`, and the server's own token header if
+   * the user chose one. A server that has no sign-in, or whose sign-in cannot be refreshed, is left
+   * as it is, so its 401 reaches the agent. Headers that are already there are never replaced.
+   */
+  async #withSignIns(
+    entry: PluginEntry,
+    config: ReturnType<typeof serversConfig>,
+  ): Promise<ReturnType<typeof serversConfig>> {
+    const resolved = resolvePluginServers(
+      [{ plugin: entry.plugin!, config }],
+      this.#dataDir,
+      () => {},
+    );
+    const entries = toMcpEntries(resolved);
+    const next = { ...config };
+    const has = (headers: Record<string, string>, name: string): boolean =>
+      Object.keys(headers).some(
+        (one) => one.toLowerCase() === name.toLowerCase(),
+      );
+    for (const server of resolved) {
+      if (server.type === "stdio" || entries[server.name]?.auth !== "oauth")
+        continue;
+      const token = await this.#signInToken(entry.name, server);
+      if (token === undefined) continue;
+      const tokenHeader = config[server.server]?.tokenHeader;
+      const headers = { ...config[server.server]?.headers };
+      if (!has(server.headers, "authorization"))
+        headers.Authorization = `Bearer ${token}`;
+      if (tokenHeader !== undefined && !has(server.headers, tokenHeader.name))
+        headers[tokenHeader.name] =
+          tokenHeader.format === "bearer" ? `Bearer ${token}` : token;
+      next[server.server] = { ...config[server.server], headers };
+    }
+    return next;
+  }
+
+  /** The access token of a server's stored sign-in, refreshed first when it has run out. */
+  async #signInToken(
+    plugin: string,
+    server: { server: string; url: string },
+  ): Promise<string | undefined> {
+    const who = `plugin ${plugin}: server ${server.server}`;
+    const serverKey = mcpServerKey(server.url);
+    let tokens: CredentialRecord["tokens"] | undefined =
+      await this.#signIns.get(serverKey, "tokens");
+    if (tokens === undefined) {
+      this.#warn(`[eta] ${who} has no sign-in; it is sent without a token`);
+      return undefined;
+    }
+    const savedAt = this.#signIns.savedAt(serverKey, "tokens");
+    if (
+      tokens.expires_in !== undefined &&
+      savedAt !== undefined &&
+      savedAt + tokens.expires_in * 1000 - EXPIRY_MARGIN_MS <= Date.now()
+    ) {
+      try {
+        tokens = await refreshStoredTokens({
+          serverKey,
+          serverUrl: server.url,
+          store: this.#signIns,
+          fetchFn: this.#refreshFetch,
+        });
+      } catch (error) {
+        this.#warn(
+          `[eta] ${who}: its sign-in expired and could not be refreshed (${messageOf(error)}); it is sent without a token`,
+        );
+        return undefined;
+      }
+      if (tokens === undefined) {
+        this.#warn(
+          `[eta] ${who}: its sign-in expired and has no refresh token; it is sent without a token`,
+        );
+        return undefined;
+      }
+    }
+    this.#handedOut.set(`${plugin}.${server.server}`, tokens.access_token);
+    return tokens.access_token;
   }
 
   /**
@@ -508,6 +614,9 @@ export class Plugins {
     if (host !== undefined)
       redactions.push({ value: host, label: "[secret cursor credential]" });
     redactions.push(...(this.#virtual?.secrets() ?? []));
+    // A sign-in token an external runtime was given is as secret as a header the user attached.
+    for (const [label, value] of this.#handedOut)
+      redactions.push({ value, label: `[secret ${label} sign-in]` });
     for (const entry of this.registry.entries()) {
       if (entry.plugin === undefined) continue;
       // A header the user attached is a credential too, and no agent may read it.
@@ -543,6 +652,8 @@ export class Plugins {
   async openOn(link: MachineLink, agentId: string): Promise<OpenedPlugin[]> {
     const active = this.active(agentId);
     if (active.length === 0) return [];
+    const runtime = this.#agents.get(agentId)?.runtime;
+    const external = runtime !== undefined && runtime !== "eta";
     const { missing } = await link.machine("pluginHave", {
       hashes: [...new Set(active.map((entry) => entry.hash!))],
     });
@@ -559,8 +670,11 @@ export class Plugins {
       opened.push({
         name: entry.name,
         hash: entry.hash!,
-        // An external runtime and eta's own loop both start the servers on the machine.
-        servers: this.#config(entry),
+        // An external runtime and eta's own loop both start the servers on the machine. Only an
+        // external runtime is given the sign-in token: eta's own loop signs in on its own.
+        servers: external
+          ? await this.#withSignIns(entry, this.#config(entry))
+          : this.#config(entry),
       });
     }
     return opened;

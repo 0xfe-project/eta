@@ -10,6 +10,10 @@ export {
 } from "./login";
 export { createOAuthProvider, type OAuthProviderOptions } from "./provider";
 export {
+  refreshStoredTokens,
+  type RefreshStoredTokensOptions,
+} from "./refresh";
+export {
   type CredentialKind,
   type CredentialRecord,
   type CredentialStore,

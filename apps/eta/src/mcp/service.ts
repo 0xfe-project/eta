@@ -130,6 +130,11 @@ export class McpService {
     });
   }
 
+  /** The fetch that makes everything refreshing a sign-in share one request. */
+  get refreshFetch(): Awaited<ReturnType<typeof createRefreshDedupingFetch>> {
+    return this.#fetch;
+  }
+
   list(): McpServerView[] {
     const views = new Map<string, McpServerView>();
     const add = (

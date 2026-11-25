@@ -580,6 +580,7 @@ export function createProduct(options: {
       wire?.pushNow("mcp");
     },
     warn,
+    fetchFn: mcp.refreshFetch,
   });
   later.plugins = plugins;
   const router = new RemoteSessionsRouter({
