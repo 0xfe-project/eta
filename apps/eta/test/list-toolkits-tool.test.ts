@@ -11,7 +11,7 @@ import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { createOarRuntimes } from "@eta/runtime-oar";
 import { describe, expect, it } from "vitest";
-import { call, say, scriptedModels } from "./support/models";
+import { say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
 
 /** A group of the agent alone, a message to it, and the end of its reply. */
@@ -44,39 +44,30 @@ async function rpc(
 }
 
 describe("list_toolkits", () => {
-  it("is among the tools of an agent on eta's own loop, which can call it", async () => {
+  it("is not among the tools of an agent on eta's own loop that has no Composio toolkit, which keeps get_plugin_config", async () => {
     const offered: string[][] = [];
-    let answer = "";
     const { models } = scriptedModels((request) => {
       offered.push(request.tools);
-      if (request.lastRole === "toolResult") {
-        answer = request.last;
-        return say("done");
-      }
-      return call("list_toolkits", {});
+      return say("done");
     });
     const w = await world({ models });
     await ask(w, await w.agent("Ada"), "which toolkits do I have?");
-    expect(offered[0]).toContain("list_toolkits");
-    expect(JSON.parse(answer)).toMatchObject({ toolkits: [] });
+    expect(offered[0]).toContain("get_plugin_config");
+    expect(offered[0]).not.toContain("list_toolkits");
   });
 
-  it("is in the tool list of eta's MCP server for an agent on an external runtime, and can be called", async () => {
-    let listed: { name: string; inputSchema: unknown }[] = [];
-    let answer: { content: { text: string }[]; isError?: boolean } | undefined;
+  it("is not in the tool list of eta's MCP server for an agent on an external runtime that has no Composio toolkit", async () => {
+    let listed: string[] = [];
     const w = await world({
       runtimes: createOarRuntimes({
         registry: createRuntimeRegistry([
           scriptedRuntime({
             id: "claude",
             turn: async (turn) => {
-              listed = (
-                (await rpc(turn, "tools/list", {})) as { tools: typeof listed }
-              ).tools;
-              answer = await rpc(turn, "tools/call", {
-                name: "list_toolkits",
-                arguments: {},
-              });
+              const result = (await rpc(turn, "tools/list", {})) as {
+                tools: { name: string }[];
+              };
+              listed = result.tools.map((one) => one.name);
               turn.say("ok");
             },
           }),
@@ -84,12 +75,7 @@ describe("list_toolkits", () => {
       }),
     });
     await ask(w, await w.agent("Cody", { runtime: "claude" }), "hi");
-    const tool = listed.find((one) => one.name === "list_toolkits");
-    expect(tool?.name).toBe("list_toolkits");
-    expect(JSON.stringify(tool!.inputSchema).length).toBeLessThan(1024);
-    expect(answer?.isError).toBeFalsy();
-    expect(JSON.parse(answer!.content[0]!.text)).toMatchObject({
-      toolkits: [],
-    });
+    expect(listed).toContain("get_plugin_config");
+    expect(listed).not.toContain("list_toolkits");
   });
 });
