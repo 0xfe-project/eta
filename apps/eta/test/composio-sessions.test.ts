@@ -1124,7 +1124,7 @@ describe("one session for the toolkits an agent has enabled", () => {
       headers: { "x-api-key": KEY },
     });
 
-    it.fails("gives an agent with two toolkits one server, from the one session", async () => {
+    it("gives an agent with two toolkits one server, from the one session", async () => {
       const { composio, plugins } = world({ ada: ["gmail", "notion"] });
       await composio.sync(["gmail", "notion"]);
       await served(plugins, "ada");
@@ -1137,7 +1137,7 @@ describe("one session for the toolkits an agent has enabled", () => {
       expect(posts()).toHaveLength(1);
     });
 
-    it.fails("gives two agents that have the same toolkits the same one server", async () => {
+    it("gives two agents that have the same toolkits the same one server", async () => {
       const { composio, plugins } = world({
         ada: ["gmail", "notion"],
         bob: ["notion", "gmail"],

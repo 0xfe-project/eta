@@ -408,20 +408,19 @@ export class Plugins {
   }
 
   /**
-   * The agent's ready Composio toolkits in the shape an external runtime takes. On this machine
-   * they come after the installed plugins' servers (`runtimeExtrasFor`); on a daemon's they go in
-   * the open (`OpenSessionArgs.mcpServers`), since they are no files to send, and the daemon puts
-   * them after the plugins' the same way.
+   * The agent's ready Composio toolkits in the shape an external runtime takes: the one server of
+   * their one session, as eta's own loop is given it. On this machine it comes after the installed
+   * plugins' servers (`runtimeExtrasFor`); on a daemon's it goes in the open
+   * (`OpenSessionArgs.mcpServers`), since it is no file to send, and the daemon puts it after the
+   * plugins' the same way.
    */
   toolkitServersFor(agentId: string): SessionMcpServer[] {
-    return this.#split(agentId).virtual.flatMap((name) =>
-      this.#sessionServersOf(name),
-    );
+    return this.#sessionServersOf(this.#split(agentId).virtual);
   }
 
-  /** A virtual plugin's servers in the shape an external runtime takes. */
-  #sessionServersOf(name: string): SessionMcpServer[] {
-    const source = this.#virtual?.mcpSource(name);
+  /** The servers of a set of virtual plugins in the shape an external runtime takes. */
+  #sessionServersOf(names: readonly string[]): SessionMcpServer[] {
+    const source = this.#virtual?.mcpSource(names);
     if (source === undefined) return [];
     return Object.entries(source.servers).flatMap(([server, entry]) =>
       entry.url === undefined
