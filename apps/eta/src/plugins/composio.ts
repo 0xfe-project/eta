@@ -488,6 +488,28 @@ export class Composio {
       .map(({ slug, name, description }) => ({ slug, name, description }));
   }
 
+  /**
+   * The toolkits among these plugin names as an agent is told of them: the slug, the display name
+   * (the slug when the kept list has none), and whether a session that has it is ready (null when
+   * none was tried). Only what eta already holds: no request, nothing of the key or of a session.
+   * Nothing while the source is off.
+   */
+  toolkitsFor(
+    names: readonly string[],
+  ): { slug: string; name: string; ready: boolean | null }[] {
+    if (!this.source().enabled) return [];
+    const slugs = names.flatMap((name) => this.#slugOf(name) ?? []);
+    const named = new Map(
+      this.toolkitsOf(slugs).map((one) => [one.slug, one.name]),
+    );
+    const states = this.#states();
+    return slugs.map((slug) => ({
+      slug,
+      name: named.get(slug) ?? slug,
+      ready: states.has(slug) ? states.get(slug) === "ready" : null,
+    }));
+  }
+
   /** The logo address of a toolkit in the list last read (or kept); null when there is none. */
   logoOf(slug: string): string | null {
     if (this.#logos === undefined && this.#apiKey() !== undefined) {
