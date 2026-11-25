@@ -27,15 +27,26 @@ export function scheduleLabel(schedule: RoutineSchedule) {
   }
 }
 
+/**
+ * Minutes said as the nearest unit, "in 5 minutes" or "2 hours ago", in words of our own: the
+ * native runtime has no relative-time formatter in `Intl`, and a page that calls it throws on render.
+ */
+function distance(minutes: number, direction: "In" | "Ago") {
+  if (minutes < 1) return uiText("routineThisMinute");
+  const unit = minutes >= 1440 ? "Day" : minutes >= 60 ? "Hour" : "Minute";
+  const count = Math.floor(
+    minutes / (unit === "Day" ? 1440 : unit === "Hour" ? 60 : 1),
+  );
+  return uiText(
+    `routine${direction}${unit}${count === 1 ? "" : "s"}` as const,
+    {
+      count,
+    },
+  );
+}
+
 export function runAgo(at: number) {
-  const minutes = Math.max(0, Math.floor((Date.now() - at) / 60_000));
-  const formatter = new Intl.RelativeTimeFormat(formatLocale(), {
-    numeric: "auto",
-  });
-  if (minutes >= 1440)
-    return formatter.format(-Math.floor(minutes / 1440), "day");
-  if (minutes >= 60) return formatter.format(-Math.floor(minutes / 60), "hour");
-  return formatter.format(-minutes, "minute");
+  return distance(Math.floor((Date.now() - at) / 60_000), "Ago");
 }
 
 export function runHistory(runs: RoutineSummary["runs"]) {
@@ -63,14 +74,7 @@ export function routineTime(at: number) {
 }
 
 export function clockDistance(at: number) {
-  const minutes = Math.max(0, Math.floor((at - Date.now()) / 60_000));
-  const formatter = new Intl.RelativeTimeFormat(formatLocale(), {
-    numeric: "auto",
-  });
-  if (minutes >= 1440)
-    return formatter.format(Math.floor(minutes / 1440), "day");
-  if (minutes >= 60) return formatter.format(Math.floor(minutes / 60), "hour");
-  return formatter.format(minutes, "minute");
+  return distance(Math.floor((at - Date.now()) / 60_000), "In");
 }
 
 // --- the viewer's clock ---------------------------------------------------------
@@ -80,6 +84,18 @@ export function clockDistance(at: number) {
 
 const DAY = 86_400_000;
 const pad = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * The zones to choose from, the current one first when the runtime does not list it. The native
+ * runtime has no `Intl.supportedValuesOf`; there the current zone is the only choice.
+ */
+export function timeZones(current: string) {
+  const all =
+    typeof Intl.supportedValuesOf === "function"
+      ? Intl.supportedValuesOf("timeZone")
+      : [];
+  return all.includes(current) ? all : [current, ...all];
+}
 
 function viewerTimeZone() {
   return new Intl.DateTimeFormat().resolvedOptions().timeZone;
