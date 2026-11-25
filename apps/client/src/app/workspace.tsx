@@ -45,7 +45,8 @@ import { TaskWorkspace } from "../pages/tasks/task-workspace";
 import { TemplateGallery } from "../pages/templates/gallery";
 import { requestedTemplate } from "../pages/templates/link";
 import { follow, useHost } from "../services/host";
-import { dismissTop } from "../ui/behaviors";
+import { dismissTop, topDismissable } from "../ui/behaviors";
+import { backAction } from "./back";
 
 /** The conversation list on a tablet narrower than 960. */
 const narrowListWidth = 280;
@@ -200,31 +201,41 @@ export function Workspace(props: {
         showConversation(Boolean(next.conversation));
       }),
     );
-  // The system back key on Android closes the app's own layers innermost first: a dismissable
-  // overlay (a modal, sheet, popover, menu or select), then Settings, a task pushed over its
-  // page, the conversation over the chat list, onboarding, and only then leaves the app. The
-  // web and desktop builds never register it, so their behavior is unchanged.
+  // The system back key on Android: what closes next comes from backAction, which reads the
+  // layers in the order a user sees them. The web and desktop builds never register it, so their
+  // behavior is unchanged.
   if (platform.os === "android")
     cleanup(
       BackHandler.on("press", () => {
-        // 1. A modal, sheet, popover, menu or select on the dismissable stack.
-        if (dismissTop()) return true;
-        if (settings() !== undefined) {
-          // 2. Settings, on top of every pane.
-          closeSettings(settings() as SettingsSection);
-        } else if (task() && taskLayer()) {
-          // 3. A task pushed over the page it opened from.
-          closeTask();
-        } else if (phone() && page() === "chat" && mobileOpen()) {
-          // 4. The conversation over the chat list.
-          back();
-        } else if (setup()) {
-          // 5. Onboarding.
-          setup.set(false);
-          link("chat");
-        } else {
-          // 6. Nothing left to close: leave the app.
-          BackHandler.exitApp();
+        const action = backAction({
+          overlay: topDismissable(),
+          settings: settings(),
+          task: Boolean(task() && taskLayer()),
+          phone: phone(),
+          page: page(),
+          conversation: mobileOpen(),
+          onboarding: setup(),
+        });
+        switch (action.kind) {
+          case "dismiss-overlay":
+            dismissTop();
+            break;
+          case "close-settings":
+            closeSettings(action.section);
+            break;
+          case "close-task":
+            closeTask();
+            break;
+          case "back-to-list":
+            back();
+            break;
+          case "leave-onboarding":
+            setup.set(false);
+            link("chat");
+            break;
+          case "exit-app":
+            BackHandler.exitApp();
+            break;
         }
         return true;
       }),

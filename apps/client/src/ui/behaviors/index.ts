@@ -4,6 +4,7 @@ export {
   createDismissable,
   dismissStackSize,
   dismissTop,
+  topDismissable,
 } from "./dismissable";
 export { createPressable } from "./pressable";
 export { definePrimitive } from "./primitive";

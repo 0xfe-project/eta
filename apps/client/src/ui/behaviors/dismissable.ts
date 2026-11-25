@@ -53,6 +53,17 @@ export function createDismissable(options: {
 }
 
 /**
+ * Reports the topmost layer without dismissing it: is there one, and does it let itself be
+ * dismissed right now? A layer that is present but disabled (a busy confirmation, say) still
+ * sits on top, so a caller can tell "nothing open" apart from "open and holding".
+ */
+export function topDismissable(): "absent" | "dismissable" | "blocked" {
+  const top = stack().at(-1);
+  if (!top) return "absent";
+  return top.enabled() ? "dismissable" : "blocked";
+}
+
+/**
  * Dismisses the topmost layer if one allows dismissal, so a caller (the Android back
  * handler, say) can chain to the layer under it. Returns whether anything was dismissed.
  */
