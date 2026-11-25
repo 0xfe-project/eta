@@ -1,6 +1,5 @@
 import { View } from "nsh";
 import {
-  Button,
   colors,
   Icon,
   Label,
@@ -10,9 +9,12 @@ import {
   SkeletonReveal,
 } from "../../components";
 import { CheckControl } from "../../components/check-control";
+import { EmptyState } from "../../components/empty-state";
 import { settled } from "../../components/pending";
 import { icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 
 export interface Persona {
   id: string;
@@ -26,8 +28,6 @@ const lineHeight = 12;
 const stateBarWidth = 40;
 /** The column at a row's end: its state, or the install bar. */
 const stateWidth = 96;
-/** How wide the reason under "Unable to load agents" runs. */
-const reasonWidth = 320;
 const skeletonRows = {
   wide: [
     [88, 420],
@@ -116,12 +116,7 @@ export function PersonaStep(props: {
 }) {
   const c = colors();
   const ready = settled(() => !props.loading);
-  const emptyState = {
-    alignItems: "center",
-    paddingVertical: space[40],
-    paddingHorizontal: space[24],
-    gap: space[8],
-  } as const;
+  const host = useHost();
   return (
     <>
       <View
@@ -148,35 +143,21 @@ export function PersonaStep(props: {
         <If when={!ready()}>
           <PersonaSkeleton phone={props.phone} />
         </If>
-        <If when={ready() && props.missing}>
-          <View style={emptyState}>
-            <Icon name="warning" size={icon.md} tone="red" />
-            <Label weight={weight.regular} style={{ textAlign: "center" }}>
-              {uiText("unableToLoadAgents")}
-            </Label>
-            <Label
-              variant="small"
-              tone="muted"
-              style={{ maxWidth: reasonWidth, textAlign: "center" }}
-            >
-              {props.missingReason || uiText("theHostDidntAnswerCheckYour")}
-            </Label>
-            <If when={props.onRetry}>
-              <Button
-                label={uiText("retry")}
-                icon="refresh"
-                style={{ marginTop: space[8], paddingHorizontal: space[12] }}
-                onPress={() => props.onRetry?.()}
-              />
-            </If>
-          </View>
-        </If>
-        <If when={ready() && !(props.missing || props.cards.length)}>
-          <View style={emptyState}>
-            <Label weight={weight.regular} style={{ textAlign: "center" }}>
-              {uiText("noPersonaCardsToInstall")}
-            </Label>
-          </View>
+        <If when={ready() && (props.missing || !props.cards.length)}>
+          <EmptyState
+            size="card"
+            status={props.missing ? "error" : "empty"}
+            loading={null}
+            error={{
+              title: uiText("unableToLoadAgents"),
+              description:
+                problemText(props.missingReason) ||
+                uiText("theHostDidntAnswerCheckYour"),
+              problem: props.missingReason || undefined,
+              retry: host.wake,
+            }}
+            empty={{ title: uiText("noPersonaCardsToInstall") }}
+          />
         </If>
         <If when={ready()}>
           <Each of={props.cards} key={(card) => card.id}>

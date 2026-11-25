@@ -14,8 +14,6 @@ import {
   colors,
   DetailSkeleton,
   dialogWidth,
-  Empty,
-  emptyWidth,
   focusRing,
   grow,
   Header,
@@ -27,6 +25,7 @@ import {
   sizes,
   SmoothScroll,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import { chatText, shownMentions } from "../../components/eta-editor";
 import { createOptimisticStatus } from "../../components/optimistic-status";
 import { settled } from "../../components/pending";
@@ -35,6 +34,7 @@ import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { follow, useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
 import { DeleteRoutine } from "./delete-routine";
 import { RoutineEditor } from "./editor";
 import { PhoneRoutineRow } from "./history";
@@ -45,7 +45,6 @@ import { RoutineReport } from "./run-report";
 
 /** How far down an empty state stands: lower in a tablet's detail column, level with the
  * list's first rows. */
-const emptyTop = { desktop: space[64], tablet: space[64] + space[48] };
 
 /** The desktop's list of routines. */
 const listWidth = 352;
@@ -73,6 +72,11 @@ export function Routines(props: {
   follow(() => "routines");
   const target = () => (selected() ? `routines.${selected()}` : undefined);
   follow(target);
+  const listLoad = useLoadState({ targets: () => ["routines"] });
+  const detailLoad = useLoadState({ targets: () => [target()] });
+  /** No routine at all and none being made: one column, the empty state, no blank detail pane. */
+  const none = () =>
+    listLoad.status() !== "ready" ? false : !list().length && !editing();
   const briefs = () => host.list<BriefView>(target() ?? "", "briefs");
   const runs = () => host.list<RunView>(target() ?? "", "runs");
   const status = () => host.section<RoutinesStatus>("routines", "status");
@@ -93,7 +97,6 @@ export function Routines(props: {
   const canDelete = () => host.can("routines.delete");
   const info = () =>
     gone() ? undefined : host.section<RoutineInfo>(target() ?? "", "info");
-  const listSettled = settled(() => !!host.state().targets.routines);
   const detailSettled = settled(() => !selected() || !!info() || gone());
   const report = signal("");
   const reportIndex = () =>
@@ -384,14 +387,14 @@ export function Routines(props: {
         <If when={!phone() || !selected()}>
           <View
             style={{
-              ...(phone()
+              ...(phone() || none()
                 ? grow
                 : {
                     width:
                       props.layout === "desktop" ? listWidth : sizes.tabletList,
                     flexShrink: 0,
                   }),
-              borderRightWidth: phone() ? 0 : 1,
+              borderRightWidth: phone() || none() ? 0 : 1,
               borderColor: c().border,
             }}
           >
@@ -415,106 +418,77 @@ export function Routines(props: {
               </Header>
             </If>
             <If
-              when={listSettled()}
-              else={<ListSkeleton label={uiText("loadingRoutine")} />}
+              when={list().length}
+              else={
+                <EmptyState
+                  size="page"
+                  status={listLoad.shown()}
+                  loading={<ListSkeleton label={uiText("loadingRoutines")} />}
+                  error={{
+                    title: uiText("routinesDidNotLoad"),
+                    description: listLoad.why(),
+                    retry: listLoad.retry,
+                    retrying: listLoad.retrying(),
+                  }}
+                  empty={{
+                    art: "routines",
+                    title: uiText("noRoutinesYet"),
+                    description: uiText("emptyRoutineHelp"),
+                    actions:
+                      host.can("routines.create") && !editing()
+                        ? [
+                            {
+                              label: uiText("newRoutine"),
+                              icon: "plus",
+                              onPress: () => editing.set("new"),
+                            },
+                          ]
+                        : undefined,
+                  }}
+                />
+              }
             >
-              <If
-                when={list().length}
-                else={
-                  <Empty
-                    title={uiText("noRoutinesYet")}
-                    description={uiText("emptyRoutineHelp")}
-                    icon="routines"
-                    iconSize={icon.lg}
-                    iconTone="ink"
-                    titleVariant="body"
-                    titleWeight={weight.regular}
-                    descriptionVariant="small"
-                    descriptionWidth={emptyWidth.wide}
-                    // The list's empty state sits at the top of the column.
-                    style={{
-                      flex: 0,
-                      justifyContent: "flex-start",
-                      paddingTop: phone()
-                        ? space[64]
-                        : tablet()
-                          ? space[48]
-                          : space[64],
-                      paddingBottom: phone() ? space[24] : 0,
-                      paddingHorizontal: tablet() ? space[20] : space[32],
-                    }}
-                  >
-                    <If when={host.can("routines.create") && !editing()}>
-                      <View style={{ ...row, paddingTop: space[8] }}>
-                        <Button
-                          label={uiText("newRoutine")}
-                          icon="plus"
-                          tone="primary"
-                          size={
-                            phone()
-                              ? control.touch
-                              : tablet()
-                                ? control.md
-                                : control.sm
-                          }
-                          iconSize={phone() ? icon.md : icon.sm}
-                          style={{
-                            paddingHorizontal: phone()
-                              ? space[16]
-                              : tablet()
-                                ? space[12]
-                                : space[8],
-                            gap: space[4],
-                          }}
-                          onPress={() => editing.set("new")}
-                        />
-                      </View>
-                    </If>
-                  </Empty>
-                }
-              >
-                <SmoothScroll style={grow} scrollbar={false}>
-                  <View
-                    style={
-                      props.layout === "desktop"
-                        ? {
-                            paddingVertical: space[12],
-                            paddingHorizontal: space[16],
-                          }
-                        : phone() && paused()
-                          ? { borderTopWidth: 1, borderColor: c().border }
-                          : undefined
-                    }
-                  >
-                    <Each of={list()} key={(item) => item.id}>
-                      {(item) => (
-                        <If
-                          when={phone()}
-                          else={
-                            <RoutineRow
-                              item={item()}
-                              selected={selected() === item().id}
-                              paused={!!paused()}
-                              tablet={tablet()}
-                              onOpen={() => select(item().id)}
-                            />
-                          }
-                        >
-                          <PhoneRoutineRow
+              <SmoothScroll style={grow} scrollbar={false}>
+                <View
+                  style={
+                    props.layout === "desktop"
+                      ? {
+                          paddingVertical: space[12],
+                          paddingHorizontal: space[16],
+                        }
+                      : phone() && paused()
+                        ? { borderTopWidth: 1, borderColor: c().border }
+                        : undefined
+                  }
+                >
+                  <Each of={list()} key={(item) => item.id}>
+                    {(item) => (
+                      <If
+                        when={phone()}
+                        else={
+                          <RoutineRow
                             item={item()}
+                            selected={selected() === item().id}
                             paused={!!paused()}
+                            tablet={tablet()}
                             onOpen={() => select(item().id)}
                           />
-                        </If>
-                      )}
-                    </Each>
-                  </View>
-                </SmoothScroll>
-              </If>
+                        }
+                      >
+                        <PhoneRoutineRow
+                          item={item()}
+                          paused={!!paused()}
+                          onOpen={() => select(item().id)}
+                        />
+                      </If>
+                    )}
+                  </Each>
+                </View>
+              </SmoothScroll>
             </If>
           </View>
         </If>
-        <If when={!phone() || selected()}>
+        <If when={(!phone() && !none()) || selected()}>
           <View style={grow}>
             <If when={props.layout === "tablet"}>
               {pageHeader()}
@@ -525,71 +499,48 @@ export function Routines(props: {
               <If
                 when={detailSettled() ? info() : undefined}
                 else={
-                  <If
-                    when={gone()}
-                    else={
-                      <If
-                        when={!selected()}
-                        else={
-                          <DetailSkeleton label={uiText("loadingRoutine")} />
-                        }
-                      >
-                        <If when={list().length}>
-                          <Empty
-                            title={uiText("selectARoutine")}
-                            description={uiText("selectOneOnTheLeftTo")}
-                            icon="routines"
-                            iconSize={icon.lg}
-                            iconTone="ink"
-                            titleWeight={tablet() ? weight.regular : undefined}
-                            // Tablet runs it across the pane.
-                            descriptionWidth={
-                              tablet() ? emptyWidth.wide : emptyWidth.narrow
-                            }
-                            style={{
-                              justifyContent: "flex-start",
-                              paddingTop: tablet()
-                                ? emptyTop.tablet
-                                : emptyTop.desktop,
-                              paddingHorizontal: tablet()
-                                ? space[40]
-                                : undefined,
-                            }}
-                          />
-                        </If>
-                      </If>
+                  <EmptyState
+                    size="page"
+                    status={
+                      gone()
+                        ? "error"
+                        : selected()
+                          ? detailLoad.status() === "error"
+                            ? "error"
+                            : "loading"
+                          : "empty"
                     }
-                  >
-                    <Empty
-                      title={uiText("routineGoneTitle")}
-                      description={uiText("routineGoneBody")}
-                      icon="routines"
-                      iconSize={icon.lg}
-                      iconTone="ink"
-                      titleWeight={tablet() ? weight.regular : undefined}
-                      // Where "Select a routine" stands, which the back button leads to.
-                      style={{
-                        justifyContent: "flex-start",
-                        paddingTop: phone()
-                          ? emptyTop.desktop
-                          : tablet()
-                            ? emptyTop.tablet
-                            : emptyTop.desktop,
-                        paddingHorizontal: tablet() ? space[40] : undefined,
-                      }}
-                    >
-                      <View style={{ ...row, paddingTop: space[8] }}>
-                        <Button
-                          label={uiText("backToRoutines")}
-                          size={phone() ? control.touch : control.md}
-                          style={{
-                            paddingHorizontal: phone() ? space[16] : space[12],
-                          }}
-                          onPress={() => select("")}
-                        />
-                      </View>
-                    </Empty>
-                  </If>
+                    loading={
+                      <DetailSkeleton label={uiText("loadingRoutine")} />
+                    }
+                    error={
+                      gone() || detailLoad.failure() === "missing"
+                        ? {
+                            art: "routines",
+                            tone: "quiet",
+                            title: uiText("routineGoneTitle"),
+                            description: uiText("routineGoneBody"),
+                            actions: [
+                              {
+                                label: uiText("backToRoutines"),
+                                icon: "arrowLeft",
+                                onPress: () => select(""),
+                              },
+                            ],
+                          }
+                        : {
+                            title: uiText("routineDidNotLoad"),
+                            description: detailLoad.why(),
+                            retry: detailLoad.retry,
+                            retrying: detailLoad.retrying(),
+                          }
+                    }
+                    empty={{
+                      art: "routines",
+                      title: uiText("selectARoutine"),
+                      description: uiText("selectOneOnTheLeftTo"),
+                    }}
+                  />
                 }
               >
                 {(item) => (

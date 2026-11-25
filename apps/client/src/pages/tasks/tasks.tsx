@@ -5,14 +5,14 @@ import type {
 } from "@eta/client-contracts";
 import type { JSX, Signal } from "nsh";
 import type { Layout } from "../../components";
+import type { EmptyAction } from "../../components/empty-state";
+import type { LoadState } from "../../services/load-status";
 import { computed, signal, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
   Button,
   colors,
-  Empty,
-  emptyWidth,
   Field,
   grow,
   Header,
@@ -23,11 +23,12 @@ import {
   textStyle,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { EmptyState } from "../../components/empty-state";
 import { foldNext } from "../../components/motion";
-import { settled } from "../../components/pending";
 import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
 import { taskDropZones } from "./drag";
 import { PhoneTaskList, TabletTaskList } from "./list";
 import { FilterTrigger, TaskMenu, TaskMenuItem, TaskMenuRule } from "./menu";
@@ -61,10 +62,6 @@ export function Tasks(props: {
   const c = colors();
   const type = textFaces();
   follow(() => "tasks");
-  // Whether the tasks came (or could not): the skeleton, once it appeared, stays its least time.
-  const tasksShown = settled(
-    () => !!(host.state().missing.tasks || host.state().targets.tasks),
-  );
   const boardDrag = taskDropZones<BoardTaskStatus>((id, status) => {
     const task = host.tasks().find((item) => item.id === id);
     if (task && !task.subtasks && task.status !== status) {
@@ -127,9 +124,23 @@ export function Tasks(props: {
         : [...items, status],
     );
   };
-  /** The no-tasks and no-match states, drawn larger and bolder on desktop and tablet. */
-  const designed = () =>
-    !phone() && !host.state().missing.tasks && !!host.state().targets.tasks;
+  const load = useLoadState({ targets: () => ["tasks"] });
+  /** Clear what hid every task: the search, the filters, or both. */
+  const noMatchActions = (): EmptyAction[] =>
+    [
+      query().trim()
+        ? { label: uiText("clearSearch"), onPress: () => query.set("") }
+        : undefined,
+      executor() || part()
+        ? {
+            label: uiText("clearFilters"),
+            onPress: () => {
+              executor.set("");
+              part.set("");
+            },
+          }
+        : undefined,
+    ].filter((action) => action !== undefined);
   return (
     <View style={{ ...grow, backgroundColor: c().canvas }}>
       <If
@@ -277,6 +288,9 @@ export function Tasks(props: {
                   caption={uiText("partOfCaption")}
                   open={partOpen()}
                   onOpenChange={partOpen.set}
+                  empty={
+                    parents().length ? undefined : uiText("noParentTasksYet")
+                  }
                   trigger={
                     <FilterTrigger
                       tablet={tablet()}
@@ -294,7 +308,9 @@ export function Tasks(props: {
                     checked={!part()}
                     onSelect={() => part.set("")}
                   />
-                  <TaskMenuRule />
+                  <If when={parents().length}>
+                    <TaskMenuRule />
+                  </If>
                   <Each of={parents()} key={(task) => task.id}>
                     {(entry) => (
                       <TaskMenuItem
@@ -378,70 +394,43 @@ export function Tasks(props: {
         else={
           <>
             <If
-              when={filtered().length && tasksShown()}
+              when={filtered().length && load.status() === "ready"}
               else={
-                <If
-                  when={tasksShown()}
-                  else={<TaskListSkeleton label={uiText("loadingTasks")} />}
-                >
-                  <Empty
-                    style={
-                      host.state().missing.tasks || !host.state().targets.tasks
-                        ? undefined
-                        : phone()
-                          ? { gap: space[8], paddingHorizontal: space[40] }
-                          : {
-                              flex: 1,
-                              justifyContent: "flex-start",
-                              paddingTop: space[64],
-                              gap: space[8],
-                            }
-                    }
-                    title={
-                      host.state().missing.tasks
-                        ? uiText("unableToLoadTasks")
-                        : !host.state().targets.tasks
-                          ? uiText("loadingTasks")
-                          : shown().length
-                            ? uiText("noTasksMatchTheFilters")
-                            : uiText("noTasksYet")
-                    }
-                    icon={host.state().missing.tasks ? "warning" : "tasks"}
-                    iconSize={
-                      host.state().missing.tasks
-                        ? icon.xl
-                        : designed()
-                          ? icon.xl
-                          : undefined
-                    }
-                    iconTone={
-                      host.state().missing.tasks
-                        ? "red"
-                        : designed() && tablet()
-                          ? "ink"
-                          : undefined
-                    }
-                    titleWeight={designed() ? weight.strong : undefined}
-                    titleTone={designed() ? "ink" : undefined}
-                    description={
-                      host.state().missing.tasks
-                        ? uiText("theHostDidNotRespondIn")
-                        : host.state().targets.tasks && !shown().length
-                          ? uiText("noTasksYetDescription")
-                          : undefined
-                    }
-                  >
-                    <If when={host.state().missing.tasks}>
-                      <Button
-                        label={uiText("retry")}
-                        icon="refresh"
-                        size={control.md}
-                        style={{ marginTop: space[4] }}
-                        onPress={host.retry}
-                      />
-                    </If>
-                  </Empty>
-                </If>
+                <EmptyState
+                  size="page"
+                  status={load.shown()}
+                  loading={<TaskListSkeleton label={uiText("loadingTasks")} />}
+                  error={{
+                    title: uiText("tasksDidNotLoad"),
+                    description: load.why(),
+                    retry: load.retry,
+                    retrying: load.retrying(),
+                  }}
+                  empty={
+                    shown().length
+                      ? {
+                          title: query().trim()
+                            ? uiText("noTasksMatchQuery", {
+                                query: query().trim(),
+                              })
+                            : uiText("noTasksMatchTheFilters"),
+                          actions: noMatchActions(),
+                        }
+                      : {
+                          art: "tasks",
+                          title: uiText("noTasksYet"),
+                          description: uiText("noTasksYetDescription"),
+                          actions: [
+                            {
+                              label: uiText("newTask"),
+                              icon: "plus",
+                              onPress: props.onCreate,
+                            },
+                          ],
+                        }
+                  }
+                  announce={shown().length > 0}
+                />
               }
             >
               <If
@@ -491,6 +480,7 @@ export function Tasks(props: {
         }
       >
         <ArchivedTasks
+          load={load}
           tablet={tablet()}
           count={archivedCount()}
           items={shown().filter((task) =>
@@ -534,13 +524,16 @@ function ExecutorMenu(props: {
       open={props.open}
       onOpenChange={props.onOpenChange}
       trigger={props.trigger}
+      empty={props.executors.length ? undefined : uiText("noExecutorsYet")}
     >
       <TaskMenuItem
         label={uiText("allExecutors")}
         checked={!props.value}
         onSelect={() => props.onChange("")}
       />
-      <TaskMenuRule />
+      <If when={props.executors.length}>
+        <TaskMenuRule />
+      </If>
       <Each of={props.executors} key={(agent) => agent.id}>
         {(agent) => (
           <TaskMenuItem
@@ -599,6 +592,7 @@ function ArchiveToggle(props: {
  */
 function ArchivedTasks(props: {
   layout: Layout;
+  load: LoadState;
   tablet: boolean;
   count: number;
   items: BoardTaskView[];
@@ -690,26 +684,36 @@ function ArchivedTasks(props: {
         <If
           when={props.items.length}
           else={
-            <Empty
-              icon="archive"
-              iconSize={icon.xl}
-              title={
-                props.count
-                  ? uiText("noArchivedTasksMatch")
-                  : uiText("noArchivedTasks")
-              }
-              titleWeight={weight.strong}
-              titleTone="ink"
-              description={
-                props.count ? undefined : uiText("noArchivedTasksDescription")
-              }
-              descriptionWidth={emptyWidth.wide}
-              style={{
-                flex: 1,
-                justifyContent: "flex-start",
-                paddingTop: space[64],
-                gap: space[8],
+            <EmptyState
+              size="page"
+              status={props.load.shown()}
+              loading={<TaskListSkeleton label={uiText("loadingTasks")} />}
+              error={{
+                title: uiText("tasksDidNotLoad"),
+                description: props.load.why(),
+                retry: props.load.retry,
+                retrying: props.load.retrying(),
               }}
+              empty={
+                props.count
+                  ? {
+                      title: uiText("noArchivedTasksMatchQuery", {
+                        query: props.query.trim(),
+                      }),
+                      actions: [
+                        {
+                          label: uiText("clearSearch"),
+                          onPress: () => props.onQuery(""),
+                        },
+                      ],
+                    }
+                  : {
+                      art: "archive",
+                      title: uiText("noArchivedTasks"),
+                      description: uiText("noArchivedTasksDescription"),
+                    }
+              }
+              announce={props.count > 0}
             />
           }
         >

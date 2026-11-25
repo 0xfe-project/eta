@@ -81,7 +81,7 @@ export const onboardingMessages = {
     "Two steps left. Open Eta on your computer to finish them.",
     "还有两步。请在电脑上打开 Eta 完成设置。",
   ],
-  unableToLoadAgents: ["Unable to load agents", "无法加载智能体"],
+  unableToLoadAgents: ["Agents didn't load", "智能体没加载出来"],
   welcomeToEta: ["Welcome to eta", "欢迎使用 Eta"],
   whichModelShouldYourAgentsUse: [
     "Which model should your agents use?",

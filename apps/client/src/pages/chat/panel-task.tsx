@@ -12,7 +12,6 @@ import {
   Button,
   colors,
   DetailSkeleton,
-  Empty,
   grow,
   Label,
   Markdown,
@@ -37,6 +36,7 @@ import {
 import { statusName, TaskGlyph } from "../tasks/status";
 import { StatusSelect } from "../tasks/status-select";
 import { TaskDetailDialogs } from "../tasks/task-detail-dialogs";
+import { TaskDetailMissing } from "../tasks/task-detail-missing";
 import { createTaskDetailState } from "../tasks/task-detail-state";
 import { TaskCommentBox, TaskCommentHint } from "../tasks/task-fields";
 import { TaskTopBar } from "../tasks/top-bar";
@@ -77,26 +77,13 @@ export function PanelTask(props: {
   const shown = settled(() => !!task());
   return (
     <If
-      when={shown() ? task() : undefined}
+      when={state.gone() || !shown() ? undefined : task()}
       else={
-        <If
-          when={state.missing()}
-          else={<DetailSkeleton label={uiText("loadingTask")} />}
-        >
-          <Empty
-            title={uiText("taskUnavailable")}
-            icon="warning"
-            iconSize={icon.lg}
-            iconTone="red"
-          >
-            <Button
-              label={uiText("retry")}
-              icon="refresh"
-              style={{ marginTop: space[8], paddingHorizontal: space[12] }}
-              onPress={state.retryTask}
-            />
-          </Empty>
-        </If>
+        <TaskDetailMissing
+          state={state}
+          skeleton={<DetailSkeleton label={uiText("loadingTask")} />}
+          onBack={props.onClose}
+        />
       }
     >
       {(item) => {

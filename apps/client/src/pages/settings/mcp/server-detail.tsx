@@ -16,8 +16,9 @@ import { StatusDot } from "../../../components/status-dot";
 import { control, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
-import { CopyButton } from "../../../ui";
+import { problemText } from "../../../services/problem-text";
 
+import { CopyButton } from "../../../ui";
 import {
   McpPhoneHeader,
   serverStatus,
@@ -159,7 +160,7 @@ export function McpDetail(props: {
         </If>
         <If when={feedback() || server().error}>
           <Label variant="small" tone="red" style={{ padding: space[16] }}>
-            {feedback() || server().error}
+            {feedback() || problemText(server().error ?? "")}
           </Label>
         </If>
         <If when={login() && signInNeeded() ? login() : undefined}>
@@ -263,7 +264,11 @@ export function McpDetail(props: {
                     ref(),
                   );
                   if (!result.ok)
-                    feedback.set(result.message ?? uiText("mcpReloadFailed"));
+                    feedback.set(
+                      result.message
+                        ? problemText(result.message)
+                        : uiText("mcpReloadFailed"),
+                    );
                 })
               }
             />

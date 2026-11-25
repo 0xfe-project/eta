@@ -16,6 +16,7 @@ import {
 } from "nsh/updater";
 import { startProgress } from "../components/progress-notification";
 import { uiText } from "../i18n";
+import { problemText } from "./problem-text";
 
 /** The update channels a release build names in `nsh.json`'s
  * `updater.channels` (scripts/nsh-client.ts): an rc build is only on `rc`, a
@@ -35,7 +36,7 @@ const channelKey = "eta.client.update.channel";
 const dismissedKey = "eta.client.update.dismissed";
 
 function describe(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return problemText(error);
 }
 
 function readShell(): ShellInfo | undefined {
@@ -136,7 +137,7 @@ function createClientUpdate() {
       // Android's APK: the system downloads and installs it.
       try {
         const { opened } = await openUrl(current.update.url);
-        if (!opened) failure.set(current.update.url);
+        if (!opened) failure.set(uiText("appUpdateNotOpened"));
       } catch (error) {
         failure.set(describe(error));
       }

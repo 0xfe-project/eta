@@ -18,22 +18,15 @@ export const skillsMessages = {
   loadingSkills: ["Loading skills…", "正在加载技能…"],
   metadata: ["Metadata", "元数据"],
   noMatchingSkills: [
-    "No search results in the loaded entries",
-    "已加载条目中无搜索结果",
+    "No skills match “{{query}}”",
+    "没有找到「{{query}}」相关的技能",
   ],
-  noMatchingSkillsHint: [
-    "Change or clear your search to see other skills.",
-    "修改或清空搜索词，查看其他技能。",
-  ],
-  noSkillsInThisDirectory: ["No skills", "暂无技能"],
+  noSkillsInThisDirectory: ["No skills yet", "还没有技能"],
   noSkillsHint: [
     "Switch devices or scopes to browse other skills.",
     "切换设备或范围，查看其他位置的技能。",
   ],
-  skillDirectoryMissing: [
-    "The skills directory does not exist.",
-    "技能目录不存在。",
-  ],
+  skillDirectoryMissing: ["No skills here yet", "这里还没有技能"],
   skillDirectoryMissingHint: [
     "Switch devices or scopes to see skills in another location.",
     "切换设备或范围，查看其他位置的技能。",
@@ -47,7 +40,7 @@ export const skillsMessages = {
     "Choose a project above, or switch to Personal to see this device’s personal skills.",
     "在上方选择项目，或切换到「个人」查看这台设备上的个人技能。",
   ],
-  skillUnableToLoadFile: ["Unable to load {{name}}", "无法加载 {{name}}"],
+  skillDidNotLoadFile: ["{{name}} didn't load", "{{name}} 没加载出来"],
   personal: ["Personal", "个人"],
   searchLoadedSkills: ["Search loaded skills", "搜索已加载技能"],
   selectAFile: ["Select a file", "选择文件"],
@@ -56,5 +49,5 @@ export const skillsMessages = {
     "This host does not provide skill files",
     "此主机不提供技能文件",
   ],
-  unableToLoadSkills: ["Unable to load skills", "无法加载技能"],
+  unableToLoadSkills: ["Skills didn't load", "技能没加载出来"],
 } as const;

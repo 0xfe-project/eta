@@ -238,14 +238,24 @@ export function Workspace(props: {
     if (result) open(result.conversation.id);
   }
   let openingCaptain = false;
+  /** Why Captain's conversation did not open: shown in its pane, with Retry. */
+  const captainProblem = signal<unknown>(undefined);
   async function openCaptain() {
     if (openingCaptain || captain() || !host.can("captain.direct")) return;
     openingCaptain = true;
-    const result = await host.action(() =>
-      host.call<CaptainResults["direct"]>("captain", "direct", {}),
-    );
-    openingCaptain = false;
-    if (result) captain.set(result.conversationId);
+    captainProblem.set(undefined);
+    try {
+      const result = await host.call<CaptainResults["direct"]>(
+        "captain",
+        "direct",
+        {},
+      );
+      captain.set(result.conversationId);
+    } catch (problem) {
+      captainProblem.set(problem ?? new Error("failed"));
+    } finally {
+      openingCaptain = false;
+    }
   }
   function navigate(next: Page) {
     openTask("");
@@ -360,6 +370,8 @@ export function Workspace(props: {
           else={
             <ConversationEmpty
               captain={page() === "captain"}
+              captainProblem={captainProblem()}
+              onRetryCaptain={() => void openCaptain()}
               onCreate={() => newGroup.set(true)}
             />
           }

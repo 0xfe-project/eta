@@ -21,12 +21,12 @@ import {
   Button,
   colors,
   DetailSkeleton,
-  Empty,
   grow,
   Label,
   Modal,
   row,
 } from "../../../components";
+import { EmptyState } from "../../../components/empty-state";
 import { settled } from "../../../components/pending";
 import { startProgress } from "../../../components/progress-notification";
 import { showToast } from "../../../components/toast";
@@ -34,6 +34,7 @@ import { icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { readResponseBytes } from "../../../services/attachment-files";
 import { useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 import { CopyButton } from "../../../ui";
 import { createArtifactFileSaver } from "./file";
 import { ArtifactPdfPreview, ArtifactPdfResourcesError } from "./pdf-preview";
@@ -76,7 +77,8 @@ export function ArtifactPreview(props: {
   const item = () =>
     artifact().versions.find((entry) => entry.number === version());
   const url = signal<URL | undefined>(undefined);
-  const problem = signal("");
+  /** Why the preview did not open: the raw failure, or `noVersion` for an artifact with none. */
+  const problem = signal<unknown>(undefined);
   const retry = signal(0);
   const busy = signal(false);
   const copied = signal(false);
@@ -128,14 +130,22 @@ export function ArtifactPreview(props: {
       downloadProgress?.dismiss();
     });
     url.set(undefined);
-    problem.set("");
+    problem.set(undefined);
     copied.set(false);
     pdfCapture.set(undefined);
     downloadProblem.set("");
     files.savedPath.set("");
     exportController?.abort();
     exportProgress?.dismiss();
-    if (number === undefined || !address || kind !== "iframe") return;
+    if (kind !== "iframe") return;
+    if (number === undefined) {
+      problem.set("noVersion");
+      return;
+    }
+    if (!address) {
+      problem.set(new Error("not connected"));
+      return;
+    }
     void host
       .call<ArtifactResults["preview"]>("artifacts", "preview", {
         artifactId: props.artifact.id,
@@ -145,8 +155,7 @@ export function ArtifactPreview(props: {
         if (active) url.set(hostUrl(result.url, "/preview/"));
       })
       .catch((error: unknown) => {
-        if (active)
-          problem.set(error instanceof Error ? error.message : String(error));
+        if (active) problem.set(error ?? new Error("failed"));
       });
   });
   async function share() {
@@ -336,7 +345,7 @@ export function ArtifactPreview(props: {
       if (request.signal.aborted) {
         progress.dismiss();
       } else {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = problemText(error);
         downloadProblem.set(message);
         progress.fail({
           title: uiText("download"),
@@ -473,22 +482,26 @@ export function ArtifactPreview(props: {
         )}
       </If>
       <If
-        when={problem()}
+        when={problem() !== undefined}
         else={
           <If
             when={previewSettled() ? url() : undefined}
             else={
-              <If
-                when={item()?.viewer === "download"}
-                else={
+              <EmptyState
+                size="page"
+                status={item()?.viewer === "download" ? "empty" : "loading"}
+                loading={
                   <DetailSkeleton
                     label={uiText("openingPreview")}
                     style={grow}
                   />
                 }
-              >
-                <Empty title={uiText("availableAsAZipDownload")} />
-              </If>
+                error={null}
+                empty={{
+                  art: "artifacts",
+                  title: uiText("availableAsAZipDownload"),
+                }}
+              />
             }
           >
             {(link) =>
@@ -506,22 +519,34 @@ export function ArtifactPreview(props: {
                   ref={(node) => {
                     frame = node;
                   }}
-                  onError={(error) => problem.set(error.message)}
+                  onError={(error) => problem.set(error)}
                 />
               )
             }
           </If>
         }
       >
-        <Empty title={uiText("previewUnavailable")} description={problem()}>
-          <Button
-            label={uiText("retry")}
-            onPress={() => retry.update((attempt) => attempt + 1)}
-          />
-          <If when={url()}>
-            <Button label={uiText("openInBrowser")} onPress={openPreview} />
-          </If>
-        </Empty>
+        <EmptyState
+          size="page"
+          status="error"
+          loading={null}
+          error={{
+            title: uiText("previewUnavailable"),
+            description:
+              problem() === "noVersion"
+                ? uiText("previewNoVersion")
+                : `${problemText(problem())} ${uiText("previewSafe")}`,
+            problem: problem() === "noVersion" ? undefined : problem(),
+            retry:
+              problem() === "noVersion"
+                ? undefined
+                : () => retry.update((attempt) => attempt + 1),
+            actions: url()
+              ? [{ label: uiText("openInBrowser"), onPress: openPreview }]
+              : undefined,
+          }}
+          empty={{ title: uiText("previewUnavailable") }}
+        />
       </If>
       <If when={confirmingShare()}>
         <Modal

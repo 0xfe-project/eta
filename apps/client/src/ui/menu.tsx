@@ -47,6 +47,8 @@ export function ActionMenu(props: {
   /** As a popup: its width, and a lifted shadow (the design's tablet menus). */
   popupWidth?: number;
   lifted?: boolean;
+  /** What it says while it has no options: pass it only then. */
+  empty?: string;
   children?: JSX.Element;
 }) {
   const c = colors();
@@ -61,6 +63,7 @@ export function ActionMenu(props: {
   return (
     <MenuFrame
       align="end"
+      empty={props.empty}
       open={titled() ? open() : undefined}
       onOpenChange={(next) => open.set(next)}
       popupStyle={{

@@ -32,10 +32,13 @@ import {
   textFaces,
 } from "../../components";
 import { hint } from "../../components/controls";
+import { EmptyState } from "../../components/empty-state";
+import { ListSkeleton } from "../../components/loading-skeleton";
 import { CloseButton } from "../../components/navigation-buttons";
 import { avatar, control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
 import { sheetEdge } from "./configure";
 import { pendingLogos, PluginLogo, primeLogos } from "./plugin-logo";
@@ -723,31 +726,59 @@ export function Market(props: {
             gap: space[12],
           }}
         >
-          <If when={catalog() && !catalog()!.sources.length}>
-            <View style={{ gap: space[8] }}>
-              <Label weight={weight.regular}>{uiText("marketNoSources")}</Label>
-              <Label variant="small" tone="muted">
-                {uiText("marketNoSourcesHint")}
-              </Label>
-            </View>
+          <If
+            when={
+              !catalog() ||
+              !catalog()!.sources.length ||
+              (!all().length && !failed().length)
+            }
+          >
+            <EmptyState
+              size="page"
+              status={catalog() ? "empty" : loading() ? "loading" : "error"}
+              loading={<ListSkeleton label={uiText("marketLoading")} />}
+              error={{
+                title: uiText("marketDidNotLoad"),
+                description: uiText("marketDidNotLoadHint"),
+                retry: () => void load(),
+              }}
+              empty={
+                catalog()?.sources.length
+                  ? {
+                      art: "plugins",
+                      title: uiText("marketEmpty"),
+                      description: uiText("marketEmptyHint"),
+                    }
+                  : {
+                      art: "plugins",
+                      title: uiText("marketNoSources"),
+                      description: uiText("marketNoSourcesHint"),
+                    }
+              }
+              style={{ paddingHorizontal: 0, paddingVertical: space[24] }}
+            />
           </If>
           <Each of={failed()} key={(item) => item.source.url}>
             {(item) => (
-              <View style={{ gap: space[4] }}>
-                <Label weight={weight.regular}>
-                  {item().source.name || item().source.url}
-                </Label>
-                <Label variant="small" tone="muted">
-                  {uiText("marketUnavailable")}
-                </Label>
-                <Label
-                  variant="small"
-                  tone="muted"
-                  style={{ userSelect: "text" }}
-                >
-                  {item().error ?? ""}
-                </Label>
-              </View>
+              <EmptyState
+                size="card"
+                status="error"
+                loading={null}
+                error={{
+                  title: uiText("marketSourceDidNotLoad", {
+                    name: item().source.name || item().source.url,
+                  }),
+                  description: uiText("marketUnavailable"),
+                  problem: item().error ?? undefined,
+                  retry: () => void load(),
+                }}
+                empty={{ title: item().source.name || item().source.url }}
+                style={{
+                  paddingHorizontal: 0,
+                  borderBottomWidth: 1,
+                  borderColor: c().border,
+                }}
+              />
             )}
           </Each>
           <Each of={stale()} key={(item) => item.source.url}>
@@ -760,7 +791,7 @@ export function Market(props: {
                 {uiText("marketKeptCopy", {
                   name: item().source.name || item().source.url,
                   time: new Date(item().updatedAt ?? 0).toLocaleString(),
-                  reason: item().stale ?? "",
+                  reason: problemText(item().stale ?? ""),
                 })}
               </Label>
             )}
@@ -805,9 +836,25 @@ export function Market(props: {
               {field(uiText("marketSearch"), query, query.set)}
             </View>
             <If when={!entries().length && !toolkits().length}>
-              <Label variant="small" tone="muted">
-                {uiText("marketNothingFound")}
-              </Label>
+              <EmptyState
+                size="page"
+                status="empty"
+                loading={null}
+                error={null}
+                empty={{
+                  title: uiText("marketNothingFound", {
+                    query: query().trim(),
+                  }),
+                  actions: [
+                    {
+                      label: uiText("clearSearch"),
+                      onPress: () => query.set(""),
+                    },
+                  ],
+                }}
+                announce
+                style={{ paddingHorizontal: 0, paddingVertical: space[8] }}
+              />
             </If>
             <View
               onLayout={({ bounds }) => room.set(bounds.size.width)}

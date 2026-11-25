@@ -18,6 +18,7 @@ import { useModels } from "../../../components/model-select";
 import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 import { askRuntimes } from "../runtimes/status";
 import { createAvatarDraw } from "./avatar";
 
@@ -176,7 +177,7 @@ export function createAgentForm(props: AgentEditorProps) {
       const runtimes = await askRuntimes(host, machine, true);
       if (machineId() === machine) installed.set(runtimes);
     } catch (error) {
-      probeError.set(error instanceof Error ? error.message : String(error));
+      probeError.set(problemText(error));
     } finally {
       probing.set(false);
     }

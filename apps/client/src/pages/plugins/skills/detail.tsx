@@ -12,8 +12,6 @@ import {
   Button,
   colors,
   DetailSkeleton,
-  Empty,
-  emptyWidth,
   grow,
   Header,
   Icon,
@@ -21,10 +19,11 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
-import { settled } from "../../../components/pending";
+import { EmptyState } from "../../../components/empty-state";
 import { dotSize } from "../../../components/status-dot";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
+import { problemText } from "../../../services/problem-text";
 import { SkillFileTree } from "./file-tree";
 import { SkillFile, skillFileLink } from "./reader";
 
@@ -53,7 +52,7 @@ export function SkillDetail(props: {
   const position = signal<SkillReadingPosition>();
   const scroll = signal<ScrollRef>();
   const contentStart = signal<ViewRef>();
-  const failure = signal("");
+  const failure = signal<unknown>(undefined);
   const reading = signal(false);
   const retry = signal(0);
   const openDiagnostics = signal<string[]>([]);
@@ -63,7 +62,7 @@ export function SkillDetail(props: {
   let linkRequest = 0;
   let scrollY = 0;
   function showError(error: unknown) {
-    failure.set(error instanceof Error ? error.message : String(error));
+    failure.set(error ?? new Error("failed"));
   }
 
   effect(() => {
@@ -88,7 +87,7 @@ export function SkillDetail(props: {
     position.set(undefined);
     scrollY = 0;
     reading.set(false);
-    failure.set("");
+    failure.set(undefined);
     openDiagnostics.set([]);
     void call<SkillFileResults["open"]>("open", { skill }).then(
       (result) => {
@@ -148,7 +147,7 @@ export function SkillDetail(props: {
     metadata.set(expandedMetadata);
     position.set(undefined);
     scrollY = target.kind === "offset" ? target.y : 0;
-    failure.set("");
+    failure.set(undefined);
     reading.set(true);
     try {
       const result = await props.call<SkillFileContent>("read", {
@@ -171,7 +170,6 @@ export function SkillDetail(props: {
     return content?.kind === "text" ? content.preview : undefined;
   };
   const loadingSkill = () => !failure() && (reading() || !handle());
-  const contentSettled = settled(() => !loadingSkill());
   const reloading = loadingSkill;
   const refresh = () => retry.update((count) => count + 1);
   const reload = () => (
@@ -303,30 +301,6 @@ export function SkillDetail(props: {
         ref={contentStart.set}
         style={{ padding: space[12], gap: space[12] }}
       >
-        <If when={failure()}>
-          <View style={{ alignItems: "flex-start", gap: space[4] }}>
-            <Empty
-              title={uiText("skillUnableToLoadFile", {
-                name: fileName() || props.skill.name,
-              })}
-              description={failure()}
-              icon="warning"
-              iconSize={icon.xl}
-              iconTone="red"
-              descriptionWidth={emptyWidth.narrow}
-              style={{
-                flex: undefined,
-                alignSelf: "stretch",
-                paddingVertical: space[40],
-              }}
-            />
-            <Button
-              label={uiText("retry")}
-              size={control.md}
-              onPress={refresh}
-            />
-          </View>
-        </If>
         <If when={preview()?.metadata}>
           <View
             style={{
@@ -365,27 +339,35 @@ export function SkillDetail(props: {
           </View>
         </If>
         <If
-          when={contentSettled() ? file() : undefined}
+          when={file()}
           else={
-            <If when={!failure()}>
-              <If
-                when={!contentSettled()}
-                else={
-                  <Label
-                    tone="muted"
-                    variant="small"
-                    style={{ paddingTop: space[8] }}
-                  >
-                    {uiText("selectAFile")}
-                  </Label>
-                }
-              >
+            <EmptyState
+              size="page"
+              status={
+                failure() !== undefined
+                  ? "error"
+                  : loadingSkill()
+                    ? "loading"
+                    : "empty"
+              }
+              loading={
                 <DetailSkeleton
                   label={uiText("loadingSkill")}
                   style={{ padding: 0, paddingTop: space[8] }}
                 />
-              </If>
-            </If>
+              }
+              error={{
+                title: uiText("skillDidNotLoadFile", {
+                  name: fileName() || props.skill.name,
+                }),
+                description: problemText(failure()),
+                problem: failure(),
+                retry: refresh,
+              }}
+              empty={{ title: uiText("selectAFile") }}
+              width="narrow"
+              style={{ paddingHorizontal: 0, paddingVertical: space[8] }}
+            />
           }
         >
           {(content) => (

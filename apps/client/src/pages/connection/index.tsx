@@ -7,6 +7,7 @@ import { Button, colors, grow, Header, Label, row } from "../../components";
 import { control, opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { addressFrom, useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { ConnectionError, LostPhoneConnection } from "./connection-errors";
 import { diagnose } from "./diagnostics";
 import { DownloadStatus } from "./download-progress";
@@ -148,7 +149,7 @@ export function Connection(props: {
         token: (link ? link.token : token().trim()) || undefined,
       });
     } catch (cause) {
-      error.set(cause instanceof Error ? cause.message : String(cause));
+      error.set(problemText(cause));
     }
   }
 
@@ -162,7 +163,7 @@ export function Connection(props: {
     try {
       begin({ ...(await startLocalHost()), local: true });
     } catch (cause) {
-      error.set(cause instanceof Error ? cause.message : String(cause));
+      error.set(problemText(cause));
       const kind = cause instanceof LocalHostError ? cause.kind : "start";
       problem.set(
         kind === "checksum"

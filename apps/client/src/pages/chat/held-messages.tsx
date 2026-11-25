@@ -11,6 +11,7 @@ import { StatusDot } from "../../components/status-dot";
 import { opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { DeliveryLine } from "./composer-delivery";
 
 /** More names than this read as a list nobody reads: say "them" instead. */
@@ -33,8 +34,7 @@ function waitingNames(
   return ids.map(nameOf).join(uiText("queueSeparator"));
 }
 
-const reason = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
+const reason = (error: unknown) => problemText(error);
 
 /**
  * Messages that are written but not in the conversation yet, over the member strip and the box

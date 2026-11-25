@@ -10,6 +10,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import { StatusDot } from "../../components/status-dot";
 import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -21,6 +22,15 @@ export function PendingReports(props: {
   onClose: () => void;
 }) {
   const c = colors();
+  const reports = () =>
+    props.routines
+      .flatMap((routine) =>
+        routine.runs
+          .filter((run) => run.status === "sent" || run.status === "failed")
+          .slice(0, 3)
+          .map((run) => ({ routine, run })),
+      )
+      .sort((a, b) => b.run.startedAt - a.run.startedAt);
   return (
     <Modal
       title={uiText("pending")}
@@ -33,19 +43,24 @@ export function PendingReports(props: {
     >
       <SmoothScroll style={grow}>
         <View style={{ padding: space[12], gap: space[8] }}>
-          <Each
-            of={props.routines
-              .flatMap((routine) =>
-                routine.runs
-                  .filter(
-                    (run) => run.status === "sent" || run.status === "failed",
-                  )
-                  .slice(0, 3)
-                  .map((run) => ({ routine, run })),
-              )
-              .sort((a, b) => b.run.startedAt - a.run.startedAt)}
-            key={(entry) => entry.run.id}
-          >
+          <If when={!reports().length}>
+            <EmptyState
+              size="page"
+              status="empty"
+              loading={null}
+              error={null}
+              empty={{
+                art: "done",
+                title: uiText("noNewReports"),
+                description: uiText("noNewReportsHint"),
+              }}
+              style={{
+                paddingHorizontal: space[4],
+                paddingVertical: space[16],
+              }}
+            />
+          </If>
+          <Each of={reports()} key={(entry) => entry.run.id}>
             {(entry) => (
               <View
                 style={{
@@ -68,7 +83,7 @@ export function PendingReports(props: {
                     })}
                   </Label>
                 </View>
-                <Label variant="small">{`${entry().routine.name}: ${entry().run.title ?? "No report"}`}</Label>
+                <Label variant="small">{`${entry().routine.name}: ${entry().run.title ?? uiText("noReport")}`}</Label>
                 <View
                   role="button"
                   accessibilityLabel={

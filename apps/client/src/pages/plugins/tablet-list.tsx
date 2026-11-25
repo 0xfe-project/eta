@@ -27,6 +27,7 @@ export function PluginTablet(props: {
   onSelect: (name: string) => void;
   onRefresh: () => Promise<void>;
   onAdd: () => void;
+  onMarket: () => void;
   detail: JSX.Element;
   /** Under the list, in the same column. */
   extra?: JSX.Element;
@@ -117,7 +118,7 @@ export function PluginTablet(props: {
             )}
           </Each>
           <If when={!props.items.length}>
-            <NoPlugins />
+            <NoPlugins onAdd={props.onAdd} onMarket={props.onMarket} />
           </If>
           {props.extra}
         </SmoothScroll>

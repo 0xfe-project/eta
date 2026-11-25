@@ -31,6 +31,7 @@ import {
 } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 import { Tabs } from "../../../ui";
 import { LetterBox, PaneBack, SectionHeader, WarningLine } from "../section";
 import { logoKey, useSourceLogos } from "./logos";
@@ -265,7 +266,7 @@ export function ProviderDetail(props: {
             borderColor: c().border,
           }}
         >
-          {check()?.error}
+          {problemText(check()?.error ?? "")}
         </Label>
       </If>
       <If

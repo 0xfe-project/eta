@@ -12,6 +12,7 @@ import {
 import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 
 export function indexInserts(messages: MessageView[]) {
   const prompts = new Set(
@@ -150,7 +151,7 @@ function InsertBody(props: {
       if (result.message.data.into !== props.message.id) props.onLate();
       props.onClose();
     } catch (cause) {
-      error.set(cause instanceof Error ? cause.message : String(cause));
+      error.set(problemText(cause));
     } finally {
       sending.set(false);
     }

@@ -63,9 +63,7 @@ test("a phone that lost the host before any message shows the error in the messa
   });
   // Said only once the connection has been gone for the grace period.
   await app.clock!.runFor(2_000);
-  expect(
-    app.shows(`${messages} >> text:Lost the connection to the host.`),
-  ).toBe(true);
+  expect(app.shows(`${messages} >> text:Can't reach the host`)).toBe(true);
   expect(app.shows(skeleton)).toBe(false);
   expect(app.shows(composer)).toBe(true);
   expect(app.shows(`${messages} >> ${composer}`)).toBe(false);

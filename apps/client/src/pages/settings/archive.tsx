@@ -14,24 +14,24 @@ import {
   ActionMenu,
   Button,
   colors,
-  Empty,
-  emptyWidth,
   grow,
   Icon,
   Label,
   row,
   SmoothScroll,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import {
   createOptimisticStatus,
   OptimisticStatus,
 } from "../../components/optimistic-status";
-import { control, icon, space, weight } from "../../components/tokens";
+import { control, icon, space } from "../../components/tokens";
 import { formatLocale, uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { useLoadState } from "../../services/load-status";
 import { messageTime } from "../chat/message-time";
 import { TaskGlyph } from "../tasks/status";
-import { emptyStyle, EntityRow, SectionHeader } from "./section";
+import { EntityRow, SectionHeader } from "./section";
 
 /** The quiet-period menu beside its label. */
 const quietPeriodWidth = 160;
@@ -73,6 +73,8 @@ export function ArchiveSettings(props: { phone?: boolean }) {
     host
       .list<BoardTaskView>("tasks", "archived")
       .filter((item) => !restoredTasks().includes(item.id));
+  const tasksLoad = useLoadState({ targets: () => ["tasks"] });
+  const conversationsLoad = useLoadState({ targets: () => ["conversations"] });
   const restoreConversation = (id: string) => {
     lastRestore = () => restoreConversation(id);
     restoredConversations.update((all) =>
@@ -215,18 +217,23 @@ export function ArchiveSettings(props: { phone?: boolean }) {
         <If
           when={conversations().length}
           else={
-            <View
+            <EmptyState
+              size="row"
+              status={conversationsLoad.shown()}
+              loading={uiText("loadingConversations")}
+              error={{
+                title: uiText("conversationsDidNotLoad"),
+                retry: conversationsLoad.retry,
+                retrying: conversationsLoad.retrying(),
+              }}
+              empty={{ title: uiText("archivedConversationsEmpty") }}
               style={{
                 paddingHorizontal: space[16],
                 paddingVertical: space[12],
                 borderBottomWidth: 1,
                 borderColor: c().border,
               }}
-            >
-              <Label variant="small" tone="muted">
-                {uiText("archivedConversationsEmpty")}
-              </Label>
-            </View>
+            />
           }
         >
           <Each
@@ -281,14 +288,21 @@ export function ArchiveSettings(props: { phone?: boolean }) {
         <If
           when={tasks().length}
           else={
-            <Empty
-              icon="archive"
-              iconSize={icon.lg}
-              title={uiText("archivedTasksEmpty")}
-              titleWeight={weight.regular}
-              description={uiText("archivedTasksEmptyHint")}
-              descriptionWidth={emptyWidth.narrow}
-              style={emptyStyle}
+            <EmptyState
+              size="card"
+              status={tasksLoad.shown()}
+              loading={uiText("loadingTasks")}
+              error={{
+                title: uiText("tasksDidNotLoad"),
+                retry: tasksLoad.retry,
+                retrying: tasksLoad.retrying(),
+              }}
+              empty={{
+                art: "archive",
+                title: uiText("archivedTasksEmpty"),
+                description: uiText("archivedTasksEmptyHint"),
+              }}
+              style={{ paddingHorizontal: space[16] }}
             />
           }
         >

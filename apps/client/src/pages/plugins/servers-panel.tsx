@@ -19,6 +19,7 @@ import { hint } from "../../components/controls";
 import { control, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { EnvEditor } from "./env-editor";
 import { HeadersEditor } from "./headers-editor";
 import { pluginText as text } from "./labels";
@@ -98,7 +99,7 @@ function createTest(props: { item: PluginView; server: string }) {
             }>("plugins", "cursorLoginStatus", { id: started.id })
             .catch((error: unknown) => ({
               state: "failed",
-              reason: error instanceof Error ? error.message : "error",
+              reason: problemText(error),
             }));
           if (cursorId() !== started.id) return;
           if (status.state !== "waiting") {

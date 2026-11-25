@@ -13,6 +13,7 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
+import { EmptyState } from "../../components/empty-state";
 import { OptimisticStatus } from "../../components/optimistic-status";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, icon, space, weight } from "../../components/tokens";
@@ -248,6 +249,27 @@ export function RoutineDetail(props: {
             onPress={props.onRun}
           />
         </View>
+        <If when={!props.runs.length}>
+          <EmptyState
+            size="row"
+            status="empty"
+            loading={null}
+            error={null}
+            empty={{
+              title: props.routine.nextRunAt
+                ? uiText("routineNoRunsYetNext", {
+                    time: `${dayWord(props.routine.nextRunAt)} ${clockTime(props.routine.nextRunAt)}`,
+                  })
+                : uiText("routineNoRunsYet"),
+            }}
+            style={{
+              paddingVertical: space[16],
+              paddingHorizontal: inset(),
+              borderTopWidth: 1,
+              borderColor: c().border,
+            }}
+          />
+        </If>
         <If when={latest()}>
           {(run) => (
             <View

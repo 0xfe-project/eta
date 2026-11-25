@@ -5,7 +5,7 @@ import { expect, open, test } from "nsh/test";
 // returns to the foreground, and finds out about a host that stopped answering.
 
 const fixture = "./fixtures/flaky-connection.tsx";
-const lost = "text:Lost the connection to the host.";
+const lost = "text:Can't reach the host";
 
 async function connected() {
   const app = await open(fixture, {

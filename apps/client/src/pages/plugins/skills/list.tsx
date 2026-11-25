@@ -13,7 +13,6 @@ import {
   ActionMenu,
   Button,
   colors,
-  Empty,
   grow,
   Header,
   Icon,
@@ -23,6 +22,7 @@ import {
   sizes,
   SmoothScroll,
 } from "../../../components";
+import { EmptyState } from "../../../components/empty-state";
 import { settled } from "../../../components/pending";
 import {
   control,
@@ -33,6 +33,7 @@ import {
 } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 import { SearchField } from "../../../ui";
 import { SkillDetail } from "./detail";
 import { SkillSelect } from "./select";
@@ -58,7 +59,7 @@ export function Skills(props: {
   const entries = signal<SkillSummary[]>([]);
   const selectedPath = signal("");
   const loading = signal(false);
-  const failure = signal("");
+  const failure = signal<unknown>(undefined);
   const retry = signal(0);
   const resolved = signal<SkillTarget>();
   const missing = signal(false);
@@ -139,7 +140,7 @@ export function Skills(props: {
     resolved.set(undefined);
     missing.set(false);
     loading.set(Boolean(locationKey));
-    failure.set("");
+    failure.set(undefined);
     if (!locationKey) return;
     let active = true;
     cleanup(() => {
@@ -166,8 +167,7 @@ export function Skills(props: {
         resolved.set(resolvedTarget);
         entries.set(loaded);
       } catch (error) {
-        if (active)
-          failure.set(error instanceof Error ? error.message : String(error));
+        if (active) failure.set(error ?? new Error("failed"));
       } finally {
         if (active) loading.set(false);
       }
@@ -365,8 +365,16 @@ export function Skills(props: {
 
   // What the list slot shows with no skills to list: one state at a time,
   // under the controls, as the design draws it.
-  const emptyCopy = (): { title: string; hint?: string } => {
-    if (!available()) return { title: uiText("thisHostDoesNotProvideSkill") };
+  const emptyCopy = (): {
+    title: string;
+    hint?: string;
+    search?: boolean;
+  } => {
+    if (!available())
+      return {
+        title: uiText("thisHostDoesNotProvideSkill"),
+        hint: uiText("loadFailedUnsupported"),
+      };
     if (!machine())
       return {
         title: uiText("skillChooseDevice"),
@@ -385,26 +393,24 @@ export function Skills(props: {
       };
     if (query().trim() && entries().length)
       return {
-        title: uiText("noMatchingSkills"),
-        hint: uiText("noMatchingSkillsHint"),
+        title: uiText("noMatchingSkills", { query: query().trim() }),
+        search: true,
       };
     return {
       title: uiText("noSkillsInThisDirectory"),
       hint: uiText("noSkillsHint"),
     };
   };
-  const emptyStyle = {
-    flex: undefined,
-    justifyContent: "flex-start",
-    paddingVertical: space[40],
-  } as const;
-  const emptyWidth = () => (tablet() ? 220 : phone() ? 240 : 260);
   // The skeleton, once it appeared, stays its least time before the skills (#380).
   const loaded = settled(() => !loading());
   const emptyState = () => (
-    <If
-      when={loaded()}
-      else={
+    <EmptyState
+      size="page"
+      width="narrow"
+      status={
+        !loaded() ? "loading" : failure() !== undefined ? "error" : "empty"
+      }
+      loading={
         <ListSkeleton
           label={uiText("loadingSkills")}
           style={{
@@ -416,35 +422,22 @@ export function Skills(props: {
           }}
         />
       }
-    >
-      <If
-        when={failure()}
-        else={
-          <Empty
-            title={emptyCopy().title}
-            description={emptyCopy().hint}
-            icon="book"
-            iconSize={icon.xl}
-            titleWeight={weight.regular}
-            titleTone="ink"
-            descriptionWidth={emptyWidth()}
-            style={emptyStyle}
-          />
-        }
-      >
-        <Empty
-          title={uiText("unableToLoadSkills")}
-          description={failure()}
-          icon="warning"
-          iconSize={icon.xl}
-          iconTone="red"
-          descriptionWidth={emptyWidth()}
-          style={emptyStyle}
-        >
-          <Button label={uiText("retry")} size={control.md} onPress={refresh} />
-        </Empty>
-      </If>
-    </If>
+      error={{
+        title: uiText("unableToLoadSkills"),
+        description: problemText(failure()),
+        problem: failure(),
+        retry: refresh,
+      }}
+      empty={{
+        art: emptyCopy().search ? undefined : "book",
+        title: emptyCopy().title,
+        description: emptyCopy().hint,
+        actions: emptyCopy().search
+          ? [{ label: uiText("clearSearch"), onPress: () => query.set("") }]
+          : undefined,
+      }}
+      announce={emptyCopy().search}
+    />
   );
   const list = () => (
     <>
@@ -679,7 +672,13 @@ export function Skills(props: {
                   />
                 }
               >
-                <Empty title={uiText("skillSelect")} icon="folder" />
+                <EmptyState
+                  size="page"
+                  status="empty"
+                  loading={null}
+                  error={null}
+                  empty={{ art: "book", title: uiText("skillSelect") }}
+                />
               </If>
             }
           >

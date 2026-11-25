@@ -668,6 +668,7 @@ export function Conversation(props: {
                 if (named)
                   member.set({ id: agentId, session: named.sessionId ?? "" });
               }}
+              target={target()}
               loaded={Boolean(timeline())}
               noCachedMessages={noCachedMessages()}
               hasMessages={messages().length > 0}

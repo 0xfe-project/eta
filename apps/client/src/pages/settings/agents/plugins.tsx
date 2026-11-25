@@ -1,20 +1,16 @@
 import type { PluginView } from "@eta/client-contracts";
 import type { AgentForm } from "./form";
 import { View } from "nsh";
-import { colors, row } from "../../../components";
+import { colors, Label, row } from "../../../components";
+import { EmptyState } from "../../../components/empty-state";
 import { icon, opacity, space, weight } from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
 
 import { useHost } from "../../../services/host";
-import { CheckControl, Empty, emptyWidth, Label } from "../../../ui";
+import { useLoadState } from "../../../services/load-status";
+import { CheckControl } from "../../../ui";
 import { useComposioPlugins } from "../../plugins/composio-plugins";
-import {
-  emptyStyle,
-  SectionHeader,
-  StatusLane,
-  StatusLine,
-  WarningLine,
-} from "../section";
+import { SectionHeader, StatusLane, StatusLine, WarningLine } from "../section";
 
 /** A plugin's status column: room for "Needs setup" and its dot. */
 const pluginLaneWidth = 108;
@@ -27,6 +23,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
   /** The connected Composio toolkits, as plugins of their own after the installed ones. */
   const composio = useComposioPlugins();
   const shown = () => activePlugins().length + composio.list().length;
+  const load = useLoadState({ targets: () => ["plugins"] });
   const transports = { stdio: "stdio", "streamable-http": "HTTP", sse: "SSE" };
   const meta = (item: PluginView) => {
     const servers = item.servers
@@ -79,10 +76,20 @@ export function AgentPlugins(props: { form: AgentForm }) {
       <If
         when={shown()}
         else={
-          <Empty
-            title={uiText("noPluginsInstalled")}
-            descriptionWidth={emptyWidth.narrow}
-            style={emptyStyle}
+          <EmptyState
+            size="card"
+            status={load.shown()}
+            loading={uiText("loadingPlugins")}
+            error={{
+              title: uiText("pluginsDidNotLoad"),
+              retry: load.retry,
+              retrying: load.retrying(),
+            }}
+            empty={{
+              art: "plugins",
+              title: uiText("noPluginsInstalled"),
+              description: uiText("noPluginsInstalledHint"),
+            }}
           />
         }
       >

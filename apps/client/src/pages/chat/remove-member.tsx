@@ -2,6 +2,7 @@ import type { ConversationInfo, MemberView } from "@eta/client-contracts";
 import { signal } from "nsh";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { ConfirmDialog } from "../../ui";
 
 /** The confirmation a member row's "Remove member" opens. */
@@ -26,7 +27,7 @@ export function RemoveMember(props: {
       });
       props.onClose();
     } catch (cause) {
-      error.set(cause instanceof Error ? cause.message : String(cause));
+      error.set(problemText(cause));
     } finally {
       busy.set(false);
     }

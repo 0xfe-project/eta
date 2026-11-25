@@ -124,4 +124,23 @@ export const machinesMessages = {
     "{{name}} 将无法再连接此主机。",
   ],
   workingWithCount: ["#{{number}} · Working", "#{{number}} · 运行中"],
+  nothingRunningOnThisMachine: [
+    "Nothing is running on this machine",
+    "现在没有任务在这台机器上运行",
+  ],
+  loadingMachines: ["Loading machines…", "正在读取机器…"],
+  machinesDidNotLoad: ["Machines didn't load", "机器没加载出来"],
+  noMachinesYet: ["No machines yet", "还没有机器"],
+  noMachinesYetHint: [
+    "Add a machine so agents can run on it.",
+    "添加一台机器，智能体就能在上面运行。",
+  ],
+  runtimesNoneFound: [
+    "No runtimes found on {{name}}.",
+    "{{name}} 上没找到运行方式。",
+  ],
+  runtimesHostUnsupported: [
+    "This host can't list runtimes yet. Updating the host adds it.",
+    "这台主机还不能列出运行方式。更新主机后就能用。",
+  ],
 } as const;

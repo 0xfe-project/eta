@@ -6,6 +6,7 @@ import { ATTACH_CHUNK_BYTES } from "@eta/client-contracts";
 import { signal } from "nsh";
 import { uiText } from "../i18n";
 import { forgetPicture, rememberPicture } from "./pictures";
+import { problemText } from "./problem-text";
 
 type Host = ReturnType<typeof useHost>;
 
@@ -126,7 +127,7 @@ export function createUploadQueue(
           await target.unattach(id).catch(() => {});
         setState(id, {
           state: "failed",
-          error: error instanceof Error ? error.message : String(error),
+          error: problemText(error),
           retry: true,
         });
       }

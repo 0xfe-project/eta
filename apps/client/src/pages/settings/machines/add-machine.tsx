@@ -23,6 +23,7 @@ import {
 } from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
 import { Tabs } from "../../../ui";
 import { PaneBack } from "../section";
 
@@ -255,7 +256,7 @@ export function AddMachine(props: { phone: boolean; onClose: () => void }) {
           </If>
           <If when={install()?.error}>
             <Label variant="small" tone="red">
-              {install()?.error}
+              {problemText(install()?.error ?? "")}
             </Label>
           </If>
         </View>

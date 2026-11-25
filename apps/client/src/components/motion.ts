@@ -51,6 +51,14 @@ export const motion = {
   open: [0.32, 0.72, 0, 1] as Easing,
   /** Going away: eases in, so it leaves quickly once it starts. */
   close: [0.32, 0, 0.67, 0] as Easing,
+  /** The avatar editor: each face passing over before one lands, the landed face settling, a
+   * face taken back from the recent ones fading in. */
+  avatarFlick: 60,
+  avatarSettle: 160,
+  avatarFade: 120,
+  /** How long an agent face's idle motion takes to come in or die away, as
+   * `@blobatar/react-native` ramps it. */
+  faceRamp: 400,
 } as const;
 
 /** Where something comes from as it fades in: below (a dialog, a sheet), the trailing edge (a
