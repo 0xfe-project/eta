@@ -5,6 +5,8 @@ import {
   Button,
   colors,
   focusRing,
+  fontFamily,
+  Fonts,
   Icon,
   Label,
   row,
@@ -57,6 +59,7 @@ function SettingBand(props: {
 export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
   const c = colors();
   const type = textFaces();
+  const fonts = Fonts();
   const host = useHost();
   const { advanced, check, source, token, editable, save, edit } = props.update;
   const advancedOpen = () =>
@@ -136,6 +139,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
               backgroundColor: c().canvas,
             }}
             itemStyle={{
+              fontFamily: fontFamily(fonts().interface),
               color: c().ink,
               fontSize: type("small").size,
               minHeight: itemRow,
