@@ -14,6 +14,7 @@ import { MemoryPauseToggle } from "./memory-pause-toggle";
 import { ProjectChip } from "./project-chip";
 import { StewardChip } from "./steward-chip";
 import { useOpenAgent } from "./use-agents";
+import { ownChatAgent } from "./use-chat-list";
 
 /**
  * The chat's header: what this conversation is, where it works, and who is in it.
@@ -53,6 +54,7 @@ export function ChatHeader({
   const openAgent = useOpenAgent();
   const { agents } = useAgentList();
   const members = group?.participants ?? [];
+  const ownChat = ownChatAgent(group, agents) !== undefined;
   return (
     // The band clears the window's lights: a folded rail is narrower than they are, so in that
     // state their corridor continues into this column and the group's name starts past them.
@@ -60,10 +62,11 @@ export function ChatHeader({
       <h1 className="flex h-9 min-w-0 items-center px-1 text-sm font-medium">
         {group ? <span className="max-w-56 truncate">{group.name}</span> : null}
       </h1>
-      {/* A direct conversation has one agent and one fixed folder: the chip would only
-          restate the project the sidebar already has open. Groups show where they work. */}
-      {group?.kind === "direct" ? null : <ProjectChip project={project} />}
+      {/* A chat of one agent has one fixed folder: the chip would only restate the project the
+          sidebar already has open. Groups show where they work. */}
+      {ownChat ? null : <ProjectChip project={project} />}
       <StewardChip
+        conversation={group}
         info={info}
         members={members.map((member) => member.agentId)}
       />

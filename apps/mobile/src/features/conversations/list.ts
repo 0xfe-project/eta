@@ -9,6 +9,7 @@ import type {
   MemberView,
 } from "@eta/client-contracts";
 import type { TextKey } from "../../i18n";
+import { agentOnlyChat } from "@eta/client-contracts";
 import {
   agentById,
   agents,
@@ -32,10 +33,53 @@ export interface GroupSection {
   rows: ConversationSummary[];
 }
 
+/**
+ * The agent whose own chat this is, when it is one: a group of one, in that agent's home project.
+ *
+ * The project is part of the question, and `agentOnlyChat` leaves it out on purpose: a group that
+ * is down to one member in somebody else's project is still that project's group, and its agent's
+ * row is a different conversation. It is also where `makeAgentChat` makes the agent's chat, so the
+ * row, the press and the screen all agree on which conversation this is.
+ */
+export function ownChatAgent(
+  conversation: ConversationSummary | undefined,
+): AgentView | undefined {
+  if (conversation === undefined) return undefined;
+  const agent = agentById(conversation.participants[0]?.agentId);
+  if (agent === undefined) return undefined;
+  if (conversation.projectId !== agent.homeProjectId) return undefined;
+  return agentOnlyChat(conversation, agent.id) ? agent : undefined;
+}
+
+/**
+ * The chat an agent already has: the newest of them, and a chat that is still open over one that was
+ * put away, whatever their times say — pressing the agent opens that one rather than making another.
+ * Undefined until somebody talks to it.
+ */
+export function ownChatOf(agent: AgentView): ConversationSummary | undefined {
+  let found: ConversationSummary | undefined;
+  for (const conversation of conversations()) {
+    if (ownChatAgent(conversation)?.id !== agent.id) continue;
+    if (found === undefined) {
+      found = conversation;
+      continue;
+    }
+    if (found.archived !== conversation.archived) {
+      if (found.archived) found = conversation;
+      continue;
+    }
+    if (newestFirst(conversation, found) < 0) found = conversation;
+  }
+  return found;
+}
+
 export function groupSections(): GroupSection[] {
   const byProject = new Map<string, ConversationSummary[]>();
+  // A chat of one agent is that agent's row, not a place: what the 私聊 segment claims is out of
+  // the groups, so no conversation is drawn twice and none is left out.
   for (const conversation of conversations()) {
-    if (conversation.archived || conversation.kind === "direct") continue;
+    if (conversation.archived || ownChatAgent(conversation) !== undefined)
+      continue;
     const rows = byProject.get(conversation.projectId);
     if (rows === undefined)
       byProject.set(conversation.projectId, [conversation]);
@@ -62,16 +106,11 @@ export interface DirectEntry {
 }
 
 export function directEntries(): DirectEntry[] {
-  // Every private chat, archived ones too: an agent whose chat is put away lives in the archive.
-  const chats = new Map<string, ConversationSummary>();
-  for (const conversation of conversations()) {
-    if (conversation.kind !== "direct") continue;
-    const agentId = conversation.participants[0]?.agentId;
-    if (agentId !== undefined) chats.set(agentId, conversation);
-  }
+  // Every agent's own chat, archived ones too: an agent whose chat is put away lives in the
+  // archive, and offering the agent again as one nobody has talked to was the same row twice.
   return agents()
     .flatMap((agent): DirectEntry[] => {
-      const conversation = chats.get(agent.id);
+      const conversation = ownChatOf(agent);
       return conversation?.archived === true ? [] : [{ agent, conversation }];
     })
     .sort((left, right) => {
@@ -135,19 +174,25 @@ export interface StatusLine {
   strong: boolean;
 }
 
-/** The line under a name. A busy member wins over the preview, which is stale by then. */
+/**
+ * The line under a name. A busy member wins over the preview, which is stale by then.
+ *
+ * A chat of one agent names nobody ("等待确认", not "小满 等待确认"): the agent is already the
+ * row's title. A group's row names whoever is busy, even when only one member is left.
+ */
 export function statusLine(conversation: ConversationSummary): StatusLine {
   const member = busiest(conversation);
+  const own = ownChatAgent(conversation) !== undefined;
   if (member !== undefined) {
     const status = t(STATUS_TEXT[member.status]);
     const name =
       agentById(member.agentId)?.name ?? t("conversations.deletedAgent");
     return {
-      text: conversation.kind === "direct" ? status : `${name} ${status}`,
+      text: own ? status : `${name} ${status}`,
       strong: member.status === "waiting_for_input",
     };
   }
-  if (conversation.preview !== "" || conversation.kind === "direct")
+  if (conversation.preview !== "" || own)
     return { text: conversation.preview, strong: false };
   return {
     text: t("conversations.memberCount", {

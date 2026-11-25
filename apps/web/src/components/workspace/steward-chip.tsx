@@ -1,4 +1,7 @@
-import type { ConversationInfo } from "@eta/client-contracts";
+import type {
+  ConversationInfo,
+  ConversationSummary,
+} from "@eta/client-contracts";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CheckIcon } from "@phosphor-icons/react/Check";
 import { useTranslation } from "react-i18next";
@@ -14,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
 import { useConversationActions } from "@/queries/conversations";
 import { AgentAvatar } from "./agent-identity";
+import { ownChatAgent } from "./use-chat-list";
 
 const onError = (error: Error) => toast.error(error.message);
 
@@ -25,10 +29,13 @@ const onError = (error: Error) => toast.error(error.message);
  * and stays a member; the timeline gets a line saying so.
  */
 export function StewardChip({
+  conversation,
   info,
   members,
   className,
 }: {
+  /** The row the header is drawn for: a chat of one agent has no steward to choose. */
+  conversation: ConversationSummary | undefined;
   info: ConversationInfo | undefined;
   /** The group's members, as agent ids. */
   members: readonly string[];
@@ -37,7 +44,8 @@ export function StewardChip({
   const { t: translateText } = useTranslation(["chat", "common"] as const);
   const { agents } = useAgentList();
   const { setSteward } = useConversationActions();
-  if (info === undefined || info.kind === "direct") return null;
+  if (info === undefined || ownChatAgent(conversation, agents) !== undefined)
+    return null;
   const pick = (agentId: string | null) =>
     setSteward.mutate({ conversationId: info.id, agentId }, { onError });
   const name =

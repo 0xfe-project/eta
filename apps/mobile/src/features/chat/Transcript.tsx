@@ -359,8 +359,9 @@ function Reply(props: {
     !reply().live && m().text !== "" && m().status !== "failed"
       ? m().text
       : undefined;
+  // Who said it is worth a line wherever there is more than one voice in the room.
   const author = () =>
-    chat.kind() === "group" ||
+    (chat.kind() === "group" && !chat.direct()) ||
     chat.members().length > 1 ||
     m().kind === "mention"
       ? agentName(m().agentId)

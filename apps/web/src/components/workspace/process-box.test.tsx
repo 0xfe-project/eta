@@ -26,13 +26,24 @@ const activity = (count: number) =>
   }));
 
 let conversations = 0;
+/**
+ * Who is in it: a group has a second voice, so its rows say who spoke; a chat of one agent is that
+ * agent's own and its rows do not repeat the name.
+ */
+const cast = (kind: "group" | "direct") =>
+  kind === "group"
+    ? [memberView("a1", { sessionId: "s1" }), memberView("a2")]
+    : [memberView("a1", { sessionId: "s1" })];
+/** A group runs in a project; a chat of one agent runs in that agent's own. */
+const placeOf = (kind: "group" | "direct") =>
+  kind === "group" ? "p1" : "home-a1";
 async function start(kind: "group" | "direct", tools: number) {
   conversations += 1;
   const id = `process-box-${conversations}`;
   const summary = conversationView({
     id,
     kind,
-    participants: [memberView("a1", { sessionId: "s1" })],
+    participants: cast(kind),
   });
   const reply: MessageView = messageView({
     conversationId: id,
@@ -65,7 +76,7 @@ async function live(kind: "group" | "direct" = "group") {
   const summary = conversationView({
     id,
     kind,
-    participants: [memberView("a1", { sessionId: "s1" })],
+    participants: cast(kind),
   });
   const reply = messageView({
     id: `${id}-reply`,
@@ -359,8 +370,9 @@ describe.each(["group", "direct"] as const)(
 
       const summary = conversationView({
         id: row.conversationId,
+        projectId: placeOf(kind),
         kind,
-        participants: [memberView("a1", { sessionId: "s1" })],
+        participants: cast(kind),
       });
       surfaceHost({
         agents: [agentView({ id: "a1", name: "研究员" })],
@@ -474,8 +486,9 @@ describe.each(["group", "direct"] as const)(
         conversations: [
           conversationView({
             id,
+            projectId: placeOf(kind),
             kind,
-            participants: [memberView("a1", { sessionId: "s1" })],
+            participants: cast(kind),
           }),
         ],
         messages: {
@@ -530,7 +543,7 @@ describe("a reply's process dialog", () => {
         conversationView({
           id,
           kind: "group",
-          participants: [memberView("a1", { sessionId: "s1" })],
+          participants: cast("group"),
         }),
       ],
       messages: {
@@ -801,8 +814,9 @@ describe.each(["group", "direct"] as const)(
         conversations: [
           conversationView({
             id,
+            projectId: placeOf(kind),
             kind,
-            participants: [memberView("a1", { sessionId: "s1" })],
+            participants: cast(kind),
           }),
         ],
         messages: {

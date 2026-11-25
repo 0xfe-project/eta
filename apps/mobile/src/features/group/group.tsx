@@ -33,6 +33,7 @@ import { Empty } from "../../ui/States";
 import { TaskStatusIcon } from "../../ui/StatusIcon";
 import { toast } from "../../ui/toast";
 import { call, useTarget } from "../../wire/target";
+import { ownChatAgent } from "../conversations/list";
 import { EditGroupScreen } from "./edit";
 import { MemberSheet } from "./member";
 import {
@@ -271,7 +272,8 @@ export function GroupInfoScreen(props: { id: string }) {
   const group = () =>
     conversations().find((conversation) => conversation.id === props.id);
   const info = () => target.section<ConversationInfo>("info");
-  const isGroup = () => group()?.kind !== "direct";
+  // A chat of one agent is not a group: its agent's own page is what the header opens instead.
+  const isGroup = () => ownChatAgent(group()) === undefined;
   const archived = () => group()?.archived ?? false;
   const project = () => projectById(group()?.projectId);
   const projectLine = () => {

@@ -157,11 +157,13 @@ export const CONVERSATIONS: ConversationSummary[] = [
     member("agent-mori", "waiting_for_input"),
     member("agent-xiaoman", "idle"),
   ]),
+  // An agent's own chat: a group of one, in that agent's home project (there is no `direct` any
+  // more; this is what the host makes now).
   conversation(
     "dm-xiaoman",
     "Xiaoman",
     "home-agent-xiaoman",
-    "direct",
+    "group",
     [member("agent-xiaoman", "waiting_for_input")],
     {
       preview: "Who should the weekly report go to?",

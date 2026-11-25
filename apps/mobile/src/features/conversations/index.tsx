@@ -21,6 +21,7 @@ import {
   archivedConversations,
   directEntries,
   groupSections,
+  ownChatAgent,
   statusLine,
   waitingDirects,
   waitingGroups,
@@ -294,7 +295,7 @@ function when(at: number): string {
 
 function ArchivedRow(props: { conversation: ConversationSummary }) {
   const place = () =>
-    props.conversation.kind === "direct"
+    ownChatAgent(props.conversation) !== undefined
       ? t("conversations.directs")
       : (projectById(props.conversation.projectId)?.name ?? "");
   return (

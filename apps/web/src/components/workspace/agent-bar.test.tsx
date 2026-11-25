@@ -14,16 +14,17 @@ import {
 import { cleanup, click, flush, mount } from "@/test-render";
 import { ChatHeader, MobileChatHeader } from "./agent-bar";
 
-const direct = (id: string, agent: string, name: string) =>
+/** An agent's own chat: a group of one, in that agent's home project. */
+const ownChat = (id: string, agent: string, name: string) =>
   conversationView({
     id,
     name,
-    kind: "direct",
+    projectId: `home-${agent}`,
     participants: [memberView(agent)],
   });
 const groups: ConversationSummary[] = [
-  direct("d1", "a1", "小明"),
-  direct("d2", "a2", "一个名字非常非常非常长的智能体助手"),
+  ownChat("d1", "a1", "小明"),
+  ownChat("d2", "a2", "一个名字非常非常非常长的智能体助手"),
   conversationView({
     id: "g1",
     name: "发布讨论",

@@ -11,14 +11,23 @@ import { reason } from "../../ui/format";
 import { Sheet } from "../../ui/Sheet";
 import { toast } from "../../ui/toast";
 import { call } from "../../wire/target";
+import { ownChatAgent } from "./list";
 
 export const updateConversation = (
   args: ConversationArgs["update"],
 ): Promise<unknown> => call("conversations", "update", args);
 
+/**
+ * One agent's own chat: it bears that agent's name and lives in that agent's own directory, so it
+ * has no place line and no Rename.
+ */
+function ownChat(conversation: ConversationSummary | undefined): boolean {
+  return ownChatAgent(conversation) !== undefined;
+}
+
 function place(conversation: ConversationSummary | undefined): string {
   const project = projectById(conversation?.projectId);
-  if (conversation?.kind === "direct" || project === undefined) return "";
+  if (ownChat(conversation) || project === undefined) return "";
   const machine = machineById(project.machineId);
   return machine === undefined
     ? project.name
@@ -77,7 +86,7 @@ export function ConversationSheet(props: {
                 </Text>
               </If>
             </View>
-            <If when={props.conversation?.kind !== "direct"}>
+            <If when={!ownChat(props.conversation)}>
               <Action
                 title={t("conversations.rename")}
                 onPress={() => {

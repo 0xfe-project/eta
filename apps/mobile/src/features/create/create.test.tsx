@@ -297,8 +297,10 @@ test("07d: the agent made gets a group of its own (conversations.create), not ag
   await app.waitFor("id:agent-create");
   await app.press("id:agent-create");
   await app.waitFor("id:chat-members");
-  expect(app.shows("label:群信息")).toBe(true);
-  expect(app.shows("text:/主理人：代码审查/")).toBe(true);
+  // A group of the agent alone is that agent's own chat: its name over the screen, and its own
+  // page behind the header.
+  expect(app.shows("text:/^代码审查$/")).toBe(true);
+  expect(app.shows("label:智能体信息")).toBe(true);
 });
 
 test("07c: a runtime the machine lacks moves the draft to eta", async () => {

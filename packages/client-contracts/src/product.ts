@@ -136,6 +136,33 @@ export interface ProjectView {
  */
 export type ConversationKind = "group" | "captain" | "direct";
 
+/**
+ * Whether a conversation is one agent's own chat: a group whose only member is that agent.
+ *
+ * This is what "talk to this agent" means now that a private chat is a group of one — no host
+ * sends `direct` any more. Three things are deliberately left to the caller:
+ *
+ * - `archived`: an agent's own row hides a chat that is put away, the archive shows it. The
+ *   predicate says what the conversation *is*, not whether it should be drawn here.
+ * - the project: a caller that claims a conversation for an agent's row also checks it is in that
+ *   agent's home project (`AgentView.homeProjectId`), which is where the client makes it. A group
+ *   of one in someone else's project is still that project's row.
+ * - Captain's own conversation, which is `captain` and not a group of anything.
+ */
+export function agentOnlyChat(
+  conversation: Pick<ConversationSummary, "kind" | "participants"> | undefined,
+  agentId: string | null | undefined,
+): boolean {
+  // Everything a page reads is optional while it loads, so nothing to look at is simply "no".
+  if (conversation === undefined || agentId === null || agentId === undefined)
+    return false;
+  return (
+    conversation.kind === "group" &&
+    conversation.participants.length === 1 &&
+    conversation.participants[0]?.agentId === agentId
+  );
+}
+
 /** `idle` unless one of the member's replies in the conversation is in flight. */
 export type MemberStatus =
   | "idle"

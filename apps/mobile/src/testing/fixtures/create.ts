@@ -19,6 +19,7 @@ import type {
   TimelineSection,
 } from "@eta/client-contracts";
 import type { FakeHost } from "../fake-host";
+import { agentOnlyChat } from "@eta/client-contracts";
 import { Storage } from "nsh";
 import { minutesAgo, PROJECTS } from "./base";
 
@@ -246,6 +247,19 @@ export function installCreate(host: FakeHost): void {
     const given = args.name?.trim();
     // A group nobody named takes the project's name, not the names of who is in it.
     const name = given === undefined || given === "" ? project.name : given;
+    // Stricter than the host, which would make a second group of the same one agent: a press that
+    // makes a chat instead of finding the one the agent has is a failure here, where it is seen.
+    const [only] = members;
+    const known =
+      members.length === 1 && only !== undefined
+        ? conversations().find(
+            (each) =>
+              each.projectId === project.id &&
+              !each.archived &&
+              agentOnlyChat(each, only),
+          )
+        : undefined;
+    if (known !== undefined) throw new Error("this agent already has its chat");
     const made = conversation(project.id, "group", name, members, stewardId);
     open(made);
     return { conversation: made };

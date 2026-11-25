@@ -1,4 +1,5 @@
 import type { AgentView, ConversationSummary } from "@eta/client-contracts";
+import { agentOnlyChat } from "@eta/client-contracts";
 import { useMemo } from "react";
 import { projectPlace } from "@/lib/projects";
 import { useAgentList } from "@/queries/agents";
@@ -38,16 +39,91 @@ export interface AgentEntry {
 const activityOf = (conversation: ConversationSummary) =>
   conversation.lastMessageAt ?? conversation.updatedAt;
 
+/**
+ * Whether a conversation is that agent's own chat: a group of one, in its home project.
+ *
+ * The project is part of the question, and `agentOnlyChat` deliberately leaves it out: a group that
+ * is down to one member in somebody else's project is still that project's group. It is also where
+ * `useOpenAgent` makes the chat, so the row, the press and the screen agree on which conversation
+ * this is.
+ */
+function isOwnChat(
+  conversation: ConversationSummary,
+  agent: Pick<AgentView, "id" | "homeProjectId">,
+): boolean {
+  return (
+    conversation.projectId === agent.homeProjectId &&
+    agentOnlyChat(conversation, agent.id)
+  );
+}
+
+/** The agent whose own chat this is, when it is one. */
+export function ownChatAgent(
+  conversation: ConversationSummary | undefined,
+  agents: readonly Pick<AgentView, "id" | "homeProjectId">[],
+): Pick<AgentView, "id" | "homeProjectId"> | undefined {
+  if (conversation === undefined) return undefined;
+  const agent = agents.find(
+    (each) => each.id === conversation.participants[0]?.agentId,
+  );
+  return agent !== undefined && isOwnChat(conversation, agent)
+    ? agent
+    : undefined;
+}
+
+/**
+ * The chat an agent already has: the newest of them, and a chat that is still open over one that was
+ * put away, whatever their times say — pressing the agent opens that one rather than making another.
+ */
+export function ownChatOf(
+  agent: Pick<AgentView, "id" | "homeProjectId">,
+  conversations: readonly ConversationSummary[],
+): ConversationSummary | undefined {
+  let found: ConversationSummary | undefined;
+  for (const conversation of conversations) {
+    if (!isOwnChat(conversation, agent)) continue;
+    if (found === undefined) {
+      found = conversation;
+      continue;
+    }
+    if (found.archived !== conversation.archived) {
+      if (found.archived) found = conversation;
+      continue;
+    }
+    if (activityOf(conversation) > activityOf(found)) found = conversation;
+  }
+  return found;
+}
+
 export function useChatList() {
   const { groups, current } = useGroups();
   const { agents, loaded } = useAgentList();
   const { projects } = useProjects();
   const { machines } = useMachines();
 
+  /** The chat each agent has, by agent id: what the agents section is made of. */
+  const chats = useMemo(() => {
+    const map = new Map<string, ConversationSummary>();
+    for (const agent of agents) {
+      const chat = ownChatOf(agent, groups);
+      if (chat !== undefined) map.set(agent.id, chat);
+    }
+    return map;
+  }, [agents, groups]);
+
+  /**
+   * The conversations that are one agent's own chat, by id. They are the agents section's rows,
+   * not a place, so they are out of the directories — and a row of one says less about itself,
+   * because the agent's name is already the row's title.
+   */
+  const owned = useMemo(
+    () => new Set([...chats.values()].map((chat) => chat.id)),
+    [chats],
+  );
+
   const directories = useMemo<DirectoryGroup[]>(() => {
     const open = groups.filter(
-      (conversation) =>
-        !conversation.archived && conversation.kind !== "direct",
+      (conversation) => !conversation.archived && !owned.has(conversation.id),
     );
     const byProject = new Map<string, ConversationSummary[]>();
     for (const conversation of open) {
@@ -76,16 +152,10 @@ export function useChatList() {
         };
       })
       .sort((left, right) => right.at - left.at);
-  }, [groups, projects, machines]);
+  }, [groups, projects, machines, owned]);
 
   const directs = useMemo<AgentEntry[]>(() => {
-    // Every private chat, archived ones included: an agent that has one is represented by it.
-    const chats = new Map<string, ConversationSummary>();
-    for (const conversation of groups) {
-      if (conversation.kind !== "direct") continue;
-      const agentId = conversation.participants[0]?.agentId;
-      if (agentId !== undefined) chats.set(agentId, conversation);
-    }
+    // Every agent's own chat, archived ones included: an agent that has one is represented by it.
     return agents
       .filter((a) => a.systemRole !== "captain")
       .flatMap((agent): AgentEntry[] => {
@@ -115,7 +185,7 @@ export function useChatList() {
           ? right.at - left.at
           : left.agent.createdAt - right.agent.createdAt;
       });
-  }, [groups, agents]);
+  }, [chats, agents]);
 
-  return { directories, directs, current, loaded };
+  return { directories, directs, owned, current, loaded };
 }
