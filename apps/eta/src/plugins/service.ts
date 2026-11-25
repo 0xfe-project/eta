@@ -433,6 +433,37 @@ export class Plugins {
   }
 
   /**
+   * The agent's ready Composio toolkits in the shape an external runtime takes: the one server of
+   * their one session, as eta's own loop is given it. On this machine it comes after the installed
+   * plugins' servers (`runtimeExtrasFor`); on a daemon's it goes in the open
+   * (`OpenSessionArgs.mcpServers`), since it is no file to send, and the daemon puts it after the
+   * plugins' the same way.
+   */
+  toolkitServersFor(agentId: string): SessionMcpServer[] {
+    return this.#sessionServersOf(this.#split(agentId).virtual);
+  }
+
+  /** The servers of a set of virtual plugins in the shape an external runtime takes. */
+  #sessionServersOf(names: readonly string[]): SessionMcpServer[] {
+    const source = this.#virtual?.mcpSource(names);
+    if (source === undefined) return [];
+    return Object.entries(source.servers).flatMap(([server, entry]) =>
+      entry.url === undefined
+        ? []
+        : [
+            {
+              name: server,
+              type: "http" as const,
+              url: entry.url,
+              ...(entry.headers === undefined
+                ? {}
+                : { headers: entry.headers }),
+            },
+          ],
+    );
+  }
+
+  /**
    * A plugin's servers' configuration with the sign-in of each remote OAuth server in its headers,
    * for a runtime that cannot sign in itself: `Authorization`, and the server's own token header if
    * the user chose one. A server that has no sign-in, or whose sign-in cannot be refreshed, is left
