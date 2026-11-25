@@ -577,8 +577,8 @@ function TaskRow(props: {
     props.toggle && !props.toggle.open ? needingYou(task(), host.tasks()) : 0;
   const executor = () =>
     host.agent(task().assigneeAgentId ?? task().createdBy.agentId)?.name;
-  // `taskTime`, not the routines' `runAgo`: that one needs `Intl.RelativeTimeFormat`, which the
-  // native runtime (macOS, Linux, Windows, phones) does not have, and its throw took the line.
+  // `taskTime`, not the routines' `runAgo`: a task's line says its own words ("Just now", "3 hours
+  // ago", the date once it is a day old), and it says them without a relative-time formatter.
   const meta = () =>
     (props.timeFirst
       ? [`#${task().number}`, executor()]
