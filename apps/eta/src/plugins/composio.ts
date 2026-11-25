@@ -32,7 +32,7 @@ import {
   COMPOSIO_NO_MANAGED_LOGIN,
   composioOwnScheme,
 } from "@eta/client-contracts";
-import { PluginError, sessionServerName } from "@eta/daemon";
+import { PluginError } from "@eta/daemon";
 import { EncryptedCredentialTable } from "../credentials/table";
 
 /** The address the source has in `MarketSource.url`: not a web address, only a name. */
