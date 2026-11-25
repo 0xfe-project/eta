@@ -3,6 +3,7 @@
  * requests: nothing reaches the network, and no real key is used.
  */
 import { Buffer } from "node:buffer";
+import { COMPOSIO_NO_MANAGED_LOGIN } from "@eta/client-contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EncryptedCredentialTable } from "../src/credentials/table";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
@@ -507,8 +508,9 @@ describe("the link", () => {
     handler = link();
     await expect(composio.link("hackernews")).rejects.toThrow();
     expect(requests).toHaveLength(0);
-    // A toolkit that signs in with the user's own key has its tests below.
-    for (const slug of ["gmail", "odd", "not-in-the-list"]) {
+    // A toolkit that signs in with the user's own key, and one Composio has no sign-in of its own
+    // for (the `odd` one), have their tests below.
+    for (const slug of ["gmail", "not-in-the-list"]) {
       requests.length = 0;
       expect(await composio.link(slug)).toBe(
         "https://connect.composio.dev/link/abc",
@@ -855,6 +857,271 @@ describe("the link", () => {
     it("never deletes anything on Composio", async () => {
       const composio = await listed([mine("ac_mine", {})]);
       await composio.link("exa");
+      expect(requests.some((r) => r.method === "DELETE")).toBe(false);
+    });
+  });
+
+  describe("a toolkit Composio has no managed sign-in for", () => {
+    const toolkitOf = (slug: string, ...schemes: string[]) =>
+      item(slug, { auth_schemes: schemes, composio_managed_auth_schemes: [] });
+    const mine = (id: string, extra: object = {}) => ({
+      id,
+      is_composio_managed: false,
+      status: "ENABLED",
+      auth_scheme: "OAUTH2",
+      ...extra,
+    });
+    const managedOne = {
+      id: "ac_managed",
+      is_composio_managed: true,
+      status: "ENABLED",
+      auth_scheme: "OAUTH2",
+      is_enabled_for_tool_router: true,
+    };
+    async function listed(
+      toolkits: unknown[],
+      configs: unknown[],
+      patch?: () => Response,
+    ) {
+      const { composio, market } = open();
+      composio.setKey(KEY);
+      handler = () => json({ items: toolkits, next_cursor: null });
+      await composioOf(market);
+      requests.length = 0;
+      handler = link((url, body) => {
+        if (url.pathname === "/api/v3/auth_configs" && body === "")
+          return json({ items: configs });
+        if (url.pathname === "/api/v3/auth_configs")
+          return json({
+            auth_config: { id: "ac_made", is_composio_managed: false },
+          });
+        if (url.pathname.startsWith("/api/v3/auth_configs/"))
+          return patch?.() ?? json({ success: true });
+        return undefined;
+      });
+      return composio;
+    }
+    const steps = () =>
+      requests.map((r) => `${r.method} ${r.path.split("?")[0]}`);
+    const linkedTo = () =>
+      (
+        JSON.parse(requests.find((r) => r.path.includes("/link"))!.body) as {
+          auth_config_id: string;
+        }
+      ).auth_config_id;
+    // Schemes eta has no evidence it can make a config for without the user's credentials: for these
+    // nothing is created, and a config the user made on Composio is the only way in.
+    const NEEDS_OWN_APP: [string, string[]][] = [
+      ["twitter", ["OAUTH2"]],
+      ["railway_mcp", ["OAUTH2"]],
+      ["odd", ["SOMETHING_NEW"]],
+    ];
+
+    it("makes a custom key config, not a managed one, for a toolkit that lists a key next to OAuth (Railway)", async () => {
+      expect(authOf(["OAUTH2", "API_KEY"], [], false)).toBe("oauth");
+      const composio = await listed(
+        [toolkitOf("railway", "OAUTH2", "API_KEY")],
+        [managedOne],
+      );
+      expect(await composio.link("railway")).toBe(
+        "https://connect.composio.dev/link/abc",
+      );
+      expect(steps()).toEqual([
+        "GET /api/v3/auth_configs",
+        "POST /api/v3/auth_configs",
+        "PATCH /api/v3/auth_configs/ac_made",
+        "POST /api/v3/connected_accounts/link",
+      ]);
+      expect(JSON.parse(requests[1]!.body)).toEqual({
+        toolkit: { slug: "railway" },
+        auth_config: {
+          type: "use_custom_auth",
+          authScheme: "API_KEY",
+          name: expect.any(String),
+          credentials: {},
+        },
+      });
+      expect(JSON.stringify(requests)).not.toContain("use_composio_managed");
+      expect(linkedTo()).toBe("ac_made");
+    });
+
+    it("takes the bearer token scheme when that is the key it lists next to OAuth", async () => {
+      const composio = await listed(
+        [toolkitOf("railway", "OAUTH2", "BEARER_TOKEN")],
+        [],
+      );
+      await composio.link("railway");
+      expect(
+        (
+          JSON.parse(requests[1]!.body) as {
+            auth_config: { authScheme: string };
+          }
+        ).auth_config.authScheme,
+      ).toBe("BEARER_TOKEN");
+    });
+
+    it("asks nothing of Composio but the list when there is no config of its own, and says what to do", async () => {
+      for (const [slug, schemes] of NEEDS_OWN_APP) {
+        const composio = await listed(
+          [toolkitOf(slug, ...schemes)],
+          [managedOne, mine("ac_disabled", { status: "DISABLED" })],
+        );
+        const error = await composio.link(slug).then(
+          () => "",
+          (caught: unknown) => String(caught),
+        );
+        expect(error).toContain(COMPOSIO_NO_MANAGED_LOGIN);
+        expect(error).not.toContain("404");
+        expect(steps()).toEqual(["GET /api/v3/auth_configs"]);
+      }
+    });
+
+    it("uses a config of its own that is on for the tool router, of any scheme, and creates and patches nothing", async () => {
+      for (const [slug, schemes] of NEEDS_OWN_APP) {
+        const composio = await listed(
+          [toolkitOf(slug, ...schemes)],
+          [
+            managedOne,
+            mine("ac_off", { is_enabled_for_tool_router: false }),
+            mine("ac_disabled", { status: "DISABLED" }),
+            mine("ac_mine", {
+              auth_scheme: schemes[0],
+              is_enabled_for_tool_router: true,
+            }),
+          ],
+        );
+        expect(await composio.link(slug)).toBe(
+          "https://connect.composio.dev/link/abc",
+        );
+        expect(steps()).toEqual([
+          "GET /api/v3/auth_configs",
+          "POST /api/v3/connected_accounts/link",
+        ]);
+        expect(linkedTo()).toBe("ac_mine");
+      }
+    });
+
+    it("switches a config of its own on for the tool router when it is off, and still links when that fails", async () => {
+      const composio = await listed(
+        [toolkitOf("twitter", "OAUTH2")],
+        [mine("ac_off", { is_enabled_for_tool_router: false })],
+      );
+      await composio.link("twitter");
+      expect(steps()).toEqual([
+        "GET /api/v3/auth_configs",
+        "PATCH /api/v3/auth_configs/ac_off",
+        "POST /api/v3/connected_accounts/link",
+      ]);
+      expect(JSON.parse(requests[1]!.body)).toEqual({
+        type: "default",
+        is_enabled_for_tool_router: true,
+      });
+      expect(linkedTo()).toBe("ac_off");
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const failing = await listed(
+        [toolkitOf("twitter", "OAUTH2")],
+        [mine("ac_off", { is_enabled_for_tool_router: false })],
+        () => json({ message: `no ${KEY}` }, 500),
+      );
+      expect(await failing.link("twitter")).toBe(
+        "https://connect.composio.dev/link/abc",
+      );
+      expect(linkedTo()).toBe("ac_off");
+    });
+
+    it("makes a custom config with no credentials for a toolkit that signs in by dynamic client registration (Cloudflare MCP)", async () => {
+      const composio = await listed(
+        [toolkitOf("cloudflare_mcp", "DCR_OAUTH")],
+        [managedOne],
+      );
+      expect(await composio.link("cloudflare_mcp")).toBe(
+        "https://connect.composio.dev/link/abc",
+      );
+      expect(steps()).toEqual([
+        "GET /api/v3/auth_configs",
+        "POST /api/v3/auth_configs",
+        "PATCH /api/v3/auth_configs/ac_made",
+        "POST /api/v3/connected_accounts/link",
+      ]);
+      expect(JSON.parse(requests[1]!.body)).toEqual({
+        toolkit: { slug: "cloudflare_mcp" },
+        auth_config: {
+          type: "use_custom_auth",
+          authScheme: "DCR_OAUTH",
+          name: expect.any(String),
+          credentials: {},
+        },
+      });
+      expect(JSON.stringify(requests)).not.toContain("use_composio_managed");
+      expect(linkedTo()).toBe("ac_made");
+    });
+
+    it("takes a DCR config of its own when there is one, and no other scheme of its own", async () => {
+      const composio = await listed(
+        [toolkitOf("cloudflare_mcp", "DCR_OAUTH")],
+        [
+          mine("ac_other", {
+            auth_scheme: "OAUTH2",
+            is_enabled_for_tool_router: true,
+          }),
+          mine("ac_dcr", {
+            auth_scheme: "DCR_OAUTH",
+            is_enabled_for_tool_router: true,
+          }),
+        ],
+      );
+      await composio.link("cloudflare_mcp");
+      expect(steps()).toEqual([
+        "GET /api/v3/auth_configs",
+        "POST /api/v3/connected_accounts/link",
+      ]);
+      expect(linkedTo()).toBe("ac_dcr");
+    });
+
+    it("prefers a key to dynamic client registration when it lists both", async () => {
+      const composio = await listed(
+        [toolkitOf("both", "DCR_OAUTH", "OAUTH2", "API_KEY")],
+        [],
+      );
+      await composio.link("both");
+      expect(
+        (
+          JSON.parse(requests[1]!.body) as {
+            auth_config: { authScheme: string };
+          }
+        ).auth_config.authScheme,
+      ).toBe("API_KEY");
+    });
+
+    it("leaves a toolkit that has a managed sign-in as it was: a managed config is made when there is none", async () => {
+      const composio = await listed([item("gmail")], []);
+      expect(await composio.link("gmail")).toBe(
+        "https://connect.composio.dev/link/abc",
+      );
+      expect(steps()).toEqual([
+        "GET /api/v3/auth_configs",
+        "POST /api/v3/auth_configs",
+        "PATCH /api/v3/auth_configs/ac_made",
+        "POST /api/v3/connected_accounts/link",
+      ]);
+      expect(JSON.parse(requests[1]!.body)).toEqual({
+        toolkit: { slug: "gmail" },
+        auth_config: { type: "use_composio_managed_auth" },
+      });
+    });
+
+    it("never deletes anything on Composio", async () => {
+      const composio = await listed(
+        [
+          toolkitOf("twitter", "OAUTH2"),
+          toolkitOf("railway", "API_KEY"),
+          toolkitOf("cloudflare_mcp", "DCR_OAUTH"),
+        ],
+        [mine("ac_mine", { is_enabled_for_tool_router: true })],
+      );
+      await composio.link("twitter");
+      await composio.link("railway");
+      await composio.link("cloudflare_mcp");
       expect(requests.some((r) => r.method === "DELETE")).toBe(false);
     });
   });
