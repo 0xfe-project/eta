@@ -4,6 +4,7 @@
  * enabled it. Against a local fake of backend.composio.dev that echoes the config it was given;
  * nothing reaches the network and no real key is used.
  */
+import type { ToolResult } from "@eta/harness";
 import { Buffer } from "node:buffer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EncryptedCredentialTable } from "../src/credentials/table";
@@ -11,6 +12,7 @@ import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { Composio } from "../src/plugins/composio";
 import { CatalogCache } from "../src/plugins/market-cache";
 import { Plugins } from "../src/plugins/service";
+import { pluginSessionTools } from "../src/plugins/tools";
 import { SettingStore } from "../src/settings/store";
 
 const KEY = "ck_test_SECRET_0123456789";
@@ -1148,5 +1150,153 @@ describe("one session for the toolkits an agent has enabled", () => {
       expect(plugins.toolkitServersFor("ada")).toEqual([toolkitServer()]);
       expect(posts()).toHaveLength(1);
     });
+  });
+});
+
+describe("list_toolkits: the Composio toolkits an agent has enabled", () => {
+  /** Agents (by id) with the toolkits (slugs) each has enabled, joined to Composio as product.ts does. */
+  function setup(enabled: Record<string, string[]>) {
+    const made = open();
+    const plugins = new Plugins({
+      db: made.db,
+      dataDir: "unused",
+      key: Buffer.alloc(32, 1),
+      agents: { get: () => ({ runtime: "eta" }) } as never,
+      machines: { list: () => [] } as never,
+      hub: { onReady: () => {} } as never,
+      changed: () => {},
+      warn: () => {},
+    });
+    plugins.setVirtual(made.composio);
+    for (const [agent, slugs] of Object.entries(enabled))
+      plugins.rows.setEnabled(
+        agent,
+        slugs.map((slug) => `@composio/${slug}`),
+      );
+    return { ...made, plugins };
+  }
+  /** What the host's list says, kept: the display names come from it. */
+  const known = async (composio: Composio) => {
+    toolkits = [kit("gmail", ["OAUTH2"]), kit("notion", ["OAUTH2"])];
+    await composio.read(composio.source(), "refresh");
+  };
+  const toolOf = (plugins: Plugins, agent: string) =>
+    pluginSessionTools({
+      plugins,
+      transportOf: () => {
+        throw new Error("no machine");
+      },
+    })({
+      meta: { id: `session-${agent}`, createdAt: 0, cwd: ".", agentId: agent },
+      session: undefined as never,
+    }).find((tool) => tool.name === "list_toolkits");
+  /** Call the tool the way a session does; the tool must be there. */
+  async function asked(plugins: Plugins, agent: string) {
+    const tool = toolOf(plugins, agent);
+    expect(tool?.name).toBe("list_toolkits");
+    const result = (await tool!.execute(
+      {},
+      {
+        turn: 0,
+        toolCallId: "call",
+        signal: new AbortController().signal,
+        toolContext: {},
+      },
+    )) as ToolResult;
+    const text = result.content
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("");
+    return {
+      result,
+      text,
+      said: JSON.parse(text) as {
+        toolkits: { slug: string; name: string; ready: boolean | null }[];
+        message?: string;
+      },
+    };
+  }
+
+  it("lists exactly the toolkits the agent has enabled, with slug, name and readiness", async () => {
+    const { composio, plugins } = setup({ ada: ["notion", "gmail"] });
+    await known(composio);
+    await composio.sync(["gmail", "notion"]);
+    const { said, result } = await asked(plugins, "ada");
+    expect(result.isError).toBeFalsy();
+    expect(said).toEqual({
+      toolkits: [
+        { slug: "gmail", name: "GMAIL", ready: true },
+        { slug: "notion", name: "NOTION", ready: true },
+      ],
+    });
+  });
+
+  it("says plainly that an agent with none has none, and is not an error", async () => {
+    const { composio, plugins } = setup({ ada: ["gmail"] });
+    await composio.sync(["gmail"]);
+    const { said, result } = await asked(plugins, "bob");
+    expect(result.isError).toBeFalsy();
+    expect(said.toolkits).toEqual([]);
+    expect(said.message).toMatch(/no composio toolkits/i);
+  });
+
+  it("never shows one agent the toolkits of another", async () => {
+    const { composio, plugins } = setup({ ada: ["gmail"], bob: ["notion"] });
+    await known(composio);
+    await composio.sync(["gmail", "notion"]);
+    expect((await asked(plugins, "ada")).said.toolkits).toEqual([
+      { slug: "gmail", name: "GMAIL", ready: true },
+    ]);
+    expect((await asked(plugins, "bob")).said.toolkits).toEqual([
+      { slug: "notion", name: "NOTION", ready: true },
+    ]);
+  });
+
+  it("holds no key, header, session id or address in the answer", async () => {
+    const { composio, plugins } = setup({ ada: ["gmail", "notion"] });
+    await known(composio);
+    await composio.sync(["gmail", "notion"]);
+    const { text } = await asked(plugins, "ada");
+    // The key is in the server an agent gets, so its absence from the answer means something.
+    expect(JSON.stringify(plugins.toolkitServersFor("ada"))).toContain(KEY);
+    for (const secret of [KEY, "x-api-key", "sess-", "tool_router", base()])
+      expect(text).not.toContain(secret);
+  });
+
+  it("takes no arguments, and its input schema is far below 1 KB", () => {
+    const { plugins } = setup({ ada: ["gmail"] });
+    const tool = toolOf(plugins, "ada") as unknown as {
+      name: string;
+      parameters: { properties?: Record<string, unknown> };
+    };
+    expect(tool?.name).toBe("list_toolkits");
+    expect(Object.keys(tool.parameters.properties ?? {})).toEqual([]);
+    expect(JSON.stringify(tool.parameters).length).toBeLessThan(512);
+  });
+
+  it("says not ready, and keeps the slug as the name, for what eta has not made a session for", async () => {
+    const { plugins } = setup({ ada: ["gmail"] });
+    expect((await asked(plugins, "ada")).said.toolkits).toEqual([
+      { slug: "gmail", name: "gmail", ready: null },
+    ]);
+  });
+
+  it("says not ready for a toolkit whose session could not be made", async () => {
+    create = () => json({ error: "no" }, 500);
+    const { composio, plugins } = setup({ ada: ["gmail"] });
+    await composio.sync(["gmail"]);
+    expect((await asked(plugins, "ada")).said.toolkits).toEqual([
+      { slug: "gmail", name: "gmail", ready: false },
+    ]);
+  });
+
+  it("leaves out a toolkit the user switched off, and everything while the source is off", async () => {
+    const { composio, plugins } = setup({ ada: ["gmail", "notion"] });
+    await composio.sync(["gmail", "notion"]);
+    plugins.setEnabled("@composio/gmail", false);
+    expect(
+      (await asked(plugins, "ada")).said.toolkits.map((one) => one.slug),
+    ).toEqual(["notion"]);
+    composio.setEnabled(false);
+    expect((await asked(plugins, "ada")).said.toolkits).toEqual([]);
   });
 });
