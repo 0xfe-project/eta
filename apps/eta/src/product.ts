@@ -651,8 +651,8 @@ export function createProduct(options: {
   // Reading the web: pages and searches, for every session that has the tools.
   const web =
     options.web === undefined ? undefined : new Web({ ...options.web, warn });
-  const runHooks = combineRunHooks(
-    memory === undefined
+  const runHooks = combineRunHooks([
+    ...(memory === undefined
       ? []
       : [
           memoryRunHooks(memory, (run) => {
@@ -663,8 +663,13 @@ export function createProduct(options: {
               made.captain?.memoryEnabled({ conversationId: key }) !== false
             );
           }),
-        ],
-  );
+        ]),
+    {
+      afterRun: (run) => {
+        if (run.status === "done") made.captain?.replyEnded(run.replyId);
+      },
+    },
+  ]);
   const engine = new Engine({
     db,
     attachments,
