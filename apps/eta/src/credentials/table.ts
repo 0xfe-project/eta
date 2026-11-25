@@ -34,6 +34,19 @@ export class EncryptedCredentialTable {
     }
   }
 
+  /** When the row was last written (epoch milliseconds), or `undefined` when there is none. */
+  writtenAt(
+    integration: string,
+    owner: string,
+    kind: string,
+  ): number | undefined {
+    return this.#db
+      .query<{ updated_at: number }, [string, string, string]>(
+        "SELECT updated_at FROM credential WHERE integration = ? AND key = ? AND kind = ?",
+      )
+      .get(integration, owner, kind)?.updated_at;
+  }
+
   write(
     integration: string,
     owner: string,
