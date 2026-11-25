@@ -19,6 +19,7 @@ import {
 import { createAppearancePreferences } from "./src/app/appearance-preferences";
 import { ClientUpdateNotice } from "./src/app/client-update-notice";
 import { Workspace } from "./src/app/workspace";
+import { showsWorkspace } from "./src/app/workspace-gate";
 import {
   Button,
   Fonts,
@@ -245,12 +246,12 @@ function App() {
                       style={{ backgroundColor: c().canvas }}
                     >
                       <If
-                        when={
-                          host.hasConnected() &&
-                          !host.paused() &&
-                          !forcedConnect() &&
-                          workspaceSettled()
-                        }
+                        when={showsWorkspace({
+                          connected: host.hasConnected(),
+                          everConnected: host.everConnected(),
+                          changingHost: forcedConnect(),
+                          settled: workspaceSettled(),
+                        })}
                         else={
                           <If
                             when={loadingWebWorkspace() || !workspaceSettled()}
