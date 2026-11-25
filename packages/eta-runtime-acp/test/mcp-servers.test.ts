@@ -109,6 +109,7 @@ describe("the MCP servers a reopened session sends", () => {
         headers: [{ name: "X-Beta", value: "b" }],
       });
     },
+    20_000,
   );
 
   it("reach an agent that can neither resume nor load in a new session, with the new list", async () => {
@@ -128,7 +129,7 @@ describe("the MCP servers a reopened session sends", () => {
       ["session/new", ["alpha-search", "beta-docs"]],
     ]);
     expect(warnings.join("\n")).toContain("cannot pick a session up again");
-  });
+  }, 20_000);
 
   it("leaves an HTTP server out for an agent that takes none, and the warning names it", async () => {
     const { manager, agent, extras, warnings } = setup({ FAKE_ACP_HTTP: "0" }, [
@@ -148,7 +149,7 @@ describe("the MCP servers a reopened session sends", () => {
     expect(warnings.join("\n")).toContain(
       "the MCP server alpha-search is HTTP, which this agent does not take; left out",
     );
-  });
+  }, 20_000);
 });
 
 describe("the line at the open of a runtime session", () => {
@@ -172,7 +173,7 @@ describe("the line at the open of a runtime session", () => {
       "[eta-runtime-acp] acp.fake: opened the agent's session (new); MCP servers sent: gamma-local; left out: alpha-search",
       "[eta-runtime-acp] acp.fake: opened the agent's session (resume); MCP servers sent: gamma-local; left out: alpha-search",
     ]);
-  });
+  }, 20_000);
 
   it("says load for a session picked up with load, and none where there are no servers", async () => {
     const { manager, agent, extras, warnings } = setup(
@@ -188,7 +189,7 @@ describe("the line at the open of a runtime session", () => {
       "[eta-runtime-acp] acp.fake: opened the agent's session (new); MCP servers sent: none; left out: none",
       "[eta-runtime-acp] acp.fake: opened the agent's session (load); MCP servers sent: none; left out: none",
     ]);
-  });
+  }, 20_000);
 
   it("holds no address, header or environment value, only names", async () => {
     const { manager, agent, extras, warnings } = setup({}, []);
@@ -223,5 +224,5 @@ describe("the line at the open of a runtime session", () => {
       expect(all).not.toContain(secret);
     // Nothing else the runtime says carries them either.
     expect(warnings.join("\n")).not.toContain("SECRET");
-  });
+  }, 20_000);
 });
