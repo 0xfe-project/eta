@@ -1,6 +1,6 @@
 /**
- * Composio toolkits as virtual plugins: one tool_router session per connected toolkit, made when the
- * toolkit is connected, checked against what Composio echoes back, and given to the agents that
+ * Composio toolkits as virtual plugins: a tool_router session for the set of toolkits an agent has enabled
+ * (and one for each toolkit no agent has), made when the toolkit is connected, checked against what Composio echoes back, and given to the agents that
  * enabled it. Against a local fake of backend.composio.dev that echoes the config it was given;
  * nothing reaches the network and no real key is used.
  */
@@ -199,17 +199,17 @@ describe("a session for a connected toolkit", () => {
   it("serves its address with the key as a header, and only for a ready toolkit", async () => {
     const { composio } = open();
     await composio.sync(["gmail"]);
-    expect(composio.mcpSource("@composio/gmail")).toEqual({
-      name: "composio:gmail",
+    expect(composio.mcpSource(["@composio/gmail"])).toEqual({
+      name: "composio",
       servers: {
-        "composio-gmail": {
+        composio: {
           type: "http",
           url: `${base()}/tool_router/sess-1/mcp`,
           headers: { "x-api-key": KEY },
         },
       },
     });
-    expect(composio.mcpSource("@composio/other")).toBeUndefined();
+    expect(composio.mcpSource(["@composio/other"])).toBeUndefined();
     expect(JSON.stringify(composio.virtuals())).not.toContain(KEY);
   });
 
@@ -225,7 +225,7 @@ describe("a session for a connected toolkit", () => {
       { slug: "gmail", state: "error" },
     ]);
     expect(composio.has("@composio/gmail")).toBe(false);
-    expect(composio.mcpSource("@composio/gmail")).toBeUndefined();
+    expect(composio.mcpSource(["@composio/gmail"])).toBeUndefined();
     expect(stored("gmail")).toBeUndefined();
   });
 
@@ -352,7 +352,7 @@ describe("a session for a connected toolkit", () => {
     expect(gets()).toHaveLength(1);
     expect(again.has("@composio/gmail")).toBe(true);
     expect(
-      again.mcpSource("@composio/gmail")?.servers["composio-gmail"],
+      again.mcpSource(["@composio/gmail"])?.servers.composio,
     ).toMatchObject({
       url: `${base()}/tool_router/sess-1/mcp`,
     });
@@ -424,7 +424,7 @@ describe("a session for a connected toolkit", () => {
     composio.setEnabled(false);
     expect(composio.virtuals()).toEqual([]);
     expect(composio.has("@composio/gmail")).toBe(false);
-    expect(composio.mcpSource("@composio/gmail")).toBeUndefined();
+    expect(composio.mcpSource(["@composio/gmail"])).toBeUndefined();
     composio.setEnabled(true);
     expect(composio.has("@composio/gmail")).toBe(true);
   });
@@ -461,7 +461,7 @@ describe("a Composio toolkit as a plugin of the agents", () => {
     const { composio, plugins } = setup();
     await composio.sync(["gmail"]);
     expect(plugins.mcpSourcesFor("ada")).toEqual([
-      composio.mcpSource("@composio/gmail"),
+      composio.mcpSource(["@composio/gmail"]),
     ]);
     expect(plugins.mcpSourcesFor("bob")).toEqual([]);
     expect(plugins.skipped("ada")).toEqual([]);
@@ -957,7 +957,7 @@ describe("one session for the toolkits an agent has enabled", () => {
   const ids = (stamp: string) =>
     stamp === "" ? [] : stamp.split(",").map((part) => part.split("@").at(-1)!);
 
-  it.fails("gives an agent with two toolkits one server, from one session that has both slugs", async () => {
+  it("gives an agent with two toolkits one server, from one session that has both slugs", async () => {
     const { composio, plugins } = world({ ada: ["gmail", "notion"] });
     await composio.sync(["gmail", "notion"]);
     await served(plugins, "ada");
@@ -979,7 +979,7 @@ describe("one session for the toolkits an agent has enabled", () => {
     expect(stored("gmail")).toBe("sess-1");
   });
 
-  it.fails("is shared by two agents that have the same toolkits", async () => {
+  it("is shared by two agents that have the same toolkits", async () => {
     const { composio, plugins } = world({
       ada: ["gmail", "notion"],
       bob: ["notion", "gmail"],
@@ -992,7 +992,7 @@ describe("one session for the toolkits an agent has enabled", () => {
     expect(servers(plugins, "bob")).toEqual(servers(plugins, "ada"));
   });
 
-  it.fails("is another session for agents that have other toolkits, and each has its own", async () => {
+  it("is another session for agents that have other toolkits, and each has its own", async () => {
     const { composio, plugins } = world({
       ada: ["gmail", "notion"],
       bob: ["gmail"],
@@ -1011,7 +1011,7 @@ describe("one session for the toolkits an agent has enabled", () => {
     );
   });
 
-  it.fails("puts one id in the stamp of an agent's sessions for all its toolkits", async () => {
+  it("puts one id in the stamp of an agent's sessions for all its toolkits", async () => {
     const { composio, plugins } = world({ ada: ["gmail", "notion"] });
     await composio.sync(["gmail", "notion"]);
     await served(plugins, "ada");
@@ -1021,7 +1021,7 @@ describe("one session for the toolkits an agent has enabled", () => {
     expect(stamp).not.toContain(KEY);
   });
 
-  it.fails("is another session for the agent, with another id in its stamp, when one of its toolkits is switched off", async () => {
+  it("is another session for the agent, with another id in its stamp, when one of its toolkits is switched off", async () => {
     const { composio, plugins } = world({ ada: ["gmail", "notion"] });
     await composio.sync(["gmail", "notion"]);
     await served(plugins, "ada");
@@ -1037,7 +1037,7 @@ describe("one session for the toolkits an agent has enabled", () => {
     expect(enables()).toContainEqual(["notion"]);
   });
 
-  it.fails("drops the session of a set that no agent has any more, and keeps the toolkit as its own", async () => {
+  it("drops the session of a set that no agent has any more, and keeps the toolkit as its own", async () => {
     const { composio, plugins, stored } = world({ ada: ["gmail", "notion"] });
     await composio.sync(["gmail", "notion"]);
     await served(plugins, "ada");
@@ -1052,7 +1052,7 @@ describe("one session for the toolkits an agent has enabled", () => {
     ]);
   });
 
-  it.fails("erases every kept session when the key is replaced or cleared", async () => {
+  it("erases every kept session when the key is replaced or cleared", async () => {
     const { composio, plugins, stored, settings } = world({
       ada: ["gmail", "notion"],
       bob: ["gmail"],
@@ -1074,7 +1074,7 @@ describe("one session for the toolkits an agent has enabled", () => {
     expect(settings.get("plugins.composioSessions")).toBeUndefined();
   });
 
-  it.fails("is not registered when Composio echoes another toolkit list for the set, and nothing is kept", async () => {
+  it("is not registered when Composio echoes another toolkit list for the set, and nothing is kept", async () => {
     const { composio, plugins, stored } = world({ ada: ["gmail", "notion"] });
     echo = (body) => ({
       toolkits: { enabled: body.toolkits.enable.slice(0, 1) },
