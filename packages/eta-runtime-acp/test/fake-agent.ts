@@ -8,6 +8,7 @@
  * - `FAKE_ACP_CAPS`: `resume` (default), `load`, or `none`: how a session can be picked up.
  * - `FAKE_ACP_AUTH=1`: `session/new` answers that a sign-in is needed.
  * - `FAKE_ACP_SYSTEM_PROMPT=1`: it takes a system prompt.
+ * - `FAKE_ACP_HTTP=0`: it takes no HTTP MCP servers (`mcpCapabilities.http` is not true).
  * - `FAKE_ACP_INIT_DELAY_MS`: how long `initialize` waits before it answers (none by default).
  */
 import {
@@ -91,7 +92,7 @@ const app = acp
       agentCapabilities: {
         loadSession: caps === "load",
         promptCapabilities: { image: true },
-        mcpCapabilities: { http: true },
+        mcpCapabilities: { http: process.env.FAKE_ACP_HTTP !== "0" },
         sessionCapabilities: {
           ...(caps === "resume" ? { resume: {} } : {}),
           close: {},
@@ -139,13 +140,21 @@ const app = acp
   .onRequest(methods.agent.session.resume, ({ params }) => {
     const stored = load(params.sessionId);
     save(params.sessionId, { ...stored, openedBy: "resume" });
-    log({ method: "session/resume", sessionId: params.sessionId });
+    log({
+      method: "session/resume",
+      sessionId: params.sessionId,
+      mcpServers: params.mcpServers,
+    });
     return { configOptions: configOptions(stored) };
   })
   .onRequest(methods.agent.session.load, async ({ params, client }) => {
     const stored = load(params.sessionId);
     save(params.sessionId, { ...stored, openedBy: "load" });
-    log({ method: "session/load", sessionId: params.sessionId });
+    log({
+      method: "session/load",
+      sessionId: params.sessionId,
+      mcpServers: params.mcpServers,
+    });
     // The replay a client that keeps its own transcript has to drop.
     for (const text of stored.prompts) {
       await client.notify(methods.client.session.update, {

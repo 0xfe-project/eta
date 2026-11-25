@@ -174,6 +174,9 @@ export function acpServers(
   return out;
 }
 
+const listed = (names: readonly string[]): string =>
+  names.length === 0 ? "none" : names.join(", ");
+
 function optionFor(
   options: readonly PermissionOption[],
   kinds: readonly PermissionOption["kind"][],
@@ -433,14 +436,11 @@ export class AcpDelegate implements RunDelegate {
     const { runtime, warn, cwd } = this.#options;
     const capabilities = process.init.agentCapabilities ?? {};
     const host = await this.#serve(context, capabilities);
-    const mcpServers = acpServers(
-      [
-        ...(host === undefined ? [] : [host]),
-        ...(this.#options.mcpServers ?? []),
-      ],
-      capabilities,
-      warn,
-    );
+    const offered = [
+      ...(host === undefined ? [] : [host]),
+      ...(this.#options.mcpServers ?? []),
+    ];
+    const mcpServers = acpServers(offered, capabilities, warn);
     const agentPrompt = this.#options.agentPrompt();
     const systemPrompt: { systemPrompt?: SystemPrompt } =
       capabilities.sessionCapabilities?.systemPrompt != null &&
@@ -455,6 +455,7 @@ export class AcpDelegate implements RunDelegate {
     const previous = this.#native;
     let options: readonly SessionConfigOption[] | null | undefined;
     let resumed = false;
+    let how: "new" | "resume" | "load" = "new";
     if (previous !== undefined) {
       const picked: LoadSessionRequest = {
         sessionId: previous,
@@ -470,6 +471,7 @@ export class AcpDelegate implements RunDelegate {
           );
           options = answer.configOptions;
           resumed = true;
+          how = "resume";
         } else if (capabilities.loadSession === true) {
           this.#replaying = true;
           try {
@@ -479,6 +481,7 @@ export class AcpDelegate implements RunDelegate {
             );
             options = answer.configOptions;
             resumed = true;
+            how = "load";
           } finally {
             this.#replaying = false;
           }
@@ -516,6 +519,12 @@ export class AcpDelegate implements RunDelegate {
       }
     }
     this.#learn(options);
+    // Names only: a server's address and headers can hold a key.
+    const sent = new Set(mcpServers.map((server) => server.name));
+    const left = offered.filter((server) => !sent.has(server.name));
+    warn(
+      `[eta-runtime-acp] ${runtime}: opened the agent's session (${how}); MCP servers sent: ${listed([...sent])}; left out: ${listed(left.map((server) => server.name))}`,
+    );
     return {
       process,
       agent,
