@@ -23,7 +23,7 @@ export const ANTIGRAVITY_ACP_AGENT: AcpAgentConfig = {
   id: "antigravity",
   label: "Antigravity",
   command: "agy",
-  args: ["acp"],
+  args: ["acp", "--process-per-session"],
   env: {},
 };
 

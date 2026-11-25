@@ -470,7 +470,12 @@ export function ExternalAgentForm(props: {
         hint: () => uiText("acpArgsHint"),
         multiline: true,
       })}
-      <If when={draft().command === "agy" && draft().args === "acp"}>
+      <If
+        when={
+          draft().command.trim() === "agy" &&
+          draft().args.split(/\r?\n/)[0]?.trim() === "acp"
+        }
+      >
         {hint(
           uiText("runtimeHowToSignIn", {
             command: "agy acp --login",
