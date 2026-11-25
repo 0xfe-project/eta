@@ -12,6 +12,7 @@ import type { TextSelection } from "../../components/eta-editor";
 import type { DeliveryActions } from "./composer-delivery";
 import {
   captainProposalOf,
+  isPictureType,
   publishedRefs,
   runBlocks,
   runFromOf,
@@ -58,6 +59,7 @@ import {
 } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
+import { PictureModes } from "../../services/picture-mode";
 import { problemReason } from "../../services/problem-text";
 import { Popover } from "../../ui";
 import { subtasksOf, TaskSummary } from "../tasks/status";
@@ -320,10 +322,23 @@ export function Message(props: {
   const rowWidth = signal(0);
   const share = () => (props.phone ? bubbleShare.phone : bubbleShare.desktop);
   const bubbleBorderAndPadding = 2 * (1 + space[12]);
-  const lineRoom = () => rowWidth() * share() - bubbleBorderAndPadding;
+  const measured = () => rowWidth() > 0;
+  const lineRoom = () =>
+    measured() ? Math.max(0, rowWidth() * share() - bubbleBorderAndPadding) : 0;
+  const pictureModes = PictureModes();
   /** A chip is laid in the text's line and adds nothing to the bubble's own width, so a
    * bubble that holds one is never narrower than the chip's longest. */
-  const holdsChip = () => attached().length > 0 || item().text.includes("![");
+  const holdsChip = () => {
+    const compact = pictureModes.mode() !== "expanded";
+    const chipIn = (message: MessageView) =>
+      !!pasteBlocksOf(message.data, message.text) ||
+      (compact && message.text.includes("!["));
+    return (
+      attached().some((file) => compact || !isPictureType(file.contentType)) ||
+      chipIn(item()) ||
+      props.additions.some((addition) => chipIn(addition))
+    );
+  };
   /** Stop was pressed and the host has not said the reply is stopping yet. */
   const stopping = signal(false);
   async function discard() {
@@ -379,12 +394,13 @@ export function Message(props: {
             }
             style={{
               maxWidth: props.phone ? bubbleWidth.phone : bubbleWidth.desktop,
-              minWidth: holdsChip()
-                ? Math.min(
-                    chipMaxWidth + bubbleBorderAndPadding,
-                    rowWidth() * share(),
-                  )
-                : undefined,
+              minWidth:
+                measured() && holdsChip()
+                  ? Math.min(
+                      chipMaxWidth + space[2] + bubbleBorderAndPadding,
+                      rowWidth() * share(),
+                    )
+                  : undefined,
               borderWidth: 1,
               borderColor: c().border,
               backgroundColor: props.delivery?.failure
@@ -404,29 +420,31 @@ export function Message(props: {
                 plugins={shown}
                 label={uiText("yourMessage")}
               />
+              <Each of={props.additions} key={(addition) => addition.id}>
+                {(addition) => (
+                  <View
+                    style={{
+                      gap: space[2],
+                      marginTop: space[8],
+                      paddingTop: space[8],
+                      borderTopWidth: 1,
+                      borderColor: c().border,
+                    }}
+                  >
+                    <Label variant="caption" tone="muted">
+                      {uiText("inserted", {
+                        clock: clock(addition().createdAt),
+                      })}
+                    </Label>
+                    <chatText.View
+                      text={stored(addition())}
+                      plugins={shown}
+                      label={uiText("insertedMessage")}
+                    />
+                  </View>
+                )}
+              </Each>
             </LineRoom.Provider>
-            <Each of={props.additions} key={(addition) => addition.id}>
-              {(addition) => (
-                <View
-                  style={{
-                    gap: space[2],
-                    marginTop: space[8],
-                    paddingTop: space[8],
-                    borderTopWidth: 1,
-                    borderColor: c().border,
-                  }}
-                >
-                  <Label variant="caption" tone="muted">
-                    {uiText("inserted", { clock: clock(addition().createdAt) })}
-                  </Label>
-                  <chatText.View
-                    text={stored(addition())}
-                    plugins={shown}
-                    label={uiText("insertedMessage")}
-                  />
-                </View>
-              )}
-            </Each>
           </View>
           <If when={props.delivery}>
             {(delivery) => (

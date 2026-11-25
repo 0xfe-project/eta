@@ -82,9 +82,10 @@ export function Chip(props: {
       style={{
         ...row,
         gap: space[4],
-        maxWidth: room()
-          ? Math.min(chipMaxWidth, room() - space[16])
-          : chipMaxWidth,
+        maxWidth:
+          room() > 0
+            ? Math.max(0, Math.min(chipMaxWidth, room() - space[16]))
+            : chipMaxWidth,
         overflow: "hidden",
         height: type("small").line + 4,
         paddingLeft: props.thumbnail ? space[2] : space[4],
