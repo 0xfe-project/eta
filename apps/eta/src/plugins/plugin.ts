@@ -4,7 +4,12 @@
  * A secret goes in through `configure` and is never read back: no section and no answer here has
  * a secret's value, only whether one is set.
  */
-import type { PluginAuditView, PluginValue } from "@eta/client-contracts";
+import type {
+  ComposioPluginView,
+  PluginAuditView,
+  PluginToolkitView,
+  PluginValue,
+} from "@eta/client-contracts";
 import type { AgentStore } from "../agents/store";
 import type { McpService } from "../mcp/service";
 import type { SettingStore } from "../settings/store";
@@ -55,6 +60,19 @@ export function pluginsPlugin(
   const needComposio = (): Composio => {
     if (composio === undefined) throw new Error("Composio is not available");
     return composio;
+  };
+  /**
+   * The connected toolkits as plugins of the agents, with the user's switch. Nothing without
+   * Composio or while its source is off. What the `toolkits` section and `composioPlugins` both say.
+   */
+  const composioPlugins = (
+    source: Composio | undefined,
+  ): ComposioPluginView[] => {
+    const off = plugins.rows.disabled();
+    return (source?.virtuals() ?? []).map((one) => ({
+      ...one,
+      enabled: !off.has(one.name),
+    }));
   };
   /**
    * Servers a test found to refuse their stored sign-in, by URL, with the stamp of the sign-in it
@@ -188,6 +206,14 @@ export function pluginsPlugin(
                               : ("none" as const),
                     },
               ),
+            })),
+          // A toolkit's session is made after the start, so this section moving is what tells a
+          // client that has the page open: it is sent when its content changes, like any section.
+          // Each entry names its provider; Composio is the only one there is.
+          toolkits: (): PluginToolkitView[] =>
+            composioPlugins(composio).map((one) => ({
+              ...one,
+              provider: "composio",
             })),
           audit: (): PluginAuditView[] =>
             plugins.rows.audits(AUDIT_SHOWN).map((row) => ({
@@ -474,16 +500,9 @@ export function pluginsPlugin(
         wire.handle("plugins", "composioAdded", async () => ({
           result: { slugs: needComposio().added() },
         })),
-        wire.handle("plugins", "composioPlugins", async () => {
-          const off = plugins.rows.disabled();
-          return {
-            result: {
-              plugins: needComposio()
-                .virtuals()
-                .map((one) => ({ ...one, enabled: !off.has(one.name) })),
-            },
-          };
-        }),
+        wire.handle("plugins", "composioPlugins", async () => ({
+          result: { plugins: composioPlugins(needComposio()) },
+        })),
         wire.handle("plugins", "composioToolkits", (call) => {
           const { slugs } = (call.args ?? {}) as { slugs?: unknown };
           if (!Array.isArray(slugs))

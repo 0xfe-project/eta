@@ -182,6 +182,8 @@ export interface PluginAuditView {
 
 export interface PluginsSections {
   list: PluginView[];
+  /** The connected toolkits, what `composioPlugins` answers, kept current. Absent from an older host. */
+  toolkits?: PluginToolkitView[];
   audit: PluginAuditView[];
 }
 
@@ -474,6 +476,14 @@ export interface ComposioPluginView {
   slug: string;
   state: "ready" | "error";
   enabled: boolean;
+}
+
+/**
+ * An entry of the `toolkits` section of the `plugins` target: a toolkit and the provider it comes
+ * from. The only provider is `composio`; a client leaves out the entries of one it does not know.
+ */
+export interface PluginToolkitView extends ComposioPluginView {
+  provider: string;
 }
 
 /** How a toolkit signs in, from the schemes Composio lists: `unknown` for one eta does not know. */
