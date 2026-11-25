@@ -411,6 +411,16 @@ export class PluginRows {
       .map((row) => row.agent_id);
   }
 
+  /** What every agent has enabled, one row for each. */
+  allEnabled(): { agentId: string; plugin: string }[] {
+    return this.#db
+      .query<{ agent_id: string; plugin: string }, []>(
+        "SELECT agent_id, plugin FROM agent_plugin ORDER BY agent_id, plugin",
+      )
+      .all()
+      .map((row) => ({ agentId: row.agent_id, plugin: row.plugin }));
+  }
+
   setEnabled(agentId: string, plugins: readonly string[]): void {
     this.#db.transaction(() => {
       this.#db

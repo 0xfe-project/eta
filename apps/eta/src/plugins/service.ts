@@ -90,10 +90,14 @@ export interface VirtualPlugins {
   owns: (name: string) => boolean;
   /** Whether it can be used now. */
   has: (name: string) => boolean;
-  /** The servers an agent of eta's own loop gets for it. */
-  mcpSource: (name: string) => McpConfigSource | undefined;
-  /** What the use is made of: another one reopens the sessions of the agents that have it. */
-  identity: (name: string) => string | undefined;
+  /** The servers an agent of eta's own loop gets for its plugins of this kind, all at once. */
+  mcpSource: (names: readonly string[]) => McpConfigSource | undefined;
+  /** What the use of an agent's plugins of this kind is made of: another one reopens the sessions of the agent. */
+  identity: (names: readonly string[]) => string | undefined;
+  /** What the agents have enabled of this kind, one list of names for each agent: what is made ready for them. */
+  demand: (sets: () => string[][]) => void;
+  /** Make ready what the agents have enabled now (nothing when it already is). */
+  refresh: () => void;
   /** What no session may pass on. */
   secrets: () => Redaction[];
   onChange: (listener: () => void) => void;
@@ -152,6 +156,7 @@ export class Plugins {
   /** Take plugins that are made by another part of the host. */
   setVirtual(virtual: VirtualPlugins): void {
     this.#virtual = virtual;
+    virtual.demand(() => this.#virtualSets());
     virtual.onChange(() => this.#changed());
   }
 
@@ -344,17 +349,28 @@ export class Plugins {
     return this.#split(agentId).skipped;
   }
 
+  /** The plugins of the virtual kind each agent has enabled and the user has not switched off, one list for each agent. */
+  #virtualSets(): string[][] {
+    const off = this.rows.disabled();
+    const byAgent = new Map<string, string[]>();
+    for (const { agentId, plugin } of this.rows.allEnabled())
+      if (this.#virtual?.owns(plugin) === true && !off.has(plugin))
+        byAgent.set(agentId, [...(byAgent.get(agentId) ?? []), plugin]);
+    return [...byAgent.values()];
+  }
+
   /** What an agent's sessions were opened with, as far as plugins go. */
   stampOf(agentId: string): string {
+    this.#virtual?.refresh();
     const { active, virtual } = this.#split(agentId);
+    // One session stands behind all of an agent's virtual plugins, so one id.
+    const identity = this.#virtual?.identity(virtual) ?? "";
     return [
       ...active.map((entry) => {
         const at = this.rows.configuredAt(entry.name);
         return `${entry.name}@${entry.hash}:${at}`;
       }),
-      ...virtual.map(
-        (name) => `${name}@${this.#virtual?.identity(name) ?? ""}`,
-      ),
+      ...virtual.map((name) => `${name}@${identity}`),
     ].join(",");
   }
 
@@ -392,20 +408,19 @@ export class Plugins {
   }
 
   /**
-   * The agent's ready Composio toolkits in the shape an external runtime takes. On this machine
-   * they come after the installed plugins' servers (`runtimeExtrasFor`); on a daemon's they go in
-   * the open (`OpenSessionArgs.mcpServers`), since they are no files to send, and the daemon puts
-   * them after the plugins' the same way.
+   * The agent's ready Composio toolkits in the shape an external runtime takes: the one server of
+   * their one session, as eta's own loop is given it. On this machine it comes after the installed
+   * plugins' servers (`runtimeExtrasFor`); on a daemon's it goes in the open
+   * (`OpenSessionArgs.mcpServers`), since it is no file to send, and the daemon puts it after the
+   * plugins' the same way.
    */
   toolkitServersFor(agentId: string): SessionMcpServer[] {
-    return this.#split(agentId).virtual.flatMap((name) =>
-      this.#sessionServersOf(name),
-    );
+    return this.#sessionServersOf(this.#split(agentId).virtual);
   }
 
-  /** A virtual plugin's servers in the shape an external runtime takes. */
-  #sessionServersOf(name: string): SessionMcpServer[] {
-    const source = this.#virtual?.mcpSource(name);
+  /** The servers of a set of virtual plugins in the shape an external runtime takes. */
+  #sessionServersOf(names: readonly string[]): SessionMcpServer[] {
+    const source = this.#virtual?.mcpSource(names);
     if (source === undefined) return [];
     return Object.entries(source.servers).flatMap(([server, entry]) =>
       entry.url === undefined
@@ -425,12 +440,13 @@ export class Plugins {
 
   /**
    * The MCP servers eta's own loop gets from an agent's plugins, on this machine: one source per
-   * plugin, `plugin:<name>`, for `McpHost` to put before the user's and the project's files. An
-   * agent on an external runtime has none here; its runtime is given them (`runtimeExtrasFor`),
-   * its Composio toolkits among them.
+   * plugin, `plugin:<name>`, and one for all its virtual plugins (the Composio toolkits), for
+   * `McpHost` to put before the user's and the project's files. An agent on an external runtime has
+   * none here; its runtime is given them (`runtimeExtrasFor`), its Composio toolkits among them.
    */
   mcpSourcesFor(agentId: string): McpConfigSource[] {
     if (this.#agents.get(agentId)?.runtime !== "eta") return [];
+    this.#virtual?.refresh();
     const { active, virtual } = this.#split(agentId);
     const own =
       active.length === 0
@@ -443,13 +459,9 @@ export class Plugins {
             this.#dataDir,
             this.#warn,
           );
-    return [
-      ...own,
-      ...virtual.flatMap((name) => {
-        const source = this.#virtual?.mcpSource(name);
-        return source === undefined ? [] : [source];
-      }),
-    ];
+    const toolkits =
+      virtual.length === 0 ? undefined : this.#virtual?.mcpSource(virtual);
+    return toolkits === undefined ? own : [...own, toolkits];
   }
 
   /**
@@ -801,6 +813,7 @@ export class Plugins {
   setEnabled(name: string, enabled: boolean): void {
     if (this.#virtual?.has(name) !== true) this.#existing(name);
     this.rows.setDisabled(name, !enabled);
+    this.#virtual?.refresh();
     this.#changed();
   }
 

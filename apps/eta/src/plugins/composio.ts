@@ -32,7 +32,7 @@ import {
   COMPOSIO_NO_MANAGED_LOGIN,
   composioOwnScheme,
 } from "@eta/client-contracts";
-import { PluginError, sessionServerName } from "@eta/daemon";
+import { PluginError } from "@eta/daemon";
 import { EncryptedCredentialTable } from "../credentials/table";
 
 /** The address the source has in `MarketSource.url`: not a web address, only a name. */
@@ -43,7 +43,7 @@ const COMPOSIO_ENABLED_KEY = "plugins.composioEnabled";
 const USER_ID_KEY = "plugins.composioUserId";
 /** Where the key is kept: the same row shape as another market source's credential (see PluginStore). */
 const CREDENTIAL = { integration: "market", key: "composio", kind: "secret" };
-/** The kept id of one toolkit's session is a row of its own beside the key's: `composio-session:<slug>`. */
+/** The kept id of a session is a row of its own beside the key's: `composio-session:<set>` (see `#setKey`). */
 const SESSION_PREFIX = "composio-session:";
 
 /** The toolkits that need no sign-in and were added, as slugs: plugins like the connected ones. */
@@ -51,7 +51,7 @@ const ADDED_KEY = "plugins.composioAdded";
 
 /** The plugin name of a connected (or added) toolkit: `@composio/<slug>`. */
 const VIRTUAL_PREFIX = "@composio/";
-/** The sessions kept, as slugs only (the ids are sealed rows of their own): to erase them all. */
+/** The sessions kept, as their keys only (the ids are sealed rows of their own): to erase them all. */
 const SESSIONS_KEY = "plugins.composioSessions";
 const SESSION_PATH = "/api/v3.1/tool_router/session";
 const SESSION_ID = /^[\w.-]{1,200}$/;
@@ -67,6 +67,10 @@ const MAX_BYTES = 2 * 1024 * 1024;
 const TIMEOUT_MS = 10_000;
 const KEY_SHAPE = /^[\x21-\x7E]{1,512}$/;
 const SLUG = /^[\w-]{1,100}$/;
+/** The key of a session: the slugs of its toolkits, sorted and joined by commas. One slug is its own key. */
+const SET = /^[\w-]{1,100}(?:,[\w-]{1,100})*$/;
+/** The one server an agent gets, whatever toolkits stand behind it, so its tools keep their names. */
+const SERVER = "composio";
 
 export interface ComposioOptions {
   db: Database;
@@ -85,7 +89,7 @@ export interface ComposioOptions {
 /** What Composio said was not what was asked for, or not where it must be: no retry in this run. */
 class Unchecked extends Error {}
 
-/** One toolkit's session: usable, or why not yet (`retryAt`: when one more try may be made). */
+/** One session, for a set of toolkits: usable, or why not yet (`retryAt`: when one more try may be made). */
 type Session =
   | { state: "ready"; id: string; url: string }
   | { state: "error"; retryAt: number };
@@ -247,11 +251,16 @@ export class Composio {
   readonly #timeoutMs: number;
   readonly #maxBytes: number;
   readonly #now: () => number;
+  /** The sessions made, by key (`#setKey`). */
   readonly #sessions = new Map<string, Session>();
   readonly #making = new Map<string, Promise<void>>();
   readonly #listeners: (() => void)[] = [];
   /** Moves when the key goes, so a session still being made for the old one is thrown away. */
   #epoch = 0;
+  /** The toolkits that are connected or added, as the last `sync` said; unknown until then. */
+  #wanted: Set<string> | undefined;
+  /** What the agents have enabled, as toolkit names, one list for each agent (`demand`). */
+  #demand: (() => string[][]) | undefined;
   /** The managed auth config found or made for a toolkit; asked once per run. */
   readonly #configs = new Map<string, string>();
   /** The toolkits whose managed auth configs were looked at for the tool router's switch in this run. */
@@ -491,14 +500,18 @@ export class Composio {
   /* ------------------------------------------------------ virtual plugins */
 
   /**
-   * A connected toolkit is a plugin of its own, `@composio/<slug>`, with one tool_router session of
-   * Composio's behind it. The one exception to "only a connected (ACTIVE) toolkit": a toolkit that
+   * A connected toolkit is a plugin of its own, `@composio/<slug>`, and what stands behind the
+   * plugins an agent has enabled is ONE tool_router session of Composio's whose `toolkits.enable`
+   * lists all of them, so the agent sees Composio's meta tools once. A session is kept by its set of
+   * slugs (sorted, joined by commas): agents with the same set share one, another set is another
+   * session. A toolkit that no agent has enabled has a session of its own, so it is listed and ready
+   * before anyone uses it. The one exception to "only a connected (ACTIVE) toolkit": a toolkit that
    * needs no sign-in has no account to be connected, so it is a plugin once it was added (`add`).
    * There is no file of it on disk: this source says what exists, `Plugins`
    * asks it (see `VirtualPlugins`), and the agents' own choice and the user's switch work as they do
-   * for any plugin. The session is made when the toolkit is connected or added, kept as its id only (sealed,
-   * one row each, and the slugs in a setting so they can all be erased), and what Composio says it
-   * made is checked before it is used: one toolkit, no removal of connections, no workbench.
+   * for any plugin. A session is kept as its id only (sealed, one row each, and the keys in a setting
+   * so they can all be erased), and what Composio says it made is checked before it is used: exactly
+   * the toolkits asked for, no removal of connections, no workbench.
    */
   owns(name: string): boolean {
     return (
@@ -520,43 +533,77 @@ export class Composio {
     return this.owns(name) ? name.slice(VIRTUAL_PREFIX.length) : undefined;
   }
 
+  /** The key of a session: the slugs, sorted and without repeats. */
+  #setKey(slugs: Iterable<string>): string {
+    return [...new Set(slugs)].sort().join(",");
+  }
+
+  /**
+   * What the agents have enabled, as toolkit names, one list for each agent: the sessions are
+   * brought in line with it, and with what is connected, whenever either moves.
+   */
+  demand(sets: () => string[][]): void {
+    this.#demand = sets;
+  }
+
+  /** Bring the sessions in line with what the agents have enabled now; nothing when that is already so. */
+  refresh(): void {
+    const key = this.#apiKey();
+    if (
+      key === undefined ||
+      this.#wanted === undefined ||
+      !this.source().enabled
+    )
+      return;
+    void this.#reconcile(key, true).catch(() => undefined);
+  }
+
   /** Nothing while the source is off or has no key. Never anything of the key or of Composio's words. */
   virtuals(): Pick<ComposioPluginView, "name" | "slug" | "state">[] {
     if (!this.source().enabled) return [];
-    return [...this.#sessions]
+    return [...this.#states()]
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([slug, one]) => ({
-        name: VIRTUAL_PREFIX + slug,
-        slug,
-        state: one.state,
-      }));
+      .map(([slug, state]) => ({ name: VIRTUAL_PREFIX + slug, slug, state }));
+  }
+
+  /** A toolkit is ready when a session that has it is, else error; nothing for one no session was tried for. */
+  #states(): Map<string, Session["state"]> {
+    const states = new Map<string, Session["state"]>();
+    for (const [set, one] of this.#sessions)
+      for (const slug of set.split(","))
+        if (states.get(slug) !== "ready") states.set(slug, one.state);
+    return states;
   }
 
   /** Whether this plugin has a session that checked out, and the source is on. */
   has(name: string): boolean {
-    return this.#readyOf(name) !== undefined;
-  }
-
-  #readyOf(name: string): (Session & { state: "ready" }) | undefined {
     const slug = this.#slugOf(name);
-    const one = slug === undefined ? undefined : this.#sessions.get(slug);
-    return one?.state === "ready" && this.source().enabled ? one : undefined;
+    return (
+      slug !== undefined &&
+      this.source().enabled &&
+      this.#states().get(slug) === "ready"
+    );
   }
 
-  /**
-   * What an agent's session is given for this plugin: the server, with the key as its header. Its name
-   * is made as an installed plugin's server is (`sessionServerName`), since an external runtime
-   * takes it by that name too.
-   */
-  mcpSource(name: string): McpConfigSource | undefined {
-    const one = this.#readyOf(name);
+  /** The session of exactly these plugins, if it checked out and the source is on. */
+  #readyFor(
+    names: readonly string[],
+  ): (Session & { state: "ready" }) | undefined {
+    const slugs = names.flatMap((name) => this.#slugOf(name) ?? []);
+    if (slugs.length === 0 || !this.source().enabled) return undefined;
+    const one = this.#sessions.get(this.#setKey(slugs));
+    return one?.state === "ready" ? one : undefined;
+  }
+
+  /** What an agent's session is given for its plugins: one server, with the key as its header. */
+  mcpSource(names: readonly string[]): McpConfigSource | undefined {
+    const one = this.#readyFor(names);
     const key = this.#apiKey();
     if (one === undefined || key === undefined) return undefined;
-    const slug = this.#slugOf(name)!;
     return {
-      name: `composio:${slug}`,
+      name: SERVER,
       servers: {
-        [sessionServerName("composio", slug)]: {
+        [SERVER]: {
           type: "http",
           url: one.url,
           headers: { "x-api-key": key },
@@ -565,9 +612,9 @@ export class Composio {
     };
   }
 
-  /** The id of the session behind a plugin: another one reopens the sessions of its agents. */
-  identity(name: string): string | undefined {
-    return this.#readyOf(name)?.id;
+  /** The id of the session behind an agent's plugins: another one reopens the sessions of its agents. */
+  identity(names: readonly string[]): string | undefined {
+    return this.#readyFor(names)?.id;
   }
 
   /** What no session may pass on. */
@@ -579,10 +626,11 @@ export class Composio {
   }
 
   /**
-   * Bring the sessions in line with the connected toolkits: one for each, none for the others. Calls
-   * overlap safely (a toolkit's session is made once), at most three are made at a time, and a
-   * failure is a toolkit's own: it is tried again only after a pause, or never in this run when
-   * Composio's answer was not what was asked for.
+   * Bring the sessions in line with the connected toolkits and with what the agents enabled: one
+   * for each set of toolkits an agent has, one for each toolkit no agent has, none for the others.
+   * Calls overlap safely (a session is made once), at most three are made at a time, and a failure
+   * is a session's own: it is tried again only after a pause, or never in this run when Composio's
+   * answer was not what was asked for.
    */
   async sync(slugs: readonly string[]): Promise<void> {
     const key = this.#apiKey();
@@ -591,61 +639,92 @@ export class Composio {
       return;
     }
     if (!this.source().enabled) return;
-    const wanted = [...new Set(slugs.filter((slug) => SLUG.test(slug)))];
+    this.#wanted = new Set(slugs.filter((slug) => SLUG.test(slug)));
+    await this.#reconcile(key, true);
+  }
+
+  /**
+   * The keys of the sessions that are needed: the set of each agent's toolkits (the ones that are
+   * connected or added), and each other connected toolkit alone. None while that is not known.
+   */
+  #needed(): string[] {
+    const wanted = this.#wanted;
+    if (wanted === undefined) return [];
+    const keys = new Set<string>();
+    const used = new Set<string>();
+    for (const names of this.#demand?.() ?? []) {
+      const slugs = names.flatMap((name) => {
+        const slug = this.#slugOf(name);
+        return slug !== undefined && wanted.has(slug) ? [slug] : [];
+      });
+      if (slugs.length === 0) continue;
+      keys.add(this.#setKey(slugs));
+      for (const slug of slugs) used.add(slug);
+    }
+    for (const slug of wanted) if (!used.has(slug)) keys.add(slug);
+    return [...keys].sort();
+  }
+
+  /** Make the sessions that are needed and are not there; with `prune`, drop the ones that are not needed. */
+  async #reconcile(key: string, prune: boolean): Promise<void> {
+    const needed = this.#needed();
     const before = this.#snapshot();
-    for (const slug of new Set([
-      ...this.#sessions.keys(),
-      ...this.#keptSlugs(),
-    ]))
-      if (!wanted.includes(slug)) this.#drop(slug);
+    if (prune)
+      for (const set of new Set([
+        ...this.#sessions.keys(),
+        ...this.#keptSets(),
+      ]))
+        if (!needed.includes(set)) this.#drop(set);
     let next = 0;
     const worker = async (): Promise<void> => {
-      while (next < wanted.length) {
-        const slug = wanted[next++]!;
-        await this.#ensure(slug, key).catch(() => undefined);
+      while (next < needed.length) {
+        const set = needed[next++]!;
+        await this.#ensure(set, key).catch(() => undefined);
       }
     };
     await Promise.all(
-      Array.from({ length: Math.min(MAKE_AT_ONCE, wanted.length) }, worker),
+      Array.from({ length: Math.min(MAKE_AT_ONCE, needed.length) }, worker),
     );
     if (this.#snapshot() !== before) this.#notify();
   }
 
   #snapshot(): string {
     return JSON.stringify(
-      [...this.#sessions].map(([slug, one]) => [
-        slug,
+      [...this.#sessions].map(([set, one]) => [
+        set,
         one.state,
         one.state === "ready" ? one.id : "",
       ]),
     );
   }
 
-  #ensure(slug: string, key: string): Promise<void> {
-    const known = this.#sessions.get(slug);
+  #ensure(set: string, key: string): Promise<void> {
+    const known = this.#sessions.get(set);
     if (known?.state === "ready") return Promise.resolve();
     if (known !== undefined && this.#now() < known.retryAt)
       return Promise.resolve();
-    const running = this.#making.get(slug);
+    const running = this.#making.get(set);
     if (running !== undefined) return running;
-    const made = this.#make(slug, key, this.#epoch).finally(() =>
-      this.#making.delete(slug),
+    const made = this.#make(set, key, this.#epoch).finally(() =>
+      this.#making.delete(set),
     );
-    this.#making.set(slug, made);
+    this.#making.set(set, made);
     return made;
   }
 
-  async #make(slug: string, key: string, epoch: number): Promise<void> {
+  async #make(set: string, key: string, epoch: number): Promise<void> {
+    const slugs = set.split(",");
     let opened: { id: string; url: string } | undefined;
     try {
       // A session uses the accounts under a config that is on for the tool router; see #authConfig.
       // A toolkit that needs no sign-in has no account and no config to switch.
-      if (this.#known(slug)?.auth !== "none")
-        await this.#enableRouter(slug, key);
-      const kept = this.#keptId(slug);
+      for (const slug of slugs)
+        if (this.#known(slug)?.auth !== "none")
+          await this.#enableRouter(slug, key);
+      const kept = this.#keptId(set);
       if (kept !== undefined) {
         try {
-          opened = await this.#read(slug, key, kept);
+          opened = await this.#read(slugs, key, kept);
         } catch (error) {
           // Composio does not know it any more, or says something else of it: one new session.
           if (
@@ -653,26 +732,26 @@ export class Composio {
             (error instanceof Refused &&
               (error.status === 401 || error.status === 404))
           )
-            this.#forget(slug);
+            this.#forget(set);
           else throw error;
         }
       }
-      opened ??= await this.#create(slug, key);
+      opened ??= await this.#create(slugs, key);
       // The key was replaced or cleared while this was made: it belongs to the old one.
       if (epoch !== this.#epoch) return;
       this.#credentials.write(
         CREDENTIAL.integration,
-        SESSION_PREFIX + slug,
+        SESSION_PREFIX + set,
         CREDENTIAL.kind,
         opened.id,
       );
       this.#settings.set(SESSIONS_KEY, [
-        ...new Set([...this.#keptSlugs(), slug]),
+        ...new Set([...this.#keptSets(), set]),
       ]);
-      this.#sessions.set(slug, { state: "ready", ...opened });
+      this.#sessions.set(set, { state: "ready", ...opened });
     } catch (error) {
       if (epoch !== this.#epoch) return;
-      this.#sessions.set(slug, {
+      this.#sessions.set(set, {
         state: "error",
         retryAt:
           error instanceof Unchecked
@@ -683,20 +762,20 @@ export class Composio {
   }
 
   async #create(
-    slug: string,
+    slugs: readonly string[],
     key: string,
   ): Promise<{ id: string; url: string }> {
     const body = await this.#call("POST", SESSION_PATH, key, {
       user_id: this.#userId(),
-      toolkits: { enable: [slug] },
+      toolkits: { enable: slugs },
       manage_connections: { enable_connection_removal: false },
       workbench: { enable: false },
     });
-    return this.#checked(slug, body, undefined);
+    return this.#checked(slugs, body, undefined);
   }
 
   async #read(
-    slug: string,
+    slugs: readonly string[],
     key: string,
     id: string,
   ): Promise<{ id: string; url: string }> {
@@ -705,12 +784,12 @@ export class Composio {
       `${SESSION_PATH}/${encodeURIComponent(id)}`,
       key,
     );
-    return this.#checked(slug, body, id);
+    return this.#checked(slugs, body, id);
   }
 
   /** The id and address of an answer, if the address is Composio's and the config says what was asked. */
   #checked(
-    slug: string,
+    slugs: readonly string[],
     body: unknown,
     id: string | undefined,
   ): { id: string; url: string } {
@@ -742,10 +821,11 @@ export class Composio {
     const bench = isPlain(config.workbench)
       ? config.workbench.enable
       : undefined;
+    // Exactly the toolkits asked for, in any order.
     if (
       !Array.isArray(toolkits) ||
-      toolkits.length !== 1 ||
-      toolkits[0] !== slug ||
+      toolkits.length !== slugs.length ||
+      !slugs.every((slug) => toolkits.includes(slug)) ||
       removal !== false ||
       bench !== false
     )
@@ -753,10 +833,10 @@ export class Composio {
     return { id: got, url };
   }
 
-  #keptId(slug: string): string | undefined {
+  #keptId(set: string): string | undefined {
     const value = this.#credentials.read(
       CREDENTIAL.integration,
-      SESSION_PREFIX + slug,
+      SESSION_PREFIX + set,
       CREDENTIAL.kind,
     );
     return typeof value === "string" && SESSION_ID.test(value)
@@ -764,48 +844,54 @@ export class Composio {
       : undefined;
   }
 
-  #keptSlugs(): string[] {
+  #keptSets(): string[] {
     const saved = this.#settings.get(SESSIONS_KEY);
     return Array.isArray(saved)
       ? saved.filter(
-          (one): one is string => typeof one === "string" && SLUG.test(one),
+          (one): one is string => typeof one === "string" && SET.test(one),
         )
       : [];
   }
 
-  /** Erase the kept id of one toolkit, and its place in the list. */
-  #forget(slug: string): void {
+  /** Erase the kept id of one session, and its place in the list. */
+  #forget(set: string): void {
     this.#credentials.erase(
       CREDENTIAL.integration,
-      SESSION_PREFIX + slug,
+      SESSION_PREFIX + set,
       CREDENTIAL.kind,
     );
-    const rest = this.#keptSlugs().filter((one) => one !== slug);
+    const rest = this.#keptSets().filter((one) => one !== set);
     if (rest.length === 0) this.#settings.delete(SESSIONS_KEY);
     else this.#settings.set(SESSIONS_KEY, rest);
   }
 
-  #drop(slug: string): void {
-    const had = this.#sessions.delete(slug);
-    this.#forget(slug);
+  #drop(set: string): void {
+    const had = this.#sessions.delete(set);
+    this.#forget(set);
     if (had) this.#notify();
+  }
+
+  /** A toolkit is no more: it is not wanted, every session that has it goes, and the sessions of what is left are brought in line. */
+  #dropToolkit(slug: string): void {
+    this.#wanted?.delete(slug);
+    for (const set of new Set([...this.#sessions.keys(), ...this.#keptSets()]))
+      if (set.split(",").includes(slug)) this.#drop(set);
+    this.refresh();
   }
 
   /** Every session and every kept id goes: the key they were made with is no more. */
   #dropAll(): void {
     this.#epoch++;
     const had = this.#sessions.size > 0;
-    for (const slug of new Set([
-      ...this.#sessions.keys(),
-      ...this.#keptSlugs(),
-    ]))
+    for (const set of new Set([...this.#sessions.keys(), ...this.#keptSets()]))
       this.#credentials.erase(
         CREDENTIAL.integration,
-        SESSION_PREFIX + slug,
+        SESSION_PREFIX + set,
         CREDENTIAL.kind,
       );
     this.#sessions.clear();
     this.#making.clear();
+    this.#wanted = undefined;
     this.#settings.delete(SESSIONS_KEY);
     if (had) this.#notify();
   }
@@ -911,15 +997,16 @@ export class Composio {
       throw new PluginError("only a toolkit that needs no sign-in is added");
     this.#settings.set(ADDED_KEY, [...new Set([...this.#addedSlugs(), slug])]);
     if (this.source().enabled) {
-      const before = this.#snapshot();
-      await this.#ensure(slug, key).catch(() => undefined);
-      if (this.#snapshot() !== before) this.#notify();
+      // Before the first `sync` what is wanted is not known: what is kept is then left as it is.
+      const known = this.#wanted !== undefined;
+      this.#wanted = new Set([...(this.#wanted ?? []), slug]);
+      await this.#reconcile(key, known);
     }
     return { status: "ready" };
   }
 
   /**
-   * Takes an added toolkit off the list and drops its session and kept id. Nothing is asked of
+   * Takes an added toolkit off the list and drops the sessions that have it and their kept ids. Nothing is asked of
    * Composio, and the agents' choices of it stay. A slug that was not added is left alone.
    */
   remove(slug: string): { removed: boolean } {
@@ -928,7 +1015,7 @@ export class Composio {
     const rest = added.filter((one) => one !== slug);
     if (rest.length === 0) this.#settings.delete(ADDED_KEY);
     else this.#settings.set(ADDED_KEY, rest);
-    this.#drop(slug);
+    this.#dropToolkit(slug);
     return { removed: true };
   }
 
@@ -971,7 +1058,7 @@ export class Composio {
           throw new Error("Composio did not confirm the delete");
         removed++;
       }
-      this.#drop(slug);
+      this.#dropToolkit(slug);
       return { status: "ready", removed };
     } catch (error) {
       return { status: this.#failure(error), removed };
