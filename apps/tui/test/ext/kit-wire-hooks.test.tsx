@@ -46,7 +46,7 @@ describe("useTarget", () => {
     expect(held()).toBeUndefined();
 
     await r.runCommand("/target one plugins");
-    await r.waitFor("probe one: audit,list");
+    await r.waitFor("probe one: audit,composio,list");
     expect(held()).toBeDefined();
 
     closeTopLayer();
@@ -79,7 +79,7 @@ describe("useTarget when what it reads changes", () => {
     expect(held("plugins")).toBeUndefined();
 
     choose!("plugins");
-    await r.waitFor("probe switch: audit,list");
+    await r.waitFor("probe switch: audit,composio,list");
     expect(held("plugins")).toBeDefined();
 
     choose!("mcp");
