@@ -31,7 +31,7 @@ const gmail: ComposioPluginView = {
 };
 
 /**
- * The same list on a host older than the `composio` section: it has no such section, so the only
+ * The same list on a host older than the `toolkits` section: it has no such section, so the only
  * source is `composioPlugins`, whose first answer is empty (the sessions are still being made).
  * "host finishes sync" is the host having them from then on; nothing is pushed. "asked" counts the
  * `composioPlugins` calls, and the list can be taken away and brought back.

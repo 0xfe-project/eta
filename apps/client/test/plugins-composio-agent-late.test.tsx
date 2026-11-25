@@ -6,7 +6,7 @@ const OLD_HOST = "./fixtures/plugins-composio-agent-late-old-host.tsx";
 const settle = () => new Promise((resolve) => setTimeout(resolve, 500));
 
 // The host makes a toolkit's session after the page was opened, and says so by changing the
-// `composio` section of its `plugins` target. The list follows that section.
+// `toolkits` section of its `plugins` target. The list follows that section.
 test("a toolkit the host pushes after the list was shown is listed, without the list being shown again", async () => {
   const app = await open(LATE, WINDOW);
   await app.waitFor("text:on-plugin");
@@ -24,6 +24,17 @@ test("a list that is shown again has the toolkit the host pushed meanwhile", asy
   await app.press("label:hide list");
   await app.press("label:show list");
   await app.waitFor("label:@composio/gmail");
+});
+
+// An entry says which provider it comes from. The list keeps the ones it knows, and a provider it does
+// not know is left out, not drawn as a broken card.
+test("a toolkit of a provider the client does not know is not listed", async () => {
+  const app = await open(LATE, WINDOW);
+  await app.waitFor("text:on-plugin");
+  await app.press("label:host lists two providers");
+  await settle();
+  expect(app.shows("label:@composio/gmail")).toBe(true);
+  expect(app.shows("label:@nango/slack")).toBe(false);
 });
 
 // A host older than the section has nothing to follow: the list reads `composioPlugins` when it is

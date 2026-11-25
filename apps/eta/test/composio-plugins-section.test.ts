@@ -1,5 +1,5 @@
 /**
- * The `composio` section of the `plugins` target: the connected toolkits as the host lists them as
+ * The `toolkits` section of the `plugins` target: the connected toolkits as the host lists them as
  * plugins of the agents (`@composio/<slug>`). The client reads it instead of asking again, so a
  * session that is made after the page opened reaches it as a push. Against a local fake of
  * backend.composio.dev and a fake key; nothing reaches the network.
@@ -137,7 +137,7 @@ const named = (section: unknown) =>
     (one) => [one.name, one.enabled] as const,
   );
 
-describe("the composio section of the plugins target", () => {
+describe("the toolkits section of the plugins target", () => {
   it("is empty before the sessions are made and lists every connected toolkit once they are", async () => {
     const { composio, synced, state } = boot();
     const followed = composio.follow();
@@ -147,13 +147,19 @@ describe("the composio section of the plugins target", () => {
     await synced;
     const after = state();
 
-    expect(before.sections.composio).toEqual([]);
-    expect(named(after.sections.composio)).toEqual([
+    expect(before.sections.toolkits).toEqual([]);
+    expect(named(after.sections.toolkits)).toEqual([
       ["@composio/gmail", true],
       ["@composio/notion", true],
     ]);
+    // Each entry says which provider the toolkit comes from; only Composio exists for now.
+    expect(
+      (after.sections.toolkits as { provider: string }[]).map(
+        (one) => one.provider,
+      ),
+    ).toEqual(["composio", "composio"]);
     // The pipe sends a section whose revision moved: this is what pushes the list down.
-    expect(after.revisions.composio).not.toBe(before.revisions.composio);
+    expect(after.revisions.toolkits).not.toBe(before.revisions.toolkits);
   });
 
   it("follows the user's switch of a toolkit", async () => {
@@ -165,11 +171,11 @@ describe("the composio section of the plugins target", () => {
     plugins.setEnabled("@composio/gmail", false);
     const off = state();
 
-    expect(named(off.sections.composio)).toEqual([
+    expect(named(off.sections.toolkits)).toEqual([
       ["@composio/gmail", false],
       ["@composio/notion", true],
     ]);
-    expect(off.revisions.composio).not.toBe(on.revisions.composio);
+    expect(off.revisions.toolkits).not.toBe(on.revisions.toolkits);
   });
 
   it("is empty, and does not throw, when the source is off, and holds nothing of the key", async () => {
@@ -177,10 +183,10 @@ describe("the composio section of the plugins target", () => {
     await composio.follow();
     release();
     await synced;
-    const listed = JSON.stringify(state().sections.composio);
+    const listed = JSON.stringify(state().sections.toolkits);
     composio.setEnabled(false);
 
     expect(listed).not.toContain(KEY);
-    expect(state().sections.composio).toEqual([]);
+    expect(state().sections.toolkits).toEqual([]);
   });
 });
