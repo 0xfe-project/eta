@@ -1116,4 +1116,37 @@ describe("one session for the toolkits an agent has enabled", () => {
     for (const one of patches())
       expect(seen.indexOf(one)).toBeLessThan(seen.indexOf(posts()[0]!));
   });
+  describe("on an external runtime, and for a daemon", () => {
+    const toolkitServer = () => ({
+      name: "composio",
+      type: "http",
+      url: `${base()}/tool_router/sess-1/mcp`,
+      headers: { "x-api-key": KEY },
+    });
+
+    it.fails("gives an agent with two toolkits one server, from the one session", async () => {
+      const { composio, plugins } = world({ ada: ["gmail", "notion"] });
+      await composio.sync(["gmail", "notion"]);
+      await served(plugins, "ada");
+      expect(plugins.toolkitServersFor("ada")).toEqual([toolkitServer()]);
+      const extras = await plugins.runtimeExtrasFor({
+        agentId: "ada",
+        runtime: "codex",
+      } as never);
+      expect(extras.mcpServers).toEqual([toolkitServer()]);
+      expect(posts()).toHaveLength(1);
+    });
+
+    it.fails("gives two agents that have the same toolkits the same one server", async () => {
+      const { composio, plugins } = world({
+        ada: ["gmail", "notion"],
+        bob: ["notion", "gmail"],
+      });
+      await composio.sync(["gmail", "notion"]);
+      await served(plugins, "ada");
+      expect(plugins.toolkitServersFor("bob")).toEqual([toolkitServer()]);
+      expect(plugins.toolkitServersFor("ada")).toEqual([toolkitServer()]);
+      expect(posts()).toHaveLength(1);
+    });
+  });
 });
