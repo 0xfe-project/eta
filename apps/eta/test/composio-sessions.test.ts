@@ -524,7 +524,7 @@ describe("a Composio toolkit as a plugin of the agents", () => {
       const extras = await extrasOf(plugins, "ada");
       expect(extras.mcpServers).toEqual([
         {
-          name: "composio-gmail",
+          name: "composio",
           type: "http",
           url: `${base()}/tool_router/sess-1/mcp`,
           headers: { "x-api-key": KEY },
@@ -556,7 +556,7 @@ describe("a Composio toolkit as a plugin of the agents", () => {
       expect(JSON.stringify(extras)).not.toContain(KEY);
     });
 
-    it("keeps an installed plugin's server when it has the same name, and gives no two of one name", async () => {
+    it("gives an installed plugin's server and the toolkits' one together, with no two of one name", async () => {
       const { composio, plugins } = setup();
       await composio.sync(["gmail"]);
       plugins.rows.setEnabled("ada", ["@composio/gmail", "composio"]);
@@ -588,13 +588,19 @@ describe("a Composio toolkit as a plugin of the agents", () => {
         name === "composio" ? (installed as never) : undefined,
       );
       const { mcpServers = [] } = await extrasOf(plugins, "ada");
+      // An installed plugin's server is `<plugin>-<server>`, which has a `-`, so it can never take
+      // the toolkits' `composio`: both are given, and no two have one name.
       expect(mcpServers.map((server) => server.name)).toEqual([
         "composio-gmail",
+        "composio",
       ]);
       expect(mcpServers[0]).toMatchObject({
         url: "http://installed.example/mcp",
       });
-      expect(JSON.stringify(mcpServers)).not.toContain(KEY);
+      expect(mcpServers[1]).toMatchObject({
+        url: `${base()}/tool_router/sess-1/mcp`,
+      });
+      expect(JSON.stringify(mcpServers[0])).not.toContain(KEY);
     });
 
     it("hands a daemon the same servers, for the agent that enabled a ready toolkit only", async () => {
@@ -602,7 +608,7 @@ describe("a Composio toolkit as a plugin of the agents", () => {
       await composio.sync(["gmail"]);
       expect(plugins.toolkitServersFor("ada")).toEqual([
         {
-          name: "composio-gmail",
+          name: "composio",
           type: "http",
           url: `${base()}/tool_router/sess-1/mcp`,
           headers: { "x-api-key": KEY },
