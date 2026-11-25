@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
+import { ANTIGRAVITY_ACP_AGENT } from "../src/acp";
 import {
   acpDraftOf,
   acpSlug,
   checkAcpDraft,
   parseAcpEnv,
 } from "../src/acp-form";
+
+describe("the Antigravity ACP preset", () => {
+  it("uses --process-per-session by default and formats as multiline draft args", () => {
+    expect(ANTIGRAVITY_ACP_AGENT.args).toEqual([
+      "acp",
+      "--process-per-session",
+    ]);
+    expect(acpDraftOf(ANTIGRAVITY_ACP_AGENT).args).toBe(
+      "acp\n--process-per-session",
+    );
+  });
+});
 
 describe("parseAcpEnv", () => {
   it("reads KEY=VALUE lines, keeping = in values, skipping blanks and comments", () => {

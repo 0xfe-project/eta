@@ -69,7 +69,7 @@ test("the Antigravity preset saves as an external runtime on the selected machin
   expect(app.value("label:Name")).toBe("Antigravity");
   expect(app.value("label:ID")).toBe("antigravity");
   expect(app.value("label:Command")).toBe("agy");
-  expect(app.value("label:Arguments")).toBe("acp");
+  expect(app.value("label:Arguments")).toBe("acp\n--process-per-session");
   expect(app.texts()).toContain(
     "Run agy acp --login in a terminal on gpu-box to sign in.",
   );
@@ -78,6 +78,28 @@ test("the Antigravity preset saves as an external runtime on the selected machin
   await app.press("label:Antigravity >> nth=0");
   expect(app.texts()).toContain("acp.antigravity");
   expect(app.texts()).toContain("gpu-box");
+});
+
+test("the Antigravity sign-in hint shows whenever agy runs with acp as its first argument", async () => {
+  const app = await settings(1440, 900);
+  await app.press("label:Add agent");
+  await app.type("label:Command", "agy");
+  await app.type("label:Arguments", "acp");
+  expect(app.value("label:Command")).toBe("agy");
+  expect(app.value("label:Arguments")).toBe("acp");
+  expect(app.texts()).toContain(
+    "Run agy acp --login in a terminal on studio to sign in.",
+  );
+  await app.clear("label:Arguments");
+  await app.type("label:Arguments", "acp\n--process-per-session");
+  expect(app.texts()).toContain(
+    "Run agy acp --login in a terminal on studio to sign in.",
+  );
+  await app.clear("label:Arguments");
+  await app.type("label:Arguments", "--version");
+  expect(app.texts()).not.toContain(
+    "Run agy acp --login in a terminal on studio to sign in.",
+  );
 });
 
 test("an edit can change the id, and the open detail follows it", async () => {
