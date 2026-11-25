@@ -58,6 +58,7 @@ export {
   toSessionServers,
   type UserEnvInput,
   type UserHeaderInput,
+  withSessionServers,
 } from "./plugin-launch";
 export {
   loadPlugin,

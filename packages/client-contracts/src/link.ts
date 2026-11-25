@@ -334,6 +334,14 @@ export interface OpenSessionArgs {
   tools: ToolSpec[];
   /** The plugins the agent has that can run, sent ahead with `pluginPut`. */
   plugins?: OpenedPlugin[];
+  /**
+   * More MCP servers for a session on an external runtime, as the runtime takes them: the agent's
+   * ready Composio toolkits, which are no files and so are no `plugins`. A header here is a
+   * secret, and stays in the daemon's memory like a plugin's. The daemon attaches them after the
+   * plugins' servers and leaves out one whose name is taken. Absent from a primary that does not
+   * send them; a daemon that does not know the field ignores it.
+   */
+  mcpServers?: SessionMcpServer[];
   /** The secrets a session on eta's own loop must not pass on; kept in memory. */
   redactions?: Redaction[];
   /**

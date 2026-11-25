@@ -22,6 +22,7 @@ import type {
   PluginValue,
   PluginView,
   Redaction,
+  SessionMcpServer,
 } from "@eta/client-contracts";
 import type { McpConfigSource, McpServerEntry } from "@eta/mcp";
 import type { RuntimeExtras, SessionMeta } from "@eta/server";
@@ -49,6 +50,7 @@ import {
   runtimeExtras,
   serversConfig,
   toMcpEntries,
+  withSessionServers,
 } from "@eta/daemon";
 import { CURSOR_AUTH_HEADER, isCursorServer } from "./cursor-login";
 import {
@@ -365,24 +367,67 @@ export class Plugins {
     );
   }
 
-  /** A session of this machine's on an external runtime: skills to tell it of, servers to attach. */
+  /**
+   * A session of this machine's on an external runtime: skills to tell it of, servers to attach.
+   * The agent's ready Composio toolkits come after its installed plugins' servers, as http servers
+   * with the key as their header (what eta's own loop is given too); an installed plugin's server
+   * of the same name keeps it, and the toolkit is left out and reported.
+   */
   async runtimeExtrasFor(meta: SessionMeta): Promise<RuntimeExtras> {
     const { agentId } = meta;
     if (agentId === undefined) return {};
-    return await runtimeExtras(
-      this.active(agentId).map((entry) => ({
-        plugin: entry.plugin!,
-        hash: entry.hash!,
-        config: this.#config(entry),
-      })),
-      { dataDir: this.#dataDir, runtime: meta.runtime, warn: this.#warn },
+    const { active } = this.#split(agentId);
+    return withSessionServers(
+      await runtimeExtras(
+        active.map((entry) => ({
+          plugin: entry.plugin!,
+          hash: entry.hash!,
+          config: this.#config(entry),
+        })),
+        { dataDir: this.#dataDir, runtime: meta.runtime, warn: this.#warn },
+      ),
+      this.toolkitServersFor(agentId),
+      this.#warn,
+    );
+  }
+
+  /**
+   * The agent's ready Composio toolkits in the shape an external runtime takes. On this machine
+   * they come after the installed plugins' servers (`runtimeExtrasFor`); on a daemon's they go in
+   * the open (`OpenSessionArgs.mcpServers`), since they are no files to send, and the daemon puts
+   * them after the plugins' the same way.
+   */
+  toolkitServersFor(agentId: string): SessionMcpServer[] {
+    return this.#split(agentId).virtual.flatMap((name) =>
+      this.#sessionServersOf(name),
+    );
+  }
+
+  /** A virtual plugin's servers in the shape an external runtime takes. */
+  #sessionServersOf(name: string): SessionMcpServer[] {
+    const source = this.#virtual?.mcpSource(name);
+    if (source === undefined) return [];
+    return Object.entries(source.servers).flatMap(([server, entry]) =>
+      entry.url === undefined
+        ? []
+        : [
+            {
+              name: server,
+              type: "http" as const,
+              url: entry.url,
+              ...(entry.headers === undefined
+                ? {}
+                : { headers: entry.headers }),
+            },
+          ],
     );
   }
 
   /**
    * The MCP servers eta's own loop gets from an agent's plugins, on this machine: one source per
    * plugin, `plugin:<name>`, for `McpHost` to put before the user's and the project's files. An
-   * agent on an external runtime has none here; its runtime is given them (`runtimeExtrasFor`).
+   * agent on an external runtime has none here; its runtime is given them (`runtimeExtrasFor`),
+   * its Composio toolkits among them.
    */
   mcpSourcesFor(agentId: string): McpConfigSource[] {
     if (this.#agents.get(agentId)?.runtime !== "eta") return [];

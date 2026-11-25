@@ -32,7 +32,7 @@ import {
   COMPOSIO_NO_MANAGED_LOGIN,
   composioOwnScheme,
 } from "@eta/client-contracts";
-import { PluginError } from "@eta/daemon";
+import { PluginError, sessionServerName } from "@eta/daemon";
 import { EncryptedCredentialTable } from "../credentials/table";
 
 /** The address the source has in `MarketSource.url`: not a web address, only a name. */
@@ -543,7 +543,11 @@ export class Composio {
     return one?.state === "ready" && this.source().enabled ? one : undefined;
   }
 
-  /** What an agent's session is given for this plugin: the server, with the key as its header. */
+  /**
+   * What an agent's session is given for this plugin: the server, with the key as its header. Its name
+   * is made as an installed plugin's server is (`sessionServerName`), since an external runtime
+   * takes it by that name too.
+   */
   mcpSource(name: string): McpConfigSource | undefined {
     const one = this.#readyOf(name);
     const key = this.#apiKey();
@@ -552,7 +556,7 @@ export class Composio {
     return {
       name: `composio:${slug}`,
       servers: {
-        [`composio-${slug}`]: {
+        [sessionServerName("composio", slug)]: {
           type: "http",
           url: one.url,
           headers: { "x-api-key": key },
