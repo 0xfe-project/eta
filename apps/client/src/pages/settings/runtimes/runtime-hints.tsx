@@ -1,14 +1,7 @@
 import type { AgentRuntimeInfo } from "@eta/client-contracts";
-import { signal, View } from "nsh";
-import {
-  Button,
-  Fonts,
-  Icon,
-  Label,
-  monoFontFamily,
-  row,
-} from "../../../components";
-import { control, icon, space, weight } from "../../../components/tokens";
+import { View } from "nsh";
+import { Button, Fonts, Label, monoFontFamily, row } from "../../../components";
+import { control, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { WarningLine } from "../section";
 import { LOGIN_COMMANDS } from "./status";
@@ -28,27 +21,40 @@ export function RuntimeWords(props: { children: string }) {
 }
 
 /**
- * What goes under the Runtime field: the chosen runtime's sign-in command when it is signed out,
- * then "Details" (each runtime that cannot be picked, in its own words) and "Retry", which asks
- * the machine again past the host's cache.
+ * What goes under the Runtime field: the chosen runtime's own trouble, in one line — its sign-in
+ * command when it is signed out, why it cannot be picked when it is missing or failing — and
+ * "Retry", which asks the machine again past the host's cache. A runtime that answers says
+ * nothing here, and what the other runtimes on the machine are doing is on their own page, not in
+ * this agent's editor.
  */
 export function RuntimeHints(props: {
   /** Undefined while the machine answers; null when it could not be asked. */
   runtimes: AgentRuntimeInfo[] | null | undefined;
-  explained: AgentRuntimeInfo[];
   chosen: AgentRuntimeInfo | undefined;
   probing: boolean;
   error: string | undefined;
   onRetry: () => void;
   onRuntimes?: (() => void) | undefined;
 }) {
-  const open = signal(false);
   const signIn = () =>
     props.chosen?.status === "unauthenticated"
       ? LOGIN_COMMANDS[props.chosen.id]
       : undefined;
+  const reason = () => {
+    if (props.runtimes === null) return uiText("runtimeUnreachable");
+    const chosen = props.chosen;
+    if (chosen === undefined) return undefined;
+    if (chosen.status === "missing")
+      return uiText("runtimeMissingHint", { runtime: chosen.label });
+    if (chosen.status === "error")
+      return uiText("runtimeErrorHint", { runtime: chosen.label });
+    return undefined;
+  };
+  /** The runtime's own words for a failure: the real reason, kept in its monospace words. */
+  const words = () =>
+    props.chosen?.status === "error" ? props.chosen.detail : undefined;
   const shown = () =>
-    props.runtimes === null || props.explained.length > 0 || !!signIn();
+    props.runtimes === null || !!signIn() || !!reason() || !!props.error;
   return (
     <If when={shown()}>
       <View style={{ alignSelf: "stretch", gap: space[4] }}>
@@ -81,31 +87,17 @@ export function RuntimeHints(props: {
             </View>
           )}
         </If>
-        <If when={props.runtimes === null}>
-          <Label variant="small" tone="muted">
-            {uiText("runtimeUnreachable")}
-          </Label>
-        </If>
         <View style={{ ...row, gap: space[8], minHeight: space[20] }}>
-          <If when={props.explained.length > 0}>
-            <View
-              role="button"
-              accessibilityLabel={uiText("runtimeDetails")}
-              accessibilityState={{ expanded: open() }}
-              onPress={() => open.set(!open())}
-              style={{ ...row, gap: space[4], cursor: "pointer" }}
-            >
-              <Icon
-                name={open() ? "down" : "right"}
-                size={icon.sm}
-                tone="mutedInk"
-              />
-              <Label variant="small" tone="mutedInk">
-                {uiText("runtimeDetails")}
+          <If when={reason()}>
+            {(text) => (
+              <Label variant="small" tone="mutedInk" style={{ flex: 1 }}>
+                {text()}
               </Label>
-            </View>
+            )}
           </If>
-          <View style={{ flex: 1 }} />
+          <If when={!reason()}>
+            <View style={{ flex: 1 }} />
+          </If>
           <Button
             label={uiText("runtimeRetry")}
             tone="ghost"
@@ -116,23 +108,8 @@ export function RuntimeHints(props: {
             onPress={props.onRetry}
           />
         </View>
-        <If when={open() && props.explained.length > 0}>
-          <View style={{ gap: space[4], paddingLeft: space[16] }}>
-            <Each of={props.explained} key={(item) => item.id}>
-              {(item) => (
-                <View style={{ gap: 1 }}>
-                  <Label
-                    variant="small"
-                    weight={weight.regular}
-                    tone="mutedInk"
-                  >
-                    {item().label}
-                  </Label>
-                  <RuntimeWords>{item().detail ?? ""}</RuntimeWords>
-                </View>
-              )}
-            </Each>
-          </View>
+        <If when={words()}>
+          {(detail) => <RuntimeWords>{detail()}</RuntimeWords>}
         </If>
         <If when={props.error}>
           {(error) => (

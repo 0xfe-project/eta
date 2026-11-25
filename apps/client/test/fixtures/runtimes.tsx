@@ -206,7 +206,7 @@ const usage: ProviderUsage[] = [
   },
 ];
 
-const agent = {
+const bo = {
   id: "a-bo",
   name: "Bo",
   instructions: "",
@@ -220,6 +220,14 @@ const agent = {
   systemRole: null,
 } as unknown as AgentView;
 
+// An agent left on a runtime this machine does not have, so the field has to say so.
+const pi = {
+  ...bo,
+  id: "a-pi",
+  name: "Pi",
+  runtime: "pi",
+} as unknown as AgentView;
+
 function Fixture() {
   const host = createHost();
   const calls = signal<string[]>([]);
@@ -231,7 +239,11 @@ function Fixture() {
     ops: ["agents.runtimes", "agents.runtimeAccount", "agents.update"],
     targets: {
       machines: { version: 1, revisions: {}, sections: { list: machines } },
-      agents: { version: 1, revisions: {}, sections: { list: [agent] } },
+      agents: {
+        version: 1,
+        revisions: {},
+        sections: { list: [bo, pi] },
+      },
       usage: { version: 1, revisions: {}, sections: { providers: usage } },
     },
   }));
@@ -266,13 +278,20 @@ function Page(props: {
   const width = windowSize().width;
   const layout = width < 600 ? "phone" : width < 1200 ? "tablet" : "desktop";
   const noop = () => {};
-  const editing = props.page === "editor" || props.page === "new";
+  const editing =
+    props.page === "editor" || props.page === "new" || props.page === "pi";
   return (
     <View style={{ flex: 1 }}>
       <Text>{props.calls().join("\n")}</Text>
       {editing ? (
         <AgentEditor
-          id={props.page === "editor" ? agent.id : undefined}
+          id={
+            props.page === "editor"
+              ? bo.id
+              : props.page === "pi"
+                ? pi.id
+                : undefined
+          }
           phone={layout === "phone"}
           tablet={layout === "tablet"}
           onClose={noop}

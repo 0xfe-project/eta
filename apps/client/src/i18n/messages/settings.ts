@@ -206,6 +206,14 @@ export const settingsMessages = {
   runtimeProbeTimedOut: ["Probe timed out (30s)", "探测超时（30 秒）"],
   runtimeProbeFailed: ["Probe failed", "探测失败"],
   runtimeAvailable: ["Available", "可用"],
+  runtimeMissingHint: [
+    "{{runtime}} isn't installed on this machine.",
+    "这台机器上没有安装 {{runtime}}。",
+  ],
+  runtimeErrorHint: [
+    "{{runtime}} could not be asked.",
+    "问不到 {{runtime}} 的状态。",
+  ],
   runtimeDetails: ["Details", "详情"],
   runtimeRetry: ["Retry", "重试"],
   runtimeUnreachable: [

@@ -181,12 +181,6 @@ export function createAgentForm(props: AgentEditorProps) {
       probing.set(false);
     }
   }
-  /** The runtimes that cannot be picked and say why in their own words. */
-  const explained = () =>
-    (installed() ?? []).filter(
-      (item) => item.status !== "available" && item.detail,
-    );
-
   function close() {
     if (!busy()) props.onClose();
   }
@@ -314,7 +308,6 @@ export function createAgentForm(props: AgentEditorProps) {
     runtimeLabel,
     external,
     installed,
-    explained,
     probing,
     probeError,
     reprobe,

@@ -39,7 +39,6 @@ export function AgentGeneral(props: {
     runtime,
     external,
     installed,
-    explained,
     probing,
     probeError,
     reprobe,
@@ -203,7 +202,6 @@ export function AgentGeneral(props: {
         hint={
           <RuntimeHints
             runtimes={installed()}
-            explained={explained()}
             chosen={external()}
             probing={probing()}
             error={probeError()}
