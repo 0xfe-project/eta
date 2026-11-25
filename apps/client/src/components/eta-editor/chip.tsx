@@ -15,7 +15,7 @@ import {
 import { icon, opacity, space } from "../tokens";
 import { LineRoom } from "./room";
 
-const chipMaxWidth = 280;
+export const chipMaxWidth = 280;
 /** A pasted text's preview beside its chip. */
 const previewMaxWidth = 420;
 
@@ -61,6 +61,7 @@ export function Chip(props: {
     <Text
       style={{
         flexShrink: shrink,
+        minWidth: 0,
         fontFamily: fontFamily(fonts().interface),
         fontSize: type("small").size,
         lineHeight: type("small").line,
@@ -111,6 +112,7 @@ export function Chip(props: {
           ...row,
           gap: space[4],
           flexShrink: 1,
+          minWidth: 0,
           cursor: props.cursor ?? (props.onPress ? "pointer" : "default"),
         }}
       >

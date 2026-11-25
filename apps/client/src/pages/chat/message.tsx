@@ -42,6 +42,8 @@ import { AgentFace } from "../../components/agent-face";
 import { EmptyState } from "../../components/empty-state";
 import {
   chatText,
+  chipMaxWidth,
+  LineRoom,
   shownFiles,
   shownMentions,
 } from "../../components/eta-editor";
@@ -116,7 +118,11 @@ function StreamingCaret() {
 /** How wide your message's bubble runs, and on phones the least room a task draft's title keeps. A
  * draft's card has no width of its own: like a task's card it fills the column, whose width is
  * the appearance setting's. */
-const bubbleWidth = { phone: "84%", desktop: "72%" } as const;
+const bubbleShare = { phone: 0.84, desktop: 0.72 } as const;
+const bubbleWidth = {
+  phone: `${bubbleShare.phone * 100}%`,
+  desktop: `${bubbleShare.desktop * 100}%`,
+} as const;
 const draftTitleWidth = 200;
 
 /** How each code the host fails a reply with is said. */
@@ -311,6 +317,13 @@ export function Message(props: {
   };
   const discarded = () => item().data.discarded === true;
   const busy = signal(false);
+  const rowWidth = signal(0);
+  const share = () => (props.phone ? bubbleShare.phone : bubbleShare.desktop);
+  const bubbleBorderAndPadding = 2 * (1 + space[12]);
+  const lineRoom = () => rowWidth() * share() - bubbleBorderAndPadding;
+  /** A chip is laid in the text's line and adds nothing to the bubble's own width, so a
+   * bubble that holds one is never narrower than the chip's longest. */
+  const holdsChip = () => attached().length > 0 || item().text.includes("![");
   /** Stop was pressed and the host has not said the reply is stopping yet. */
   const stopping = signal(false);
   async function discard() {
@@ -348,7 +361,13 @@ export function Message(props: {
       }}
     >
       <If when={item().author === "user"}>
-        <View style={{ alignItems: "flex-end", gap: space[4] }}>
+        <View
+          // The row is as wide as the message, whatever the bubble holds: the line's room is
+          // the bubble's share of it, less the bubble's border and padding (the bubble itself
+          // fits its content, so it cannot be measured for this).
+          onLayout={({ bounds }) => rowWidth.set(bounds.size.width)}
+          style={{ alignItems: "flex-end", gap: space[4] }}
+        >
           <View
             accessibilityLabel={
               props.delivery
@@ -360,6 +379,12 @@ export function Message(props: {
             }
             style={{
               maxWidth: props.phone ? bubbleWidth.phone : bubbleWidth.desktop,
+              minWidth: holdsChip()
+                ? Math.min(
+                    chipMaxWidth + bubbleBorderAndPadding,
+                    rowWidth() * share(),
+                  )
+                : undefined,
               borderWidth: 1,
               borderColor: c().border,
               backgroundColor: props.delivery?.failure
@@ -373,11 +398,13 @@ export function Message(props: {
               paddingHorizontal: space[12],
             }}
           >
-            <chatText.View
-              text={{ ...stored(item()), files: attached() }}
-              plugins={shown}
-              label={uiText("yourMessage")}
-            />
+            <LineRoom.Provider value={lineRoom}>
+              <chatText.View
+                text={{ ...stored(item()), files: attached() }}
+                plugins={shown}
+                label={uiText("yourMessage")}
+              />
+            </LineRoom.Provider>
             <Each of={props.additions} key={(addition) => addition.id}>
               {(addition) => (
                 <View
