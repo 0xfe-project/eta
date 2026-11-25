@@ -1,4 +1,8 @@
-import type { ComposioPluginView, PluginResults } from "@eta/client-contracts";
+import type {
+  ComposioPluginView,
+  PluginResults,
+  PluginToolkitView,
+} from "@eta/client-contracts";
 import { effect, signal, untracked, View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { hint } from "../../components/controls";
@@ -17,9 +21,10 @@ const listed = new WeakMap<object, ComposioPluginView[]>();
 /**
  * The connected Composio toolkits as the host lists them as plugins of the agents
  * (`@composio/<slug>`). Read when the page opens and again on `read()`, and then followed: a host
- * that publishes the `composio` section of its `plugins` target sends it when a toolkit's session is
- * made after the page opened. A host without the section is only read, as before; one that does not
- * answer (or does not know the call) lists none, and nothing says so.
+ * that publishes the `toolkits` section of its `plugins` target sends it when a toolkit's session is
+ * made after the page opened; the entries of a provider other than Composio are left out. A host
+ * without the section is only read, as before; one that does not answer (or does not know the call)
+ * lists none, and nothing says so.
  */
 export function useComposioPlugins() {
   const host = useHost();
@@ -40,8 +45,9 @@ export function useComposioPlugins() {
   // The host's own copy, kept current by its pushes. Reading it does not call the host, so it
   // cannot cause a push that is read again.
   effect(() => {
-    const pushed = host.section<ComposioPluginView[]>("plugins", "composio");
-    if (Array.isArray(pushed)) list.set(pushed);
+    const pushed = host.section<PluginToolkitView[]>("plugins", "toolkits");
+    if (Array.isArray(pushed))
+      list.set(pushed.filter((one) => one.provider === "composio"));
   });
   return { list, read };
 }

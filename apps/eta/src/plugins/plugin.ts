@@ -7,6 +7,7 @@
 import type {
   ComposioPluginView,
   PluginAuditView,
+  PluginToolkitView,
   PluginValue,
 } from "@eta/client-contracts";
 import type { AgentStore } from "../agents/store";
@@ -62,7 +63,7 @@ export function pluginsPlugin(
   };
   /**
    * The connected toolkits as plugins of the agents, with the user's switch. Nothing without
-   * Composio or while its source is off. What the `composio` section and `composioPlugins` both say.
+   * Composio or while its source is off. What the `toolkits` section and `composioPlugins` both say.
    */
   const composioPlugins = (
     source: Composio | undefined,
@@ -208,7 +209,12 @@ export function pluginsPlugin(
             })),
           // A toolkit's session is made after the start, so this section moving is what tells a
           // client that has the page open: it is sent when its content changes, like any section.
-          composio: () => composioPlugins(composio),
+          // Each entry names its provider; Composio is the only one there is.
+          toolkits: (): PluginToolkitView[] =>
+            composioPlugins(composio).map((one) => ({
+              ...one,
+              provider: "composio",
+            })),
           audit: (): PluginAuditView[] =>
             plugins.rows.audits(AUDIT_SHOWN).map((row) => ({
               ...row,
