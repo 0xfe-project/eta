@@ -34,25 +34,32 @@ for (const [width, height] of sizes) {
   });
 }
 
-test("Details opens each runtime's own words under the field", async () => {
+test("the field keeps the other runtimes' own words out of it", async () => {
   const app = await open("./fixtures/runtimes.tsx", {
     width: 1440,
     height: 900,
     locale: "en-US",
     urlScheme: "eta://fixture/new",
   });
-  expect(app.texts().join("\n")).not.toContain("timed out after 30000ms");
-  await app.press("label:Details");
   const words = app.texts().join("\n");
-  expect(words).toContain(
-    "oar: `opencode models --verbose` timed out after 30000ms",
-  );
-  expect(words).toContain("pi: command not found on PATH");
-  expect(words).toContain(
-    "spawn gemini --experimental-acp: exited with code 1",
-  );
-  await app.press("label:Details");
-  expect(app.texts().join("\n")).not.toContain("timed out after 30000ms");
+  // A runtime that answers says nothing under the field, and no other runtime speaks for it.
+  expect(words).not.toContain("timed out after 30000ms");
+  expect(words).not.toContain("command not found on PATH");
+  expect(words).not.toContain("Details");
+});
+
+test("an agent left on a runtime this machine lacks says so in one line", async () => {
+  const app = await open("./fixtures/runtimes.tsx", {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+    urlScheme: "eta://fixture/pi",
+  });
+  const words = app.texts().join("\n");
+  expect(words).toContain("Pi isn't installed on this machine.");
+  expect(words).toContain("Retry");
+  // The host's own words stay out of the field.
+  expect(words).not.toContain("command not found on PATH");
 });
 
 test("Retry asks the machine again with fresh: true", async () => {
@@ -60,7 +67,7 @@ test("Retry asks the machine again with fresh: true", async () => {
     width: 1440,
     height: 900,
     locale: "en-US",
-    urlScheme: "eta://fixture/new",
+    urlScheme: "eta://fixture/editor",
   });
   expect(app.texts()[0]).toBe("agents.runtimes {}");
   await app.press("label:Retry");
