@@ -102,6 +102,12 @@ jobs:
           part: ${{ matrix.part }}
           save-uv-cache: ${{ matrix.part == 'static' }}
 
+      # The client is checked with nsh (typecheck, in the static part) and tested with it
+      # (test, in the rest part); the other parts do not run it and do not pay for it.
+      - name: Set up nsh
+        if: ${{ steps.plan.outputs.run && (matrix.part == 'static' || matrix.part == 'rest') }}
+        uses: ./.github/actions/setup-nsh
+
       # Turborepo's Remote Cache (turbo.json's remoteCache), which development
       # machines fill as they commit: a short-lived token for the Vercel team,
       # through its OIDC policy for this repository.
