@@ -118,6 +118,33 @@ points eta at a SearXNG of your own instead.
 [opencode](https://github.com/anomalyco/opencode), both MIT. The notice is in
 `packages/eta-mcp/NOTICE`.
 
+### t3code (Tailscale Serve and direct endpoint discovery)
+
+`apps/eta/src/machines/tailscale.ts` and `apps/eta/src/machines/direct-endpoints.ts`
+include Tailscale Serve route/holder inspection, stderr diagnostic classification,
+HTTPS endpoint probing, and direct LAN/tailnet endpoint discovery adapted from
+[pingdotgg/t3code](https://github.com/pingdotgg/t3code)
+(`packages/tailscale/src/tailscale.ts`, `apps/server/src/cli/pair.ts`,
+`apps/server/src/environment/DirectEndpoints.ts`, `apps/server/src/startupAccess.ts`,
+`packages/shared/src/hostClassification.ts`).
+
+Copyright (c) 2026 T3 Tools Inc., under the MIT License:
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+> associated documentation files (the "Software"), to deal in the Software without restriction,
+> including without limitation the rights to use, copy, modify, merge, publish, distribute,
+> sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or
+> substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+> NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+> NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+> DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
+> OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 ### TOBEREFR
 
 `packages/TOBEREFR` is not part of any build. It keeps its own notices:

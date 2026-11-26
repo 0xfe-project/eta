@@ -113,6 +113,19 @@ if (!Number.isInteger(port) || port < 0 || port > 65_535) {
   process.exit(2);
 }
 
+const tailscaleServe = values["tailscale-serve"] === true;
+let tailscaleServePort: number | undefined;
+if (values["tailscale-serve-port"] !== undefined) {
+  const parsed = Number(values["tailscale-serve-port"]);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535) {
+    console.error(
+      `--tailscale-serve-port: not a port: ${values["tailscale-serve-port"]}`,
+    );
+    process.exit(2);
+  }
+  tailscaleServePort = parsed;
+}
+
 if (serviceCommand !== undefined) {
   // How this process was started, for a service that has to start it again: a compiled host is
   // its own program; from source it is bun and this file. The flags were checked above.
@@ -134,9 +147,10 @@ if (serviceCommand !== undefined) {
       const definition = await manager.install(self);
       console.log(`Installed ${definition.name} (${definition.path}).`);
       console.log(
-        values.host === "127.0.0.1" || values.host === "localhost"
+        !tailscaleServe &&
+          (values.host === "127.0.0.1" || values.host === "localhost")
           ? `It listens on http://127.0.0.1:${port}.`
-          : `It asks for a token beyond loopback: open the page once with ?token=<the token in ${join(homedir(), ".eta", "access-token")}>.`,
+          : `It asks for a token: open the page once with ?token=<the token in ${join(homedir(), ".eta", "access-token")}>.`,
       );
     }
   } catch (error) {
@@ -165,12 +179,17 @@ const memoryUrl = values["memory-url"] ?? process.env.ETA_MEMORY_URL;
 const publicUrl = values["public-url"] ?? process.env.ETA_PUBLIC_URL;
 const searxngUrl = values["searxng-url"] ?? process.env.ETA_SEARXNG_URL;
 
+let updateRunningToken: ((tokenFile: string | undefined) => void) | undefined;
+
 const host = await startHost({
   dataDir,
   port,
   hostname: listen,
   // The tailnet's computers can be found and added as machines, and the user's own let in.
   tailscale: true,
+  ...(tailscaleServe ? { tailscaleServe: true } : {}),
+  ...(tailscaleServePort === undefined ? {} : { tailscaleServePort }),
+  onGateChange: ({ tokenFile }) => updateRunningToken?.(tokenFile),
   // The daemon builds this host carries (or the checkout's): daemons are kept at them.
   daemonBuilds: true,
   ...(values["web-dir"] === undefined
@@ -195,14 +214,23 @@ const host = await startHost({
 });
 
 // Said where another start looks before it opens the same database (`running.ts`).
-const forget = recordRunning(dataDir, {
+let forget = recordRunning(dataDir, {
   pid: process.pid,
   hostname: host.hostname,
   port: host.port,
   tokenFile: host.tokenFile ?? null,
   version: VERSION,
 });
-process.on("exit", forget);
+updateRunningToken = (tokenFile) => {
+  forget = recordRunning(dataDir, {
+    pid: process.pid,
+    hostname: host.hostname,
+    port: host.port,
+    tokenFile: tokenFile ?? null,
+    version: VERSION,
+  });
+};
+process.on("exit", () => forget());
 
 /**
  * A signal is a shutdown, not a crash: the sessions flush, the files close. Handled before the

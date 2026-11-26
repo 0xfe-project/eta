@@ -18,6 +18,7 @@ import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/files";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
 import type { SshRunner } from "./machines/install";
+import type { TailscaleProbe } from "./machines/remote-access";
 import type {
   McpTuning,
   Product,
@@ -46,10 +47,12 @@ import { GatewayModels } from "./llm/models";
 import { llmPlugin } from "./llm/plugin";
 import { openLlm } from "./llm/runtime";
 import { buildsIn, defaultBuilds } from "./machines/builds";
+import { readTailscaleServePreference } from "./machines/remote-access";
 import { Tailscale } from "./machines/tailscale";
 import { clearMigrationInput, stageMigrationInput } from "./model-backfill";
 import { createProduct } from "./product";
 import { COMPILED } from "./resources";
+import { SettingStore } from "./settings/store";
 
 export interface HostOptions {
   /** Everything the host owns: the database, the sessions, the providers config. */
@@ -131,6 +134,19 @@ export interface HostOptions {
    * default; `main.ts` turns it on.
    */
   tailscale?: boolean | Tailscale;
+  /** Enable Tailscale HTTPS (`tailscale serve`) on startup; forces the token gate on. */
+  tailscaleServe?: boolean;
+  /** HTTPS port for Tailscale Serve (default 443). */
+  tailscaleServePort?: number;
+  /** Tests only: override the HTTPS probe used to verify Tailscale Serve reachability. */
+  tailscaleProbe?: TailscaleProbe;
+  /** Tests only: override cloud VM detection for direct endpoint discovery. */
+  onCloudVm?: boolean;
+  /** Called whenever the dynamic token gate turns on or off at runtime. */
+  onGateChange?: (state: {
+    tokenFile: string | undefined;
+    token: string | undefined;
+  }) => void;
   /**
    * The daemon builds this primary carries (`apps/daemon/scripts/build.ts`): `true` looks where
    * they are kept (the checkout's `apps/daemon/out/dist`, or inside a compiled host), a string is
@@ -173,6 +189,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
     dataDir: options.dataDir,
     tokenFile: options.tokenFile,
     allowOrigins: options.allowOrigins,
+    forceGate: options.tailscaleServe === true,
+    onGateChange: options.onGateChange,
   });
 
   const db = openDatabase(databasePath(options.dataDir));
@@ -189,6 +207,18 @@ export async function startHost(options: HostOptions): Promise<Host> {
     } finally {
       clearMigrationInput(db);
     }
+    const persistedTailscaleServe = readTailscaleServePreference(
+      new SettingStore(db),
+    );
+    const startupTailscaleServe =
+      options.tailscaleServe === true || persistedTailscaleServe.enabled;
+    const startupTailscaleServePort =
+      options.tailscaleServePort ?? persistedTailscaleServe.port;
+    // Security invariant: if Tailscale HTTPS is enabled (via CLI or persisted preference), turn on
+    // the Token Gate BEFORE opening the HTTP listener so traffic proxied from Tailscale Serve is
+    // never unauthenticated.
+    if (startupTailscaleServe) access.setDynamicGate(true);
+
     const warn = options.warn ?? ((message: string) => console.warn(message));
     const acp =
       options.acp === false
@@ -232,7 +262,13 @@ export async function startHost(options: HostOptions): Promise<Host> {
       artifactLimits: options.artifactLimits,
       memoryUrl: options.memoryUrl,
       publicUrl: options.publicUrl,
-      accessToken: access.token,
+      access,
+      tailscaleServe: {
+        enabled: startupTailscaleServe,
+        port: startupTailscaleServePort,
+        probe: options.tailscaleProbe,
+      },
+      onCloudVm: options.onCloudVm,
       ...(options.web === undefined || options.web === false
         ? {}
         : { web: options.web === true ? {} : options.web }),
@@ -314,6 +350,11 @@ export async function startHost(options: HostOptions): Promise<Host> {
     });
     try {
       await product.mount(server);
+      if (startupTailscaleServe) {
+        await product.remoteAccess.reconcileStartup({
+          persist: options.tailscaleServe === true,
+        });
+      }
       // After the server: it has applied the network settings, which the gateway's own
       // requests to the providers then inherit.
       if (options.llm !== undefined && options.llm !== false) {
@@ -349,7 +390,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
     hostname,
     dataDir: options.dataDir,
     webDir: options.webDir,
-    tokenFile: access.tokenFile,
+    get tokenFile() {
+      return access.tokenFile;
+    },
     db,
     product,
     server,

@@ -36,6 +36,7 @@ import {
   INSTALL_DOWNLOAD_PATH,
   INSTALL_SCRIPT_PATH,
   LINK_PATH,
+  WELL_KNOWN_HOST_PATH,
 } from "@eta/client-contracts";
 
 import { MCP_CALLBACK_PATH } from "./mcp/path";
@@ -60,6 +61,15 @@ export interface AccessOptions {
   tokenFile?: string | undefined;
   /** Other origins that may open the socket (the dev page's). */
   allowOrigins?: readonly string[] | undefined;
+  /** Force the token gate on even on loopback (e.g. when Tailscale Serve proxies to this host). */
+  forceGate?: boolean | undefined;
+  /** Called whenever the dynamic gate turns on or off at runtime. */
+  onGateChange?:
+    | ((state: {
+        tokenFile: string | undefined;
+        token: string | undefined;
+      }) => void)
+    | undefined;
 }
 
 export interface Access {
@@ -69,6 +79,16 @@ export interface Access {
   readonly tokenFile: string | undefined;
   /** The token itself, or `undefined` when the gate is off: for the phone's connect link. */
   readonly token: string | undefined;
+  /** Whether the token gate is currently active. */
+  readonly gated: boolean;
+  /**
+   * Turn the dynamic token gate on or off (for runtime remote exposure such as Tailscale Serve).
+   * Turning it off only clears the dynamic gate; a host gated by `--token-file` or a non-loopback
+   * listen address stays gated. Returns the active token when gated.
+   */
+  setDynamicGate: (enabled: boolean) => string | undefined;
+  /** Replace dynamic extra allowed WebSocket origins (such as the active Tailscale HTTPS origin). */
+  setExtraAllowedOrigins: (origins: readonly string[]) => void;
 }
 
 /** Whether an interface or `Host` name can only be reached from this machine. */
@@ -165,40 +185,81 @@ function isMachineRoute(pathname: string): boolean {
   );
 }
 
+function isWellKnownHost(request: Request, pathname: string): boolean {
+  return (
+    pathname === WELL_KNOWN_HOST_PATH &&
+    (request.method === "GET" || request.method === "HEAD")
+  );
+}
+
 const refuse = (status: number, message: string): Response =>
   new Response(message, {
     status,
     headers: { "content-type": "text/plain; charset=utf-8" },
   });
 
+function normalizeOrigin(raw: string): string | undefined {
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.origin
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function createAccess(options: AccessOptions): Access {
   const allowed = new Set(options.allowOrigins ?? []);
-  const gated =
+  const extraAllowed = new Set<string>();
+  const baseGated =
     options.tokenFile !== undefined || !isLoopback(options.hostname);
-  const tokenFile = gated
-    ? (options.tokenFile ?? join(options.dataDir, "access-token"))
-    : undefined;
-  const token = tokenFile === undefined ? undefined : loadToken(tokenFile);
-  const gate =
-    token === undefined
-      ? undefined
-      : (() => {
-          // What the cookie holds: derived from the token, so a leaked cookie is not the token.
-          const cookie = createHash("sha256")
-            .update(`eta-cookie:${token}`)
-            .digest("base64url");
-          return { token: digest(token), cookie, cookieDigest: digest(cookie) };
-        })();
+  let dynamicGate = options.forceGate === true;
+  let currentTokenFile: string | undefined;
+  let currentToken: string | undefined;
+  let gate: { token: Buffer; cookie: string; cookieDigest: Buffer } | undefined;
+
+  function syncGate(notify: boolean): void {
+    const shouldGate = baseGated || dynamicGate;
+    if (shouldGate) {
+      if (gate === undefined) {
+        const file = options.tokenFile ?? join(options.dataDir, "access-token");
+        const token = loadToken(file);
+        // What the cookie holds: derived from the token, so a leaked cookie is not the token.
+        const cookie = createHash("sha256")
+          .update(`eta-cookie:${token}`)
+          .digest("base64url");
+        currentTokenFile = file;
+        currentToken = token;
+        gate = { token: digest(token), cookie, cookieDigest: digest(cookie) };
+        if (notify)
+          options.onGateChange?.({
+            tokenFile: currentTokenFile,
+            token: currentToken,
+          });
+      }
+      return;
+    }
+    if (gate !== undefined) {
+      currentTokenFile = undefined;
+      currentToken = undefined;
+      gate = undefined;
+      if (notify)
+        options.onGateChange?.({ tokenFile: undefined, token: undefined });
+    }
+  }
+
+  syncGate(false);
 
   function originAllowed(request: Request): boolean {
     const origin = request.headers.get("origin");
     if (origin === null) return true;
-    if (allowed.has(origin)) return true;
+    if (allowed.has(origin) || extraAllowed.has(origin)) return true;
     const asked = askedFor(request);
     if (origin !== asked.origin) return false;
     // The origin it asked for. Behind the token gate that is enough (a rebound name has no
     // cookie); without it the name has to be one only this machine can resolve.
-    if (gated) return true;
+    if (gate !== undefined) return true;
     try {
       return isLoopback(new URL(`http://${asked.host}`).hostname);
     } catch {
@@ -208,11 +269,34 @@ export function createAccess(options: AccessOptions): Access {
   }
 
   return {
-    tokenFile,
-    token,
+    get tokenFile() {
+      return currentTokenFile;
+    },
+    get token() {
+      return currentToken;
+    },
+    get gated() {
+      return gate !== undefined;
+    },
+    setDynamicGate(enabled: boolean) {
+      dynamicGate = enabled;
+      syncGate(true);
+      return currentToken;
+    },
+    setExtraAllowedOrigins(origins: readonly string[]) {
+      extraAllowed.clear();
+      for (const raw of origins) {
+        const origin = normalizeOrigin(raw);
+        if (origin !== undefined) extraAllowed.add(origin);
+      }
+    },
     authorize(request) {
       const url = new URL(request.url);
-      if (url.pathname === "/up" || isMachineRoute(url.pathname))
+      if (
+        url.pathname === "/up" ||
+        isWellKnownHost(request, url.pathname) ||
+        isMachineRoute(url.pathname)
+      )
         return undefined;
 
       if (url.pathname === "/ws" && !originAllowed(request)) {

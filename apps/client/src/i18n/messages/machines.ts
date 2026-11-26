@@ -68,12 +68,92 @@ export const machinesMessages = {
     "在手机的 Eta 里点「扫电脑上的二维码」。二维码里有访问令牌，别给别人看。",
   ],
   phoneCantReachThisAddress: [
-    "A phone can't reach this address. Have the host listen on your LAN or Tailscale address, then open this page from there.",
-    "这个地址手机连不到。让 host 监听局域网或 Tailscale 地址，再从那个地址打开这个页面。",
+    "This host only listens locally, so a phone can't reach it yet.",
+    "当前主机仅监听本机地址，手机还无法直接连接。",
   ],
   phoneCodeFailed: [
     "The code couldn't be generated. Check the host address and retry.",
     "配对码没能生成。检查主机地址后重试。",
+  ],
+  phoneRoutePublic: ["Public URL", "公网地址"],
+  phoneRouteTailscaleHttps: ["Tailscale HTTPS", "Tailscale HTTPS"],
+  phoneRouteTailnet: ["Tailscale", "Tailscale"],
+  phoneRouteLan: ["LAN", "局域网"],
+  phoneRouteCustom: ["Custom URL", "自定义地址"],
+  phoneRoutePlaceholder: ["https://eta.example.com", "https://eta.example.com"],
+  phoneCustomUrlLabel: ["Or enter a reachable address", "或输入可访问的地址"],
+  phoneCustomUrlInvalid: [
+    "Enter a valid http:// or https:// address.",
+    "请输入有效的 http:// 或 https:// 地址。",
+  ],
+  phoneCustomUrlLoopback: [
+    "A phone can't reach a local loopback address.",
+    "手机无法连接到本机回环地址。",
+  ],
+  tailscaleHttps: ["Tailscale HTTPS", "Tailscale HTTPS"],
+  tailscaleHttpsEnable: ["Enable Tailscale HTTPS", "开启 Tailscale HTTPS"],
+  tailscaleHttpsEnabling: [
+    "Enabling Tailscale HTTPS…",
+    "正在开启 Tailscale HTTPS…",
+  ],
+  tailscaleHttpsDisabling: [
+    "Disabling Tailscale HTTPS…",
+    "正在关闭 Tailscale HTTPS…",
+  ],
+  tailscaleHttpsReady: [
+    "Reach this host securely from your phone over Tailscale.",
+    "通过 Tailscale 让手机安全访问这台主机。",
+  ],
+  tailscaleHttpsRetryPort: ["Retry on port {{port}}", "改用端口 {{port}} 重试"],
+  tailscaleHttpsTurnOff: ["Turn off", "关闭"],
+  tailscaleHttpsDisable: ["Turn off Tailscale HTTPS", "关闭 Tailscale HTTPS"],
+  tailscaleHttpsCopyUrl: [
+    "Copy Tailscale HTTPS URL",
+    "复制 Tailscale HTTPS 地址",
+  ],
+  tailscaleDiagNotInstalled: [
+    "Install Tailscale on this host to enable one-click HTTPS.",
+    "请先在此主机安装 Tailscale 才能一键开启 HTTPS。",
+  ],
+  tailscaleDiagNotRunning: [
+    "Start Tailscale on this host, then try again.",
+    "请先在此主机启动 Tailscale，再重试。",
+  ],
+  tailscaleDiagNotLoggedIn: [
+    "Sign in to Tailscale on this host, then try again.",
+    "请先在此主机登录 Tailscale，再重试。",
+  ],
+  tailscaleDiagMagicDnsMissing: [
+    "Enable MagicDNS in Tailscale DNS settings, then try again.",
+    "请在 Tailscale DNS 设置中开启 MagicDNS 后重试。",
+  ],
+  tailscaleDiagHttpsDisabled: [
+    "Enable HTTPS Certificates in Tailscale DNS settings (login.tailscale.com/admin/dns), then try again.",
+    "请在 Tailscale DNS 设置（login.tailscale.com/admin/dns）开启 HTTPS 证书后重试。",
+  ],
+  tailscaleDiagPermissionDenied: [
+    "Run sudo tailscale set --operator=$USER on this host, then try again.",
+    "请在此主机运行 sudo tailscale set --operator=$USER 后重试。",
+  ],
+  tailscaleDiagPortOccupied: [
+    "Port {{port}} is already used by another Tailscale service.",
+    "端口 {{port}} 已被其他 Tailscale 服务占用。",
+  ],
+  tailscaleDiagUnsupportedTarget: [
+    "This host's listen address can't be proxied by Tailscale Serve.",
+    "当前主机监听地址无法通过 Tailscale Serve 代理。",
+  ],
+  tailscaleDiagProbeFailed: [
+    "Tailscale HTTPS is not active: HTTPS verification on port {{port}} failed, so Tailscale Serve was rolled back. The certificate may still be provisioning or this host can't reach its Tailscale HTTPS address—try again in a moment.",
+    "Tailscale HTTPS 未开启：端口 {{port}} 的 HTTPS 验证未通过，Tailscale Serve 已回滚。证书可能仍在签发，或本机暂时无法访问其 Tailscale HTTPS 地址，请稍后重试。",
+  ],
+  tailscaleDiagProbeFailedActive: [
+    "Tailscale Serve is still active on port {{port}}, but HTTPS verification failed (the certificate may still be provisioning or unreachable from this host). Retry or turn it off.",
+    "Tailscale Serve 仍在端口 {{port}} 上运行，但 HTTPS 验证未通过（证书可能仍在签发，或本机暂时无法访问该地址）。请重试或将其关闭。",
+  ],
+  tailscaleDiagUnknown: [
+    "Couldn't turn on Tailscale HTTPS. Check Tailscale status and try again.",
+    "无法开启 Tailscale HTTPS，请检查 Tailscale 状态后重试。",
   ],
   installOverSsh: ["Install over SSH", "通过 SSH 安装"],
   machineFingerprint: ["Machine fingerprint", "机器指纹"],

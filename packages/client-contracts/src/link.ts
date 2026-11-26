@@ -44,6 +44,8 @@ export const DAEMON_DOWNLOAD_PATH = "/machines/daemon";
  */
 export const INSTALL_SCRIPT_PATH = "/machines/install.sh";
 export const INSTALL_DOWNLOAD_PATH = "/machines/install";
+/** Unauthenticated read-only identity probe (`GET`/`HEAD`) returning `{ hostId }`. */
+export const WELL_KNOWN_HOST_PATH = "/.well-known/eta/host";
 
 /**
  * The link's own version: what both sides must agree on to talk at all. It moves only when a

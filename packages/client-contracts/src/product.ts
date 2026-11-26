@@ -552,6 +552,7 @@ export const MACHINE_ACTIONS = [
   "install",
   "addresses",
   "phoneLink",
+  "setTailscaleServe",
 ] as const;
 export type MachineAction = (typeof MACHINE_ACTIONS)[number];
 
@@ -574,6 +575,56 @@ export interface MachineRemoveResult {
   removedAgents: string[];
   removedProjects: string[];
   removedConversations: string[];
+}
+
+export type MachineRouteKind =
+  | "public"
+  | "tailscale_https"
+  | "tailnet"
+  | "lan"
+  | "loopback";
+
+/** One address that points at this host. */
+export interface MachineRouteView {
+  kind: MachineRouteKind;
+  url: string;
+  label: string;
+  /** Whether another device (such as a phone) can reach this address; false for loopback. */
+  reachable: boolean;
+}
+
+export type TailscaleServeHolderStatus = "none" | "ours" | "dead" | "other";
+
+export type TailscaleServeDiagnostic =
+  | "not-installed"
+  | "not-running"
+  | "not-logged-in"
+  | "magic-dns-missing"
+  | "https-disabled"
+  | "permission-denied"
+  | "port-occupied"
+  | "unsupported-target"
+  | "probe-failed"
+  | "unknown";
+
+/** Tailscale HTTPS (`tailscale serve`) availability and state on this host. */
+export interface TailscaleServeStatusView {
+  installed: boolean;
+  running: boolean;
+  magicDnsName: string | null;
+  httpsCapable: boolean | null;
+  /** Whether Tailscale HTTPS is enabled by eta (persisted or via `--tailscale-serve`). */
+  enabled: boolean;
+  /** Verified active Tailscale HTTPS origin, or null when inactive. */
+  activeUrl: string | null;
+  /** Configured HTTPS serve port (default 443). */
+  port: number;
+  /** Current owner of the root serve route on `port`, when known. */
+  holderStatus?: TailscaleServeHolderStatus;
+  /** Structured diagnostic code when unavailable or failed. */
+  diagnostic?: TailscaleServeDiagnostic;
+  /** Concise actionable message when unavailable or failed (never raw stderr). */
+  error?: string;
 }
 
 export interface MachineArgs {
@@ -610,8 +661,10 @@ export interface MachineArgs {
    * only, never kept or logged. Returns at once; the steps show in the `installs` section.
    */
   install: { host: string; name?: string; url?: string; password?: string };
-  /** The addresses a new machine can dial this host at, besides the one the page is on. */
+  /** The addresses a new machine or phone can dial this host at, plus Tailscale HTTPS status. */
   addresses: Record<string, never>;
+  /** Enable or disable Tailscale HTTPS (`tailscale serve`) for this host. */
+  setTailscaleServe: { enabled: boolean; port?: number };
 }
 
 /** An install over SSH, as it goes (`machines.installs`). */
@@ -660,8 +713,27 @@ export interface MachineResults {
     peers: TailnetPeerView[];
   };
   install: { installId: string };
-  /** The host's tailnet address (`http://<MagicDNS name>:<port>`), when it listens there. */
-  addresses: { tailnet: string | null };
+  /** Reachable routes, listening interface, and Tailscale HTTPS status for this host. */
+  addresses: {
+    /** Legacy tailnet address (`https://<MagicDNS>` or `http://<MagicDNS>:<port>`), or null. */
+    tailnet: string | null;
+    /** All known addresses for this host, ordered by preference (reachable remote routes first). */
+    routes: MachineRouteView[];
+    /** Best remotely reachable URL (`public` > `tailscale_https` > `tailnet` > `lan`), or null if loopback-only. */
+    preferredUrl: string | null;
+    /** The interface this host is listening on (e.g. `127.0.0.1`, `0.0.0.0`). */
+    listeningHost: string;
+    /** The port this host is listening on. */
+    port: number;
+    /** Tailscale HTTPS (`tailscale serve`) status and availability on this host. */
+    tailscaleServe: TailscaleServeStatusView;
+  };
+  setTailscaleServe: {
+    ok: boolean;
+    tailscaleServe: TailscaleServeStatusView;
+    routes: MachineRouteView[];
+    preferredUrl: string | null;
+  };
 }
 export type MachineCall = {
   [A in MachineAction]: Omit<CallFrame, "target" | "action" | "args"> & {
