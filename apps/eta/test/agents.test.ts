@@ -497,6 +497,24 @@ describe("deleting an agent", () => {
       error: "Agent Bob was deleted.",
     });
   });
+
+  it("archives an agent's agent_home project even when its path came from a different dataDir", async () => {
+    const w = await world();
+    const ada = await w.agent("Ada", { model: "fake:fake-model" });
+    w.host.db
+      .query("UPDATE project SET path = ? WHERE id = ?")
+      .run(`/moved/dataDir/agents/${ada.id}`, ada.homeProjectId);
+
+    await w.client.call("agents", "delete", { agentId: ada.id });
+
+    expect(
+      w.host.db
+        .query<{ archived: number }, [string]>(
+          "SELECT archived FROM project WHERE id = ?",
+        )
+        .get(ada.homeProjectId)?.archived,
+    ).toBe(1);
+  });
 });
 
 describe("an agent's model", () => {

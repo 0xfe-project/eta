@@ -86,6 +86,16 @@ export class ProjectStore {
     return row === null ? undefined : recordOf(row);
   }
 
+  /** The `agent_home` project owned by `ownerAgentId`, regardless of whether `dataDir` moved. */
+  homeOfAgent(ownerAgentId: string): ProjectRecord | undefined {
+    const row = this.#db
+      .query<Row, [string]>(
+        "SELECT * FROM project WHERE kind = 'agent_home' AND owner_agent_id = ? ORDER BY created_at, id LIMIT 1",
+      )
+      .get(ownerAgentId);
+    return row === null ? undefined : recordOf(row);
+  }
+
   create(input: ProjectInput): ProjectRecord {
     const id = crypto.randomUUID();
     const now = Date.now();
