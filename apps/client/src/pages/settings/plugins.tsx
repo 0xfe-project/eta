@@ -14,6 +14,7 @@ import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { clearMarketCache } from "../plugins/market";
 
 /** How wide the source and proxy fields grow, and the hint above the proxy. */
 const fieldWidth = 560;
@@ -67,6 +68,7 @@ export function PluginSettings(props: { phone?: boolean }) {
     if (!result) return false;
     settings.set(result);
     proxy.set(result.proxy);
+    if (method !== "marketSettings") clearMarketCache(host);
     return true;
   }
   const hasComposio = () => sources().some((item) => item.kind === "composio");
@@ -78,7 +80,10 @@ export function PluginSettings(props: { phone?: boolean }) {
       host.call<{ hasKey: boolean }>("plugins", method, args),
     );
     busy.set(false);
-    if (result) hasKey.set(result.hasKey);
+    if (result) {
+      hasKey.set(result.hasKey);
+      clearMarketCache(host);
+    }
     return result;
   }
   async function saveKey() {

@@ -1,6 +1,6 @@
 import type { PluginResults, PluginView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { signal, View } from "nsh";
+import { effect, signal, untracked, View } from "nsh";
 import {
   Button,
   Caption,
@@ -52,23 +52,70 @@ const footerHeight = 36;
 /** A phone row: taller when it has a line asking for configuration. */
 const phoneRowHeight = { needsConfig: 64, other: 60 } as const;
 
+export type PluginsTab = "Plugins" | "Skills" | "Market";
+
 export function Plugins(props: {
   layout: Layout;
   onBack?: () => void;
   /** Opens an address in the browser; the system's by default. */
   open?: (url: string) => Promise<void>;
+  initialTab?: PluginsTab;
+  initialPlugin?: string;
+  onPluginSettings?: () => void;
 }) {
   const host = useHost();
   const c = colors();
-  const tab = signal("Plugins");
+  const tab = signal<PluginsTab>(props.initialTab ?? "Plugins");
   const add = signal(false);
   const config = signal("");
-  const selected = signal("");
+  const selected = signal(props.initialPlugin ?? "");
+  const pendingDesktopOpen = signal(
+    props.layout === "desktop" && props.initialPlugin
+      ? props.initialPlugin
+      : "",
+  );
   const warnings = signal("");
   const source = signal("");
   const remove = signal("");
   const servers = signal("");
   const list = () => host.list<PluginView>("plugins");
+  effect(() => {
+    const nextTab = props.initialTab;
+    if (nextTab) tab.set(nextTab);
+  });
+  effect(() => {
+    const nextPlugin = props.initialPlugin;
+    if (nextPlugin === undefined) return;
+    untracked(() => {
+      selected.set(nextPlugin);
+      if (nextPlugin && !props.initialTab) tab.set("Plugins");
+      if (nextPlugin && props.layout === "desktop")
+        pendingDesktopOpen.set(nextPlugin);
+    });
+  });
+  effect(() => {
+    const targetName = pendingDesktopOpen();
+    if (!targetName || props.layout !== "desktop") return;
+    const target = list().find((item) => item.name === targetName);
+    if (!target) return;
+    untracked(() => {
+      pendingDesktopOpen.set("");
+      const hasFieldIssue = target.fields.some(
+        (field) =>
+          field.issue !== null ||
+          (field.required &&
+            !field.set &&
+            field.value === null &&
+            field.default == null),
+      );
+      const hasMissingEnv = target.servers.some(
+        (server) => (server.missingEnv?.length ?? 0) > 0,
+      );
+      if (target.fields.length === 0 || (!hasFieldIssue && hasMissingEnv))
+        servers.set(target.name);
+      else config.set(target.name);
+    });
+  });
   const plugin = () => list().find((item) => item.name === config());
   const phone = () => props.layout === "phone";
   const tabletPlugins = () => props.layout === "tablet" && tab() === "Plugins";
@@ -124,8 +171,8 @@ export function Plugins(props: {
 
   const hoveredTab = signal("");
   function tabs(tablet = false) {
-    const items = ["Plugins", "Skills", "Market"];
-    const label = (item: string) =>
+    const items: PluginsTab[] = ["Plugins", "Skills", "Market"];
+    const label = (item: PluginsTab) =>
       uiText(
         item === "Plugins"
           ? "plugins"
@@ -201,19 +248,20 @@ export function Plugins(props: {
   }
 
   const detailView = () => (
-    <If when={detail()}>
+    <Each of={detail() ? [detail()!] : []} key={(item) => item.name}>
       {(item) => (
         <PluginDetail
           item={item()}
           phone={phone()}
           onBack={() => selected.set("")}
           onConfigure={() => config.set(item().name)}
+          onServers={() => servers.set(item().name)}
           onUpdate={() => update(item().name)}
           onRemove={() => remove.set(item().name)}
           onRefresh={refreshPlugins}
         />
       )}
-    </If>
+    </Each>
   );
   const desktopList = () => (
     <SmoothScroll style={grow} scrollbar={false}>
@@ -334,6 +382,8 @@ export function Plugins(props: {
                         <Market
                           layout={props.layout}
                           onBack={props.onBack}
+                          open={props.open}
+                          onPluginSettings={props.onPluginSettings}
                           tabs={() => tabs(props.layout === "tablet")}
                         />
                       }
@@ -413,7 +463,10 @@ export function Plugins(props: {
           />
         )}
       </If>
-      <If when={serversPlugin()}>
+      <Each
+        of={serversPlugin() ? [serversPlugin()!] : []}
+        key={(item) => item.name}
+      >
         {(item) => (
           <ServersDialog
             item={item()}
@@ -421,7 +474,7 @@ export function Plugins(props: {
             onClose={() => servers.set("")}
           />
         )}
-      </If>
+      </Each>
       <If when={sourcePlugin()}>
         {(item) => (
           <PluginSourceDialog item={item()} onClose={() => source.set("")} />
@@ -430,16 +483,21 @@ export function Plugins(props: {
       <If when={add()}>
         <AddPlugin phone={phone()} onClose={() => add.set(false)} />
       </If>
-      <If when={plugin()}>
+      <Each of={plugin() ? [plugin()!] : []} key={(item) => item.name}>
         {(item) => (
           <ConfigurePlugin
             item={item()}
             phone={phone()}
             tablet={props.layout === "tablet"}
             onClose={() => config.set("")}
+            onServers={() => {
+              const name = item().name;
+              config.set("");
+              servers.set(name);
+            }}
           />
         )}
-      </If>
+      </Each>
       <If when={remove()}>
         <Modal
           title={uiText("removePluginTitle", { name: remove() })}
@@ -523,6 +581,10 @@ function PluginCard(props: {
   const c = colors();
   const git = () =>
     props.item.source.kind === "git" ? props.item.source : undefined;
+  const hasMissingEnv = () =>
+    props.item.servers.some((server) => (server.missingEnv?.length ?? 0) > 0);
+  const needsSetup = () =>
+    props.item.state === "needs_config" || hasMissingEnv();
   return (
     <View
       role="button"
@@ -671,7 +733,8 @@ function PluginCard(props: {
         <PluginEnabled
           item={props.item}
           compact={
-            props.item.source.kind === "git" && props.item.fields.length > 0
+            props.item.source.kind === "git" &&
+            (props.item.fields.length > 0 || needsSetup())
           }
         />
         <View style={{ flex: 1 }} />
@@ -688,7 +751,18 @@ function PluginCard(props: {
             onPress={props.onRemove}
           />
         </If>
-        <If when={props.item.fields.length}>
+        <If
+          when={props.item.fields.length}
+          else={
+            <If when={needsSetup()}>
+              <Button
+                label={uiText("configure")}
+                tone="primary"
+                onPress={props.onServers}
+              />
+            </If>
+          }
+        >
           <Button label={uiText("cardValues")} onPress={props.onConfigure} />
         </If>
       </View>
