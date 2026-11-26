@@ -7,8 +7,9 @@
  * the commit the project's checkout is on. The worktree lives outside the project's directory, in
  * the machine's own eta data (`<data dir>/worktrees/<project id>/task-<number>` on the primary,
  * `~/.eta/worktrees/...` on a daemon's machine): the project's `git status` stays clean, the path
- * is a function of the task (so a rerun finds its way back to the same files), and nothing
- * deletes it, since it holds the work that is being reviewed. A task in `local` mode works in the
+ * is a function of the task (so a rerun finds its way back to the same files), and it
+ * stays while the task is open, since it holds the work that is being reviewed; a finished,
+ * archived or deleted task's clean worktree is removed (`removeWorktree`). A task in `local` mode works in the
  * project's directory itself.
  */
 import type { TaskWorkspaceMode } from "@eta/client-contracts";
@@ -37,6 +38,33 @@ async function isGitRepo(
   if (result.code === 127 || result.timedOut === true)
     throw new Error(result.stderr.trim() || "the machine did not answer");
   return result.code === 0;
+}
+
+/**
+ * Take a task's worktree away once the task is finished, archived or deleted. Only a clean one
+ * goes: uncommitted work is left where it is, and the branch always stays (it holds the commits,
+ * and a task brought back makes its worktree again from it). Says what it did.
+ */
+export async function removeWorktree(
+  transport: SshTransport,
+  input: { projectPath: string; path: string },
+): Promise<"removed" | "kept" | "absent"> {
+  const script = [
+    `wt=${shellQuote(input.path)}`,
+    `[ -d "$wt" ] || { echo absent; exit 0; }`,
+    `cd ${shellQuote(input.projectPath)} 2>/dev/null || { echo absent; exit 0; }`,
+    `if [ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]; then echo kept; exit 0; fi`,
+    `git worktree remove "$wt" >&2 || exit 5`,
+    `echo removed`,
+  ].join("\n");
+  const result = await transport.run(script, { timeoutMs: TIMEOUT_MS });
+  if (result.code !== 0)
+    throw new Error(
+      result.stderr.trim() ||
+        `could not remove the worktree (exit ${result.code})`,
+    );
+  const said = result.stdout.trim();
+  return said === "removed" || said === "kept" ? said : "absent";
 }
 
 export interface Worktree {
