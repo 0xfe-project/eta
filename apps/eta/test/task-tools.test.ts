@@ -503,48 +503,50 @@ describe("the task tools", () => {
       withDep.id,
     ).length;
 
-    const badAssigneeMsg =
-      "update_task cannot change a task's assignee; set assignee when creating or drafting the task (draft_task, create_task, create_subtask, or tasks.create) — ownership cannot be reassigned after creation";
-
-    expect(
-      await callUpdate({
-        task: `#${target.number}`,
-        title: "Changed",
-        status: "in_progress",
-        parent: parent.id,
-        addDependencies: [{ task: dep.id }],
-        assignee: "zzz-not-an-agent",
-      }),
-    ).toEqual({ isError: true, text: badAssigneeMsg });
-
-    expect(
-      await callUpdate({
-        task: target.id,
-        assignee: bola.id,
-      }),
-    ).toEqual({ isError: true, text: badAssigneeMsg });
-
-    expect(
-      await callUpdate({
-        task: `#${withDep.number}`,
-        removeDependencies: [dep.id],
-        assignee: "Bola",
-      }),
-    ).toEqual({ isError: true, text: badAssigneeMsg });
-
-    expect(
-      await callUpdate({
-        task: `#${target.number}`,
-        title: "Changed",
-        parent: parent.id,
-        addDependencies: [{ task: dep.id }],
-        foo: "bar",
-        priority: "high",
-      }),
-    ).toEqual({
-      isError: true,
-      text: "update_task does not accept unknown field(s): foo, priority; allowed fields are task, title, description, status, parent, addDependencies, removeDependencies",
+    const badAssignee = await callUpdate({
+      task: `#${target.number}`,
+      title: "Changed",
+      status: "in_progress",
+      parent: parent.id,
+      addDependencies: [{ task: dep.id }],
+      assignee: "zzz-not-an-agent",
     });
+    expect(badAssignee.isError).toBe(true);
+    expect(badAssignee.text).toMatch(
+      /invalid arguments for update_task:.*\/assignee.*must not have additional properties/,
+    );
+
+    const realIdAssignee = await callUpdate({
+      task: target.id,
+      assignee: bola.id,
+    });
+    expect(realIdAssignee.isError).toBe(true);
+    expect(realIdAssignee.text).toMatch(
+      /invalid arguments for update_task:.*\/assignee.*must not have additional properties/,
+    );
+
+    const realNameAssignee = await callUpdate({
+      task: `#${withDep.number}`,
+      removeDependencies: [dep.id],
+      assignee: "Bola",
+    });
+    expect(realNameAssignee.isError).toBe(true);
+    expect(realNameAssignee.text).toMatch(
+      /invalid arguments for update_task:.*\/assignee.*must not have additional properties/,
+    );
+
+    const unknownFields = await callUpdate({
+      task: `#${target.number}`,
+      title: "Changed",
+      parent: parent.id,
+      addDependencies: [{ task: dep.id }],
+      foo: "bar",
+      priority: "high",
+    });
+    expect(unknownFields.isError).toBe(true);
+    expect(unknownFields.text).toMatch(
+      /invalid arguments for update_task:.*\/foo.*\/priority.*must not have additional properties/,
+    );
 
     // No DB, parent, dependency, or activity changes occurred.
     expect(w.host.product.board.detail(target.id)).toMatchObject({
@@ -563,11 +565,9 @@ describe("the task tools", () => {
       withDepActivityCount,
     );
 
-    // Passing `assignee: undefined` explicitly is still allowed.
     const allowed = await callUpdate({
       task: `#${target.number}`,
       title: "Updated cleanly",
-      assignee: undefined,
     });
     expect(allowed).toEqual({
       isError: false,
@@ -627,36 +627,33 @@ describe("the task tools", () => {
 
     const beforeActivityCount = w.host.product.board.activity(task.id).length;
 
-    expect(
-      await callUpdate({
-        title: "Changed",
-        status: "blocked",
-        assignee: "zzz-not-an-agent",
-      }),
-    ).toEqual({
-      isError: true,
-      text: "update_task cannot change a task's assignee; set assignee when creating or drafting the task (draft_task, create_task, create_subtask, or tasks.create) — ownership cannot be reassigned after creation",
+    const badAssignee = await callUpdate({
+      title: "Changed",
+      status: "blocked",
+      assignee: "zzz-not-an-agent",
     });
+    expect(badAssignee.isError).toBe(true);
+    expect(badAssignee.text).toMatch(
+      /invalid arguments for update_task:.*\/assignee.*must not have additional properties/,
+    );
 
-    expect(
-      await callUpdate({
-        assignee: ada.id,
-      }),
-    ).toEqual({
-      isError: true,
-      text: "update_task cannot change a task's assignee; set assignee when creating or drafting the task (draft_task, create_task, create_subtask, or tasks.create) — ownership cannot be reassigned after creation",
+    const realAssignee = await callUpdate({
+      assignee: ada.id,
     });
+    expect(realAssignee.isError).toBe(true);
+    expect(realAssignee.text).toMatch(
+      /invalid arguments for update_task:.*\/assignee.*must not have additional properties/,
+    );
 
-    expect(
-      await callUpdate({
-        parent: "#1",
-        extra: true,
-        status: "done",
-      }),
-    ).toEqual({
-      isError: true,
-      text: "update_task does not accept unknown field(s): parent, extra; allowed fields are title, description, status",
+    const unknownFields = await callUpdate({
+      parent: "#1",
+      extra: true,
+      status: "done",
     });
+    expect(unknownFields.isError).toBe(true);
+    expect(unknownFields.text).toMatch(
+      /invalid arguments for update_task:.*\/parent.*\/extra.*must not have additional properties/,
+    );
 
     expect(w.host.product.board.detail(task.id)).toMatchObject({
       title: "Run task",
@@ -670,7 +667,6 @@ describe("the task tools", () => {
 
     const allowed = await callUpdate({
       title: "Run updated",
-      assignee: undefined,
     });
     expect(allowed).toEqual({
       isError: false,

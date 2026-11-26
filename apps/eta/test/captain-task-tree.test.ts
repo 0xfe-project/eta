@@ -176,20 +176,20 @@ describe("captain and the task graph", () => {
       title: "Should not change",
       assignee: "zzz-not-an-agent",
     });
-    expect(nonexistentAssignee).toEqual({
-      isError: true,
-      text: "update_task_fields cannot change a task's assignee; set assignee when creating or drafting the task (draft_task, create_task, create_subtask, or tasks.create) — ownership cannot be reassigned after creation",
-    });
+    expect(nonexistentAssignee.isError).toBe(true);
+    expect(nonexistentAssignee.text).toMatch(
+      /invalid arguments for update_task_fields:.*\/assignee.*must not have additional properties/,
+    );
 
     const realAssignee = await use("update_task_fields", {
       taskId: task.id,
       status: "done",
       assignee: bola.id,
     });
-    expect(realAssignee).toEqual({
-      isError: true,
-      text: "update_task_fields cannot change a task's assignee; set assignee when creating or drafting the task (draft_task, create_task, create_subtask, or tasks.create) — ownership cannot be reassigned after creation",
-    });
+    expect(realAssignee.isError).toBe(true);
+    expect(realAssignee.text).toMatch(
+      /invalid arguments for update_task_fields:.*\/assignee.*must not have additional properties/,
+    );
 
     const unknownFields = await use("update_task_fields", {
       taskId: task.id,
@@ -197,10 +197,10 @@ describe("captain and the task graph", () => {
       foo: "bar",
       bar: 1,
     });
-    expect(unknownFields).toEqual({
-      isError: true,
-      text: "update_task_fields does not accept unknown field(s): foo, bar; allowed fields are taskId, title, description, status",
-    });
+    expect(unknownFields.isError).toBe(true);
+    expect(unknownFields.text).toMatch(
+      /invalid arguments for update_task_fields:.*\/foo.*\/bar.*must not have additional properties/,
+    );
 
     expect(w.host.product.board.detail(task.id)).toMatchObject({
       title: beforeTask.title,
@@ -211,13 +211,12 @@ describe("captain and the task graph", () => {
       beforeActivityCount,
     );
 
-    const allowedWithUndefined = await use("update_task_fields", {
+    const allowed = await use("update_task_fields", {
       taskId: task.id,
       title: "Allowed",
-      assignee: undefined,
     });
-    expect(allowedWithUndefined.isError).toBe(false);
-    expect(allowedWithUndefined.text).toBe("Task #1 updated.");
+    expect(allowed.isError).toBe(false);
+    expect(allowed.text).toBe("Task #1 updated.");
     expect(w.host.product.board.detail(task.id)!.title).toBe("Allowed");
   });
 });

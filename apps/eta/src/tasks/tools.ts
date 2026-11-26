@@ -53,50 +53,12 @@ function failure(error: unknown): ToolResult {
   return toolError(error instanceof Error ? error.message : String(error));
 }
 
-const CONVERSATION_UPDATE_FIELDS = [
-  "task",
-  "title",
-  "description",
-  "status",
-  "parent",
-  "addDependencies",
-  "removeDependencies",
-] as const;
-
-const RUN_UPDATE_FIELDS = ["title", "description", "status"] as const;
-
 const DISPATCH_ASSIGNEE_ERROR =
   "cannot set assignee during a turn bound to an active dispatch assignment; omit assignee so you remain both creator and executor";
 
 function normalizeAssignee(assignee: string | undefined): string | undefined {
   const trimmed = assignee?.trim() ?? "";
   return trimmed === "" ? undefined : trimmed;
-}
-
-/**
- * Refuse `assignee` and any unknown keys inside `execute()` before touching the board so the model
- * sees the ownership rule instead of a silent no-op or a generic schema error.
- */
-export function assertAllowedTaskUpdateFields(
-  toolName: string,
-  args: object,
-  allowed: readonly string[],
-): void {
-  const record = args as Record<string, unknown>;
-  const allowedSet = new Set(allowed);
-  if (Object.hasOwn(record, "assignee") && record.assignee !== undefined) {
-    throw new Error(
-      `${toolName} cannot change a task's assignee; set assignee when creating or drafting the task (draft_task, create_task, create_subtask, or tasks.create) — ownership cannot be reassigned after creation`,
-    );
-  }
-  const unknown = Object.keys(record).filter(
-    (key) => !allowedSet.has(key) && record[key] !== undefined,
-  );
-  if (unknown.length > 0) {
-    throw new Error(
-      `${toolName} does not accept unknown field(s): ${unknown.join(", ")}; allowed fields are ${allowed.join(", ")}`,
-    );
-  }
 }
 
 /** What the tools need to know about the places tasks run in. */
@@ -682,37 +644,37 @@ function conversationTools(
       `Change a task's title, description or status, or what it waits for. Only the fields you ` +
       `give change. This cannot change a task's assignee (ownership is set at creation). ` +
       `Moving a task to done or cancelled stops its runs. ${ARCHIVED_RULE}`,
-    parameters: Type.Object({
-      task: Type.String({ description: "The task's number (12 or #12) or id" }),
-      title: Type.Optional(Type.String()),
-      description: Type.Optional(Type.String()),
-      status: Type.Optional(
-        Type.String({
-          description:
-            "backlog, todo, in_progress, in_review, done, blocked or cancelled",
+    parameters: Type.Object(
+      {
+        task: Type.String({
+          description: "The task's number (12 or #12) or id",
         }),
-      ),
-      parent: Type.Optional(
-        Type.String({
-          description:
-            "Make it a subtask of this task (number or id), or of none with an empty string",
-        }),
-      ),
-      addDependencies: dependsOnParameter,
-      removeDependencies: Type.Optional(
-        Type.Array(Type.String(), {
-          description:
-            "Tasks this one should no longer wait for: numbers (12 or #12) or ids",
-        }),
-      ),
-    }),
+        title: Type.Optional(Type.String()),
+        description: Type.Optional(Type.String()),
+        status: Type.Optional(
+          Type.String({
+            description:
+              "backlog, todo, in_progress, in_review, done, blocked or cancelled",
+          }),
+        ),
+        parent: Type.Optional(
+          Type.String({
+            description:
+              "Make it a subtask of this task (number or id), or of none with an empty string",
+          }),
+        ),
+        addDependencies: dependsOnParameter,
+        removeDependencies: Type.Optional(
+          Type.Array(Type.String(), {
+            description:
+              "Tasks this one should no longer wait for: numbers (12 or #12) or ids",
+          }),
+        ),
+      },
+      { additionalProperties: false },
+    ),
     execute(args) {
       try {
-        assertAllowedTaskUpdateFields(
-          "update_task",
-          args,
-          CONVERSATION_UPDATE_FIELDS,
-        );
         const {
           task: which,
           parent,
@@ -917,18 +879,20 @@ function runTools(
       `when you wait on something). Only the fields you give change. This cannot change the ` +
       `task's assignee. Moving it to review is finish_task's job, and done or cancelled is the ` +
       `user's call. ${ARCHIVED_RULE}`,
-    parameters: Type.Object({
-      title: Type.Optional(Type.String()),
-      description: Type.Optional(Type.String()),
-      status: Type.Optional(
-        Type.String({
-          description: "backlog, todo, in_progress or blocked",
-        }),
-      ),
-    }),
+    parameters: Type.Object(
+      {
+        title: Type.Optional(Type.String()),
+        description: Type.Optional(Type.String()),
+        status: Type.Optional(
+          Type.String({
+            description: "backlog, todo, in_progress or blocked",
+          }),
+        ),
+      },
+      { additionalProperties: false },
+    ),
     execute(args) {
       try {
-        assertAllowedTaskUpdateFields("update_task", args, RUN_UPDATE_FIELDS);
         if (
           args.status === "done" ||
           args.status === "cancelled" ||
