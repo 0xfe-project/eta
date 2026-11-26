@@ -16,9 +16,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   loadPlugin,
   pluginDataDir,
+  resolvePluginServers,
   runtimeExtras,
   serversConfig,
   sessionServerName,
+  toMcpEntries,
 } from "../src";
 import { sessionServers } from "../src/plugin-launch";
 
@@ -258,6 +260,175 @@ describe("configuration", () => {
       },
     );
     expect((await only(loaded)).server).not.toHaveProperty("headers");
+  });
+});
+
+describe("foreign plugin templates and OAuth launch", () => {
+  async function foreignPlugin(
+    mcpJson: unknown,
+    manifest: Record<string, unknown> = {},
+  ) {
+    const root = await temp();
+    await mkdir(join(root, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "foreign-demo", ...manifest }),
+    );
+    await writeFile(join(root, ".mcp.json"), JSON.stringify(mcpJson));
+    return await loadPlugin(root);
+  }
+
+  it("expands ${VAR} and ${VAR:-default} in args and mixed env alongside PLUGIN_ROOT/PLUGIN_DATA in a single pass", async () => {
+    const loaded = await foreignPlugin({
+      local: {
+        command: "node",
+        args: [
+          "--root",
+          "${CLAUDE_PLUGIN_ROOT}/bin",
+          "--token",
+          "${TOKEN}",
+          "--url=https://${HOST:-api.example.com}/v1",
+          "--dir=${CLAUDE_PLUGIN_ROOT}/${SUBDIR:-sub}",
+          "--data=${PLUGIN_DATA}/${SUBDIR:-sub}",
+          "--opt=${OPT_TOKEN:-}",
+        ],
+        env: {
+          AUTH: "Bearer ${TOKEN}",
+          ENDPOINT: "https://${HOST:-api.example.com}/api",
+          ROOTED: "${CLAUDE_PLUGIN_ROOT}/${SUBDIR:-sub}",
+          OPTIONAL_AUTH: "Bearer ${OPT_TOKEN:-}",
+        },
+      },
+    });
+    const { server, data } = await only(loaded, {
+      // Ensure replacement values containing placeholders are NOT re-expanded.
+      TOKEN: "${PLUGIN_ROOT}",
+    });
+    expect(argv(server)).toEqual([
+      loaded.root,
+      "node",
+      "--root",
+      `${loaded.root}/bin`,
+      "--token",
+      "${PLUGIN_ROOT}",
+      "--url=https://api.example.com/v1",
+      `--dir=${loaded.root}/sub`,
+      `--data=${data}/sub`,
+      "--opt=",
+    ]);
+    expect((server as Stdio).env).toEqual({
+      AUTH: "Bearer ${PLUGIN_ROOT}",
+      ENDPOINT: "https://api.example.com/api",
+      ROOTED: `${loaded.root}/sub`,
+      PLUGIN_ROOT: loaded.root,
+      PLUGIN_DATA: data,
+    });
+    expect((server as Stdio).env).not.toHaveProperty("OPTIONAL_AUTH");
+
+    // User-supplied values override non-secret defaults and fill optional secrets.
+    const overridden = await only(loaded, {
+      TOKEN: "s3cret",
+      HOST: "custom.test",
+      SUBDIR: "mine",
+      OPT_TOKEN: "opt-123",
+    });
+    expect(argv(overridden.server)).toEqual([
+      loaded.root,
+      "node",
+      "--root",
+      `${loaded.root}/bin`,
+      "--token",
+      "s3cret",
+      "--url=https://custom.test/v1",
+      `--dir=${loaded.root}/mine`,
+      `--data=${overridden.data}/mine`,
+      "--opt=opt-123",
+    ]);
+    expect((overridden.server as Stdio).env).toEqual({
+      AUTH: "Bearer s3cret",
+      ENDPOINT: "https://custom.test/api",
+      ROOTED: `${loaded.root}/mine`,
+      OPTIONAL_AUTH: "Bearer opt-123",
+      PLUGIN_ROOT: loaded.root,
+      PLUGIN_DATA: overridden.data,
+    });
+  });
+
+  it("applies non-secret defaults and omits unset optional secrets in foreign remote headers", async () => {
+    const loaded = await foreignPlugin({
+      mcpServers: {
+        remote: {
+          type: "http",
+          url: "https://example.com/mcp",
+          headers: {
+            "X-Region": "${REGION:-us-east}",
+            Authorization: "Bearer ${OPT_TOKEN:-}",
+          },
+        },
+      },
+    });
+    const withoutSecret = toMcpEntries(
+      resolvePluginServers(
+        [{ plugin: loaded, config: serversConfig(loaded, {}) }],
+        await temp(),
+        () => undefined,
+      ),
+    );
+    expect(withoutSecret["foreign-demo-remote"]).toStrictEqual({
+      type: "streamable-http",
+      url: "https://example.com/mcp",
+      headers: { "X-Region": "us-east" },
+      auth: "oauth",
+    });
+
+    const withSecret = toMcpEntries(
+      resolvePluginServers(
+        [
+          {
+            plugin: loaded,
+            config: serversConfig(loaded, {
+              REGION: "eu-west",
+              OPT_TOKEN: "tok",
+            }),
+          },
+        ],
+        await temp(),
+        () => undefined,
+      ),
+    );
+    expect(withSecret["foreign-demo-remote"]).toStrictEqual({
+      type: "streamable-http",
+      url: "https://example.com/mcp",
+      headers: { "X-Region": "eu-west", Authorization: "Bearer tok" },
+    });
+  });
+
+  it("maps foreign remote OAuth auth to eta's MCP entry auth mode", async () => {
+    const loaded = await foreignPlugin({
+      mcpServers: {
+        remote: {
+          type: "http",
+          url: "https://example.com/mcp",
+          auth: { type: "oauth", scopes: ["read"] },
+          headers: {
+            Authorization: "Bearer ${TOKEN}",
+          },
+        },
+      },
+    });
+    const entries = toMcpEntries(
+      resolvePluginServers(
+        [{ plugin: loaded, config: serversConfig(loaded, { TOKEN: "tok" }) }],
+        await temp(),
+        () => undefined,
+      ),
+    );
+    expect(entries["foreign-demo-remote"]).toStrictEqual({
+      type: "streamable-http",
+      url: "https://example.com/mcp",
+      headers: { Authorization: "Bearer tok" },
+      auth: "oauth",
+    });
   });
 });
 

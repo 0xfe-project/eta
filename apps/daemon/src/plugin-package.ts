@@ -122,10 +122,12 @@ export interface PluginServer {
 
 /** What the extension says about one server: where the configuration goes. */
 interface PluginServerBinding {
-  /** Environment variable to field. */
+  /** Environment variable to field name, or a foreign `${VAR}` template for mixed env values. */
   env: Record<string, string>;
   /** Header name to template (`Bearer {api_key}`). */
   headers: Record<string, string>;
+  /** Foreign argument templates by index (`{ 1: "--token=${TOKEN}" }`), when args hold `${VAR}`. */
+  args?: Record<number, string>;
   /**
    * A remote server's sign-in on eta's own loop: `false` never signs in (a 401 is an error),
    * `"oauth"` always may. Left out, it is inferred (`toMcpEntries`). Ignored on stdio.
@@ -473,7 +475,7 @@ async function loadServers(
   return servers;
 }
 
-/** `${NAME}` in a Claude Code or Cursor MCP file. */
+/** `${NAME}` or `${NAME:-default}` in a Claude Code or Cursor MCP file. */
 const FOREIGN_VAR = /\$\{([^}]*)\}/g;
 /** A variable that is a secret by its name. */
 const SECRET_NAME = /key|token|secret|auth|password|credential/i;
@@ -487,34 +489,95 @@ const FOREIGN_SERVER_KEYS = new Set([
   "cwd",
   "url",
   "headers",
+  "auth",
 ]);
+
+interface ForeignVarRef {
+  name: string;
+  defaultValue?: string;
+}
 
 interface ForeignServer {
   /** The server as eta's own `mcp.json` writes it. */
   raw: Record<string, unknown>;
-  /** Environment variable to the variable of the file that fills it. */
+  /** Environment variable to the field name, or a `${VAR}` template for mixed values. */
   env: Record<string, string>;
   /** Header name to template (`Bearer {TOKEN}`). */
   headers: Record<string, string>;
+  /** Argument templates by index, when args reference `${VAR}`. */
+  args?: Record<number, string>;
+  /** Remote server auth mode mapped from foreign `auth`, when declared. */
+  auth?: false | "oauth";
+  /** Every foreign variable referenced by this server, in order. */
+  vars: ForeignVarRef[];
   ignored: string[];
+  notices: string[];
 }
 
-/** The variables of `text` other than the plugin's own directory, or why it cannot be used. */
-function foreignVars(text: string): string[] | string {
-  const names: string[] = [];
-  for (const [, name] of text.matchAll(FOREIGN_VAR)) {
-    if (name === "PLUGIN_ROOT") continue;
-    if (!ENV_NAME.test(name!)) return `\${${name}} is not a plain variable`;
-    names.push(name!);
+/** Parse one `${...}` body (`NAME` or `NAME:-default`), or `null` for built-in placeholders. */
+function parseForeignExpr(expr: string): ForeignVarRef | null | string {
+  if (expr.includes("${")) return `\${${expr}} is not a plain variable`;
+  const sep = expr.indexOf(":-");
+  const name = sep === -1 ? expr : expr.slice(0, sep);
+  const defaultValue = sep === -1 ? undefined : expr.slice(sep + 2);
+  if (name === "PLUGIN_ROOT" || name === "PLUGIN_DATA")
+    return defaultValue === undefined
+      ? null
+      : `\${${expr}} is not a plain variable`;
+  if (!ENV_NAME.test(name)) return `\${${expr}} is not a plain variable`;
+  return defaultValue === undefined ? { name } : { name, defaultValue };
+}
+
+/** The variables of `text` other than built-in placeholders, or why it cannot be used. */
+function foreignVars(text: string): ForeignVarRef[] | string {
+  const vars: ForeignVarRef[] = [];
+  for (const [, expr] of text.matchAll(FOREIGN_VAR)) {
+    const parsed = parseForeignExpr(expr!);
+    if (typeof parsed === "string") return parsed;
+    if (parsed !== null) vars.push(parsed);
   }
-  return names;
+  return vars;
+}
+
+/** Variable names referenced by a foreign `${VAR}` / `${VAR:-default}` template. */
+export function foreignVarNames(text: string): string[] {
+  const parsed = foreignVars(text);
+  return typeof parsed === "string" ? [] : parsed.map((one) => one.name);
+}
+
+/** Whether `text` is a single `${VAR}` or `${VAR:-default}` placeholder with no surrounding text. */
+function singleForeignPlaceholder(text: string): string | undefined {
+  const matches = [...text.matchAll(FOREIGN_VAR)];
+  if (matches.length !== 1 || matches[0]![0] !== text) return undefined;
+  const parsed = parseForeignExpr(matches[0]![1]!);
+  return parsed !== null && typeof parsed !== "string"
+    ? parsed.name
+    : undefined;
+}
+
+/** Map a foreign server's `auth` field for remote or stdio servers. */
+function parseForeignAuth(
+  auth: unknown,
+  stdio: boolean,
+): { auth?: false | "oauth"; notice?: string; error?: string } {
+  if (auth === undefined) return {};
+  if (stdio) return { notice: "auth is for remote servers; ignored" };
+  if (auth === false) return { auth: false };
+  if (typeof auth === "string") {
+    if (/^oauth2?$/i.test(auth)) return { auth: "oauth" };
+    return { error: `unsupported auth mode ${JSON.stringify(auth)}` };
+  }
+  if (isPlain(auth) && typeof auth.type === "string") {
+    if (/^oauth2?$/i.test(auth.type)) return { auth: "oauth" };
+    if (auth.type.toLowerCase() === "none") return { auth: false };
+    return { error: `unsupported auth type ${JSON.stringify(auth.type)}` };
+  }
+  return { error: "unsupported auth configuration" };
 }
 
 /** One server of a Claude Code or Cursor file, in the shape eta's own file has, or why it is skipped. */
 function mapForeignServer(entry: unknown): ForeignServer | string {
   if (!isPlain(entry)) return "must be an object";
-  if (entry.auth !== undefined)
-    return "it signs in with OAuth, which eta does not do for these plugins";
   const swap = (text: string): string =>
     text.replaceAll("${CLAUDE_PLUGIN_ROOT}", "${PLUGIN_ROOT}");
   const ignored = Object.keys(entry).filter(
@@ -526,6 +589,13 @@ function mapForeignServer(entry: unknown): ForeignServer | string {
   };
   const env: Record<string, string> = {};
   const headers: Record<string, string> = {};
+  const argTemplates: Record<number, string> = {};
+  const vars: ForeignVarRef[] = [];
+  const notices: string[] = [];
+
+  const authMapped = parseForeignAuth(entry.auth, raw.type === "stdio");
+  if (authMapped.error !== undefined) return authMapped.error;
+  if (authMapped.notice !== undefined) notices.push(authMapped.notice);
 
   if (raw.type === "stdio") {
     if (typeof entry.command !== "string") return "command must be a string";
@@ -537,10 +607,13 @@ function mapForeignServer(entry: unknown): ForeignServer | string {
     if (entry.args !== undefined) {
       if (!isStrings(entry.args)) return "args must be strings";
       const args = entry.args.map(swap);
-      for (const arg of args) {
-        const names = foreignVars(arg);
-        if (typeof names === "string" || names.length > 0)
-          return "args hold a variable eta cannot fill in";
+      for (const [index, arg] of args.entries()) {
+        const found = foreignVars(arg);
+        if (typeof found === "string") return `args: ${found}`;
+        if (found.length > 0) {
+          argTemplates[index] = arg;
+          vars.push(...found);
+        }
       }
       raw.args = args;
     }
@@ -553,12 +626,18 @@ function mapForeignServer(entry: unknown): ForeignServer | string {
       const fixed: Record<string, string> = {};
       for (const [name, value] of Object.entries(entry.env)) {
         const text = swap(value);
-        const names = foreignVars(text);
-        if (typeof names === "string") return `env ${name}: ${names}`;
-        if (names.length === 0) fixed[name] = text;
-        else if (names.length === 1 && text === `\${${names[0]}}`)
-          env[name] = names[0]!;
-        else return `env ${name} mixes text with a variable`;
+        const found = foreignVars(text);
+        if (typeof found === "string") return `env ${name}: ${found}`;
+        if (found.length === 0) fixed[name] = text;
+        else {
+          if (RESERVED_ENV.has(name.toUpperCase()))
+            return `env must not contain ${name}`;
+          if (!ENV_NAME.test(name))
+            return `${name} cannot be set from configuration`;
+          vars.push(...found);
+          const whole = singleForeignPlaceholder(text);
+          env[name] = whole ?? text;
+        }
       }
       raw.env = fixed;
     }
@@ -568,29 +647,77 @@ function mapForeignServer(entry: unknown): ForeignServer | string {
     raw.url = entry.url;
     if (entry.headers !== undefined) {
       if (!isStringMap(entry.headers)) return "headers must be strings";
+      if (!validHeaders(entry.headers))
+        return "headers are not valid HTTP headers";
       const fixed: Record<string, string> = {};
       for (const [name, value] of Object.entries(entry.headers)) {
-        const names = foreignVars(value);
-        if (typeof names === "string") return `header ${name}: ${names}`;
-        if (value.includes("${PLUGIN_ROOT}"))
+        const text = swap(value);
+        if (text.includes("${PLUGIN_ROOT}") || text.includes("${PLUGIN_DATA}"))
           return `header ${name} holds the plugin directory`;
-        if (names.length === 0) fixed[name] = value;
-        else
-          headers[name] = value.replace(
-            FOREIGN_VAR,
-            (_, field: string) => `{${field}}`,
-          );
+        const found = foreignVars(text);
+        if (typeof found === "string") return `header ${name}: ${found}`;
+        if (found.length === 0) fixed[name] = value;
+        else {
+          vars.push(...found);
+          headers[name] = text.replace(FOREIGN_VAR, (_, expr: string) => {
+            const parsed = parseForeignExpr(expr);
+            return parsed !== null && typeof parsed !== "string"
+              ? `{${parsed.name}}`
+              : _;
+          });
+        }
       }
       raw.headers = fixed;
     }
   }
-  return { raw, env, headers, ignored };
+  return {
+    raw,
+    env,
+    headers,
+    ...(Object.keys(argTemplates).length === 0 ? {} : { args: argTemplates }),
+    ...(authMapped.auth === undefined ? {} : { auth: authMapped.auth }),
+    vars,
+    ignored,
+    notices,
+  };
+}
+
+interface ForeignVarMeta {
+  servers: string[];
+  hasUndefaulted: boolean;
+  defaultValue?: string;
+  secret: boolean;
+  hasNonEmptySecretDefault: boolean;
+}
+
+function foreignFieldSpec(
+  variable: string,
+  meta: ForeignVarMeta,
+): Record<string, unknown> {
+  const description =
+    meta.servers.length === 1
+      ? `Used by the MCP server ${meta.servers[0]}.`
+      : `Used by the MCP servers ${meta.servers.join(", ")}.`;
+  const required = meta.secret
+    ? meta.hasUndefaulted || meta.hasNonEmptySecretDefault
+    : meta.hasUndefaulted;
+  const attachDefault =
+    !meta.secret && !meta.hasUndefaulted && meta.defaultValue !== undefined;
+  return {
+    type: "string",
+    title: variable,
+    description,
+    required,
+    secret: meta.secret,
+    ...(attachDefault ? { default: meta.defaultValue } : {}),
+  };
 }
 
 /**
- * The MCP servers of a Cursor or Claude Code plugin: `.mcp.json` and a root `mcp.json`, both
- * `{ "mcpServers": { ... } }`. They become the servers eta's own file has; a `${VAR}` becomes a
- * field the user fills in after installing, and nothing runs before that.
+ * The MCP servers of a Cursor or Claude Code plugin: `.mcp.json` and a root `mcp.json`, either
+ * `{ "mcpServers": { ... } }` or a flat top-level server map. They become the servers eta's own
+ * file has; a `${VAR}` (or `${VAR:-default}`) becomes a field the user fills in after installing,
+ * and nothing runs before that.
  */
 async function loadForeignServers(
   root: string,
@@ -600,6 +727,7 @@ async function loadForeignServers(
   const servers: PluginServer[] = [];
   const bindings: Record<string, PluginServerBinding> = {};
   const specs: Record<string, unknown> = {};
+  const varMeta = new Map<string, ForeignVarMeta>();
   // What plugin.json's mcpServers names (a path, a list of paths, or the servers themselves),
   // then the conventional files; a file named twice is read once.
   const sources: { file: string; inline?: unknown; declared: boolean }[] = [];
@@ -657,11 +785,29 @@ async function loadForeignServers(
         continue;
       }
     }
-    if (!isPlain(raw) || !isPlain(raw.mcpServers)) {
-      refused("it has no mcpServers object");
+    if (!isPlain(raw)) {
+      refused("it is not an object");
       continue;
     }
-    for (const [name, entry] of Object.entries(raw.mcpServers)) {
+    let serverMap: Record<string, unknown>;
+    if (Object.hasOwn(raw, "mcpServers")) {
+      if (!isPlain(raw.mcpServers)) {
+        refused("it has no mcpServers object");
+        continue;
+      }
+      serverMap = raw.mcpServers;
+    } else {
+      // Claude Code plugins may ship a flat top-level server map in `.mcp.json`.
+      const entries = Object.entries(raw).filter(
+        ([key, value]) => !(key === "$schema" && typeof value === "string"),
+      );
+      if (entries.length > 0 && entries.every(([, value]) => !isPlain(value))) {
+        refused("it has no mcpServers object");
+        continue;
+      }
+      serverMap = Object.fromEntries(entries);
+    }
+    for (const [name, entry] of Object.entries(serverMap)) {
       const skip = (why: string): void => {
         reports.push(`${file}: server ${name} skipped: ${why}`);
       };
@@ -679,21 +825,30 @@ async function loadForeignServers(
         skip(config);
         continue;
       }
-      const names = [
-        ...Object.values(mapped.env),
-        ...Object.values(mapped.headers).flatMap((t) =>
-          [...t.matchAll(/\{([^}]*)\}/g)].map((m) => m[1]!),
-        ),
-      ];
+      const nextMeta = new Map<string, ForeignVarMeta>();
+      for (const { name: variable, defaultValue } of mapped.vars) {
+        const existing = nextMeta.get(variable) ?? varMeta.get(variable);
+        const secret = existing?.secret ?? SECRET_NAME.test(variable);
+        const merged: ForeignVarMeta = existing
+          ? { ...existing, servers: [...existing.servers] }
+          : {
+              servers: [],
+              hasUndefaulted: false,
+              secret,
+              hasNonEmptySecretDefault: false,
+            };
+        if (!merged.servers.includes(name)) merged.servers.push(name);
+        if (defaultValue === undefined) merged.hasUndefaulted = true;
+        else if (secret) {
+          if (defaultValue !== "") merged.hasNonEmptySecretDefault = true;
+        } else if (merged.defaultValue === undefined) {
+          merged.defaultValue = defaultValue;
+        }
+        nextMeta.set(variable, merged);
+      }
       const fresh: Record<string, unknown> = {};
-      for (const variable of names)
-        fresh[variable] = {
-          type: "string",
-          title: variable,
-          description: `Used by the MCP server ${name}.`,
-          required: true,
-          secret: SECRET_NAME.test(variable),
-        };
+      for (const [variable, meta] of nextMeta)
+        fresh[variable] = foreignFieldSpec(variable, meta);
       const { problems } = parseConfigFields({ ...specs, ...fresh });
       if (problems.length > 0) {
         skip(
@@ -701,13 +856,23 @@ async function loadForeignServers(
         );
         continue;
       }
+      for (const [variable, meta] of nextMeta) varMeta.set(variable, meta);
       Object.assign(specs, fresh);
       servers.push({ name, config });
       if (
         Object.keys(mapped.env).length > 0 ||
-        Object.keys(mapped.headers).length > 0
+        Object.keys(mapped.headers).length > 0 ||
+        mapped.args !== undefined ||
+        mapped.auth !== undefined
       )
-        bindings[name] = { env: mapped.env, headers: mapped.headers };
+        bindings[name] = {
+          env: mapped.env,
+          headers: mapped.headers,
+          ...(mapped.args === undefined ? {} : { args: mapped.args }),
+          ...(mapped.auth === undefined ? {} : { auth: mapped.auth }),
+        };
+      for (const notice of mapped.notices)
+        reports.push(`${file}: server ${name}: ${notice}`);
       if (mapped.ignored.length > 0)
         reports.push(
           `${file}: server ${name}: ${mapped.ignored.join(", ")} not supported by eta; ignored`,
@@ -840,6 +1005,7 @@ function parseExtension(
   raw: unknown,
   servers: PluginServer[],
   reports: string[],
+  extraFields: readonly PluginField[] = [],
 ): Pick<
   PluginPackage,
   "fields" | "configProblems" | "bindings" | "requires" | "servers"
@@ -854,7 +1020,12 @@ function parseExtension(
     if (!["config", "mcp", "requires"].includes(key))
       reports.push(`extensions.${ETA_EXTENSION}.${key} is unknown; ignored`);
   const { fields, problems: configProblems } = parseConfigFields(raw.config);
-  const known = new Set(fields.map((field) => field.name));
+  const known = new Set([
+    ...fields.map((field) => field.name),
+    ...(configProblems.length === 0
+      ? extraFields.map((field) => field.name)
+      : []),
+  ]);
 
   let requires: string[] = [];
   if (raw.requires !== undefined) {
@@ -957,6 +1128,33 @@ export function fillTemplate(
   return complete ? filled : undefined;
 }
 
+/** Merge a foreign server's auto-mapped binding with an explicit eta extension binding. */
+function mergeBindings(
+  base: PluginServerBinding | undefined,
+  over: PluginServerBinding | undefined,
+): PluginServerBinding | undefined {
+  if (base === undefined) return over;
+  if (over === undefined) return base;
+  const overHeaderNames = new Set(
+    Object.keys(over.headers).map((name) => name.toLowerCase()),
+  );
+  const headers: Record<string, string> = {
+    ...Object.fromEntries(
+      Object.entries(base.headers).filter(
+        ([name]) => !overHeaderNames.has(name.toLowerCase()),
+      ),
+    ),
+    ...over.headers,
+  };
+  const auth = over.auth !== undefined ? over.auth : base.auth;
+  return {
+    env: { ...base.env, ...over.env },
+    headers,
+    ...(base.args === undefined ? {} : { args: { ...base.args } }),
+    ...(auth === undefined ? {} : { auth }),
+  };
+}
+
 /** Read and validate the plugin at `dir`; throws `PluginError` when the spec rejects it. */
 export async function loadPlugin(dir: string): Promise<PluginPackage> {
   const root = await resolvedPath(dir);
@@ -996,7 +1194,24 @@ export async function loadPlugin(dir: string): Promise<PluginPackage> {
     extensions[ETA_EXTENSION],
     mapped.servers,
     reports,
+    mapped.fields,
   );
+  const extFieldsByName = new Map(
+    extension.fields.map((field) => [field.name, field]),
+  );
+  const mappedFieldNames = new Set(mapped.fields.map((field) => field.name));
+  const fields: PluginField[] = [
+    ...mapped.fields.map((field) => extFieldsByName.get(field.name) ?? field),
+    ...extension.fields.filter((field) => !mappedFieldNames.has(field.name)),
+  ];
+  const bindings: Record<string, PluginServerBinding> = {};
+  for (const server of extension.servers) {
+    const merged = mergeBindings(
+      mapped.bindings[server.name],
+      extension.bindings[server.name],
+    );
+    if (merged !== undefined) bindings[server.name] = merged;
+  }
   return {
     root,
     manifest,
@@ -1004,8 +1219,8 @@ export async function loadPlugin(dir: string): Promise<PluginPackage> {
     layout: found,
     skills,
     ...extension,
-    fields: [...mapped.fields, ...extension.fields],
-    bindings: { ...mapped.bindings, ...extension.bindings },
+    fields,
+    bindings,
   };
 }
 
