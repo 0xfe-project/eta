@@ -23,22 +23,29 @@ test("agent creator auto-pins primary, hides Follow the project and Persona on e
   await app.waitFor("label:Claude Code");
   await app.press("label:Claude Code");
 
-  // Follow the project is omitted; primary machine is auto-selected; Persona stays hidden in both steps.
+  // Follow the project is omitted; primary machine is auto-selected; Persona stays hidden in every step.
   expect(app.shows("label:Runs on")).toBe(true);
   expect(app.texts()).not.toContain("Follow the project");
   expect(app.texts()).toContain("studio");
   expect(app.shows("label:Persona")).toBe(false);
   await app.press("label:Next");
+  await app.waitUntil(() => app.texts().includes("2/3"));
+  expect(app.shows("label:Persona")).toBe(false);
+  // The creator's last step is Plugins, after Instructions.
+  await app.press("label:Next");
   await app.waitFor("label:Create");
   expect(app.shows("label:Persona")).toBe(false);
 
   await app.press("label:Create");
-  await app.waitUntil(() =>
-    app.texts().some((line) => line.startsWith("agents.create ")),
-  );
-  const callLine = app
-    .texts()
-    .find((line) => line.startsWith("agents.create "))!;
+  // The fixture logs its calls one per line in a single text, and the Plugins step makes
+  // its own calls before this one.
+  const createCall = () =>
+    app
+      .texts()
+      .flatMap((text) => text.split("\n"))
+      .find((line) => line.startsWith("agents.create "));
+  await app.waitUntil(() => createCall() !== undefined);
+  const callLine = createCall()!;
   const args = JSON.parse(callLine.slice("agents.create ".length));
   expect(args).toMatchObject({
     name: "NewCody",
