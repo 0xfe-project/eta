@@ -756,7 +756,7 @@ describe("a Cursor or Claude Code layout", () => {
     expect(loaded.reports.join("\n")).not.toContain("after you confirm");
   });
 
-  it("reads Cursor's root mcp.json and skips OAuth and unfillable servers with a reason", async () => {
+  it("reads Cursor's root mcp.json, loads mixed env, and skips unsupported auth and url vars", async () => {
     const loaded = await loadPlugin(
       await foreign(
         ".cursor-plugin",
@@ -781,17 +781,473 @@ describe("a Cursor or Claude Code layout", () => {
         },
       ),
     );
-    expect(loaded.servers.map((entry) => entry.name)).toEqual(["plain"]);
+    expect(loaded.servers.map((entry) => entry.name)).toEqual([
+      "plain",
+      "mixed",
+    ]);
+    expect(loaded.bindings.mixed).toEqual({
+      env: { A: "a-${B}" },
+      headers: {},
+    });
+    expect(loaded.fields).toMatchObject([
+      { name: "B", required: true, secret: false },
+    ]);
     const text = loaded.reports.join("\n");
-    expect(text).toContain("server oauth skipped: it signs in with OAuth");
-    expect(text).toContain("server hosted skipped: url holds a variable");
     expect(text).toContain(
-      "server mixed skipped: env A mixes text with a variable",
+      "server oauth skipped: unsupported auth configuration",
     );
+    expect(text).toContain("server hosted skipped: url holds a variable");
     expect(text).toContain(
       "server plain: placement not supported by eta; ignored",
     );
     expect(text).not.toContain("after you confirm");
+  });
+
+  it("supports ${VAR:-default} in foreign env, headers, and args while keeping secrets default-free", async () => {
+    const loaded = await loadPlugin(
+      await foreign(
+        ".claude-plugin",
+        { name: "demo" },
+        {
+          ".mcp.json": {
+            mcpServers: {
+              local: {
+                command: "node",
+                args: [
+                  "--host",
+                  "${API_HOST:-https://api.example.com:8443/v1}",
+                  "--token=${API_TOKEN:-dev-fallback}",
+                  "--opt-secret=${OPT_SECRET:-}",
+                  "--opt-plain=${OPT_PLAIN:-}",
+                ],
+                env: {
+                  MODE: "${RUN_MODE:-fast}",
+                  ENDPOINT:
+                    "https://${API_HOST:-https://api.example.com:8443/v1}/mcp",
+                  AUTH: "Bearer ${API_TOKEN:-dev-fallback}",
+                },
+              },
+              remote: {
+                type: "http",
+                url: "https://example.com/mcp",
+                headers: {
+                  "X-Region": "${REGION:-us-east}",
+                  Authorization: "Bearer ${REMOTE_KEY:-placeholder}",
+                  "X-Optional": "Token ${OPTIONAL_KEY:-}",
+                },
+              },
+            },
+          },
+        },
+      ),
+    );
+    expect(loaded.reports).toEqual([]);
+    expect(loaded.configProblems).toEqual([]);
+    expect(loaded.servers.map((s) => s.name)).toEqual(["local", "remote"]);
+
+    const byName = Object.fromEntries(loaded.fields.map((f) => [f.name, f]));
+    // Non-secret defaults populate `default` and are optional.
+    expect(byName.API_HOST).toMatchObject({
+      secret: false,
+      required: false,
+      default: "https://api.example.com:8443/v1",
+    });
+    expect(byName.RUN_MODE).toMatchObject({
+      secret: false,
+      required: false,
+      default: "fast",
+    });
+    expect(byName.OPT_PLAIN).toMatchObject({
+      secret: false,
+      required: false,
+      default: "",
+    });
+    expect(byName.REGION).toMatchObject({
+      secret: false,
+      required: false,
+      default: "us-east",
+    });
+    // Secret fields MUST NEVER carry `default` (schema invariant).
+    expect(byName.API_TOKEN).toMatchObject({ secret: true, required: true });
+    expect(byName.API_TOKEN).not.toHaveProperty("default");
+    expect(byName.REMOTE_KEY).toMatchObject({ secret: true, required: true });
+    expect(byName.REMOTE_KEY).not.toHaveProperty("default");
+    // Empty fallback on a secret makes it optional, still without `default`.
+    expect(byName.OPT_SECRET).toMatchObject({ secret: true, required: false });
+    expect(byName.OPT_SECRET).not.toHaveProperty("default");
+    expect(byName.OPTIONAL_KEY).toMatchObject({
+      secret: true,
+      required: false,
+    });
+    expect(byName.OPTIONAL_KEY).not.toHaveProperty("default");
+
+    expect(loaded.bindings.local).toEqual({
+      env: {
+        MODE: "RUN_MODE",
+        ENDPOINT: "https://${API_HOST:-https://api.example.com:8443/v1}/mcp",
+        AUTH: "Bearer ${API_TOKEN:-dev-fallback}",
+      },
+      headers: {},
+      args: {
+        1: "${API_HOST:-https://api.example.com:8443/v1}",
+        2: "--token=${API_TOKEN:-dev-fallback}",
+        3: "--opt-secret=${OPT_SECRET:-}",
+        4: "--opt-plain=${OPT_PLAIN:-}",
+      },
+    });
+    expect(loaded.bindings.remote).toEqual({
+      env: {},
+      headers: {
+        "X-Region": "{REGION}",
+        Authorization: "Bearer {REMOTE_KEY}",
+        "X-Optional": "Token {OPTIONAL_KEY}",
+      },
+    });
+  });
+
+  it("rejects malformed shell parameter expansions and reserved env bindings in foreign servers", async () => {
+    const loaded = await loadPlugin(
+      await foreign(
+        ".claude-plugin",
+        { name: "demo" },
+        {
+          ".mcp.json": {
+            mcpServers: {
+              nested: { command: "node", args: ["${A:-${B}}"] },
+              alt: { command: "node", env: { X: "${A:+alt}" } },
+              empty: { command: "node", env: { X: "${:-def}" } },
+              reservedRoot: {
+                command: "node",
+                env: { PLUGIN_ROOT: "${FOO}" },
+              },
+              reservedDefault: {
+                command: "node",
+                args: ["${PLUGIN_ROOT:-/tmp}"],
+              },
+              headerData: {
+                type: "http",
+                url: "https://example.com/mcp",
+                headers: { "X-Dir": "${PLUGIN_DATA}" },
+              },
+              good: { command: "node" },
+            },
+          },
+        },
+      ),
+    );
+    expect(loaded.servers.map((s) => s.name)).toEqual(["good"]);
+    const text = loaded.reports.join("\n");
+    expect(text).toContain("server nested skipped");
+    expect(text).toContain("server alt skipped");
+    expect(text).toContain("server empty skipped");
+    expect(text).toContain("server reservedRoot skipped: env must not contain");
+    expect(text).toContain("server reservedDefault skipped");
+    expect(text).toContain("server headerData skipped");
+  });
+
+  it("accepts flat top-level server maps in file-based .mcp.json while keeping strict entry validation", async () => {
+    const loaded = await loadPlugin(
+      await foreign(
+        ".claude-plugin",
+        { name: "demo" },
+        {
+          ".mcp.json": {
+            $schema: "https://example.com/ignored-schema.json",
+            local: {
+              command: "npx",
+              args: ["-y", "pkg", "--token", "${MY_TOKEN}"],
+            },
+            remote: {
+              type: "http",
+              url: "https://api.example.com/mcp",
+            },
+            bad: {
+              command: "/bin/sh",
+            },
+          },
+        },
+      ),
+    );
+    expect(loaded.servers.map((s) => s.name)).toEqual(["local", "remote"]);
+    expect(loaded.fields.map((f) => f.name)).toEqual(["MY_TOKEN"]);
+    expect(loaded.reports).toEqual([
+      ".mcp.json: server bad skipped: command must be one bare executable name or a ./ path",
+    ]);
+
+    const badFlat = await loadPlugin(
+      await foreign(
+        ".claude-plugin",
+        { name: "demo" },
+        { ".mcp.json": { foo: "bar" } },
+      ),
+    );
+    expect(badFlat.servers).toEqual([]);
+    expect(badFlat.reports[0]).toContain("has no mcpServers object");
+  });
+
+  it("maps remote OAuth auth declarations, skips unknown auth modes, and reports/ignores stdio auth", async () => {
+    const loaded = await loadPlugin(
+      await foreign(
+        ".claude-plugin",
+        { name: "demo" },
+        {
+          ".mcp.json": {
+            mcpServers: {
+              oauthObj: {
+                type: "http",
+                url: "https://oauth.example.com/mcp",
+                auth: { type: "oauth", scopes: ["read"] },
+              },
+              oauthStr: {
+                type: "http",
+                url: "https://oauth2.example.com/mcp",
+                auth: "oauth",
+              },
+              noAuth: {
+                type: "http",
+                url: "https://open.example.com/mcp",
+                auth: { type: "none" },
+              },
+              unknownType: {
+                type: "http",
+                url: "https://bad.example.com/mcp",
+                auth: { type: "mtls" },
+              },
+              stdioWithAuth: {
+                command: "node",
+                auth: { type: "oauth" },
+              },
+            },
+          },
+        },
+      ),
+    );
+    expect(loaded.servers.map((s) => s.name)).toEqual([
+      "oauthObj",
+      "oauthStr",
+      "noAuth",
+      "stdioWithAuth",
+    ]);
+    expect(loaded.bindings.oauthObj).toEqual({
+      env: {},
+      headers: {},
+      auth: "oauth",
+    });
+    expect(loaded.bindings.oauthStr).toEqual({
+      env: {},
+      headers: {},
+      auth: "oauth",
+    });
+    expect(loaded.bindings.noAuth).toEqual({
+      env: {},
+      headers: {},
+      auth: false,
+    });
+    expect(loaded.bindings.stdioWithAuth).toBeUndefined();
+    const text = loaded.reports.join("\n");
+    expect(text).toContain(
+      'server unknownType skipped: unsupported auth type "mtls"',
+    );
+    expect(text).toContain(
+      "server stdioWithAuth: auth is for remote servers; ignored",
+    );
+  });
+
+  it("merges shared ${VAR} fields across multiple servers without duplicates or clobbering", async () => {
+    const loaded = await loadPlugin(
+      await foreign(
+        ".claude-plugin",
+        { name: "demo" },
+        {
+          ".mcp.json": {
+            mcpServers: {
+              alpha: {
+                command: "node",
+                env: {
+                  KEY: "${SHARED_API_KEY}",
+                  REGION: "${REGION:-us-east}",
+                  TIER: "${TIER:-free}",
+                },
+              },
+              beta: {
+                type: "http",
+                url: "https://example.com/mcp",
+                headers: {
+                  Authorization: "Bearer ${SHARED_API_KEY}",
+                  "X-Region": "${REGION}",
+                  "X-Tier": "${TIER:-pro}",
+                },
+              },
+            },
+          },
+        },
+      ),
+    );
+    expect(loaded.reports).toEqual([]);
+    expect(loaded.fields.map((f) => f.name)).toEqual([
+      "SHARED_API_KEY",
+      "REGION",
+      "TIER",
+    ]);
+    const byName = Object.fromEntries(loaded.fields.map((f) => [f.name, f]));
+    expect(byName.SHARED_API_KEY).toMatchObject({
+      description: "Used by the MCP servers alpha, beta.",
+      required: true,
+      secret: true,
+    });
+    // beta uses `${REGION}` without a default, so REGION becomes required with no default.
+    expect(byName.REGION).toMatchObject({
+      description: "Used by the MCP servers alpha, beta.",
+      required: true,
+      secret: false,
+    });
+    expect(byName.REGION).not.toHaveProperty("default");
+    // Both servers give defaults for TIER; first default is kept cleanly.
+    expect(byName.TIER).toMatchObject({
+      description: "Used by the MCP servers alpha, beta.",
+      required: false,
+      secret: false,
+      default: "free",
+    });
+  });
+
+  it("deduplicates fields and deep-merges bindings when a foreign plugin also has extensions['tech.0xfe.eta']", async () => {
+    const loaded = await loadPlugin(
+      await foreign(
+        ".claude-plugin",
+        {
+          name: "demo",
+          extensions: {
+            [ETA]: {
+              config: {
+                API_KEY: {
+                  type: "string",
+                  title: "Custom API Key",
+                  description: "From eta extension",
+                  required: true,
+                  secret: true,
+                  pattern: "^sk-",
+                },
+                EXTRA: { type: "string", default: "yes" },
+              },
+              mcp: {
+                local: {
+                  env: { EXTRA_ENV: "EXTRA" },
+                },
+                remote: {
+                  headers: { "X-Extra": "{EXTRA}" },
+                  auth: false,
+                },
+              },
+            },
+          },
+        },
+        {
+          ".mcp.json": {
+            mcpServers: {
+              local: {
+                command: "node",
+                args: ["--key", "${API_KEY}"],
+                env: { KEY: "${API_KEY}" },
+              },
+              remote: {
+                type: "http",
+                url: "https://example.com/mcp",
+                auth: { type: "oauth" },
+                headers: {
+                  Authorization: "Bearer ${API_KEY}",
+                },
+              },
+            },
+          },
+        },
+      ),
+    );
+    expect(loaded.reports).toEqual([]);
+    expect(loaded.configProblems).toEqual([]);
+    // No duplicate API_KEY; extension definition takes precedence.
+    expect(loaded.fields.map((f) => f.name)).toEqual(["API_KEY", "EXTRA"]);
+    expect(loaded.fields[0]).toMatchObject({
+      name: "API_KEY",
+      title: "Custom API Key",
+      description: "From eta extension",
+      pattern: "^sk-",
+      secret: true,
+      required: true,
+    });
+    // Deep-merged bindings preserve foreign env/headers/args alongside extension additions.
+    expect(loaded.bindings.local).toEqual({
+      env: { KEY: "API_KEY", EXTRA_ENV: "EXTRA" },
+      headers: {},
+      args: { 1: "${API_KEY}" },
+    });
+    expect(loaded.bindings.remote).toEqual({
+      env: {},
+      headers: {
+        Authorization: "Bearer {API_KEY}",
+        "X-Extra": "{EXTRA}",
+      },
+      auth: false,
+    });
+
+    // Case-insensitive header override and invalid RE2 pattern preservation in foreign + extension.
+    const caseAndRe2 = await loadPlugin(
+      await foreign(
+        ".claude-plugin",
+        {
+          name: "demo",
+          extensions: {
+            [ETA]: {
+              config: {
+                BAD_REGEX: { type: "string", pattern: "(?=a)" },
+              },
+            },
+          },
+        },
+        {
+          ".mcp.json": {
+            mcpServers: {
+              s: { command: "node", env: { KEY: "${KEY}" } },
+            },
+          },
+        },
+      ),
+    );
+    expect(caseAndRe2.configProblems[0]).toContain("RE2");
+
+    const caseOverride = await loadPlugin(
+      await foreign(
+        ".claude-plugin",
+        {
+          name: "demo",
+          extensions: {
+            [ETA]: {
+              config: { CUSTOM_KEY: { type: "string", secret: true } },
+              mcp: {
+                remote: {
+                  headers: { Authorization: "Token {CUSTOM_KEY}" },
+                },
+              },
+            },
+          },
+        },
+        {
+          ".mcp.json": {
+            mcpServers: {
+              remote: {
+                type: "http",
+                url: "https://example.com/mcp",
+                headers: { authorization: "Bearer ${OLD_KEY}" },
+              },
+            },
+          },
+        },
+      ),
+    );
+    expect(caseOverride.bindings.remote).toEqual({
+      env: {},
+      headers: { Authorization: "Token {CUSTOM_KEY}" },
+    });
   });
 
   it("does not warn about a skills list that only names directories under skills/", async () => {
