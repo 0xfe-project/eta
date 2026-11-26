@@ -35,6 +35,8 @@ export function TaskDetail(props: {
   id: string;
   layout: Layout;
   docked?: boolean;
+  /** The chat column's width, from the appearance setting. */
+  contentWidth?: number;
   onClose: () => void;
   onTask: (id: string) => void;
 }) {
@@ -268,6 +270,7 @@ export function TaskDetail(props: {
                   item={item()}
                   layout={props.layout}
                   docked={props.docked}
+                  contentWidth={props.contentWidth}
                   onTask={props.onTask}
                   state={state}
                 />

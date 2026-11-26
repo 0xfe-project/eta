@@ -577,6 +577,7 @@ export function Workspace(props: {
             <TaskWorkspace
               layout={props.layout}
               taskId={task()}
+              contentWidth={conversationWidth()}
               onOpen={openTask}
               onRelatedTask={openRelatedTask}
               onClose={closeTask}
@@ -746,6 +747,7 @@ export function Workspace(props: {
                   <TaskDetail
                     id={id()}
                     layout={props.layout}
+                    contentWidth={conversationWidth()}
                     onClose={closeTask}
                     onTask={openRelatedTask}
                   />

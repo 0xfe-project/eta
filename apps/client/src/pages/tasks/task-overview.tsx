@@ -56,10 +56,6 @@ import { TabletOverview } from "./tablet-overview";
 import { TaskCommentBox, TaskFields, TaskRail } from "./task-fields";
 import { PhoneRunTokens, TaskUsageSection } from "./usage-section";
 
-/** How wide the overview's column runs: a parent's and a task's in the side layout, and the
- * page's own. */
-const contentWidth = { parent: 724, task: 668, page: 728 } as const;
-
 /** Who works in a run, by name: the agent mentioned into it, or the executor. */
 function useRunName(state: TaskDetailState) {
   const host = useHost();
@@ -318,6 +314,7 @@ export function RunLine(props: {
 /** A task's page on desktop: its document in the middle, its properties in the rail. */
 function DesktopOverview(props: {
   item: BoardTaskDetail;
+  contentWidth?: number;
   onTask: (id: string) => void;
   state: TaskDetailState;
 }) {
@@ -351,7 +348,7 @@ function DesktopOverview(props: {
             paddingBottom: space[20],
             paddingHorizontal: space[24],
             width: "100%",
-            maxWidth: parent() ? contentWidth.parent : contentWidth.task,
+            maxWidth: props.contentWidth,
             alignSelf: "center",
             gap: parent() ? space[24] : 0,
           }}
@@ -552,6 +549,8 @@ export function TaskOverview(props: {
   item: BoardTaskDetail;
   layout: Layout;
   docked?: boolean;
+  /** The chat column's width, from the appearance setting: the overview's column is that wide. */
+  contentWidth?: number;
   onTask: (id: string) => void;
   state: TaskDetailState;
 }) {
@@ -637,6 +636,7 @@ export function TaskOverview(props: {
         else={
           <DesktopOverview
             item={item()}
+            contentWidth={props.contentWidth}
             onTask={props.onTask}
             state={props.state}
           />
@@ -650,7 +650,7 @@ export function TaskOverview(props: {
                 paddingTop: phone() ? space[16] : space[12],
                 paddingBottom: phone() ? space[16] : space[20],
                 width: "100%",
-                maxWidth: contentWidth.page,
+                maxWidth: props.contentWidth,
                 alignSelf: "center",
                 gap: phone() ? space[20] : space[12],
               }}

@@ -10,6 +10,8 @@ const listWidth = 300;
 export function TaskWorkspace(props: {
   layout: Layout;
   taskId: string;
+  /** The chat column's width, from the appearance setting. */
+  contentWidth?: number;
   onOpen: (id: string) => void;
   onRelatedTask: (id: string) => void;
   onClose: () => void;
@@ -47,6 +49,7 @@ export function TaskWorkspace(props: {
     <TaskDetail
       id={id}
       layout={props.layout}
+      contentWidth={props.contentWidth}
       onClose={close}
       onTask={related}
     />
