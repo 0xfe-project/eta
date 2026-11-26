@@ -81,6 +81,43 @@ const ABORTED_TOOL_RESULT = {
   content: "Tool execution was cancelled before completion.",
 };
 
+/**
+ * A call as the run can wait for it: the signal wins, even against a tool whose
+ * promise never settles. The tool is not stopped — nothing can stop a promise —
+ * but the batch stops waiting on it, and what it ends with later is nobody's
+ * unhandled rejection.
+ */
+function untilAborted<T>(
+  work: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T | typeof ABORTED_TOOL_RESULT> {
+  if (signal === undefined) return work;
+  if (signal.aborted) {
+    void work.catch(() => undefined);
+    return Promise.resolve(ABORTED_TOOL_RESULT);
+  }
+  return new Promise<T | typeof ABORTED_TOOL_RESULT>((resolve, reject) => {
+    const onAbort = (): void => {
+      signal.removeEventListener("abort", onAbort);
+      resolve(ABORTED_TOOL_RESULT);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        // Cancelled while it ran: whatever the tool ended with on the way out is
+        // that cancellation, not a failure of its own.
+        if (signal.aborted) resolve(ABORTED_TOOL_RESULT);
+        else reject(error);
+      },
+    );
+  });
+}
+
 /** Whether an error is the run being cancelled rather than a tool failing. */
 export function isAbortError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
@@ -193,8 +230,12 @@ export class ToolService extends Service {
                 }),
           }),
         );
+        // The run waits for the call as the signal bounds it, not for the tool's
+        // own promise: a tool that never settles stops being waited for the
+        // moment the run is cancelled, and the abort's drain sees it settle too.
+        const bounded = untilAborted(admitted, options.signal);
         const tracked =
-          options.track === undefined ? admitted : options.track(admitted);
+          options.track === undefined ? bounded : options.track(bounded);
         return await tracked;
       } catch (error) {
         // Not admitted, or cancelled while it ran: the run is stopping, and the

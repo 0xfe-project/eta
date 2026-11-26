@@ -158,6 +158,77 @@ describe("tool service", () => {
     dispose();
   });
 
+  it("a batch ends on abort even when a tool's promise never settles", async () => {
+    const { tools, dispose } = withTools();
+    tools.register({
+      name: "hang",
+      execute: () => new Promise(() => undefined),
+    });
+    let drained = false;
+    const controller = new AbortController();
+    const batch = tools.executeBatch(
+      [{ id: "c1", name: "hang", arguments: {} }],
+      {
+        execution: "sequential",
+        turn: 1,
+        signal: controller.signal,
+        track: (work) => {
+          void work.finally(() => {
+            drained = true;
+          });
+          return work;
+        },
+      },
+    );
+    setTimeout(() => controller.abort(), 50);
+    const settled = await Promise.race([
+      batch,
+      new Promise((resolve) => setTimeout(resolve, 1500, "still pending")),
+    ]);
+    expect(settled).toEqual([
+      {
+        id: "c1",
+        result: {
+          isError: true,
+          content: "Tool execution was cancelled before completion.",
+        },
+      },
+    ]);
+    // What the run's abort drains is the same promise: it settles too.
+    expect(drained).toBe(true);
+    dispose();
+  });
+
+  it("the parallel path ends the same way", async () => {
+    const { tools, dispose } = withTools();
+    tools.register({
+      name: "hang",
+      execute: () => new Promise(() => undefined),
+    });
+    const controller = new AbortController();
+    const batch = tools.executeBatch(
+      [
+        { id: "c1", name: "hang", arguments: {} },
+        { id: "c2", name: "echo", arguments: "x" },
+      ],
+      { execution: "parallel", turn: 1, signal: controller.signal },
+    );
+    setTimeout(() => controller.abort(), 50);
+    const settled = await Promise.race([
+      batch,
+      new Promise((resolve) => setTimeout(resolve, 1500, "still pending")),
+    ]);
+    expect(settled).not.toBe("still pending");
+    expect((settled as { id: string }[])[0]).toEqual({
+      id: "c1",
+      result: {
+        isError: true,
+        content: "Tool execution was cancelled before completion.",
+      },
+    });
+    dispose();
+  });
+
   it("a detached middleware stops participating", async () => {
     const { tools, dispose } = withTools();
     tools.register(echo);

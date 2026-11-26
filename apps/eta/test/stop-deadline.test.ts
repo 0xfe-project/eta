@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
 import { machineView } from "./support/daemon";
 import { tempDir } from "./support/host";
-import { gate, HANG, say, scriptedModels } from "./support/models";
+import { call, gate, HANG, say, scriptedModels } from "./support/models";
 import { remoteWorld, sessionOf } from "./support/remote";
 import { world } from "./support/world";
 
@@ -183,6 +183,44 @@ describe("a run that does not stop when told to", () => {
       late.open();
     }
   });
+});
+
+describe("a run waiting on a tool that never settles", () => {
+  /**
+   * The reply is stopped, and the run it was on is waiting on a tool that will not come back (a
+   * script parked on a promise nothing resolves). Being told to stop is enough: the tool call is
+   * reported cancelled, the run ends, and the agent is free for the next message at once — not
+   * "still busy with the reply you stopped" until the grace runs out.
+   */
+  it("frees the agent as soon as the stop is heard, without waiting out the grace", async () => {
+    const { models, requests } = scriptedModels((request) =>
+      request.index === 0
+        ? call("esmrun", { script: "await new Promise(() => {});" })
+        : say("answer after the stop"),
+    );
+    const w = await world({ models, replies: { stopGraceMs: GRACE } });
+    const { group } = await ada(w);
+    const first = await w.send(group.id, "run something that never comes back");
+    const reply = first.replies[0]!;
+    await w.settled(group.id, reply.id, ["working"]);
+    // The tool call is in flight and nothing the run does will settle it.
+    await until(() => requests.length === 1);
+
+    await stop(w, group.id, reply.id);
+    const ended = await w.settled(group.id, reply.id);
+    expect(ended.status).toBe("stopped");
+
+    // What the user hits next: the message they send once the reply is stopped. Without the fix
+    // the run is still waiting on the tool, so this one is refused as "still busy".
+    const second = await w.send(group.id, "are you there?");
+    const answered = await w.settled(group.id, second.replies[0]!.id);
+    expect(answered).toMatchObject({
+      status: "done",
+      text: "answer after the stop",
+    });
+    // Not "stopped here after the grace": the run heard the stop and ended by itself.
+    expect(ended.data.stopNote).toBeUndefined();
+  }, 30_000);
 });
 
 describe("a reply on Claude Code that is stopped", () => {

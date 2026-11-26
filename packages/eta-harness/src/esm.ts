@@ -164,6 +164,38 @@ const show = (value: unknown): string => {
   }
 };
 
+/**
+ * A promise the run can stop waiting for: the script itself cannot be stopped,
+ * but the abort ends the evaluation that is parked on it.
+ */
+function abortable<T>(
+  work: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
+  if (signal === undefined) return work;
+  if (signal.aborted) {
+    void work.catch(() => undefined);
+    return Promise.reject(signal.reason);
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => {
+      signal.removeEventListener("abort", onAbort);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 const effectLine = (effect: Effect): string =>
   `${effect.status === "ok" ? "" : `[${effect.status}] `}${effect.name} ${effect.detail} (line ${effect.at.line})`;
 
@@ -557,18 +589,32 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     const parts: string[] = [];
     let isError = false;
     let effects: Effect[] = [];
+    // A cancelled run ends the evaluation, not only the calls the script makes:
+    // a script parked on an await that never settles stops with it.
+    let cancelled = false;
+    let cancellation: unknown;
     await hydrate();
     await frames.run(frame, async () => {
       try {
         const realm = agent.realm();
         const module = snippetSource(source, (s) => realm.parses(s));
-        const result = await agent.run(module, {
-          identifier: file,
-          ...(timeoutMs === undefined ? {} : { timeoutMs }),
-        });
+        const result = await abortable(
+          agent.run(module, {
+            identifier: file,
+            ...(timeoutMs === undefined ? {} : { timeoutMs }),
+          }),
+          call.signal,
+        );
         effects = result.effects;
         parts.push(show(result.value));
       } catch (error) {
+        // The run was cancelled while the script ran: that is not the script
+        // failing, and the kernel reports the call as cancelled like any other.
+        if (call.signal?.aborted === true) {
+          cancelled = true;
+          cancellation = error;
+          return;
+        }
         isError = true;
         parts.push(
           `Error: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
@@ -582,6 +628,8 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
         `(eta.state was not saved: ${error instanceof Error ? error.message : String(error)})`,
       );
     }
+    // Thrown after the flush: what the script already changed is still saved.
+    if (cancelled) throw cancellation;
     let text = parts.join("\n");
     if (text.length > RESULT_CHARS) {
       const full = `${file.replace(/\.js$/, "")}.out.txt`;
