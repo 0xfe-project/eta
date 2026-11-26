@@ -293,7 +293,7 @@ function Fixture() {
   return (
     <Host.Provider value={stub}>
       <View style={{ flex: 1 }}>
-        <Plugins layout="desktop" />
+        <Plugins onSettings={() => {}} layout="desktop" />
       </View>
     </Host.Provider>
   );

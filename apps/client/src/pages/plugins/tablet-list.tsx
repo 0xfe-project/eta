@@ -16,6 +16,7 @@ import { avatar, opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { PluginName } from "./plugin-name";
 import { NoPlugins, PluginGlyph, Status } from "./plugin-status";
+import { PluginSettingsButton } from "./settings-button";
 
 /** A plugin's row in the tablet list. */
 const rowHeight = 60;
@@ -26,6 +27,7 @@ export function PluginTablet(props: {
   tabs: JSX.Element;
   onSelect: (name: string) => void;
   onRefresh: () => Promise<void>;
+  onSettings: () => void;
   onAdd: () => void;
   onMarket: () => void;
   detail: JSX.Element;
@@ -52,6 +54,7 @@ export function PluginTablet(props: {
           end={space[12]}
         >
           <View style={{ flex: 1 }} />
+          <PluginSettingsButton layout="tablet" onPress={props.onSettings} />
           <Button
             label={uiText("refreshPlugins")}
             icon="refresh"

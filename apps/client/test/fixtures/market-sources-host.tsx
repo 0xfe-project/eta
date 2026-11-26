@@ -115,7 +115,11 @@ export function mountSources(mode: "split" | "fail" | "reopen") {
             onPress={() => open.set(!open())}
           />
           <If when={open()} else={<Label>closed</Label>}>
-            <Market layout="desktop" tabs={() => <Label>tabs</Label>} />
+            <Market
+              onSettings={() => {}}
+              layout="desktop"
+              tabs={() => <Label>tabs</Label>}
+            />
           </If>
         </View>
       </Host.Provider>

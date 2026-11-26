@@ -81,7 +81,11 @@ export function mountUnified(layout: "desktop" | "phone") {
     return (
       <Host.Provider value={stub}>
         <View style={{ flex: 1 }}>
-          <Market layout={layout} tabs={() => <Label>tabs</Label>} />
+          <Market
+            onSettings={() => {}}
+            layout={layout}
+            tabs={() => <Label>tabs</Label>}
+          />
         </View>
       </Host.Provider>
     );

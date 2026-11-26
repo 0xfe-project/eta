@@ -136,6 +136,7 @@ export function openMarket(
           </If>
           <If when={shown()}>
             <Market
+              onSettings={() => {}}
               layout="desktop"
               tabs={() => <Label>tabs</Label>}
               open={async (url) => {

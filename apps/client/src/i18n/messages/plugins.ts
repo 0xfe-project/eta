@@ -272,6 +272,10 @@ export const pluginsMessages = {
   pluginsNeedAttention: ["Needs attention", "需要处理"],
   pluginsInstalledCount: ["Installed · {{count}}", "已安装 · {{count}}"],
   refreshPlugins: ["Refresh plugins", "刷新插件"],
+  pluginMarketSettings: [
+    "Manage plugin market sources in Settings",
+    "在设置中管理插件市场来源",
+  ],
   removePluginTitle: ["Remove {{name}}?", "移除 {{name}}？"],
   removePluginDescription: [
     "Its fetched files are deleted. Its configuration and PLUGIN_DATA stay, for when it is added again.",

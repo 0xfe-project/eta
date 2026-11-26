@@ -110,7 +110,11 @@ export function mountComposioLogos(
             label="release"
             onPress={() => waiting.splice(0).forEach((go) => go())}
           />
-          <Market layout="desktop" tabs={() => <Label>tabs</Label>} />
+          <Market
+            onSettings={() => {}}
+            layout="desktop"
+            tabs={() => <Label>tabs</Label>}
+          />
         </View>
       </Host.Provider>
     );
