@@ -116,9 +116,11 @@ describe("esmrun", () => {
     expect(text).toContain('"seen": "1: hi"');
     expect(text).toContain(cwd.split("/").at(-1)!);
     expect(existsSync(join(cwd, "hello.txt"))).toBe(true);
-    expect(readdirSync(join(root, "runs")).some((f) => f.endsWith(".js"))).toBe(
-      true,
-    );
+    // The history holds the code; a run leaves no script file behind.
+    expect(
+      existsSync(join(root, "runs")) &&
+        readdirSync(join(root, "runs")).some((f) => f.endsWith(".js")),
+    ).toBe(false);
     expect(
       await session.kernel.tools.execute(
         "read_state",

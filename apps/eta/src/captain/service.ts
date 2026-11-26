@@ -54,6 +54,8 @@ import { redactJson, redactText } from "./redact";
 import { MAX_CAPTAIN_REVIEW_ATTEMPTS } from "./store";
 
 const GLOBAL_PROMPT_ID = "global";
+/** Who a base prompt version is credited to when the host moved it to a newer default. */
+const SYSTEM_PROMPT_ACTOR = "system";
 const ACTIVE_MEMBER = new Set(["queued", "working", "stopping"]);
 const REVIEW_BATCH_MAX = 20;
 const REVIEW_PROMPT_CHARS = 12_000;
@@ -231,6 +233,7 @@ export class CaptainService {
     const existing = this.#deps.store.captainAgent();
     const created = existing === undefined ? await this.#create() : undefined;
     const agent = existing ?? created!.agent;
+    this.#followDefaultBasePrompt();
     this.#conversation(agent);
     return {
       identity: this.#viewOf(agent),
@@ -723,6 +726,28 @@ export class CaptainService {
       content: old.content,
       actorAgentId: input.actorAgentId,
     });
+  }
+
+  /**
+   * The base prompt starts as the harness's default and is copied into the history when Captain is
+   * made, so an upgrade that improves the default would never reach a host that already has one.
+   * A base prompt nobody edited (version 1, or one this method wrote) therefore follows the
+   * default; one a person or Captain set is theirs and is left alone.
+   */
+  #followDefaultBasePrompt(): void {
+    const latest = this.#deps.store.latestPrompt(GLOBAL_PROMPT_ID, "base");
+    if (latest === undefined || latest.content === DEFAULT_SYSTEM_PROMPT)
+      return;
+    const untouched =
+      latest.version === 1 || latest.actorAgentId === SYSTEM_PROMPT_ACTOR;
+    if (!untouched) return;
+    this.#deps.store.appendPromptVersion({
+      subjectId: GLOBAL_PROMPT_ID,
+      kind: "base",
+      content: DEFAULT_SYSTEM_PROMPT,
+      actorAgentId: SYSTEM_PROMPT_ACTOR,
+    });
+    this.#basePrompt = DEFAULT_SYSTEM_PROMPT;
   }
 
   #basePrompt: string | undefined;

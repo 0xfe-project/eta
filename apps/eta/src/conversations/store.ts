@@ -413,6 +413,27 @@ export class ConversationStore {
       .map((row) => row.session_id);
   }
 
+  /**
+   * Forget every member's session in the conversation, so the next wake of each makes a new one
+   * with an empty context. The old sessions' journals stay. Returns the session ids let go.
+   */
+  clearSessions(conversationId: string): string[] {
+    return this.#db.transaction(() => {
+      const ids = this.#db
+        .query<{ session_id: string }, [string]>(
+          "SELECT session_id FROM participant WHERE conversation_id = ? AND session_id IS NOT NULL",
+        )
+        .all(conversationId)
+        .map((row) => row.session_id);
+      this.#db
+        .query(
+          "UPDATE participant SET session_id = NULL, pending_settings = NULL WHERE conversation_id = ?",
+        )
+        .run(conversationId);
+      return ids;
+    })();
+  }
+
   /** The member has been shown the timeline up to `seq`. Only ever forward. */
   setSeen(conversationId: string, agentId: string, seq: number): void {
     this.#db

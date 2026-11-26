@@ -103,6 +103,8 @@ export interface TaskRuns {
   start: (taskId: string) => void;
   /** The task is done or cancelled: its runs stop. */
   stop: (taskId: string, why: string) => void;
+  /** The task is finished, archived or deleted: its worktree, if it has one, can go. */
+  release?: (task: TaskRecord) => void;
   /** Whether a run of the task is starting or going. */
   active: (taskId: string) => boolean;
   /**
@@ -577,9 +579,10 @@ export class TaskBoard {
     if (after.status !== before.status) {
       // Done or cancelled work is not worked on any more. Out of the backlog, a task that never
       // ran starts; one that has run already is rerun by hand.
-      if (after.status === "done" || after.status === "cancelled")
+      if (after.status === "done" || after.status === "cancelled") {
         this.#runs?.stop(id, `The task is ${after.status}.`);
-      else if (
+        this.#runs?.release?.(after);
+      } else if (
         workable(after.status) &&
         !workable(before.status) &&
         this.#deps.runs.ofTask(id).length === 0 &&
@@ -824,6 +827,7 @@ export class TaskBoard {
     for (const other of awaited) this.#announce(other, "changed", []);
     this.#graphChanged();
     void this.#deps.attachments?.dropTask(id).catch(() => undefined);
+    this.#runs?.release?.(task);
   }
 
   /**
@@ -911,6 +915,7 @@ export class TaskBoard {
           });
         });
     })();
+    for (const t of tree) this.#runs?.release?.(this.#existing(t.id));
     return this.#detailOf(this.#existing(task.id));
   }
 
@@ -1018,6 +1023,7 @@ export class TaskBoard {
         });
       }
     })();
+    for (const task of chosen) this.#runs?.release?.(task);
     return chosen.map((task) => task.id);
   }
 

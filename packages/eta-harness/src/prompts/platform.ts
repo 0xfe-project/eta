@@ -308,7 +308,6 @@ function realmLines(mcpServers: readonly string[]): string[] {
     "How a script behaves:",
     "- The last expression is the result. Do not `export default` it.",
     "- Each call is its own module. Top-level `const`/`let` are gone in the next call; put what the next call needs on `eta.state`, never on `globalThis`.",
-    "- Every script is saved under the session's runs/ directory, so what you did can be read and replayed.",
     '- A bare import (`import x from "some-package"`) installs that package from npm on first use. Before writing a helper, check whether a package already does it: a driver, a parser, a browser, an SDK.',
     "- For files use `search`, `view` and `edit`. Do not reach for `$` with cat/sed/grep to read or change a file.",
     "",

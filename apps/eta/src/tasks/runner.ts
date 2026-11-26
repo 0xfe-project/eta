@@ -74,7 +74,7 @@ import { explainRunError } from "../agents/model";
 import { mentionKey, sessionKeyOf, taskKey } from "../session-owner";
 import { workable } from "./status";
 import { executorOf } from "./store";
-import { prepareWorktree } from "./workspace";
+import { prepareWorktree, removeWorktree } from "./workspace";
 
 /**
  * What a run says when the agent that is to execute the task is not in the registry. It names the
@@ -392,6 +392,40 @@ export class TaskRunner implements TaskRuns {
   stop(taskId: string, why: string): void {
     this.#forget(taskId);
     for (const run of this.#deps.runs.openOf(taskId)) this.#stop(run, why);
+  }
+
+  /**
+   * The task is finished, archived or deleted: take its worktree away if it is clean. A run still
+   * winding down is waited for (a minute at most); a failure is only logged, since the files are
+   * only tidied, never needed.
+   */
+  release(
+    task: {
+      id: string;
+      projectId: string | null;
+      worktreePath: string | null;
+    },
+    attempt = 0,
+  ): void {
+    if (task.worktreePath === null || task.projectId === null) return;
+    if (this.active(task.id) && attempt < 12) {
+      setTimeout(() => this.release(task, attempt + 1), 5000).unref();
+      return;
+    }
+    const project = this.#deps.projects.get(task.projectId);
+    const machine =
+      project === undefined
+        ? undefined
+        : this.#deps.machines.get(project.machineId);
+    if (project === undefined || machine === undefined) return;
+    removeWorktree(this.#deps.transport(machine), {
+      projectPath: project.path,
+      path: task.worktreePath,
+    }).catch((error: unknown) => {
+      console.warn(
+        `[eta] could not remove a task's worktree: ${messageOf(error)}`,
+      );
+    });
   }
 
   withdraw(taskId: string, which: "start" | "executor" = "start"): void {

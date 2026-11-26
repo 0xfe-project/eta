@@ -1093,6 +1093,30 @@ export class Engine {
     ].join("\n");
   }
 
+  /* ------------------------------------------------------------- context */
+
+  /**
+   * Start every member's context over. After many compactions a session's context decays, and
+   * the way out is a new session. Refused while a reply is in flight: the run holds its session.
+   * What the members are told next is only what is said after this; the conversation's goal and
+   * decisions still reach them through `conversation_info`.
+   */
+  resetContext(conversationId: string): number {
+    this.#requireConversation(conversationId);
+    if (
+      this.#timeline.active(conversationId).length > 0 ||
+      [...this.#running.keys()].some((key) =>
+        key.startsWith(`${conversationId}:`),
+      )
+    )
+      throw new Error(
+        "a reply is still running here; stop it before clearing the context",
+      );
+    const released = this.#conversations.clearSessions(conversationId);
+    this.#changed([conversationId]);
+    return released.length;
+  }
+
   /* ---------------------------------------------------------------- stop */
 
   /** Stop one reply, or every reply in flight in a conversation. Returns the rows as they now read. */
