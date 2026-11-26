@@ -691,6 +691,7 @@ export function Conversation(props: {
               hasOlder={hasOlder() ?? timeline()?.hasMore}
               paging={paging()}
               phone={phone()}
+              contentWidth={props.contentWidth}
               compact={props.layout === "tablet" || props.alignComposer}
               captain={props.captain}
               rail={props.rail}

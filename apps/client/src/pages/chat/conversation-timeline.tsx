@@ -56,6 +56,8 @@ export function ConversationTimeline(props: {
   hasOlder?: boolean;
   paging: boolean;
   phone: boolean;
+  /** The chat column's width, from the appearance setting: a draft's form is that wide. */
+  contentWidth?: number;
   compact?: boolean;
   /** Captain's own conversation: its replies need no name row. */
   captain?: boolean;
@@ -442,6 +444,7 @@ export function ConversationTimeline(props: {
               message={message()}
               projectName={props.projectName}
               phone={phone()}
+              contentWidth={props.contentWidth}
               onClose={closeDraft}
             />
           )}

@@ -87,8 +87,16 @@ export function TaskDraftDetail(props: {
   message: MessageView;
   projectName?: string;
   phone: boolean;
+  /** The chat column's width, from the appearance setting: the form is that wide. */
+  contentWidth?: number;
   onClose: () => void;
 }) {
+  /**
+   * The column's width, so the form's edges line up with the card that opened it; the design's
+   * dialog width when the setting has no maximum, and never wider than the window.
+   */
+  const width = () =>
+    Math.min(props.contentWidth ?? dialogWidth.lg, windowSize().width - 32);
   const host = useHost();
   const color = colors();
   const type = textFaces();
@@ -203,7 +211,7 @@ export function TaskDraftDetail(props: {
   return (
     <Modal
       title={uiText("draftConfirmTitle")}
-      width={Math.min(dialogWidth.lg, windowSize().width - 32)}
+      width={width()}
       height={props.phone ? "100%" : dialogHeight}
       phone={props.phone}
       phonePage={props.phone}
