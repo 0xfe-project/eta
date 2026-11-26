@@ -7,12 +7,13 @@ import { Buffer } from "node:buffer";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { deflateSync } from "node:zlib";
+import { DEFAULT_IMAGE_LIMITS } from "@eta/harness";
 import { Database } from "bun:sqlite";
 import { describe, expect, it } from "vitest";
 import { AttachmentStore } from "../src/conversations/attachments";
 import { tempDir } from "./support/host";
 
-const LIMIT = 3 * 1024 * 1024;
+const LIMIT = DEFAULT_IMAGE_LIMITS.maxBytes;
 
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
   let c = n;
@@ -91,12 +92,13 @@ describe("an image over the limit", () => {
     expect(image.mime).toBe("image/png");
     expect(sizeOf(image.dataBase64).equals(small)).toBe(true);
     const listed = await attachments.images([record]);
-    expect(listed).toEqual([image]);
+    expect(listed.images).toEqual([image]);
+    expect(listed.omitted.size).toBe(0);
   });
 
   it("is scaled down to fit, and the stored file is left alone", async () => {
     const { attachments, put } = await store();
-    const big = noisePng(1300);
+    const big = noisePng(1450);
     expect(big.byteLength).toBeGreaterThan(LIMIT);
     const record = await put(big, "image/png", "big.png");
     const image = await attachments.image(record);
@@ -104,14 +106,14 @@ describe("an image over the limit", () => {
     expect(image.mime).toBe("image/png");
     expect(bytes.byteLength).toBeLessThanOrEqual(LIMIT);
     const shown = await new Bun.Image(bytes).metadata();
-    expect(shown.width).toBeLessThan(1300);
+    expect(shown.width).toBeLessThan(1450);
     expect(shown.format).toBe("png");
     expect((await readFile(attachments.pathOf(record))).equals(big)).toBe(true);
   });
 
   it("stays a jpeg when it was one", async () => {
     const { attachments, put } = await store();
-    const jpeg = await new Bun.Image(noisePng(1700))
+    const jpeg = await new Bun.Image(noisePng(2200))
       .jpeg({ quality: 100 })
       .buffer();
     expect(jpeg.byteLength).toBeGreaterThan(LIMIT);
@@ -121,29 +123,57 @@ describe("an image over the limit", () => {
     expect(sizeOf(image.dataBase64).byteLength).toBeLessThanOrEqual(LIMIT);
   });
 
-  it("is scaled down in the history too, within what the images share", async () => {
+  it("scales each image in a multi-image turn against the per-image model limit", async () => {
     const { attachments, put } = await store();
-    const first = await put(noisePng(1300), "image/png", "one.png");
-    const second = await put(noisePng(1300), "image/png", "two.png");
+    const first = await put(noisePng(1250), "image/png", "one.png");
+    const second = await put(noisePng(1450), "image/png", "two.png");
     const listed = await attachments.images([first, second]);
-    const total = listed.reduce(
-      (sum, image) => sum + sizeOf(image.dataBase64).byteLength,
-      0,
-    );
-    expect(listed.length).toBeGreaterThan(0);
-    expect(total).toBeLessThanOrEqual(LIMIT);
+    expect(listed.images).toHaveLength(2);
+    expect(listed.omitted.size).toBe(0);
+    for (const image of listed.images) {
+      expect(sizeOf(image.dataBase64).byteLength).toBeLessThanOrEqual(LIMIT);
+    }
   });
 
-  it("is refused with the reason when it cannot be decoded", async () => {
+  it("scales down an image whose dimensions exceed maxSide", async () => {
+    const { attachments, put } = await store();
+    const wide = await new Bun.Image(noisePng(16))
+      .resize(9000, 16)
+      .png()
+      .buffer();
+    const record = await put(wide, "image/png", "wide.png");
+    const image = await attachments.image(record);
+    const shown = await new Bun.Image(sizeOf(image.dataBase64)).metadata();
+    expect(Math.max(shown.width, shown.height)).toBeLessThanOrEqual(
+      DEFAULT_IMAGE_LIMITS.maxSide,
+    );
+  });
+
+  it("records a reason in omitted instead of silently dropping un-fittable, unsupported, or extra images", async () => {
     const { attachments, put } = await store();
     const junk = Buffer.alloc(LIMIT + 1024);
     crypto.getRandomValues(junk);
-    const record = await put(junk, "image/png", "broken.png");
-    await expect(attachments.image(record)).rejects.toThrow(
-      /broken\.png is 3\.\d MB, over the 3\.0 MB an image may be, and it could not be decoded/,
+    const broken = await put(junk, "image/png", "broken.png");
+    await expect(attachments.image(broken)).rejects.toThrow(
+      /broken\.png is 5\.\d MB, over the 5\.0 MB an image may be, and it could not be decoded/,
     );
-    // The history leaves it out rather than losing the turn.
-    expect(await attachments.images([record])).toEqual([]);
+    const brokenList = await attachments.images([broken]);
+    expect(brokenList.images).toEqual([]);
+    expect(brokenList.omitted.get(broken.id)).toMatch(/could not be decoded/);
+
+    const bmp = await put(Buffer.from("BM"), "image/bmp", "bad.bmp");
+    const bmpList = await attachments.images([bmp]);
+    expect(bmpList.images).toEqual([]);
+    expect(bmpList.omitted.get(bmp.id)).toMatch(/not a format the model takes/);
+
+    const five = await Promise.all(
+      Array.from({ length: 5 }, (_, i) =>
+        put(noisePng(16), "image/png", `p${i}.png`),
+      ),
+    );
+    const capped = await attachments.images(five);
+    expect(capped.images).toHaveLength(4);
+    expect(capped.omitted.get(five[4]!.id)).toMatch(/read_image/);
   });
 
   it("keeps the formats a model takes", async () => {

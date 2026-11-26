@@ -293,6 +293,8 @@ export class MachineHub {
         machineId: machine.id,
         epoch,
         status: connection.approved ? "approved" : "pending",
+        chunked: true,
+        maxMessageBytes: LINK_LIMITS.maxMessageBytes,
       });
       if (connection.approved) void this.#activate(connection);
       return {
@@ -322,6 +324,11 @@ export class MachineHub {
       ]).finally(() => clearTimeout(timer));
       const facts = await connection.machine("info", {});
       if (connection.gone) return;
+      if (facts.chunked === true) {
+        connection.peer.enableChunking({
+          maxMessageBytes: facts.maxMessageBytes,
+        });
+      }
       // Whatever it was told before, this is the build it came back as.
       this.#settled(connection.machineId);
       machines.setFacts(connection.machineId, {

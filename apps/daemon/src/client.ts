@@ -138,6 +138,9 @@ export class DaemonLink {
         if (message.op === "welcome") {
           epoch = message.epoch;
           admitted = true;
+          if (message.chunked === true) {
+            peer?.enableChunking({ maxMessageBytes: message.maxMessageBytes });
+          }
           if (message.status === "approved") open(epoch);
           else this.#state({ state: "pending", epoch });
         } else if (message.op === "approved") {

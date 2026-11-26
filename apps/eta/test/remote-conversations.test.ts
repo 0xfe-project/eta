@@ -1,4 +1,5 @@
 import type {
+  AttachmentView,
   InboxResponse,
   InteractionView,
   SidebarSession,
@@ -13,14 +14,17 @@ import type {
  * as it would a local one.
  */
 import type { KernelModels } from "@eta/core";
+import { Buffer } from "node:buffer";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { deflateSync } from "node:zlib";
+import { LINK_LIMITS } from "@eta/client-contracts";
 import { DaemonLink, DaemonNode } from "@eta/daemon";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { connect, until } from "./support/client";
 import { dropLink, machineView } from "./support/daemon";
-import { testHost } from "./support/host";
+import { tempDir, testHost } from "./support/host";
 import { call, gate, HANG, say, scriptedModels } from "./support/models";
 import { remoteWorld, sessionOf } from "./support/remote";
 
@@ -1005,4 +1009,277 @@ describe("the global session list and the mirror", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(runEnds()).toBe(2);
   });
+});
+
+describe("large images over the link (#960)", () => {
+  const originalHome = process.env.HOME;
+  afterEach(() => {
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+  });
+
+  const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+
+  function pngChunk(type: string, data: Buffer): Buffer {
+    const out = Buffer.alloc(12 + data.length);
+    out.writeUInt32BE(data.length, 0);
+    out.write(type, 4, "ascii");
+    data.copy(out, 8);
+    let crc = 0xffffffff;
+    for (const byte of out.subarray(4, 8 + data.length))
+      crc = CRC_TABLE[(crc ^ byte) & 255]! ^ (crc >>> 8);
+    out.writeUInt32BE((crc ^ 0xffffffff) >>> 0, 8 + data.length);
+    return out;
+  }
+
+  function noisePng(side: number): Buffer {
+    const row = 1 + side * 3;
+    const raw = Buffer.alloc(row * side);
+    crypto.getRandomValues(raw);
+    for (let y = 0; y < side; y += 1) raw[y * row] = 0;
+    const header = Buffer.alloc(13);
+    header.writeUInt32BE(side, 0);
+    header.writeUInt32BE(side, 4);
+    header[8] = 8;
+    header[9] = 2;
+    return Buffer.concat([
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+      pngChunk("IHDR", header),
+      pngChunk("IDAT", deflateSync(raw, { level: 1 })),
+      pngChunk("IEND", Buffer.alloc(0)),
+    ]);
+  }
+
+  async function uploadImage(
+    r: Awaited<ReturnType<typeof remoteWorld>>,
+    conversationId: string,
+    bytes: Buffer,
+    name: string,
+    contentType = "image/png",
+  ): Promise<AttachmentView> {
+    const piece = 384 * 1024;
+    const uploadId = crypto.randomUUID();
+    const count = Math.max(1, Math.ceil(bytes.byteLength / piece));
+    let result: { attachment: AttachmentView | null } = { attachment: null };
+    for (let index = 0; index < count; index += 1) {
+      result = (await r.client.call("conversations", "attach", {
+        conversationId,
+        uploadId,
+        name,
+        contentType,
+        index,
+        last: index === count - 1,
+        data: bytes
+          .subarray(index * piece, (index + 1) * piece)
+          .toString("base64"),
+      })) as typeof result;
+    }
+    return result.attachment!;
+  }
+
+  function assertAllFramesBounded(traffic: { in: string[]; out: string[] }) {
+    expect(traffic.in.length).toBeGreaterThan(0);
+    expect(traffic.out.length).toBeGreaterThan(0);
+    for (const frame of [...traffic.in, ...traffic.out]) {
+      expect(Buffer.byteLength(frame, "utf8")).toBeLessThanOrEqual(
+        LINK_LIMITS.maxFrameBytes,
+      );
+    }
+  }
+
+  it.skipIf(process.platform === "win32")(
+    "sends >8 MiB image attachments and multi-turn image conversations without exceeding frame limits or poisoning the session",
+    async () => {
+      process.env.HOME = await tempDir("eta-daemon-home-");
+      const { models, requests } = scriptedModels(
+        (request) => say(`seen ${request.images} images`),
+        { vision: true },
+      );
+      const r = await remoteWorld({ models });
+      const { group } = await r.agents("Ada");
+
+      const bigPng = noisePng(1750);
+      expect(bigPng.byteLength).toBeGreaterThan(8 * 1024 * 1024);
+      const mediumPng = noisePng(1250);
+      expect(mediumPng.byteLength).toBeLessThanOrEqual(5 * 1024 * 1024);
+
+      const att1 = await uploadImage(r, group.id, bigPng, "big.png");
+      const att2 = await uploadImage(r, group.id, mediumPng, "med1.png");
+      const first = await r.send(group.id, "turn 1 images", {
+        attachments: [att1.id, att2.id],
+      });
+      const r1 = await r.settled(group.id, first.replies[0]!.id);
+      expect(r1).toMatchObject({ status: "done", text: "seen 2 images" });
+
+      const att3 = await uploadImage(r, group.id, mediumPng, "med2.png");
+      const second = await r.send(group.id, "turn 2 image", {
+        attachments: [att3.id],
+      });
+      const r2 = await r.settled(group.id, second.replies[0]!.id);
+      expect(r2).toMatchObject({ status: "done", text: "seen 3 images" });
+
+      const third = await r.send(group.id, "plain text follow-up");
+      const r3 = await r.settled(group.id, third.replies[0]!.id);
+      expect(r3).toMatchObject({ status: "done", text: "seen 3 images" });
+
+      expect(requests).toHaveLength(3);
+      expect(r.traffic.in.some((f) => f.includes('"ch":"chunk"'))).toBe(true);
+      expect(r.traffic.out.some((f) => f.includes('"ch":"chunk"'))).toBe(true);
+      assertAllFramesBounded(r.traffic);
+    },
+    60_000,
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "steers a running remote turn with >8 MiB of images",
+    async () => {
+      process.env.HOME = await tempDir("eta-daemon-home-");
+      const first = gate();
+      const { models, requests } = scriptedModels(
+        async (request) => {
+          if (request.index === 0) {
+            await first.opened;
+            return say("first done");
+          }
+          return say(`steered with ${request.images} images`);
+        },
+        { vision: true },
+      );
+      const r = await remoteWorld({ models });
+      const { agents, group } = await r.agents("Ada");
+
+      const sent = await r.send(group.id, "start working");
+      const reply = sent.replies[0]!;
+      await r.settled(group.id, reply.id, ["working"]);
+      await until(() => requests.length === 1);
+
+      const mediumPng = noisePng(1250);
+      const att1 = await uploadImage(r, group.id, mediumPng, "s1.png");
+      const att2 = await uploadImage(r, group.id, mediumPng, "s2.png");
+      const steered = await r.send(group.id, "look at these while running", {
+        mode: "steer",
+        attachments: [att1.id, att2.id],
+      });
+      expect(steered.joined).toEqual([agents[0]!.id]);
+
+      first.open();
+      const done = await r.settled(group.id, reply.id);
+      expect(done).toMatchObject({
+        status: "done",
+        text: "steered with 2 images",
+      });
+      expect(requests[1]!.images).toBe(2);
+      expect(r.traffic.in.some((f) => f.includes('"ch":"chunk"'))).toBe(true);
+      expect(r.traffic.out.some((f) => f.includes('"ch":"chunk"'))).toBe(true);
+      assertAllFramesBounded(r.traffic);
+    },
+    60_000,
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "supports read_image, sessions.prompt, and sessions.image with >8 MiB base64 payloads",
+    async () => {
+      process.env.HOME = await tempDir("eta-daemon-home-");
+      let fileId = "";
+      const { models, requests } = scriptedModels(
+        (request) => {
+          if (request.last.includes("direct big image"))
+            return say("saw direct");
+          if (request.lastRole === "toolResult")
+            return say(`read ${request.images} images`);
+          return call("read_image", { file: fileId });
+        },
+        { vision: true },
+      );
+      const r = await remoteWorld({ models });
+      const { group } = await r.agents("Ada");
+
+      const bigPng = noisePng(1750);
+      const att = await uploadImage(r, group.id, bigPng, "giant.png");
+      fileId = att.id;
+      const sent = await r.send(group.id, "inspect with read_image", {
+        attachments: [att.id],
+      });
+      const done = await r.settled(group.id, sent.replies[0]!.id);
+      expect(done).toMatchObject({ status: "done", text: "read 2 images" });
+
+      const session = sessionOf(r, group.id)!;
+      const directBase64 = noisePng(1480).toString("base64");
+      expect(directBase64.length).toBeGreaterThan(LINK_LIMITS.maxFrameBytes);
+
+      await r.client.call("sessions", "prompt", {
+        session,
+        text: "direct big image",
+        images: [{ mime: "image/png", dataBase64: directBase64 }],
+      });
+      await until(() =>
+        requests.some((req) => req.last.includes("direct big image")),
+      );
+
+      let targetRow: ViewMessageRow | undefined;
+      await until(async () => {
+        const resynced = (await r.client.call("sessions", "resync", {
+          session,
+        })) as {
+          state: { sections: { transcript?: { messages: ViewMessageRow[] } } };
+        };
+        const rows = resynced.state.sections.transcript?.messages ?? [];
+        const hasReply = rows.some((row) =>
+          JSON.stringify(row.message).includes("saw direct"),
+        );
+        if (!hasReply) return false;
+        targetRow = rows.find((row) =>
+          JSON.stringify(row.message).includes("direct big image"),
+        );
+        return targetRow !== undefined;
+      });
+
+      const parts = (targetRow!.message as { content: { type?: string }[] })
+        .content;
+      const imageIndex = parts.findIndex((part) => part.type === "image");
+      expect(imageIndex).toBeGreaterThanOrEqual(0);
+
+      const fetched = (await r.client.call("sessions", "image", {
+        session,
+        entryId: targetRow!.entryId,
+        index: imageIndex,
+      })) as { mimeType: string; data: string };
+      expect(fetched).toEqual({ mimeType: "image/png", data: directBase64 });
+
+      expect(r.traffic.in.some((f) => f.includes('"ch":"chunk"'))).toBe(true);
+      expect(r.traffic.out.some((f) => f.includes('"ch":"chunk"'))).toBe(true);
+      assertAllFramesBounded(r.traffic);
+    },
+    60_000,
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "adds a visible not-shown note instead of failing or silently dropping an undecodable large image",
+    async () => {
+      process.env.HOME = await tempDir("eta-daemon-home-");
+      const { models, requests } = scriptedModels(() => say("acknowledged"), {
+        vision: true,
+      });
+      const r = await remoteWorld({ models });
+      const { group } = await r.agents("Ada");
+
+      const corrupt = Buffer.alloc(6 * 1024 * 1024);
+      crypto.getRandomValues(corrupt);
+      const att = await uploadImage(r, group.id, corrupt, "corrupt.png");
+      const sent = await r.send(group.id, "check this file", {
+        attachments: [att.id],
+      });
+      const done = await r.settled(group.id, sent.replies[0]!.id);
+      expect(done).toMatchObject({ status: "done", text: "acknowledged" });
+      expect(requests[0]!.images).toBe(0);
+      const transcript = requests[0]!.transcript.join("\n");
+      expect(transcript).toContain("corrupt.png");
+      expect(transcript).toContain("; not shown:");
+    },
+    60_000,
+  );
 });

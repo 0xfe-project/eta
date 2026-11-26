@@ -10,6 +10,7 @@
  * copy written on the daemon's machine through the link for a session there.
  */
 import type { AttachmentView } from "@eta/client-contracts";
+import type { ImageLimits } from "@eta/harness";
 import type { SshTransport } from "@eta/ssh";
 import type { Database } from "bun:sqlite";
 import { Buffer } from "node:buffer";
@@ -29,6 +30,7 @@ import {
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS,
 } from "@eta/client-contracts";
+import { DEFAULT_IMAGE_LIMITS } from "@eta/harness";
 import { shellQuote } from "@eta/ssh";
 import { fitImage } from "../images/fit";
 
@@ -107,9 +109,8 @@ const UPLOAD_ID =
 
 /** An upload nobody sent is forgotten after this long. */
 const UNSENT_TTL_MS = 24 * 60 * 60 * 1000;
-/** The images a run carries are the first this many, up to this many bytes in all. */
+/** The images a run carries are the first this many, each fitted for the model's limits. */
 const MAX_IMAGES = 4;
-const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 /** The largest picture the transcript fetches; one reply carries it whole. */
 const MAX_PICTURE_BYTES = 8 * 1024 * 1024;
 const IMAGE_TYPES = new Set([
@@ -356,53 +357,88 @@ export class AttachmentStore {
   }
 
   /**
-   * The images among `records` a model can be given in the prompt: the common formats, few and
-   * small enough to travel (over the link they share one frame). One over what is left of the
-   * budget is scaled down to fit (see `image`); one that cannot be, or cannot be read, is left out.
+   * The images among `records` a model can be given in the prompt: the common formats, up to
+   * `MAX_IMAGES`, each scaled down if needed to fit `limits`. Any image attachment that cannot be
+   * shown (unsupported format, over the per-turn count limit, unreadable, or unfittable) is
+   * recorded in `omitted` with its reason so the caller can tell the model instead of silently
+   * dropping it.
    */
   async images(
     records: readonly AttachmentRecord[],
-  ): Promise<{ mime: string; dataBase64: string }[]> {
+    limits: ImageLimits = DEFAULT_IMAGE_LIMITS,
+  ): Promise<{
+    images: { mime: string; dataBase64: string }[];
+    omitted: Map<string, string>;
+  }> {
     const images: { mime: string; dataBase64: string }[] = [];
-    let total = 0;
+    const omitted = new Map<string, string>();
     for (const record of records) {
-      if (images.length >= MAX_IMAGES) break;
-      if (!IMAGE_TYPES.has(record.contentType)) continue;
-      const bytes = await readFile(this.pathOf(record)).catch(() => undefined);
-      if (bytes === undefined) continue;
-      const fitted = await fitImage(
-        record.name,
-        record.contentType,
-        bytes,
-        MAX_IMAGE_BYTES - total,
-      ).catch(() => undefined);
-      if (fitted === undefined) continue;
-      total += fitted.bytes.byteLength;
-      images.push({
-        mime: fitted.mime,
-        dataBase64: fitted.bytes.toString("base64"),
-      });
+      if (!record.contentType.startsWith("image/")) continue;
+      if (!limits.mimeTypes.includes(record.contentType)) {
+        omitted.set(
+          record.id,
+          `${record.contentType} is not a format the model takes (${limits.mimeTypes.join(", ")})`,
+        );
+        continue;
+      }
+      if (images.length >= MAX_IMAGES) {
+        omitted.set(
+          record.id,
+          `at most ${MAX_IMAGES} images are shown per turn; use read_image to view it`,
+        );
+        continue;
+      }
+      let bytes: Buffer;
+      try {
+        bytes = await readFile(this.pathOf(record));
+      } catch (error) {
+        omitted.set(
+          record.id,
+          error instanceof Error ? error.message : String(error),
+        );
+        continue;
+      }
+      try {
+        const fitted = await fitImage(
+          record.name,
+          record.contentType,
+          bytes,
+          limits.maxBytes,
+          { maxSide: limits.maxSide },
+        );
+        images.push({
+          mime: fitted.mime,
+          dataBase64: fitted.bytes.toString("base64"),
+        });
+      } catch (error) {
+        omitted.set(
+          record.id,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
-    return images;
+    return { images, omitted };
   }
 
   /**
-   * One image as a model can be given it, scaled down when it is over the limit; throws why it
+   * One image as a model can be given it, scaled down when it is over `limits`; throws why it
    * cannot be, for a tool to say. The stored file stays as it was uploaded.
    */
   async image(
     record: AttachmentRecord,
+    limits: ImageLimits = DEFAULT_IMAGE_LIMITS,
   ): Promise<{ mime: string; dataBase64: string }> {
-    if (!IMAGE_TYPES.has(record.contentType))
+    if (!limits.mimeTypes.includes(record.contentType))
       throw new Error(
-        `${record.name} is ${record.contentType}, not an image a model takes (${[...IMAGE_TYPES].join(", ")})`,
+        `${record.name} is ${record.contentType}, not an image a model takes (${limits.mimeTypes.join(", ")})`,
       );
     const bytes = await readFile(this.pathOf(record));
     const fitted = await fitImage(
       record.name,
       record.contentType,
       bytes,
-      MAX_IMAGE_BYTES,
+      limits.maxBytes,
+      { maxSide: limits.maxSide },
     );
     return { mime: fitted.mime, dataBase64: fitted.bytes.toString("base64") };
   }
