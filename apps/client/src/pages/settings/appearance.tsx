@@ -21,6 +21,7 @@ import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, space } from "../../components/tokens";
 import { languageChoices, LanguageSettings, useText } from "../../i18n";
 import { pictureModes, PictureModes } from "../../services/picture-mode";
+import { processDetails, ProcessDetails } from "../../services/process-detail";
 
 /** A choice's menu and a typed value, beside their label off phones. */
 const menuWidth = 160;
@@ -39,6 +40,11 @@ const widthLabels = {
   wide: "full",
 } as const;
 export type ChatWidth = keyof typeof widthLabels;
+const processDetailLabels = {
+  brief: "processBrief",
+  standard: "standard",
+  detailed: "processDetailed",
+} as const;
 const paletteLabels = {
   default: "paletteDefault",
   catppuccin: "paletteCatppuccin",
@@ -286,6 +292,7 @@ export function Appearance(props: AppearanceProps & { phone: boolean }) {
   const language = LanguageSettings();
   const picker = ElementPicking();
   const pictures = PictureModes();
+  const process = ProcessDetails();
   return (
     <SmoothScroll style={grow} scrollbar={false}>
       <ChoiceRow
@@ -357,6 +364,15 @@ export function Appearance(props: AppearanceProps & { phone: boolean }) {
           text(mode === "compact" ? "picturesCompact" : "picturesExpanded")
         }
         set={pictures.set}
+      />
+      <ChoiceRow
+        title={text("processDetail")}
+        hint={text("processDetailHint")}
+        phone={props.phone}
+        choices={processDetails}
+        value={process.detail()}
+        name={(detail) => text(processDetailLabels[detail])}
+        set={process.set}
       />
       <FontRow kind="interface" phone={props.phone} onFonts={props.onFonts} />
       <FontRow kind="mono" phone={props.phone} onFonts={props.onFonts} />

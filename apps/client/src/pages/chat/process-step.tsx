@@ -13,6 +13,7 @@ import {
 import { Spinner } from "../../components/spinner";
 import { icon, layer, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { ProcessDetails } from "../../services/process-detail";
 import { ToolOutput } from "./run/tool-code";
 import { toolTitle } from "./run/transcript-line";
 
@@ -164,7 +165,8 @@ export function ProcessStep(props: { value: RunBlock }) {
 
 /**
  * A thought or something the agent said on the way: a small title that opens
- * to it. A thought starts folded, words start open, in small type.
+ * to it. Words start open, in small type; a thought starts folded, or open
+ * when the process shows in detail. Once toggled, the reader's choice holds.
  */
 function TextStep(props: {
   id: string;
@@ -173,9 +175,15 @@ function TextStep(props: {
 }) {
   const c = colors();
   const rowBox = stepRow();
-  // Toggled away from how it starts, for the step it was toggled on.
-  const toggled = signal<string | undefined>(undefined);
-  const open = () => (props.kind === "note") !== (toggled() === props.id);
+  const processDetail = ProcessDetails();
+  const opensAtFirst = () =>
+    props.kind === "note" || processDetail.detail() === "detailed";
+  // What the reader set it to, for the step they set.
+  const chosen = signal<{ id: string; open: boolean } | undefined>(undefined);
+  const open = () => {
+    const choice = chosen();
+    return choice?.id === props.id ? choice.open : opensAtFirst();
+  };
   const label = () =>
     uiText(props.kind === "thinking" ? "runThinking" : "processNote");
   return (
@@ -189,7 +197,7 @@ function TextStep(props: {
         accessibilityState={{ expanded: open() }}
         onPress={() => {
           if (open() && props.kind === "thinking") rowBox.reveal();
-          toggled.set(toggled() === props.id ? undefined : props.id);
+          chosen.set({ id: props.id, open: !open() });
         }}
         style={{
           ...row,
