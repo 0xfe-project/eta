@@ -278,4 +278,84 @@ describe("captain assignment turn", () => {
     // The user's Inbox lists it: the assignment did not start this turn.
     await until(() => inbox().some((item) => item.id === asked()!.id));
   });
+  it("keeps an assignment off the tasks a later turn makes without an assignee", async () => {
+    const told: string[] = [];
+    const { models } = scriptedModels((request) => {
+      if (request.agent !== "Ada") return say("ok");
+      if (request.lastRole === "toolResult") {
+        told.push(request.last);
+        if (request.last.includes("Unrelated own task"))
+          return call("draft_task", {
+            title: "Unrelated own draft",
+            goal: "Ada's own work",
+            acceptance: "Never the assignment's",
+            workspace: "local",
+          });
+        return say("done");
+      }
+      if (request.last.includes("for yourself"))
+        return call("create_task", {
+          title: "Unrelated own task",
+          description: "Ada's own work",
+          workspace: "local",
+        });
+      return call("create_task", {
+        title: "Ship the patch",
+        description: "Do the implementation",
+        workspace: "local",
+      });
+    });
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id], "unbound-turn");
+    await w.watch(group.id);
+    const captain = w.host.product.captain;
+
+    const assigned = await captain.assign({
+      conversationId: group.id,
+      text: "Ada, implement it.",
+      agentIds: [ada.id],
+    });
+    await w.settled(group.id, assigned.replyIds[0]!);
+    await until(
+      () =>
+        captain.store.assignment(assigned.assignment.id)!.targets[0]!.status ===
+        "working",
+    );
+
+    // The assignment's own turn: the task it makes is the assignment's.
+    const own = () =>
+      w.host.db
+        .query<{ captain_assignment_id: string | null }, []>(
+          "SELECT captain_assignment_id FROM task WHERE title = 'Ship the patch'",
+        )
+        .get();
+    await until(() => own() !== null);
+    expect(own()!.captain_assignment_id).toBe(assigned.assignment.id);
+
+    // A later turn the assignment did not start: naming nobody means the agent itself,
+    // not the assignment that is still open.
+    await w.send(group.id, "Ada, also do something else for yourself.");
+    const later = () =>
+      w.host.db
+        .query<{ captain_assignment_id: string | null }, []>(
+          "SELECT captain_assignment_id FROM task WHERE title = 'Unrelated own task'",
+        )
+        .get();
+    await until(() => later() !== null);
+    await until(() => told.length >= 3);
+    expect(later()!.captain_assignment_id).toBeNull();
+    const draft = w.rows(group.id).find((row) => row.kind === "task_draft")!;
+    expect(draft.data.captainAssignmentId).toBeUndefined();
+
+    // Nor does the assignment count a task it never asked for.
+    expect(
+      w.host.db
+        .query<{ task_count: number }, [string]>(
+          "SELECT task_count FROM captain_assignment_target WHERE assignment_id = ?",
+        )
+        .get(assigned.assignment.id)!.task_count,
+    ).toBe(1);
+  });
 });

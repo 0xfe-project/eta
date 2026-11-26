@@ -512,8 +512,12 @@ function conversationTools(
         const open = assignment();
         if (open?.forThisTurn === true && assignee !== undefined)
           throw new Error(DISPATCH_ASSIGNEE_ERROR);
-        // A task handed to another agent in some other turn is that agent's, not the assignment's.
-        const captain = assignee === undefined ? open : undefined;
+        // The assignment binds the turn it started, not the agent for as long as it stays open:
+        // a task a later turn makes, for itself or for another agent, is not the assignment's.
+        const captain =
+          assignee === undefined && open?.forThisTurn === true
+            ? open
+            : undefined;
         const row = board.draft({
           conversationId: who.conversationId,
           agentId: who.agentId,
@@ -596,7 +600,10 @@ function conversationTools(
         const open = assignment();
         if (open?.forThisTurn === true && assignee !== undefined)
           throw new Error(DISPATCH_ASSIGNEE_ERROR);
-        const captain = assignee === undefined ? open : undefined;
+        const captain =
+          assignee === undefined && open?.forThisTurn === true
+            ? open
+            : undefined;
         const task = board.create(
           {
             ...rest,
