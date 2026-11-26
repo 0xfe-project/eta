@@ -738,6 +738,15 @@ export class Market {
           secret: field.secret === true,
           required: field.required === true,
         })),
+        bundledAgents: plugin.agents.map(
+          ({ id, name, description, path, instructions }) => ({
+            id,
+            name,
+            description,
+            path,
+            instructions,
+          }),
+        ),
       };
     } finally {
       await rm(scratch, { recursive: true, force: true });

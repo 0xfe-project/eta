@@ -142,6 +142,18 @@ export interface PluginAgentView {
   name: string;
 }
 
+/** A bot/agent definition bundled inside a plugin (`agents/*.md`). */
+export interface PluginBundledAgentView {
+  /** Stable id derived from filename (e.g. `code-reviewer`). */
+  id: string;
+  name: string;
+  description: string;
+  /** Relative path inside the plugin (e.g. `agents/code-reviewer.md`). */
+  path: string;
+  /** Parsed instruction prompt body ready to import into a new agent. */
+  instructions: string;
+}
+
 export interface PluginView {
   name: string;
   /** Null for a plugin that could not be read, whose `name` is its directory's. */
@@ -168,6 +180,8 @@ export interface PluginView {
   env?: PluginEnvView[];
   /** The agents that have it enabled; they skip it while its state is `needs_config`. */
   agents: PluginAgentView[];
+  /** Bot/agent definitions bundled inside the plugin (`agents/*.md`). Absent from an older host. */
+  bundledAgents?: PluginBundledAgentView[];
 }
 
 /** An agent read a secret. The value is not here, nor anywhere else that keeps a record. */
@@ -588,4 +602,6 @@ export interface MarketPreview {
   layout: string | null;
   /** The values it will ask for after it is installed. */
   fields: { name: string; secret: boolean; required: boolean }[];
+  /** Bot/agent definitions bundled inside the plugin (`agents/*.md`). Absent from an older host. */
+  bundledAgents?: PluginBundledAgentView[];
 }
