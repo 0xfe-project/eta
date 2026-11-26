@@ -126,8 +126,10 @@ async function scriptedGeneration() {
       } satisfies AssistantMessageEvent,
     });
   };
-  emit("message:start", { runId: "r", turnId: "t" });
+  const start = () => emit("message:start", { runId: "r", turnId: "t" });
+  start();
   return {
+    start,
     frame,
     end(at: number, text: string, usage: Usage) {
       vi.setSystemTime(at);
@@ -156,6 +158,22 @@ it("estimates a streaming generation at most once a second, then reports its mea
   // 300 reported output tokens over the two seconds from first to last output.
   run.end(2000, "a".repeat(2000), { ...emptyUsage(), output: 300 });
   expect(run.rate()).toEqual({ tokensPerSec: 150, basis: "measured" });
+});
+
+it("shows no rate when a generation starts until its first estimate", async () => {
+  await using run = await scriptedGeneration();
+  run.frame(0, "a".repeat(4));
+  run.frame(2000, "a".repeat(800));
+  run.end(2000, "a".repeat(800), { ...emptyUsage(), output: 100 });
+  expect(run.rate()).toEqual({ tokensPerSec: 50, basis: "measured" });
+  // The next generation of the turn drops the last one's rate rather than showing it as its own.
+  run.start();
+  expect(run.rate()).toBeNull();
+  run.frame(3000, "a".repeat(4));
+  run.frame(3999, "a".repeat(400));
+  expect(run.rate()).toBeNull();
+  run.frame(4000, "a".repeat(800));
+  expect(run.rate()).toEqual({ tokensPerSec: 200, basis: "estimate" });
 });
 
 it("keeps an ended generation an estimate when the provider reports no output", async () => {
