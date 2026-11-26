@@ -253,7 +253,12 @@ jobs:
               ditto "$out/Eta.app" "$dmg/Eta.app"
               cp apps/client/dmg.json apps/client/dmg/background.png "$dmg/"
               iconutil -c icns apps/client/icon.iconset -o "$dmg/Eta.icns"
-              bunx appdmg@0.6.6 "$dmg/dmg.json" "$RUNNER_TEMP/try/$DESKTOP"
+              # npm, not bunx: appdmg 0.6.6 pulls macos-alias and ds-store, whose install
+              # scripts run `node-gyp rebuild`, and bun's installer cannot resolve node-gyp's
+              # executable — it fails the run with 'could not determine executable to run for
+              # package node-gyp' and then 'install script from macos-alias exited with 1'. npm
+              # ships node-gyp and puts it on the script's PATH.
+              npx --yes appdmg@0.6.6 "$dmg/dmg.json" "$RUNNER_TEMP/try/$DESKTOP"
               ;;
             linux)
               test -x "$out/Eta/nsh/eta-bootstrap"
