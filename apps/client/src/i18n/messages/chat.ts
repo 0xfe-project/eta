@@ -281,16 +281,6 @@ export const chatMessages = {
   queueThem: ["them", "他们"],
   queueSeparator: [", ", "、"],
   queueLabel: ["Queued message: {{text}}", "排队中的消息：{{text}}"],
-  queueSteer: ["Insert into this turn", "插入当前回合"],
-  queueSteerSeveral: ["Insert into the replies", "插入当前回复"],
-  queueSteerLabel: [
-    "Insert into this turn: {{text}}",
-    "插入当前回合：{{text}}",
-  ],
-  queueSteering: [
-    "Inserting into {{names}}'s turn…",
-    "正在插入 {{names}} 的这一轮…",
-  ],
   queuePullBack: ["Pull back to edit", "撤回到输入框"],
   queuePullBackLabel: [
     "Pull back into the box: {{text}}",
@@ -301,15 +291,6 @@ export const chatMessages = {
   queueDropLabel: ["Delete this one: {{text}}", "删除这条：{{text}}"],
   queueDropping: ["deleting…", "正在删除…"],
   queueTaken: ["{{names}} already read this one", "{{names}} 已经读到这条了"],
-  queueSteerIdle: [
-    "{{names}} has no reply to insert into; it stays queued",
-    "{{names}} 现在没有可以插入的回复，这条仍在排队",
-  ],
-  queueSteerEnded: [
-    "{{names}} just finished; this goes out as the next message",
-    "{{names}} 这一轮刚好结束，这条作为下一条发出",
-  ],
-  queueSteerFailed: ["Could not insert it: {{reason}}", "没能插入：{{reason}}"],
   queuePullFailed: [
     "Could not pull it back: {{reason}}",
     "没能撤回：{{reason}}",

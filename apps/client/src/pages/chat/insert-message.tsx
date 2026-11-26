@@ -1,4 +1,9 @@
 import type { ConversationResults, MessageView } from "@eta/client-contracts";
+import {
+  captainOutcomeOperationId,
+  captainProposalOf,
+  isCaptainOutcome,
+} from "@eta/client-contracts";
 import { effect, signal, View } from "nsh";
 import { Button, colors, Label, row } from "../../components";
 import {
@@ -13,48 +18,128 @@ import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { problemText } from "../../services/problem-text";
+import { reviewItemsOf } from "./captain-review";
+
+function isAnchorCandidate(message: MessageView): boolean {
+  if (message.data.event === "task_draft_decided" || isCaptainOutcome(message))
+    return false;
+  return (
+    message.author === "user" ||
+    reviewItemsOf(message).length > 0 ||
+    captainProposalOf(message) !== undefined ||
+    (message.author === "agent" && message.kind === "message")
+  );
+}
 
 export function indexInserts(messages: MessageView[]) {
-  const prompts = new Set(
-    messages.filter((m) => m.author === "user").map((m) => m.id),
+  const byId = new Map(messages.map((message) => [message.id, message]));
+  const proposalByOpId = new Map<string, string>();
+  for (const message of messages) {
+    const proposal = captainProposalOf(message);
+    if (proposal !== undefined)
+      proposalByOpId.set(proposal.operationId, message.id);
+  }
+  const anchors = new Set(
+    messages.filter(isAnchorCandidate).map((message) => message.id),
   );
+  const resolveFoldTarget = (message: MessageView): string | undefined => {
+    if (message.author !== "user" || typeof message.data.into !== "string")
+      return undefined;
+    let curId = message.data.into;
+    if (curId === message.id || !anchors.has(curId)) return undefined;
+    const seen = new Set<string>([message.id]);
+    for (let hops = 0; hops < 4; hops++) {
+      if (seen.has(curId)) break;
+      seen.add(curId);
+      const cur = byId.get(curId);
+      if (
+        cur !== undefined &&
+        cur.author === "user" &&
+        typeof cur.data.into === "string" &&
+        cur.data.into !== cur.id &&
+        anchors.has(cur.data.into)
+      ) {
+        curId = cur.data.into;
+        continue;
+      }
+      break;
+    }
+    return curId !== message.id && anchors.has(curId) ? curId : undefined;
+  };
   const additions = new Map<string, MessageView[]>();
-  const recipients = new Map<string, string[]>();
+  const foldedTo = new Map<string, string>();
   const rows = messages.filter((message) => {
     // Written for the agent that drafted the task to read: not shown.
     if (message.data.event === "task_draft_decided") return false;
-    const { into } = message.data;
-    if (
-      message.author === "user" &&
-      typeof into === "string" &&
-      prompts.has(into) &&
-      into !== message.id
-    ) {
-      const list = additions.get(into) ?? [];
+    const target = resolveFoldTarget(message);
+    if (target !== undefined) {
+      foldedTo.set(message.id, target);
+      const list = additions.get(target) ?? [];
       list.push(message);
-      additions.set(into, list);
+      additions.set(target, list);
       return false;
-    }
-    if (
-      message.agentId &&
-      message.replyToId &&
-      (message.status === "working" || message.status === "waiting_for_input")
-    ) {
-      const ids = recipients.get(message.replyToId) ?? [];
-      if (!ids.includes(message.agentId)) ids.push(message.agentId);
-      recipients.set(message.replyToId, ids);
     }
     return true;
   });
+  const visibleRows = new Set(rows.map((item) => item.id));
+  const resolveReplyAnchor = (message: MessageView): string => {
+    const trigger = message.replyToId ? byId.get(message.replyToId) : undefined;
+    const root = message.rootMessageId
+      ? byId.get(message.rootMessageId)
+      : undefined;
+    if (trigger !== undefined && isCaptainOutcome(trigger)) {
+      const opId = captainOutcomeOperationId(trigger);
+      return (opId ? proposalByOpId.get(opId) : undefined) ?? message.id;
+    }
+    if (trigger !== undefined) {
+      const folded = foldedTo.get(trigger.id);
+      if (folded !== undefined) return folded;
+      if (
+        visibleRows.has(trigger.id) &&
+        anchors.has(trigger.id) &&
+        trigger.author !== "agent"
+      )
+        return trigger.id;
+    }
+    if (root !== undefined) {
+      if (isCaptainOutcome(root)) {
+        const opId = captainOutcomeOperationId(root);
+        return (opId ? proposalByOpId.get(opId) : undefined) ?? message.id;
+      }
+      const folded = foldedTo.get(root.id);
+      if (folded !== undefined) return folded;
+      if (
+        visibleRows.has(root.id) &&
+        anchors.has(root.id) &&
+        root.author !== "agent"
+      )
+        return root.id;
+    }
+    return message.id;
+  };
+  const recipients = new Map<string, string[]>();
+  for (const message of rows) {
+    if (
+      message.author === "agent" &&
+      message.kind === "message" &&
+      message.agentId &&
+      (message.status === "working" || message.status === "waiting_for_input")
+    ) {
+      const anchorId = resolveReplyAnchor(message);
+      const ids = recipients.get(anchorId) ?? [];
+      if (!ids.includes(message.agentId)) ids.push(message.agentId);
+      recipients.set(anchorId, ids);
+    }
+  }
   return { rows, additions, recipients };
 }
 
 /**
  * The words to add to a turn that is still running, in the popover under the
- * user message it answers: the chat's text (`chatText`: formatted, long pastes
+ * message or card it answers: the chat's text (`chatText`: formatted, long pastes
  * folded; no `@` and no files, a steer carries text to the agents already
  * replying), who it goes to and the Insert button. Its draft is kept per
- * message, so closing the popover loses nothing.
+ * target row, so closing the popover loses nothing.
  */
 /** The insert popover: its width, the room it keeps while its draft loads, its editor's bounds. */
 const popoverWidth = 288;
@@ -163,7 +248,7 @@ function InsertBody(props: {
   const canSend = () =>
     !out.state().blank && !limits.tooLong() && host.state().status === "open";
   return (
-    <View style={{ width: popoverWidth }}>
+    <View testID="insert-popover" style={{ width: popoverWidth }}>
       <View style={{ padding: space[8], gap: space[4] }}>
         <If when={limits.tooLong()}>
           <Label variant="caption" tone="warning">

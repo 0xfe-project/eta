@@ -63,7 +63,7 @@ export function ConversationTimeline(props: {
   rail?: boolean;
   onPageOlder: () => void;
   onInsert: (message: MessageView) => void;
-  /** The user message whose insert popover is open. */
+  /** The message or card whose insert popover is open. */
   insertingId?: string;
   onInsertClose: () => void;
   insertPanel: () => JSX.Element;

@@ -145,12 +145,132 @@ function isCaptainDispatchMessage(message: MessageView): boolean {
   );
 }
 
+function InsertTrigger(props: {
+  canInsert: boolean;
+  inserting?: boolean;
+  align?: "start" | "end";
+  onInsert: () => void;
+  onInsertClose?: () => void;
+  insertPanel?: () => JSX.Element;
+}) {
+  const c = colors();
+  return (
+    <If when={props.canInsert || props.inserting}>
+      <Popover
+        open={props.inserting ?? false}
+        placement="bottom"
+        align={props.align ?? "end"}
+        offset={6}
+        margin={8}
+        onOpenChange={(open) => {
+          if (open) props.onInsert();
+          else props.onInsertClose?.();
+        }}
+        trigger={
+          <View
+            role="button"
+            accessibilityLabel={uiText("insertMessage")}
+            hoverStyle={{ borderColor: c().ink }}
+            focusVisibleStyle={focusRing(c())}
+            style={{
+              paddingVertical: 1,
+              paddingHorizontal: space[8],
+              borderWidth: 1,
+              borderColor: props.inserting ? c().ink : c().border,
+              cursor: "pointer",
+            }}
+          >
+            <Label
+              tracking="caps"
+              variant="caption"
+              tone={props.inserting ? "ink" : "muted"}
+              style={{ textTransform: "uppercase" }}
+            >
+              {uiText("insert")}
+            </Label>
+          </View>
+        }
+      >
+        <Compact>{props.insertPanel?.()}</Compact>
+      </Popover>
+    </If>
+  );
+}
+
+function InsertedRows(props: {
+  additions: MessageView[];
+  leadingDivider: boolean;
+  textOf: (message: MessageView) => Parameters<typeof chatText.View>[0]["text"];
+  plugins: Parameters<typeof chatText.View>[0]["plugins"];
+}) {
+  const c = colors();
+  return (
+    <Each of={props.additions} key={(addition) => addition.id}>
+      {(addition, index) => (
+        <View
+          style={{
+            gap: space[2],
+            ...(props.leadingDivider || index() > 0
+              ? {
+                  marginTop: space[8],
+                  paddingTop: space[8],
+                  borderTopWidth: 1,
+                  borderColor: c().border,
+                }
+              : {}),
+          }}
+        >
+          <Label variant="caption" tone="muted">
+            {uiText("inserted", {
+              clock: clock(addition().createdAt),
+            })}
+          </Label>
+          <chatText.View
+            text={props.textOf(addition())}
+            plugins={props.plugins}
+            label={uiText("insertedMessage")}
+          />
+        </View>
+      )}
+    </Each>
+  );
+}
+
+function InsertedBlock(props: {
+  additions: MessageView[];
+  phone: boolean;
+  textOf: (message: MessageView) => Parameters<typeof chatText.View>[0]["text"];
+  plugins: Parameters<typeof chatText.View>[0]["plugins"];
+}) {
+  const c = colors();
+  return (
+    <If when={props.additions.length > 0}>
+      <View
+        style={{
+          borderWidth: 1,
+          borderColor: c().border,
+          backgroundColor: props.phone ? c().selected : c().surface,
+          paddingVertical: space[8],
+          paddingHorizontal: space[12],
+        }}
+      >
+        <InsertedRows
+          additions={props.additions}
+          leadingDivider={false}
+          textOf={props.textOf}
+          plugins={props.plugins}
+        />
+      </View>
+    </If>
+  );
+}
+
 export function Message(props: {
   item: MessageView;
   additions: MessageView[];
   canInsert: boolean;
   onInsert: () => void;
-  /** The insert popover under this user message is open. */
+  /** The insert popover under this message or card is open. */
   inserting?: boolean;
   onInsertClose?: () => void;
   /** What the insert popover holds while it is open. */
@@ -444,30 +564,12 @@ export function Message(props: {
                 plugins={shown}
                 label={uiText("yourMessage")}
               />
-              <Each of={props.additions} key={(addition) => addition.id}>
-                {(addition) => (
-                  <View
-                    style={{
-                      gap: space[2],
-                      marginTop: space[8],
-                      paddingTop: space[8],
-                      borderTopWidth: 1,
-                      borderColor: c().border,
-                    }}
-                  >
-                    <Label variant="caption" tone="muted">
-                      {uiText("inserted", {
-                        clock: clock(addition().createdAt),
-                      })}
-                    </Label>
-                    <chatText.View
-                      text={stored(addition())}
-                      plugins={shown}
-                      label={uiText("insertedMessage")}
-                    />
-                  </View>
-                )}
-              </Each>
+              <InsertedRows
+                additions={props.additions}
+                leadingDivider={true}
+                textOf={stored}
+                plugins={shown}
+              />
             </LineRoom.Provider>
           </View>
           <If when={props.delivery}>
@@ -493,45 +595,14 @@ export function Message(props: {
               >
                 {stamp()}
               </Label>
-              <If when={props.canInsert || props.inserting}>
-                <Popover
-                  open={props.inserting ?? false}
-                  placement="bottom"
-                  align="end"
-                  offset={6}
-                  margin={8}
-                  onOpenChange={(open) => {
-                    if (open) props.onInsert();
-                    else props.onInsertClose?.();
-                  }}
-                  trigger={
-                    <View
-                      role="button"
-                      accessibilityLabel={uiText("insertMessage")}
-                      hoverStyle={{ borderColor: c().ink }}
-                      focusVisibleStyle={focusRing(c())}
-                      style={{
-                        paddingVertical: 1,
-                        paddingHorizontal: space[8],
-                        borderWidth: 1,
-                        borderColor: props.inserting ? c().ink : c().border,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <Label
-                        tracking="caps"
-                        variant="caption"
-                        tone={props.inserting ? "ink" : "muted"}
-                        style={{ textTransform: "uppercase" }}
-                      >
-                        {uiText("insert")}
-                      </Label>
-                    </View>
-                  }
-                >
-                  <Compact>{props.insertPanel?.()}</Compact>
-                </Popover>
-              </If>
+              <InsertTrigger
+                canInsert={props.canInsert}
+                inserting={props.inserting}
+                align="end"
+                onInsert={props.onInsert}
+                onInsertClose={props.onInsertClose}
+                insertPanel={props.insertPanel}
+              />
             </View>
           </If>
         </View>
@@ -730,7 +801,43 @@ export function Message(props: {
           </Card>
         </If>
       </If>
-      <If when={operation()}>{(op) => <Proposal operation={op()} />}</If>
+      <If when={operation()}>
+        {(op) => (
+          <View style={{ gap: space[4] }}>
+            <Proposal operation={op()} />
+            <InsertedBlock
+              additions={props.additions}
+              phone={props.phone}
+              textOf={stored}
+              plugins={shown}
+            />
+            <If when={props.canInsert || props.inserting}>
+              <View
+                style={{ ...row, justifyContent: "flex-end", gap: space[8] }}
+              >
+                <Label
+                  variant="caption"
+                  tone={props.phone ? "muted" : "faint"}
+                  tracking={props.phone ? undefined : "caps"}
+                  style={{
+                    textTransform: props.phone ? "none" : "uppercase",
+                  }}
+                >
+                  {stamp()}
+                </Label>
+                <InsertTrigger
+                  canInsert={props.canInsert}
+                  inserting={props.inserting}
+                  align="end"
+                  onInsert={props.onInsert}
+                  onInsertClose={props.onInsertClose}
+                  insertPanel={props.insertPanel}
+                />
+              </View>
+            </If>
+          </View>
+        )}
+      </If>
       <If
         when={
           item().author !== "user" &&
@@ -985,11 +1092,43 @@ export function Message(props: {
           }
         >
           {(items) => (
-            <CaptainReview
-              items={items()}
-              time={messageTime(item().createdAt, false)}
-              onPending={props.onPending}
-            />
+            <View style={{ gap: space[4] }}>
+              <CaptainReview
+                items={items()}
+                time={messageTime(item().createdAt, false)}
+                onPending={props.onPending}
+              />
+              <InsertedBlock
+                additions={props.additions}
+                phone={props.phone}
+                textOf={stored}
+                plugins={shown}
+              />
+              <If when={props.canInsert || props.inserting}>
+                <View
+                  style={{ ...row, justifyContent: "flex-end", gap: space[8] }}
+                >
+                  <Label
+                    variant="caption"
+                    tone={props.phone ? "muted" : "faint"}
+                    tracking={props.phone ? undefined : "caps"}
+                    style={{
+                      textTransform: props.phone ? "none" : "uppercase",
+                    }}
+                  >
+                    {stamp()}
+                  </Label>
+                  <InsertTrigger
+                    canInsert={props.canInsert}
+                    inserting={props.inserting}
+                    align="end"
+                    onInsert={props.onInsert}
+                    onInsertClose={props.onInsertClose}
+                    insertPanel={props.insertPanel}
+                  />
+                </View>
+              </If>
+            </View>
           )}
         </If>
         <If when={item().status === "stopped"}>
@@ -1038,6 +1177,14 @@ export function Message(props: {
             >
               {stamp()}
             </Label>
+            <InsertTrigger
+              canInsert={props.canInsert}
+              inserting={props.inserting}
+              align="start"
+              onInsert={props.onInsert}
+              onInsertClose={props.onInsertClose}
+              insertPanel={props.insertPanel}
+            />
             <If when={!active() && answer()}>
               <Button
                 label={uiText("copy")}
@@ -1072,6 +1219,14 @@ export function Message(props: {
               />
             </If>
           </View>
+        </If>
+        <If when={!review()}>
+          <InsertedBlock
+            additions={props.additions}
+            phone={props.phone}
+            textOf={stored}
+            plugins={shown}
+          />
         </If>
       </If>
       <If when={process()}>

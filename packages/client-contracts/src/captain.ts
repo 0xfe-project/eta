@@ -275,7 +275,7 @@ const LEGACY_OUTCOME_KEYS = ["captainGroupOutcome", "captainAgentOutcome"];
  * outcome this way, so a client from before the shared mark keeps skipping it.
  */
 const LEGACY_GROUP_OUTCOME =
-  /^Your proposed group "[\s\S]*" \(operation [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\) was (?:confirmed|rejected) by the user/;
+  /^Your proposed group "[\s\S]*" \(operation ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\) was (?:confirmed|rejected) by the user/;
 
 /** Whether a row is the message that tells Captain how a proposal it made ended; clients skip it. */
 export function isCaptainOutcome(
@@ -287,6 +287,40 @@ export function isCaptainOutcome(
     if (typeof outcome === "object" && outcome !== null) return true;
   }
   return LEGACY_GROUP_OUTCOME.test(message.text);
+}
+
+/** The operation id of a Captain proposal-outcome row, if present (including legacy rows). */
+export function captainOutcomeOperationId(
+  message: Pick<MessageView, "author" | "kind" | "text" | "data">,
+): string | undefined {
+  if (message.author !== "system" || message.kind !== "message")
+    return undefined;
+  for (const key of ["captainOutcome", ...LEGACY_OUTCOME_KEYS]) {
+    const outcome = message.data[key];
+    if (
+      typeof outcome === "object" &&
+      outcome !== null &&
+      "operationId" in outcome &&
+      typeof outcome.operationId === "string"
+    )
+      return outcome.operationId;
+  }
+  return LEGACY_GROUP_OUTCOME.exec(message.text)?.[1];
+}
+
+/** Whether a row is a Supervisor `<captain-review>` prompt row. */
+export function isCaptainReview(
+  message: Pick<MessageView, "author" | "kind" | "text" | "data">,
+): boolean {
+  if (message.author !== "system" || message.kind !== "message") return false;
+  if (
+    typeof message.data.captainReview === "object" &&
+    message.data.captainReview !== null
+  )
+    return true;
+  const open = message.text.indexOf("<captain-review>");
+  const close = message.text.lastIndexOf("</captain-review>");
+  return open >= 0 && close > open;
 }
 
 export interface CaptainPromptVersionView {

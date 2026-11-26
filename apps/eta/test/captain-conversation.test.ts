@@ -8,9 +8,10 @@ import type {
   ConversationSummary,
   MemberView,
 } from "@eta/client-contracts";
+import { captainProposalOf, isCaptainOutcome } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
-import { call, say, scriptedModels } from "./support/models";
+import { call, gate, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
 
 type World = Awaited<ReturnType<typeof world>>;
@@ -248,5 +249,352 @@ describe("tasks in captain's direct conversation", () => {
     const checked = await w.send(directId, "check subtask");
     const checkReply = await w.settled(directId, checked.replies[0]!.id);
     expect(checkReply.text).toContain("Direct-chat task");
+  });
+});
+
+describe("steering Captain turns", () => {
+  it("steers a <captain-review> turn with into=reviewRow.id and delivers the insert", async () => {
+    const first = gate();
+    const { models, requests } = scriptedModels(async (request) => {
+      if (request.agent === "Captain") {
+        if (!request.transcript.join("\n").includes("focus on #1")) {
+          await first.opened;
+          return say("checked review");
+        }
+        return say("focused on #1");
+      }
+      return say("ok");
+    });
+    const w = await world({
+      captain: true,
+      tasks: { runs: false },
+      models,
+    });
+    const direct = await w.host.product.captain.direct();
+    await w.watch(direct.conversationId);
+
+    w.host.product.captain.store.createReview({
+      kind: "task_stalled",
+      dedupeKey: "test:steer-review-into",
+      body: "Task #1 stalled.",
+    });
+    await w.host.product.captain.observeReviews();
+
+    await until(() =>
+      w
+        .rows(direct.conversationId)
+        .some(
+          (row) =>
+            row.author === "agent" &&
+            row.agentId === direct.agentId &&
+            row.status === "working",
+        ),
+    );
+    const reviewRow = w
+      .rows(direct.conversationId)
+      .find(
+        (row) =>
+          row.author === "system" && row.text.includes("<captain-review>"),
+      )!;
+    const reply = w
+      .rows(direct.conversationId)
+      .find(
+        (row) =>
+          row.author === "agent" &&
+          row.agentId === direct.agentId &&
+          row.status === "working",
+      )!;
+    await until(() => requests.length === 1);
+
+    const inserted = await w.send(direct.conversationId, "focus on #1", {
+      into: reviewRow.id,
+      mode: "steer",
+    });
+    expect(inserted.joined).toEqual([direct.agentId]);
+    expect(inserted.replies).toEqual([]);
+    expect(inserted.message.data).toMatchObject({ into: reviewRow.id });
+
+    first.open();
+    const done = await w.settled(direct.conversationId, reply.id);
+    expect(done.text).toBe("focused on #1");
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.transcript.join("\n")).toContain("focus on #1");
+  });
+
+  it("plain mode=steer on a <captain-review> turn anchors data.into on the review row", async () => {
+    const first = gate();
+    const { models, requests } = scriptedModels(async (request) => {
+      if (request.agent === "Captain") {
+        if (!request.transcript.join("\n").includes("also check logs")) {
+          await first.opened;
+          return say("checked review");
+        }
+        return say("checked with logs");
+      }
+      return say("ok");
+    });
+    const w = await world({
+      captain: true,
+      tasks: { runs: false },
+      models,
+    });
+    const direct = await w.host.product.captain.direct();
+    await w.watch(direct.conversationId);
+
+    w.host.product.captain.store.createReview({
+      kind: "task_stalled",
+      dedupeKey: "test:steer-review-plain",
+      body: "Task #2 stalled.",
+    });
+    await w.host.product.captain.observeReviews();
+
+    await until(() =>
+      w
+        .rows(direct.conversationId)
+        .some(
+          (row) =>
+            row.author === "agent" &&
+            row.agentId === direct.agentId &&
+            row.status === "working",
+        ),
+    );
+    const reviewRow = w
+      .rows(direct.conversationId)
+      .find(
+        (row) =>
+          row.author === "system" && row.text.includes("<captain-review>"),
+      )!;
+    const reply = w
+      .rows(direct.conversationId)
+      .find(
+        (row) =>
+          row.author === "agent" &&
+          row.agentId === direct.agentId &&
+          row.status === "working",
+      )!;
+    await until(() => requests.length === 1);
+
+    const steered = await w.send(direct.conversationId, "also check logs", {
+      mode: "steer",
+    });
+    expect(steered.joined).toEqual([direct.agentId]);
+    expect(steered.replies).toEqual([]);
+    expect(steered.message.data).toMatchObject({ into: reviewRow.id });
+
+    first.open();
+    const done = await w.settled(direct.conversationId, reply.id);
+    expect(done.text).toBe("checked with logs");
+  });
+
+  it("steers a captainOutcome turn via into=proposalCardRow.id and via plain mode=steer", async () => {
+    const first = gate();
+    const second = gate();
+    const { models, requests } = scriptedModels(async (request) => {
+      if (request.agent === "Captain") {
+        const seen = request.transcript.join("\n");
+        if (!seen.includes("Docs")) {
+          if (seen.includes("adjust goal")) return say("goal adjusted");
+          await first.opened;
+          return say("noted one");
+        }
+        if (seen.includes("hold on")) return say("holding on");
+        await second.opened;
+        return say("noted two");
+      }
+      return say("ok");
+    });
+    const w = await world({
+      captain: true,
+      tasks: { runs: false },
+      models,
+    });
+    const ada = await w.agent("Ada");
+    const project = await w.project();
+    const direct = await w.host.product.captain.direct();
+    await w.watch(direct.conversationId);
+
+    const proposedOne = await w.host.product.captain.proposals.propose(
+      w.host.product.captain.propose.group,
+      {
+        name: "Launch",
+        projectId: project.id,
+        memberIds: [ada.id],
+        stewardId: ada.id,
+      },
+      direct.conversationId,
+    );
+    await w.client.call("captain", "decideOperation", {
+      operationId: proposedOne.operation.id,
+      decision: "reject",
+    });
+
+    await until(() =>
+      w
+        .rows(direct.conversationId)
+        .some(
+          (row) =>
+            row.author === "agent" &&
+            row.agentId === direct.agentId &&
+            row.status === "working",
+        ),
+    );
+    await until(() => requests.length === 1);
+    const replyOne = w
+      .rows(direct.conversationId)
+      .find(
+        (row) =>
+          row.author === "agent" &&
+          row.agentId === direct.agentId &&
+          row.status === "working",
+      )!;
+    expect(w.rows(direct.conversationId).find(isCaptainOutcome)).toBeDefined();
+    expect(
+      w
+        .rows(direct.conversationId)
+        .find((row) => captainProposalOf(row) !== undefined)?.id,
+    ).toBe(proposedOne.messageId);
+
+    const inserted = await w.send(direct.conversationId, "adjust goal", {
+      into: proposedOne.messageId,
+      mode: "steer",
+    });
+    expect(inserted.joined).toEqual([direct.agentId]);
+    expect(inserted.replies).toEqual([]);
+    expect(inserted.message.data).toMatchObject({
+      into: proposedOne.messageId,
+    });
+
+    first.open();
+    const doneOne = await w.settled(direct.conversationId, replyOne.id);
+    expect(doneOne.text).toBe("goal adjusted");
+
+    // Second proposal: plain mode=steer resolves captainOutcome -> proposalCardRow.id.
+    const proposedTwo = await w.host.product.captain.proposals.propose(
+      w.host.product.captain.propose.group,
+      {
+        name: "Docs",
+        projectId: project.id,
+        memberIds: [ada.id],
+        stewardId: ada.id,
+      },
+      direct.conversationId,
+    );
+    await w.client.call("captain", "decideOperation", {
+      operationId: proposedTwo.operation.id,
+      decision: "reject",
+    });
+
+    await until(() =>
+      w
+        .rows(direct.conversationId)
+        .some(
+          (row) =>
+            row.author === "agent" &&
+            row.agentId === direct.agentId &&
+            row.status === "working",
+        ),
+    );
+    await until(() => requests.length >= 3);
+    const replyTwo = w
+      .rows(direct.conversationId)
+      .find(
+        (row) =>
+          row.author === "agent" &&
+          row.agentId === direct.agentId &&
+          row.status === "working",
+      )!;
+
+    const steered = await w.send(direct.conversationId, "hold on", {
+      mode: "steer",
+    });
+    expect(steered.joined).toEqual([direct.agentId]);
+    expect(steered.replies).toEqual([]);
+    expect(steered.message.data).toMatchObject({ into: proposedTwo.messageId });
+
+    second.open();
+    const doneTwo = await w.settled(direct.conversationId, replyTwo.id);
+    expect(doneTwo.text).toBe("holding on");
+  });
+
+  it("falls back to reply.id when a captainOutcome lands without its proposal card in the conversation", async () => {
+    const first = gate();
+    const { models, requests } = scriptedModels(async (request) => {
+      if (request.agent === "Captain") {
+        const seen = request.transcript.join("\n");
+        if (seen.includes("use fallback")) return say("used fallback");
+        if (!seen.includes("hold on")) {
+          await first.opened;
+          return say("noted");
+        }
+        return say("still working");
+      }
+      return say("ok");
+    });
+    const w = await world({
+      captain: true,
+      tasks: { runs: false },
+      models,
+    });
+    const ada = await w.agent("Ada");
+    const project = await w.project();
+    const direct = await w.host.product.captain.direct();
+    const originGroup = await w.group(project.id, [ada.id, direct.agentId]);
+    await w.watch(direct.conversationId);
+
+    const proposed = await w.host.product.captain.proposals.propose(
+      w.host.product.captain.propose.group,
+      {
+        name: "ArchivedOrigin",
+        projectId: project.id,
+        memberIds: [ada.id],
+        stewardId: ada.id,
+      },
+      originGroup.id,
+    );
+    await w.client.call("conversations", "update", {
+      conversationId: originGroup.id,
+      archived: true,
+    });
+    await w.client.call("captain", "decideOperation", {
+      operationId: proposed.operation.id,
+      decision: "reject",
+    });
+
+    await until(() =>
+      w
+        .rows(direct.conversationId)
+        .some(
+          (row) =>
+            row.author === "agent" &&
+            row.agentId === direct.agentId &&
+            row.status === "working",
+        ),
+    );
+    const reply = w
+      .rows(direct.conversationId)
+      .find(
+        (row) =>
+          row.author === "agent" &&
+          row.agentId === direct.agentId &&
+          row.status === "working",
+      )!;
+    await until(() => requests.length === 1);
+
+    const plainSteered = await w.send(direct.conversationId, "hold on", {
+      mode: "steer",
+    });
+    expect(plainSteered.joined).toEqual([direct.agentId]);
+    expect(plainSteered.message.data).toMatchObject({ into: reply.id });
+
+    const directSteered = await w.send(direct.conversationId, "use fallback", {
+      into: reply.id,
+      mode: "steer",
+    });
+    expect(directSteered.joined).toEqual([direct.agentId]);
+    expect(directSteered.message.data).toMatchObject({ into: reply.id });
+
+    first.open();
+    const done = await w.settled(direct.conversationId, reply.id);
+    expect(done.text).toBe("used fallback");
   });
 });

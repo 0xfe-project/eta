@@ -192,6 +192,152 @@ describe("a message that arrives while the agent is answering", () => {
     await w.settled(group.id, sent.replies[0]!.id);
   });
 
+  it("put into the root prompt during an @mention chain joins the mentioned agent answering it", async () => {
+    const bobGate = gate();
+    const { models, requests } = scriptedModels(async (request) => {
+      if (request.agent === "Ada") {
+        return request.lastRole === "toolResult"
+          ? say("Asked Bob.")
+          : call("mention", { agents: ["Bob"], message: "check tests" });
+      }
+      if (!request.transcript.join("\n").includes("also check Safari")) {
+        await bobGate.opened;
+        return say("Bob checked.");
+      }
+      return say("Bob checked Safari too.");
+    });
+    const w = await world({ models });
+    const adaAgent = await w.agent("Ada");
+    const bobAgent = await w.agent("Bob");
+    const project = await w.project();
+    const group = await w.group(project.id, [adaAgent.id, bobAgent.id]);
+    await w.watch(group.id);
+
+    const asked = await w.send(group.id, "please review");
+    await w.settled(group.id, asked.replies[0]!.id);
+    await until(() =>
+      w
+        .rows(group.id)
+        .some(
+          (row) =>
+            row.author === "agent" &&
+            row.agentId === bobAgent.id &&
+            row.status === "working",
+        ),
+    );
+    const bobReply = w
+      .rows(group.id)
+      .find((row) => row.author === "agent" && row.agentId === bobAgent.id)!;
+    await until(() => requests.some((request) => request.agent === "Bob"));
+
+    const inserted = await w.send(group.id, "also check Safari", {
+      into: asked.message.id,
+      mode: "steer",
+    });
+    expect(inserted.joined).toEqual([bobAgent.id]);
+    expect(inserted.replies).toEqual([]);
+    expect(inserted.message.data).toMatchObject({ into: asked.message.id });
+
+    bobGate.open();
+    const done = await w.settled(group.id, bobReply.id);
+    expect(done.text).toBe("Bob checked Safari too.");
+  });
+
+  it("put into an active reply directly joins that reply and anchors data.into to it", async () => {
+    const first = gate();
+    const { models, requests } = scriptedModels(async (request) => {
+      if (request.index === 0) {
+        await first.opened;
+        return say("on it");
+      }
+      return say("adjusted reply");
+    });
+    const w = await world({ models });
+    const { agent, group } = await ada(w);
+
+    const asked = await w.send(group.id, "start task");
+    const reply = asked.replies[0]!;
+    await w.settled(group.id, reply.id, ["working"]);
+    await until(() => requests.length === 1);
+
+    const inserted = await w.send(group.id, "focus on edge cases", {
+      into: reply.id,
+      mode: "steer",
+    });
+    expect(inserted.joined).toEqual([agent.id]);
+    expect(inserted.replies).toEqual([]);
+    expect(inserted.message.data).toMatchObject({ into: reply.id });
+
+    first.open();
+    const done = await w.settled(group.id, reply.id);
+    expect(done.text).toBe("adjusted reply");
+  });
+
+  it("rejects into for held rows and rows from another conversation", async () => {
+    const first = gate();
+    const { models } = scriptedModels(async (request) => {
+      if (request.index === 0) {
+        await first.opened;
+        return say("on it");
+      }
+      return say("done");
+    });
+    const w = await world({ models });
+    const { project, agent, group } = await ada(w);
+    const other = await w.group(project.id, [agent.id]);
+    await w.watch(other.id);
+
+    const one = await w.send(group.id, "first");
+    await w.settled(group.id, one.replies[0]!.id, ["working"]);
+    const held = await w.send(group.id, "queued");
+    await until(() => w.held(group.id).length === 1);
+
+    await expect(
+      w.send(group.id, "into held", { into: held.message.id, mode: "steer" }),
+    ).rejects.toThrow(/in this conversation/);
+    await expect(
+      w.send(other.id, "cross chat", { into: one.message.id, mode: "steer" }),
+    ).rejects.toThrow(/in this conversation/);
+
+    first.open();
+    await w.settled(group.id, one.replies[0]!.id);
+    await w.settled(group.id, held.replies[0]!.id);
+  });
+
+  it("plain steer into a reply whose trigger is non-visible anchors data.into on the reply row", async () => {
+    const first = gate();
+    const { models, requests } = scriptedModels(async (request) => {
+      if (request.index === 0) {
+        await first.opened;
+        return say("on it");
+      }
+      return say("steered ok");
+    });
+    const w = await world({ models });
+    const { agent, group } = await ada(w);
+
+    const hiddenTrigger = await w.host.product.engine.send({
+      conversationId: group.id,
+      text: "The user confirmed the task draft.",
+      author: "system",
+      data: { event: "task_draft_decided" },
+      mentions: [agent.id],
+      mode: "queue",
+    });
+    const reply = hiddenTrigger.replies[0]!;
+    await w.settled(group.id, reply.id, ["working"]);
+    await until(() => requests.length === 1);
+
+    const steered = await w.send(group.id, "keep it brief", { mode: "steer" });
+    expect(steered.joined).toEqual([agent.id]);
+    expect(steered.replies).toEqual([]);
+    expect(steered.message.data).toMatchObject({ into: reply.id });
+
+    first.open();
+    const done = await w.settled(group.id, reply.id);
+    expect(done.text).toBe("steered ok");
+  });
+
   it("queue gets a reply of its own, which waits for the one before it", async () => {
     const first = gate();
     const order: string[] = [];

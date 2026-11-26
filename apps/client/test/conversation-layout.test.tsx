@@ -78,10 +78,11 @@ for (const [name, width, height] of sizes)
       urlScheme: "eta://fixture/held",
     });
     // Above the box, not in the conversation: neither the words nor the
-    // empty reply the host queued for them.
+    // empty reply the host queued for them, and no legacy steer-from-queue button.
     expect(app.shows(`${composer} >> label:Queued message: Queued words`)).toBe(
       true,
     );
+    expect(app.shows(`${composer} >> text:Insert into this turn`)).toBe(false);
     expect(app.shows(`${messages} >> text:Queued words`)).toBe(false);
     expect(app.shows(`${messages} >> text:Queued`)).toBe(false);
     await app.press("label:Deliver");
@@ -90,24 +91,57 @@ for (const [name, width, height] of sizes)
   });
 
 for (const [name, width, height] of sizes)
-  test(`inserted from the queue, a message is drawn in the one whose turn it joined, not as a row of its own (${name})`, async () => {
+  test(`inserted via the inline popover, a message renders under the target message before the reply (${name})`, async () => {
     const app = await open(fixture, {
       width,
       height,
       locale: "en-US",
       urlScheme: "eta://fixture/held",
     });
-    await app.press("label:Insert into this turn: Queued words");
-    await app.waitFor(`${messages} >> text:Queued words`);
-    expect(app.shows("label:Queued message: Queued words")).toBe(false);
-    // Once, and in "ping"'s insert block: under it, before Ada's reply to it.
-    expect(app.count(`${messages} >> text:Queued words`)).toBe(1);
+    await app.press("role:button[Insert message]");
+    await app.waitFor("id:insert-popover");
+    await app.type("id:insert-popover >> id:eta-editor", "Clarify scope");
+    await app.press("id:insert-popover >> label:Insert");
+    await app.waitFor(`${messages} >> text:Clarify scope`);
+    expect(app.shows('text:{"into":"m1","mode":"steer"}')).toBe(true);
+    expect(app.count(`${messages} >> text:Clarify scope`)).toBe(1);
     const texts = app.texts();
     const inserted = texts.findIndex((text) =>
       /^inserted · /i.test(text.replace(/^· /, "")),
     );
     expect(inserted).toBeGreaterThan(texts.indexOf("ping"));
-    expect(texts.indexOf("Queued words")).toBe(inserted + 1);
+    expect(texts.indexOf("Clarify scope")).toBe(inserted + 1);
+  });
+
+for (const [name, width, height] of [
+  ["desktop", 1440, 900],
+  ["phone", 390, 844],
+] as const)
+  test(`Captain review card offers inline Insert and renders Inserted below the card before Captain's reply (${name})`, async () => {
+    const app = await open(fixture, {
+      width,
+      height,
+      locale: "en-US",
+      urlScheme: "eta://fixture/captain-review",
+    });
+    await app.waitFor(`${messages} >> text:Task #7 stalled`);
+    expect(app.shows(`${messages} >> role:button[Insert message]`)).toBe(true);
+    await app.press(`${messages} >> role:button[Insert message]`);
+    await app.waitFor("id:insert-popover");
+    await app.type("id:insert-popover >> id:eta-editor", "Focus on #7 first");
+    await app.press("id:insert-popover >> label:Insert");
+    await app.waitFor(`${messages} >> text:Focus on #7 first`);
+    expect(app.shows('text:{"into":"r1","mode":"steer"}')).toBe(true);
+    expect(app.count(`${messages} >> text:Focus on #7 first`)).toBe(1);
+    const texts = app.texts();
+    const inserted = texts.findIndex((text) =>
+      /^inserted · /i.test(text.replace(/^· /, "")),
+    );
+    expect(inserted).toBeGreaterThan(texts.indexOf("Task #7 stalled"));
+    expect(texts.indexOf("Focus on #7 first")).toBe(inserted + 1);
+    expect(texts.indexOf("Working…")).toBeGreaterThan(
+      texts.indexOf("Focus on #7 first"),
+    );
   });
 
 test("the desktop panel remembers both positions and never marks its button with pending work", async () => {

@@ -117,15 +117,6 @@ export function conversationsPlugin(
           return { result: { conversationId: id, recalled } };
         }),
 
-        wire.handle("conversations", "steerHeld", async (call) => {
-          const args = new Args(call);
-          const id = args.string("conversationId");
-          existing(id);
-          return {
-            result: await engine.steerHeld(id, args.string("messageId")),
-          };
-        }),
-
         wire.handle("conversations", "update", (call) => {
           const args = new Args(call);
           const id = args.string("conversationId");

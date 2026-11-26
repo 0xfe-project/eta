@@ -3,7 +3,6 @@ import type {
   MessageView,
   PromptImage,
   SendResult,
-  SteerHeldResult,
 } from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { AskObserver, ImageLimits } from "@eta/harness";
@@ -38,7 +37,13 @@ import type { ConversationPolicies } from "./policy";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
 import { homedir } from "node:os";
-import { isExternalRuntime } from "@eta/client-contracts";
+import {
+  captainOutcomeOperationId,
+  captainProposalOf,
+  isCaptainOutcome,
+  isCaptainReview,
+  isExternalRuntime,
+} from "@eta/client-contracts";
 import { heldFor } from "@eta/client-contracts/routing";
 import { kernelOn } from "@eta/core";
 import { lastSeq, LinkError, listen } from "@eta/daemon";
@@ -565,84 +570,6 @@ export class Engine {
     return recalled;
   }
 
-  /**
-   * Put a held message into the turns in flight, as if it had been sent with `steer`. One step on
-   * the host rather than a recall and a send from the client: the check that it is still held and
-   * taking it out of the queue are one transaction (`Timeline.steerOut`), so a lane that read it
-   * first makes this a no-op instead of a second copy of the words.
-   *
-   * The agents it joins are the ones it was waiting for (`data.woke`) that have a turn to join.
-   * None of them (a turn being stopped, a lane between replies) leaves it held. A join that fails
-   * because the turn ended under it gets a reply of its own, as `send` does.
-   */
-  async steerHeld(
-    conversationId: string,
-    messageId: string,
-  ): Promise<SteerHeldResult> {
-    const conversation = this.#requireConversation(conversationId);
-    const row = this.#timeline.get(messageId);
-    const none = { conversationId, joined: [], replies: [], dropped: [] };
-    // Another conversation's message is a wrong call, not one a lane got to first.
-    if (row !== undefined && row.conversationId !== conversationId)
-      throw new Error(`no message ${messageId} in this conversation`);
-    if (row === undefined || row.data.held === undefined)
-      return { ...none, steered: false, reason: "taken" };
-    const waitingFor = Array.isArray(row.data.woke)
-      ? (row.data.woke as string[])
-      : [];
-    const joining = waitingFor.filter((agentId) =>
-      this.#joinable(conversationId, agentId),
-    );
-    if (joining.length === 0)
-      return { ...none, steered: false, reason: "idle" };
-    const into =
-      row.author === "user"
-        ? this.#insertTarget(conversationId, joining)
-        : undefined;
-    const out = this.#timeline.steerOut(messageId, joining, into);
-    if (out === undefined) return { ...none, steered: false, reason: "taken" };
-    this.#changed([conversationId]);
-
-    const joined: string[] = [];
-    const replies: MessageView[] = [];
-    for (const agentId of joining) {
-      try {
-        await this.#join(conversation, agentId, out.message);
-        joined.push(agentId);
-      } catch (error) {
-        this.#warn(`[eta] could not steer ${agentId}: ${String(error)}`);
-        replies.push(
-          this.#timeline.queueReply(conversationId, agentId, out.message),
-        );
-      }
-    }
-    if (joined.length !== joining.length) {
-      // Joined by some: still drawn in the message it went into, and the replies of the rest come
-      // after it as any queued reply does. Joined by none: a message of its own (`send` too).
-      const { into: _into, ...rest } = out.message.data;
-      this.#timeline.setData(messageId, {
-        ...(joined.length > 0 ? out.message.data : rest),
-        woke: [
-          ...(out.message.data.woke as string[]),
-          ...replies.map((reply) => reply.agentId!),
-        ],
-        joined,
-      });
-    }
-    for (const reply of replies)
-      this.#schedule(conversationId, reply.agentId!, reply.id);
-    this.#changed([conversationId]);
-    return {
-      conversationId,
-      steered: joined.length > 0,
-      ...(joined.length > 0 ? {} : { reason: "ended" as const }),
-      joined,
-      message: this.#timeline.get(messageId)!,
-      replies: replies.map((reply) => this.#timeline.get(reply.id)!),
-      dropped: out.dropped,
-    };
-  }
-
   async send(input: {
     conversationId: string;
     text: string;
@@ -679,8 +606,8 @@ export class Engine {
     mentions: readonly string[];
     mode: "queue" | "steer";
     /**
-     * A user message whose turns this one is put into (`ConversationArgs["send"]["into"]`): it
-     * goes to every agent answering that message right now, whatever `mentions` and `mode` say,
+     * A non-held message or card whose turns this one is put into (`ConversationArgs["send"]["into"]`):
+     * it goes to every agent answering that target right now, whatever `mentions` and `mode` say,
      * and is recorded as `data.into`. With nobody answering it any more, it is sent as `mentions`
      * and `mode: "queue"` would have it, without the mark.
      */
@@ -697,11 +624,9 @@ export class Engine {
       if (
         target === undefined ||
         target.conversationId !== conversation.id ||
-        target.author !== "user"
+        target.data.held !== undefined
       )
-        throw new Error(
-          `no message ${input.into} of yours in this conversation`,
-        );
+        throw new Error(`no message ${input.into} in this conversation`);
       const answering = this.answering(conversation.id, target.id);
       if (answering.length > 0) {
         into = target.id;
@@ -829,7 +754,7 @@ export class Engine {
     }
     if (joined.length !== planned.filter((p) => p.join).length) {
       // Joined by some, it stays in the message it was put into and the replies of the rest come
-      // after it, as `steerHeld` has it. Joined by none, it is not part of that message any more:
+      // after it. Joined by none, it is not part of that message any more:
       // it reads as its own message, with its replies under it.
       const { into: _into, ...rest } = message.data;
       this.#timeline.setData(message.id, {
@@ -855,29 +780,79 @@ export class Engine {
   }
 
   /**
-   * The agents answering a message right now, with a turn that can be steered: their reply in
-   * flight is the one that message woke (`replyToId`), in the order they were woken.
+   * The agents answering a message or card right now, with a turn that can be steered: their reply
+   * in flight answers `targetId` directly, through an @mention chain or `data.into` chain, through
+   * a proposal's `captainOutcome` row, or directly as the reply row itself, in wake order.
    */
-  answering(conversationId: string, messageId: string): string[] {
-    return this.#timeline
-      .repliesTo(messageId)
-      .flatMap((reply) =>
-        reply.agentId !== null &&
-        this.#running.get(keyOf(conversationId, reply.agentId))?.replyId ===
-          reply.id &&
-        this.#joinable(conversationId, reply.agentId)
-          ? [reply.agentId]
-          : [],
-      );
+  answering(conversationId: string, targetId: string): string[] {
+    const target = this.#timeline.get(targetId);
+    if (
+      target === undefined ||
+      target.conversationId !== conversationId ||
+      target.data.held !== undefined
+    )
+      return [];
+    const targetProposalOpId = captainProposalOf(target)?.operationId;
+    const seen = new Set<string>();
+    const agents: string[] = [];
+    for (const reply of this.#timeline.active(conversationId)) {
+      if (
+        reply.agentId === null ||
+        seen.has(reply.agentId) ||
+        this.#running.get(keyOf(conversationId, reply.agentId))?.replyId !==
+          reply.id ||
+        !this.#joinable(conversationId, reply.agentId)
+      )
+        continue;
+      const directOrRoot =
+        reply.replyToId === target.id ||
+        reply.rootMessageId === target.id ||
+        this.#followInto(
+          reply.rootMessageId === null
+            ? undefined
+            : this.#timeline.get(reply.rootMessageId),
+        )?.id === target.id;
+      const directReply = reply.id === target.id;
+      let proposalOutcome = false;
+      if (targetProposalOpId !== undefined) {
+        const trigger =
+          reply.replyToId === null
+            ? undefined
+            : this.#timeline.get(reply.replyToId);
+        const root =
+          reply.rootMessageId === null
+            ? undefined
+            : this.#timeline.get(reply.rootMessageId);
+        proposalOutcome =
+          (trigger !== undefined &&
+            captainOutcomeOperationId(trigger) === targetProposalOpId) ||
+          (root !== undefined &&
+            captainOutcomeOperationId(root) === targetProposalOpId);
+      }
+      if (!directOrRoot && !directReply && !proposalOutcome) continue;
+      seen.add(reply.agentId);
+      agents.push(reply.agentId);
+    }
+    return agents;
+  }
+
+  #followInto(row: MessageView | undefined): MessageView | undefined {
+    let cur = row;
+    for (let hops = 0; hops < 4 && typeof cur?.data.into === "string"; hops++) {
+      const next = this.#timeline.get(cur.data.into);
+      if (next === undefined || next.id === cur.id) break;
+      cur = next;
+    }
+    return cur;
   }
 
   /**
-   * The user message a steer into `agentIds`' turns is drawn in (`data.into`), as an Insert from
-   * that message's popover is: the message each turn answers — its reply's root, so a reply an
-   * @mention woke counts as answering the message that started the exchange. A root that was
-   * itself drawn in another message stands for that one. Turns answering different messages put
-   * it in the latest of them: the one nearest where it was written, so it does not jump up the
-   * transcript (or out of the loaded part of it). Undefined when no turn answers a user message.
+   * The visible anchor a steer into `agentIds`' turns is drawn in (`data.into`), as an Insert from
+   * that row's popover is: the visible user message, `<captain-review>` card, or `captain_proposal`
+   * card each turn answers (falling back to the reply row itself when no visible prompt exists).
+   * A root that was itself drawn in another row stands for that one. Turns answering different
+   * anchors put it in the latest of them: the one nearest where it was written, so it does not jump
+   * up the transcript (or out of the loaded part of it).
    */
   #insertTarget(
     conversationId: string,
@@ -888,24 +863,35 @@ export class Engine {
       const running = this.#running.get(keyOf(conversationId, agentId));
       const reply =
         running === undefined ? undefined : this.#timeline.get(running.replyId);
-      let root =
-        reply?.rootMessageId == null
-          ? undefined
-          : this.#timeline.get(reply.rootMessageId);
-      for (
-        let hops = 0;
-        hops < 4 && typeof root?.data.into === "string";
-        hops++
-      )
-        root = this.#timeline.get(root.data.into);
-      if (
-        root === undefined ||
-        root.conversationId !== conversationId ||
-        root.author !== "user" ||
-        root.data.held !== undefined
-      )
+      if (reply === undefined || reply.conversationId !== conversationId)
         continue;
-      if (target === undefined || root.seq > target.seq) target = root;
+      const root = this.#followInto(
+        reply.rootMessageId == null
+          ? undefined
+          : this.#timeline.get(reply.rootMessageId),
+      );
+      let anchor: MessageView = reply;
+      if (
+        root !== undefined &&
+        root.conversationId === conversationId &&
+        root.data.held === undefined
+      ) {
+        if (
+          root.author === "user" ||
+          isCaptainReview(root) ||
+          captainProposalOf(root) !== undefined
+        )
+          anchor = root;
+        else if (isCaptainOutcome(root)) {
+          const opId = captainOutcomeOperationId(root);
+          const proposal =
+            opId === undefined
+              ? undefined
+              : this.#timeline.proposalRowOf(conversationId, opId);
+          anchor = proposal ?? reply;
+        }
+      }
+      if (target === undefined || anchor.seq > target.seq) target = anchor;
     }
     return target?.id;
   }

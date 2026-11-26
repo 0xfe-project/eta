@@ -188,15 +188,6 @@ test("03a: a sent message queued behind a run can be pulled back or dropped", as
   expect(app.shows("text:/^排队中/")).toBe(false);
 });
 
-test("03a: a queued message reads in two lines and can be inserted into the turn in flight", async () => {
-  const app = await chat("wire", "chat-queue");
-  await app.waitFor("text:The rollback needs tests too");
-  await app.waitFor("text:/这一轮结束后发出/");
-  await app.press("text:插入这一轮");
-  await app.waitFor("text:/已并入 .* 正在进行的回复/");
-  expect(app.shows("text:插入这一轮")).toBe(false);
-});
-
 test("03b: @ lists members, everyone and files, and a pick replaces only the token", async () => {
   const app = await chat("wire");
   await app.type("id:composer-input", "看下 @");

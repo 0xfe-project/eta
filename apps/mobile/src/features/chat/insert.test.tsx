@@ -125,5 +125,7 @@ test("composer: a message to a member who is answering is held until its turn en
   await app.press("id:composer-submit");
   await app.waitFor("text:/这一轮结束后发出/");
   expect(app.texts()).toContain("Next: the docs.");
-  expect(app.shows("text:插入这一轮")).toBe(true);
+  expect(app.shows("text:插入这一轮")).toBe(false);
+  expect(app.shows("text:拉回")).toBe(true);
+  expect(app.shows("text:删除")).toBe(true);
 });
