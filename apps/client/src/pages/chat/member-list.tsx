@@ -1,5 +1,6 @@
 import type {
   ConversationInfo,
+  GenerationRate,
   MemberSpend,
   MemberView,
 } from "@eta/client-contracts";
@@ -117,6 +118,13 @@ export function ConversationMembers(props: {
                   <Label variant="caption" tone="muted">
                     {memberStatus(entry().status)}
                   </Label>
+                  <If
+                    when={
+                      entry().status === "working" ? entry().sessionId : null
+                    }
+                  >
+                    {(session) => <MemberRate session={session()} />}
+                  </If>
                 </View>
                 <If
                   when={entry().sessionId}
@@ -246,6 +254,47 @@ function MemberFace(props: { agentId: string; session: string | null }) {
       <ContextRing usage={usage} size={avatar.xl}>
         <AgentFace id={props.agentId} size={avatar.md} />
       </ContextRing>
+    </If>
+  );
+}
+
+/** "≈999 tok/s": the slot a rate fills, so the row keeps its width as the digits change. */
+const rateSlot = 10;
+
+/**
+ * How fast a working member's model writes: the estimate of the generation in flight, else the
+ * last generation's measured rate.
+ */
+function MemberRate(props: { session: string }) {
+  const host = useHost();
+  const c = colors();
+  const rate = () =>
+    host.section<GenerationRate | null>(`sessions.${props.session}`, "rate");
+  return (
+    <If when={rate()}>
+      {(current) => (
+        <View
+          tooltip={hint(
+            uiText(
+              current().basis === "estimate"
+                ? "memberRateEstimate"
+                : "memberRateMeasured",
+            ),
+            c,
+          )}
+          style={{ ...row, gap: space[4], flexShrink: 0 }}
+        >
+          <Label variant="caption" tone="muted">
+            ·
+          </Label>
+          <Label variant="caption" tone="muted" mono>
+            {`${current().basis === "estimate" ? "≈" : ""}${uiText(
+              "memberRate",
+              { rate: String(Math.round(current().tokensPerSec)) },
+            )}`.padEnd(rateSlot, "\u2007")}
+          </Label>
+        </View>
+      )}
     </If>
   );
 }

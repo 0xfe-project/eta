@@ -1,0 +1,18 @@
+import { expect, open, test } from "nsh/test";
+
+const fixture = "./fixtures/member-rate.tsx";
+const rates = (texts: string[]) =>
+  texts.filter((text) => text.includes("tok/s")).map((text) => text.trim());
+
+test("a working member shows its output speed beside its status, an idle member none", async () => {
+  const app = await open(fixture, {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+  });
+  expect(rates(app.texts())).toEqual(["≈38 tok/s"]);
+  await app.press("label:Generation ends");
+  expect(rates(app.texts())).toEqual(["42 tok/s"]);
+  await app.press("label:Run ends");
+  expect(rates(app.texts())).toEqual([]);
+});
