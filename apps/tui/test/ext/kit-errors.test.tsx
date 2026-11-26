@@ -2,11 +2,17 @@
  * What a failed call tells the user: the wire's own failures in both languages, the gateway's
  * codes in the user's language with their values filled in, the host's message for everything
  * else, and one real failure from a real host.
+ *
+ * Reference is the kit's own `llmProblemMessages` rather than `apps/web/src/locales`, which
+ * #1003 deleted along with `apps/web`. Exhaustive coverage (every `LlmCode` has a message) is
+ * enforced at the type level by `MessageCatalog<LlmCode>` in `errors.ts`; this test guards
+ * placeholder interpolation (`{provider}`, `{status}`) and non-fallback to the raw diagnostic.
  */
 import { LLM_CODES } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { WireError } from "../../src/connection/wire";
 import { callErrorText } from "../../src/ext/kit/errors";
+import { llmProblemMessages } from "../../src/ext/kit/messages";
 
 describe("callErrorText for the wire's own failures", () => {
   it.each([
@@ -44,8 +50,11 @@ describe("callErrorText for the host's failures", () => {
       params: { provider: "Grok", status: 429 },
     });
     const text = callErrorText(error, locale);
+    const template = llmProblemMessages[locale][code];
     expect(text).not.toBe("");
     expect(text).not.toMatch(/[{}]/);
     expect(text).not.toBe("diagnostic");
+    if (template.includes("{provider}")) expect(text).toContain("Grok");
+    if (template.includes("{status}")) expect(text).toContain("429");
   });
 });
