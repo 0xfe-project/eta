@@ -8,7 +8,9 @@ import type {
   TaskActivityView,
   TaskCardData,
 } from "@eta/client-contracts";
+import type { KernelTool } from "@eta/core";
 import { describe, expect, it } from "vitest";
+import { taskKey } from "../src/session-owner";
 import { until } from "./support/client";
 import { call, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
@@ -317,5 +319,363 @@ describe("the task tools", () => {
         "done",
     );
     expect(w.row(group.id, draft.id)?.kind).toBe("task_card");
+  });
+
+  it("surfaces task ownership in create_task, list_tasks, and get_task responses", async () => {
+    const { models, results } = script([
+      call("create_task", {
+        title: "For Bola",
+        description: "Delegated task",
+        workspace: "local",
+        assignee: "Bola",
+      }),
+      call("create_task", {
+        title: "For self",
+        description: "Creator executes",
+        workspace: "local",
+      }),
+      call("create_task", {
+        title: "Blank assignee",
+        description: "Normalized to creator",
+        workspace: "local",
+        assignee: "   ",
+      }),
+      call("list_tasks", {}),
+      call("get_task", { task: "1" }),
+      call("get_task", { task: "2" }),
+      call("get_task", { task: "4" }),
+    ]);
+    const w = await world({ models, tasks: { runs: false } });
+    const ada = await w.agent("Ada");
+    const bola = await w.agent("Bola");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id, bola.id]);
+    await w.watch(group.id);
+
+    const first = await w.send(group.id, "create the tasks");
+    await w.settled(group.id, first.replies[0]!.id);
+
+    // Also verify a user-created task (`tasks.create`) shows its assignee in list/get.
+    await w.client.call("tasks", "create", {
+      conversationId: group.id,
+      workspace: "local",
+      tasks: [{ title: "User made", assignee: bola.id }],
+    });
+    const tools = new Map(
+      w.host.product.sessionHooks
+        .sessionTools({
+          meta: {
+            id: "conv-session",
+            createdAt: 0,
+            cwd: project.path,
+            agentId: ada.id,
+            conversationId: group.id,
+          },
+          session: undefined as never,
+        })
+        .map((tool) => [tool.name, tool] as const),
+    );
+    const listAfterUserCreate = (await tools.get("list_tasks")!.execute(
+      {},
+      {
+        turn: 1,
+        toolCallId: "list-after",
+        signal: new AbortController().signal,
+        toolContext: {},
+      },
+    )) as { content: { text: string }[] };
+    const getAfterUserCreate = (await tools.get("get_task")!.execute(
+      { task: "4" },
+      {
+        turn: 1,
+        toolCallId: "get-after",
+        signal: new AbortController().signal,
+        toolContext: {},
+      },
+    )) as { content: { text: string }[] };
+
+    expect(results[0]).toBe('Created task #1 "For Bola", executed by Bola.');
+    expect(results[1]).toBe('Created task #2 "For self".');
+    expect(results[2]).toBe('Created task #3 "Blank assignee".');
+
+    expect(results[3]).toContain(
+      "#1 [todo] For Bola — never run, created by Ada, assigned to Bola",
+    );
+    expect(results[3]).toMatch(
+      /^#2 \[todo\] For self — never run, created by Ada$/m,
+    );
+    expect(results[3]).toMatch(
+      /^#3 \[todo\] Blank assignee — never run, created by Ada$/m,
+    );
+
+    expect(results[4]).toMatch(
+      /^#1 \[todo\] For Bola — never run, created by Ada, assigned to Bola\nWorks in/,
+    );
+    expect(results[5]).toMatch(
+      /^#2 \[todo\] For self — never run, created by Ada\nWorks in/,
+    );
+    expect(results[6]).toBe("no such task: 4");
+
+    const listedText = listAfterUserCreate.content.map((b) => b.text).join("");
+    const userTaskText = getAfterUserCreate.content.map((b) => b.text).join("");
+    expect(listedText).toContain(
+      "#4 [todo] User made — never run, created by the user, assigned to Bola",
+    );
+    expect(userTaskText).toMatch(
+      /^#4 \[todo\] User made — never run, created by the user, assigned to Bola\nWorks in/,
+    );
+  });
+
+  it("refuses assignee and unknown fields on conversation update_task without mutating the board or recording activity", async () => {
+    const { models } = scriptedModels(() => say("ok"));
+    const w = await world({ models, tasks: { runs: false } });
+    const ada = await w.agent("Ada");
+    const bola = await w.agent("Bola");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id, bola.id]);
+
+    const parent = w.host.product.board.create(
+      {
+        title: "Parent",
+        conversationId: group.id,
+        workspace: "local",
+        status: "backlog",
+      },
+      { kind: "agent", agentId: ada.id },
+    );
+    const dep = w.host.product.board.create(
+      {
+        title: "Dependency",
+        conversationId: group.id,
+        workspace: "local",
+      },
+      { kind: "agent", agentId: ada.id },
+    );
+    const target = w.host.product.board.create(
+      {
+        title: "Target",
+        description: "Initial",
+        conversationId: group.id,
+        workspace: "local",
+      },
+      { kind: "agent", agentId: ada.id },
+    );
+    const withDep = w.host.product.board.create(
+      {
+        title: "With dep",
+        conversationId: group.id,
+        workspace: "local",
+        dependsOn: [{ task: dep.id }],
+      },
+      { kind: "agent", agentId: ada.id },
+    );
+
+    const tools = new Map(
+      w.host.product.sessionHooks
+        .sessionTools({
+          meta: {
+            id: "conv-session",
+            createdAt: 0,
+            cwd: project.path,
+            agentId: ada.id,
+            conversationId: group.id,
+          },
+          session: undefined as never,
+        })
+        .map((tool) => [tool.name, tool] as const),
+    );
+    const callUpdate = async (args: Record<string, unknown>) => {
+      const tool: KernelTool = tools.get("update_task")!;
+      const result = (await tool.execute(args, {
+        turn: 1,
+        toolCallId: "t1",
+        signal: new AbortController().signal,
+        toolContext: {},
+      })) as { content: { text: string }[]; isError?: boolean };
+      return {
+        text: result.content.map((block) => block.text).join(""),
+        isError: result.isError === true,
+      };
+    };
+
+    const targetActivityCount = w.host.product.board.activity(target.id).length;
+    const withDepActivityCount = w.host.product.board.activity(
+      withDep.id,
+    ).length;
+
+    const badAssigneeMsg =
+      "update_task cannot change a task's assignee; set assignee when creating or drafting the task (draft_task, create_task, create_subtask, or tasks.create) — ownership cannot be reassigned after creation";
+
+    expect(
+      await callUpdate({
+        task: `#${target.number}`,
+        title: "Changed",
+        status: "in_progress",
+        parent: parent.id,
+        addDependencies: [{ task: dep.id }],
+        assignee: "zzz-not-an-agent",
+      }),
+    ).toEqual({ isError: true, text: badAssigneeMsg });
+
+    expect(
+      await callUpdate({
+        task: target.id,
+        assignee: bola.id,
+      }),
+    ).toEqual({ isError: true, text: badAssigneeMsg });
+
+    expect(
+      await callUpdate({
+        task: `#${withDep.number}`,
+        removeDependencies: [dep.id],
+        assignee: "Bola",
+      }),
+    ).toEqual({ isError: true, text: badAssigneeMsg });
+
+    expect(
+      await callUpdate({
+        task: `#${target.number}`,
+        title: "Changed",
+        parent: parent.id,
+        addDependencies: [{ task: dep.id }],
+        foo: "bar",
+        priority: "high",
+      }),
+    ).toEqual({
+      isError: true,
+      text: "update_task does not accept unknown field(s): foo, priority; allowed fields are task, title, description, status, parent, addDependencies, removeDependencies",
+    });
+
+    // No DB, parent, dependency, or activity changes occurred.
+    expect(w.host.product.board.detail(target.id)).toMatchObject({
+      title: "Target",
+      description: "Initial",
+      status: "todo",
+      parentId: null,
+      assigneeAgentId: null,
+      dependsOn: [],
+    });
+    expect(w.host.product.board.activity(target.id)).toHaveLength(
+      targetActivityCount,
+    );
+    expect(w.host.product.board.detail(withDep.id)!.dependsOn).toHaveLength(1);
+    expect(w.host.product.board.activity(withDep.id)).toHaveLength(
+      withDepActivityCount,
+    );
+
+    // Passing `assignee: undefined` explicitly is still allowed.
+    const allowed = await callUpdate({
+      task: `#${target.number}`,
+      title: "Updated cleanly",
+      assignee: undefined,
+    });
+    expect(allowed).toEqual({
+      isError: false,
+      text: `#${target.number} is now [todo] "Updated cleanly".`,
+    });
+    expect(w.host.product.board.detail(target.id)!.title).toBe(
+      "Updated cleanly",
+    );
+  });
+
+  it("refuses assignee and unknown fields on run update_task without mutating the task or recording activity", async () => {
+    const { models } = scriptedModels(() => say("ok"));
+    const w = await world({ models, tasks: { runs: false } });
+    const ada = await w.agent("Ada");
+    const bola = await w.agent("Bola");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id, bola.id]);
+
+    const task = w.host.product.board.create(
+      {
+        title: "Run task",
+        description: "Original",
+        conversationId: group.id,
+        workspace: "local",
+        assignee: bola.id,
+      },
+      { kind: "agent", agentId: ada.id },
+    );
+
+    const tools = new Map(
+      w.host.product.sessionHooks
+        .sessionTools({
+          meta: {
+            id: "run-session",
+            createdAt: 0,
+            cwd: project.path,
+            agentId: bola.id,
+            conversationId: taskKey(task.id),
+          },
+          session: undefined as never,
+        })
+        .map((tool) => [tool.name, tool] as const),
+    );
+    const callUpdate = async (args: Record<string, unknown>) => {
+      const tool: KernelTool = tools.get("update_task")!;
+      const result = (await tool.execute(args, {
+        turn: 1,
+        toolCallId: "t1",
+        signal: new AbortController().signal,
+        toolContext: {},
+      })) as { content: { text: string }[]; isError?: boolean };
+      return {
+        text: result.content.map((block) => block.text).join(""),
+        isError: result.isError === true,
+      };
+    };
+
+    const beforeActivityCount = w.host.product.board.activity(task.id).length;
+
+    expect(
+      await callUpdate({
+        title: "Changed",
+        status: "blocked",
+        assignee: "zzz-not-an-agent",
+      }),
+    ).toEqual({
+      isError: true,
+      text: "update_task cannot change a task's assignee; set assignee when creating or drafting the task (draft_task, create_task, create_subtask, or tasks.create) — ownership cannot be reassigned after creation",
+    });
+
+    expect(
+      await callUpdate({
+        assignee: ada.id,
+      }),
+    ).toEqual({
+      isError: true,
+      text: "update_task cannot change a task's assignee; set assignee when creating or drafting the task (draft_task, create_task, create_subtask, or tasks.create) — ownership cannot be reassigned after creation",
+    });
+
+    expect(
+      await callUpdate({
+        parent: "#1",
+        extra: true,
+        status: "done",
+      }),
+    ).toEqual({
+      isError: true,
+      text: "update_task does not accept unknown field(s): parent, extra; allowed fields are title, description, status",
+    });
+
+    expect(w.host.product.board.detail(task.id)).toMatchObject({
+      title: "Run task",
+      description: "Original",
+      status: "todo",
+      assigneeAgentId: bola.id,
+    });
+    expect(w.host.product.board.activity(task.id)).toHaveLength(
+      beforeActivityCount,
+    );
+
+    const allowed = await callUpdate({
+      title: "Run updated",
+      assignee: undefined,
+    });
+    expect(allowed).toEqual({
+      isError: false,
+      text: `#${task.number} is now [todo] "Run updated".`,
+    });
+    expect(w.host.product.board.detail(task.id)!.title).toBe("Run updated");
   });
 });

@@ -33,6 +33,7 @@ import { Type } from "typebox";
 import { interactionId } from "../inbox/store";
 import { heldIn } from "../session-owner";
 import { ARCHIVED_RULE, archivedNote } from "../tasks/archived";
+import { assertAllowedTaskUpdateFields } from "../tasks/tools";
 import { GroupConflictError } from "./propose-group";
 import { redactJson, redactText, redactValue } from "./redact";
 
@@ -55,6 +56,13 @@ export interface CaptainToolDeps {
   ) => Promise<{ answered: boolean; interaction: unknown }>;
   dataDir: string;
 }
+
+const CAPTAIN_UPDATE_FIELDS = [
+  "taskId",
+  "title",
+  "description",
+  "status",
+] as const;
 
 const json = (value: unknown): string => redactJson(value);
 
@@ -610,6 +618,11 @@ export function captainSessionTools(
       }),
       execute(args) {
         try {
+          assertAllowedTaskUpdateFields(
+            "update_task_fields",
+            args,
+            CAPTAIN_UPDATE_FIELDS,
+          );
           const task = deps.board.find(args.taskId);
           if (task === undefined) return toolError("No such task.");
           const archived = archivedNotice.before(task.id);

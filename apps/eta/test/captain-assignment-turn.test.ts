@@ -69,8 +69,11 @@ describe("captain assignment turn", () => {
           "SELECT assignee_agent, captain_assignment_id FROM task WHERE assignee_agent = ?",
         )
         .get(bea);
-    await until(() => handed() !== null || told !== "");
-    expect(told).not.toMatch(/do not use task.assignee/);
+    await until(() => handed() !== null && told !== "");
+    expect(told).not.toMatch(
+      /cannot set assignee during a turn bound to an active dispatch assignment/,
+    );
+    expect(told).toBe('Created task #2 "Review the patch", executed by Bea.');
 
     // It is Bea's task, not the assignment's.
     expect(handed()).toEqual({
@@ -110,12 +113,116 @@ describe("captain assignment turn", () => {
     });
     await w.settled(group.id, assigned.replyIds[0]!);
 
-    expect(heard).toMatch(/do not use task.assignee/);
+    expect(heard).toBe(
+      "cannot set assignee during a turn bound to an active dispatch assignment; omit assignee so you remain both creator and executor",
+    );
     expect(
       w.host.db
         .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM task")
         .get()!.n,
     ).toBe(0);
+  });
+
+  it("refuses non-blank assignee on draft_task in the turn the assignment started", async () => {
+    let heard = "";
+    let bea = "";
+    const { models } = scriptedModels((request) => {
+      if (request.agent !== "Ada") return say("ok");
+      if (request.lastRole === "toolResult") {
+        heard = request.last;
+        return say("done");
+      }
+      return call("draft_task", {
+        title: "Wrong draft handoff",
+        goal: "Must stay with the assigned agent",
+        acceptance: "Never drafted",
+        workspace: "local",
+        assignee: bea,
+      });
+    });
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const other = await w.agent("Bea");
+    bea = other.id;
+    const project = await w.project();
+    const group = await w.group(
+      project.id,
+      [ada.id, other.id],
+      "draft-refused",
+    );
+    await w.watch(group.id);
+
+    const assigned = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, draft the fix.",
+      agentIds: [ada.id],
+    });
+    await w.settled(group.id, assigned.replyIds[0]!);
+
+    expect(heard).toBe(
+      "cannot set assignee during a turn bound to an active dispatch assignment; omit assignee so you remain both creator and executor",
+    );
+    expect(w.rows(group.id).some((row) => row.kind === "task_draft")).toBe(
+      false,
+    );
+  });
+
+  it("normalizes blank and whitespace assignee on create_task and draft_task during an active dispatch turn", async () => {
+    const results: string[] = [];
+    const { models } = scriptedModels((request) => {
+      if (request.agent !== "Ada") return say("ok");
+      if (request.lastRole === "toolResult") {
+        results.push(request.last);
+        return results.length >= 2
+          ? say("done")
+          : call("draft_task", {
+              title: "Blank assignee draft",
+              goal: "Keep assignment provenance",
+              acceptance: "Drafted cleanly",
+              workspace: "local",
+              assignee: "   ",
+            });
+      }
+      return call("create_task", {
+        title: "Blank assignee task",
+        description: "Keep assignment provenance",
+        workspace: "local",
+        assignee: "",
+      });
+    });
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id], "blank-assignee");
+    await w.watch(group.id);
+
+    const assigned = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, handle both.",
+      agentIds: [ada.id],
+    });
+    await w.settled(group.id, assigned.replyIds[0]!);
+
+    expect(results).toHaveLength(2);
+    expect(results[0]).toBe('Created task #1 "Blank assignee task".');
+    expect(results[1]).not.toContain("executed by");
+
+    const taskRow = w.host.db
+      .query<
+        { assignee_agent: string | null; captain_assignment_id: string | null },
+        []
+      >(
+        "SELECT assignee_agent, captain_assignment_id FROM task WHERE number = 1",
+      )
+      .get();
+    expect(taskRow).toEqual({
+      assignee_agent: null,
+      captain_assignment_id: assigned.assignment.id,
+    });
+
+    const draft = w.rows(group.id).find((row) => row.kind === "task_draft")!;
+    expect(draft.data.assignee).toBeUndefined();
+    expect(draft.data.captainAssignmentId).toBe(assigned.assignment.id);
   });
 
   it("shows the user a question asked in a turn the assignment did not start", async () => {

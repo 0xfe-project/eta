@@ -328,9 +328,10 @@ export class TaskBoard {
   /* ---------------------------------------------------------------- changes */
 
   /**
-   * An agent makes a task at once (the user asked for one). Users do not make tasks: the one who
-   * makes a task is the one who executes it. A task made this way has no card, since only a
-   * confirmed draft puts one in a timeline, and its first run is queued.
+   * An agent makes a task at once (the user asked for one), executed by `assignee` when named, or
+   * by the maker itself when omitted. Users create tasks through `make` (`tasks.create`), which
+   * requires an explicit `assignee`. A task made here has no card, since only a confirmed draft
+   * puts one in a timeline, and its first run is queued.
    */
   create(
     input: FieldsInput & {

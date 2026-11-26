@@ -13,9 +13,10 @@ import type { ToolResult } from "@eta/harness";
  *
  * Registered on each session when it opens, so a tool knows which agent it speaks for and where
  * without being told. An agent in a conversation proposes work (`draft_task`) or, when asked to,
- * makes it (`create_task`); the agent that made a task executes it, in a session of its own
- * (`task:` in `session-owner.ts`), and that session reports with `comment_task` and `finish_task`. An
- * agent the user mentions on a task answers in a session of its own on it, with `comment_task` only.
+ * makes it (`create_task`); the task's executor (its `assignee`, or the maker when none is set)
+ * executes it, in a session of its own (`task:` in `session-owner.ts`), and that session reports
+ * with `comment_task` and `finish_task`. An agent the user mentions on a task answers in a session
+ * of its own on it, with `comment_task` only.
  * Which run of the task that session is working on is asked when a tool is called, not when the
  * session opened: a session outlives its runs, since a comment that arrives later wakes another one
  * in the same session.
@@ -50,6 +51,52 @@ import { executorOf } from "./store";
 /** A failure the model can act on, from anything the board refused. */
 function failure(error: unknown): ToolResult {
   return toolError(error instanceof Error ? error.message : String(error));
+}
+
+const CONVERSATION_UPDATE_FIELDS = [
+  "task",
+  "title",
+  "description",
+  "status",
+  "parent",
+  "addDependencies",
+  "removeDependencies",
+] as const;
+
+const RUN_UPDATE_FIELDS = ["title", "description", "status"] as const;
+
+const DISPATCH_ASSIGNEE_ERROR =
+  "cannot set assignee during a turn bound to an active dispatch assignment; omit assignee so you remain both creator and executor";
+
+function normalizeAssignee(assignee: string | undefined): string | undefined {
+  const trimmed = assignee?.trim() ?? "";
+  return trimmed === "" ? undefined : trimmed;
+}
+
+/**
+ * Refuse `assignee` and any unknown keys inside `execute()` before touching the board so the model
+ * sees the ownership rule instead of a silent no-op or a generic schema error.
+ */
+export function assertAllowedTaskUpdateFields(
+  toolName: string,
+  args: object,
+  allowed: readonly string[],
+): void {
+  const record = args as Record<string, unknown>;
+  const allowedSet = new Set(allowed);
+  if (Object.hasOwn(record, "assignee") && record.assignee !== undefined) {
+    throw new Error(
+      `${toolName} cannot change a task's assignee; set assignee when creating or drafting the task (draft_task, create_task, create_subtask, or tasks.create) — ownership cannot be reassigned after creation`,
+    );
+  }
+  const unknown = Object.keys(record).filter(
+    (key) => !allowedSet.has(key) && record[key] !== undefined,
+  );
+  if (unknown.length > 0) {
+    throw new Error(
+      `${toolName} does not accept unknown field(s): ${unknown.join(", ")}; allowed fields are ${allowed.join(", ")}`,
+    );
+  }
 }
 
 /** What the tools need to know about the places tasks run in. */
@@ -218,8 +265,10 @@ function reading(deps: TaskToolDeps) {
       `#${task.number} [${task.status}]${away === undefined ? "" : " [archived]"} ${task.title} — ` +
       `${task.runStatus === null ? "never run" : `run ${task.runStatus}`}, ` +
       `created by ${whoIs(task.createdBy)}${
-        parent === undefined ? "" : `; subtask of #${parent.number}`
-      }${
+        task.assigneeAgentId === null
+          ? ""
+          : `, assigned to ${nameOf(task.assigneeAgentId)}`
+      }${parent === undefined ? "" : `; subtask of #${parent.number}`}${
         task.subtasks == null
           ? ""
           : `; subtasks ${task.subtasks.done}/${task.subtasks.total} done`
@@ -403,7 +452,7 @@ function reading(deps: TaskToolDeps) {
     },
   });
 
-  return { whoIs, taskOf, list, get, note };
+  return { whoIs, taskOf, nameOf, list, get, note };
 }
 
 function conversationTools(
@@ -414,7 +463,7 @@ function conversationTools(
   const actor: TaskActor = { kind: "agent", agentId: who.agentId };
   const assignment = () =>
     deps.captain?.assignmentFor(who.conversationId, who.agentId);
-  const { taskOf, list, get, note } = reading(deps);
+  const { taskOf, nameOf, list, get, note } = reading(deps);
   const archivedNotice = note();
 
   // The debt this comment used to record is paid on the prompt side. The session's own list is
@@ -432,8 +481,9 @@ function conversationTools(
       "tool rounds — draft it; the user decides. What stays in chat: reading, looking things up, " +
       "explaining, asking, taking a position, checking a command or two. `mention` is handing work " +
       "to a person; this tool hands it to the board. A draft is not your step list: it is the " +
-      "board's proposal. The user edits and confirms it, then you do it yourself in a fresh " +
-      "session that cannot see this conversation — so write the goal and acceptance for a reader " +
+      "board's proposal. The user edits and confirms it, then the executor (you, or `assignee` if " +
+      "specified) runs it in a fresh session that cannot see this conversation — so write the goal " +
+      "and acceptance for a reader " +
       "who knows nothing else, and put what you have established in `decided`. This is how work " +
       "leaves a conversation: `create_task` is for when the user named a task themselves. " +
       "By default a confirmed draft starts at once; give `status: backlog` for work to plan now " +
@@ -495,12 +545,11 @@ function conversationTools(
           who.conversationId,
           args.workspace,
         );
-        const { base, assignee, ...rest } = args;
+        const { base, assignee: rawAssignee, ...rest } = args;
+        const assignee = normalizeAssignee(rawAssignee);
         const open = assignment();
         if (open?.forThisTurn === true && assignee !== undefined)
-          throw new Error(
-            "Captain assignments do not use task.assignee; create the task yourself",
-          );
+          throw new Error(DISPATCH_ASSIGNEE_ERROR);
         // A task handed to another agent in some other turn is that agent's, not the assignment's.
         const captain = assignee === undefined ? open : undefined;
         const row = board.draft({
@@ -534,10 +583,10 @@ function conversationTools(
     name: "create_task",
     label: "create_task",
     description:
-      "Create a task on the board at once, linked to this conversation, and start on it: you " +
-      "execute the tasks you make, in a fresh session of your own that does not see this " +
-      "conversation. Drafting first is the rule, not a suggestion: unless the user named the task " +
-      "themselves, propose it with `draft_task` and let the user decide.",
+      "Create a task on the board at once, linked to this conversation, and start on it: the " +
+      "executor (you, or `assignee` if specified) runs it in a fresh session that does not see " +
+      "this conversation. Drafting first is the rule, not a suggestion: unless the user named the " +
+      "task themselves, propose it with `draft_task` and let the user decide.",
     parameters: Type.Object({
       title: Type.String({ description: "A short title" }),
       description: Type.Optional(
@@ -580,12 +629,11 @@ function conversationTools(
           who.conversationId,
           args.workspace,
         );
-        const { base, assignee, ...rest } = args;
+        const { base, assignee: rawAssignee, ...rest } = args;
+        const assignee = normalizeAssignee(rawAssignee);
         const open = assignment();
         if (open?.forThisTurn === true && assignee !== undefined)
-          throw new Error(
-            "Captain assignments do not use task.assignee; create the task yourself",
-          );
+          throw new Error(DISPATCH_ASSIGNEE_ERROR);
         const captain = assignee === undefined ? open : undefined;
         const task = board.create(
           {
@@ -610,10 +658,17 @@ function conversationTools(
             messageId: captain.messageId,
             agentId: who.agentId,
           });
-        return text(`Created task #${task.number} "${task.title}".`, {
-          id: task.id,
-          number: task.number,
-        });
+        return text(
+          `Created task #${task.number} "${task.title}"${
+            task.assigneeAgentId === null
+              ? ""
+              : `, executed by ${nameOf(task.assigneeAgentId)}`
+          }.`,
+          {
+            id: task.id,
+            number: task.number,
+          },
+        );
       } catch (error) {
         return failure(error);
       }
@@ -625,9 +680,8 @@ function conversationTools(
     label: "update_task",
     description:
       `Change a task's title, description or status, or what it waits for. Only the fields you ` +
-      `give change. Moving a task to done or cancelled stops its runs. ${
-        ARCHIVED_RULE
-      }`,
+      `give change. This cannot change a task's assignee (ownership is set at creation). ` +
+      `Moving a task to done or cancelled stops its runs. ${ARCHIVED_RULE}`,
     parameters: Type.Object({
       task: Type.String({ description: "The task's number (12 or #12) or id" }),
       title: Type.Optional(Type.String()),
@@ -654,6 +708,11 @@ function conversationTools(
     }),
     execute(args) {
       try {
+        assertAllowedTaskUpdateFields(
+          "update_task",
+          args,
+          CONVERSATION_UPDATE_FIELDS,
+        );
         const {
           task: which,
           parent,
@@ -855,10 +914,9 @@ function runTools(
     label: "update_task",
     description:
       `Change this task's title, description or status while you work (for example to blocked ` +
-      `when you wait on something). Only the fields you give change. Moving it to review is ` +
-      `finish_task's job, and done or cancelled is the user's call. ${
-        ARCHIVED_RULE
-      }`,
+      `when you wait on something). Only the fields you give change. This cannot change the ` +
+      `task's assignee. Moving it to review is finish_task's job, and done or cancelled is the ` +
+      `user's call. ${ARCHIVED_RULE}`,
     parameters: Type.Object({
       title: Type.Optional(Type.String()),
       description: Type.Optional(Type.String()),
@@ -870,6 +928,7 @@ function runTools(
     }),
     execute(args) {
       try {
+        assertAllowedTaskUpdateFields("update_task", args, RUN_UPDATE_FIELDS);
         if (
           args.status === "done" ||
           args.status === "cancelled" ||

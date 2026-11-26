@@ -426,8 +426,8 @@ describe("captain assignment", () => {
       agentIds: [ada.id],
     });
     await w.settled(group.id, result.replyIds[0]!);
-    expect(heard).toMatch(
-      /Do not pass|does not use task.assignee|create the task yourself/,
+    expect(heard).toBe(
+      "cannot set assignee during a turn bound to an active dispatch assignment; omit assignee so you remain both creator and executor",
     );
     expect(
       w.host.db
