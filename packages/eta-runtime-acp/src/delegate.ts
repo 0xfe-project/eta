@@ -47,7 +47,6 @@ import type {
   RunDelegate,
   RunDelegateContext,
 } from "@eta/core";
-import type { AcpLaunchConfig } from "./config";
 import type { AcpChoices } from "./models";
 import { hostResultOf, HostTools, NO_RUN } from "@eta/runtime-kit";
 import { choicesOf, effortFor } from "./models";
@@ -58,7 +57,7 @@ export interface AcpDelegateOptions {
   /** `acp.<id>`. */
   runtime: string;
   /** The agent as it is configured now; throws with the reason when it is not. */
-  agent: () => AcpLaunchConfig;
+  agent: () => AcpAgentConfig;
   sessionId: string;
   cwd: string;
   resume: string | undefined;
@@ -428,27 +427,20 @@ export class AcpDelegate implements RunDelegate {
   /** Pick up the agent's session where this one has run before, or open a new one. */
   async #session(
     process: AcpProcess,
-    agent: AcpLaunchConfig,
+    agent: AcpAgentConfig,
     context: RunDelegateContext,
   ): Promise<Opened> {
     const { runtime, warn, cwd } = this.#options;
     const capabilities = process.init.agentCapabilities ?? {};
-    // Antigravity can store MCP headers in its conversation database. Only a user-configured
-    // ACP launch can opt into these servers.
-    let mcpServers: McpServer[] = [];
-    if (agent.discovered) {
-      await this.#host.close();
-    } else {
-      const host = await this.#serve(context, capabilities);
-      mcpServers = acpServers(
-        [
-          ...(host === undefined ? [] : [host]),
-          ...(this.#options.mcpServers ?? []),
-        ],
-        capabilities,
-        warn,
-      );
-    }
+    const host = await this.#serve(context, capabilities);
+    const mcpServers = acpServers(
+      [
+        ...(host === undefined ? [] : [host]),
+        ...(this.#options.mcpServers ?? []),
+      ],
+      capabilities,
+      warn,
+    );
     const agentPrompt = this.#options.agentPrompt();
     const systemPrompt: { systemPrompt?: SystemPrompt } =
       capabilities.sessionCapabilities?.systemPrompt != null &&

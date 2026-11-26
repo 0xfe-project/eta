@@ -366,7 +366,6 @@ export const settingsMessages = {
   ],
   acpAddAgent: ["Add agent", "添加智能体"],
   acpAddTitle: ["Add external agent", "添加外部智能体"],
-  acpAntigravityPreset: ["Use Antigravity preset", "使用 Antigravity 预设"],
   acpEditTitle: ["Edit {{label}}", "编辑 {{label}}"],
   acpEditAgent: ["Edit agent", "编辑智能体"],
   acpPrimarySuffix: [" (primary)", "（主机）"],

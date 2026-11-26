@@ -1,8 +1,7 @@
 /**
  * Which ACP agents this machine has, and what each can be set to.
  *
- * The runtime list includes configured agents and Antigravity when available on PATH.
- * For each agent, looking costs a process: start the command, say
+ * The list is the config file's. For each agent, looking costs a process: start the command, say
  * `initialize`, open a session in an empty directory to read its config options (its models and
  * reasoning levels), and let it go. So an answer is kept five minutes, and dropped when the
  * agent's configuration changes. A session that opens for real tells what it saw too.
@@ -14,13 +13,12 @@ import type {
   AgentRuntimeInfo,
   AgentRuntimeModel,
 } from "@eta/client-contracts";
-import type { AcpConfigFile, AcpLaunchConfig } from "./config";
+import type { AcpConfigFile } from "./config";
 import type { AcpChoices } from "./models";
 import { accessSync, constants, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { env } from "node:process";
-import { ANTIGRAVITY_ACP_AGENT } from "@eta/client-contracts";
 import { acpRuntimeId } from "./config";
 import { isAuthError } from "./delegate";
 import { choicesOf, modelsOf } from "./models";
@@ -68,14 +66,6 @@ function timed<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
   ]).finally(() => clearTimeout(timer));
 }
 
-function discoverAntigravity(): AcpLaunchConfig | undefined {
-  const command = Bun.which(ANTIGRAVITY_ACP_AGENT.command, {
-    PATH: env.PATH ?? "",
-  });
-  if (command !== null)
-    return { ...ANTIGRAVITY_ACP_AGENT, command, discovered: true };
-}
-
 export class AcpCatalog {
   readonly #config: AcpConfigFile;
   readonly #ttlMs: number;
@@ -91,14 +81,6 @@ export class AcpCatalog {
     this.#warn = options.warn ?? (() => undefined);
   }
 
-  /** The configuration that a session on this machine will actually launch. */
-  agent(id: string): AcpLaunchConfig | undefined {
-    return (
-      this.#config.get(id) ??
-      (id === ANTIGRAVITY_ACP_AGENT.id ? discoverAntigravity() : undefined)
-    );
-  }
-
   /** The models last seen for an agent; none before anything was seen. */
   models(id: string): readonly AgentRuntimeModel[] {
     return this.#entries.get(id)?.probe.models ?? [];
@@ -111,7 +93,7 @@ export class AcpCatalog {
     if (entry === undefined) {
       let agent: AcpAgentConfig | undefined;
       try {
-        agent = this.agent(id);
+        agent = this.#config.get(id);
       } catch {
         return;
       }
@@ -165,40 +147,27 @@ export class AcpCatalog {
   }
 
   /**
-   * Every configured or discovered agent as a runtime, asked again when the answer is old.
-   * A file that cannot be read lists no ACP runtimes; the settings page shows why.
+   * Every configured agent as a runtime, asked again where the answer is old. A file that cannot
+   * be read lists none here, so the built-in runtimes still list; the settings page shows why.
    */
   async list(fresh = false): Promise<AgentRuntimeInfo[]> {
+    let views: Awaited<ReturnType<AcpCatalog["views"]>>;
     try {
-      const agents: AcpLaunchConfig[] = this.#config.read();
-      if (!agents.some((agent) => agent.id === ANTIGRAVITY_ACP_AGENT.id)) {
-        const antigravity = discoverAntigravity();
-        if (antigravity !== undefined) agents.unshift(antigravity);
-      }
-      for (const id of this.#entries.keys())
-        if (!agents.some((agent) => agent.id === id)) this.#entries.delete(id);
-      return await Promise.all(
-        agents.map(async (agent) => {
-          const { probe } = await this.#entry(agent, fresh);
-          return {
-            id: acpRuntimeId(agent.id),
-            label: agent.label,
-            ...(agent.discovered === true
-              ? { discovered: agent.discovered }
-              : {}),
-            status: probe.status,
-            ...(probe.version === undefined ? {} : { version: probe.version }),
-            ...(probe.detail === undefined ? {} : { detail: probe.detail }),
-            models: [...probe.models],
-          };
-        }),
-      );
+      views = await this.views(fresh);
     } catch (error) {
       this.#warn(
         `[eta-runtime-acp] ${error instanceof Error ? error.message : String(error)}`,
       );
       return [];
     }
+    return views.map(({ view, models }) => ({
+      id: view.runtime,
+      label: view.label,
+      status: view.status,
+      ...(view.version === undefined ? {} : { version: view.version }),
+      ...(view.detail === undefined ? {} : { detail: view.detail }),
+      models: [...models],
+    }));
   }
 
   /** Every configured agent with what this machine found, for the settings screen. */
@@ -206,6 +175,8 @@ export class AcpCatalog {
     fresh = false,
   ): Promise<{ view: AcpAgentView; models: readonly AgentRuntimeModel[] }[]> {
     const agents = this.#config.read();
+    for (const id of this.#entries.keys())
+      if (!agents.some((agent) => agent.id === id)) this.#entries.delete(id);
     return await Promise.all(
       agents.map(async (agent) => {
         const { probe } = await this.#entry(agent, fresh);

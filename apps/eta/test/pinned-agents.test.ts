@@ -335,12 +335,9 @@ describe("pinning", () => {
         machineId: r.daemon.machineId,
       }),
     ).toEqual({ runtimes: theirs });
-    // With no machine named, only the primary's locally discovered runtimes can appear.
-    const primary = (await r.client.call("agents", "runtimes", {})) as {
-      runtimes: AgentRuntimeInfo[];
-    };
-    expect(primary.runtimes.filter((runtime) => !runtime.discovered)).toEqual(
-      [],
-    );
+    // The primary's own (none, in a test host) when no machine is named.
+    expect(await r.client.call("agents", "runtimes", {})).toEqual({
+      runtimes: [],
+    });
   });
 });

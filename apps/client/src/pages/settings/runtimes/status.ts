@@ -40,7 +40,6 @@ export function reasonTone(reason: RuntimeReason | undefined) {
 
 /** What signs a runtime in, run in a terminal on its machine; eta never signs one in itself. */
 export const LOGIN_COMMANDS: Partial<Record<string, string>> = {
-  "acp.antigravity": "agy acp --login",
   claude: "claude",
   codex: "codex login",
   grok: "grok login",

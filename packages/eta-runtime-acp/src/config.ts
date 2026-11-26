@@ -15,8 +15,6 @@ import { ACP_AGENT_ID } from "@eta/client-contracts";
 
 const PREFIX = "acp.";
 
-export type AcpLaunchConfig = AcpAgentConfig & { discovered?: true };
-
 /** `acp.<id>` for an agent id. */
 export function acpRuntimeId(id: string): `acp.${string}` {
   return `${PREFIX}${id}`;

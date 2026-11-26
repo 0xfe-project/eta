@@ -2,8 +2,7 @@
  * ACP (Agent Client Protocol) agents as runtimes an eta session can run on.
  *
  * `createAcpRuntimes` is what a session host is given (`SessionRuntimes`), beside oar's: every
- * agent in this machine's `~/.eta/acp.json` and the Antigravity CLI found on PATH are offered as
- * runtimes with an `acp.<id>` ID. For a session whose metadata
+ * agent in this machine's `~/.eta/acp.json` is a runtime `acp.<id>`. For a session whose metadata
  * names one, it opens a delegate that starts the agent as a stdio child and hands it the
  * session's runs. `catalog` is what a settings screen reads; `config` is the file.
  */
@@ -64,7 +63,7 @@ export function createAcpRuntimes(
         runtime: input.runtime,
         // Read at each start: what the user changed holds from the next process on.
         agent: () => {
-          const agent = catalog.agent(id);
+          const agent = config.get(id);
           if (agent === undefined)
             throw new Error(
               `runtime_unavailable: the ACP agent ${id} is not configured on this machine (${config.path})`,
