@@ -1,10 +1,11 @@
 import type { JSX, ViewStyle } from "nsh";
 import type { Layout } from "./theme";
-import { context, platform, reduceMotion, signal, View } from "nsh";
+import { context, platform, reduceMotion, safeArea, signal, View } from "nsh";
 import { Menu, MenuItem, MenuSeparator, Popover, Sheet } from "nsh/base";
 import { Compact } from "./density";
 import { EmptyState } from "./empty-state";
 import { menuMotion } from "./motion";
+import { screenInsets } from "./safe-area";
 import { SmoothScroll } from "./smooth-scroll";
 import { colors, focusRing, Screen } from "./theme";
 import { space } from "./tokens";
@@ -148,16 +149,24 @@ export function MenuFrame(props: {
     props.onOpenChange?.(next);
   };
   const close = () => change(false);
+  const surfaceInsets = screenInsets();
+  const bottomInset = () => Math.max(safeArea().bottom, surfaceInsets().bottom);
   // A popup grows out of its trigger's corner and goes back into it.
   const rise = () => menuMotion(props.align ?? "start", reduceMotion());
-  const sheetStyle = (): ViewStyle => ({
-    width: "100%",
-    paddingBottom: space[8],
-    borderTopWidth: 1,
-    borderColor: c().strong,
-    backgroundColor: c().canvas,
-    ...props.sheetStyle,
-  });
+  const sheetStyle = (): ViewStyle => {
+    const baseBottom =
+      typeof props.sheetStyle?.paddingBottom === "number"
+        ? props.sheetStyle.paddingBottom
+        : space[8];
+    return {
+      width: "100%",
+      borderTopWidth: 1,
+      borderColor: c().strong,
+      backgroundColor: c().canvas,
+      ...props.sheetStyle,
+      paddingBottom: baseBottom + bottomInset(),
+    };
+  };
   // The popover's rows scroll within the room on its side, as a menu's do.
   const room = signal<number | undefined>(undefined);
   const content = (native: boolean) => (

@@ -54,6 +54,7 @@ for (const platform of platforms) {
       // The dropdown chooses in every layout too.
       await app.press("label:Channel");
       await app.waitFor("text:Pre-releases");
+      expect(app.shows("id:menu-grabber")).toBe(sheet);
       await app.press("text:Pre-releases");
       await app.waitFor("text:Channel: pre");
       await app.waitUntil(() => !app.shows("text:Pre-releases"));
