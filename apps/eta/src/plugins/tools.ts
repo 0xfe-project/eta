@@ -143,6 +143,29 @@ export function pluginSessionTools(deps: {
         return text(JSON.stringify({ plugin: args.plugin, fields }, null, 2));
       },
     });
-    return [toKernelTool(tool, () => undefined)];
+    const listToolkits = defineTool({
+      name: "list_toolkits",
+      label: "Composio toolkits",
+      description:
+        "List the Composio toolkits you have enabled: each one's slug, display name, and whether its connection is ready (`null` when eta does not know yet). Use the slugs when you ask Composio's tools to search or connect a toolkit. This reads eta's own state; it does not call Composio.",
+      parameters: Type.Object({}),
+      execute() {
+        return text(
+          JSON.stringify(
+            { toolkits: deps.plugins.toolkitsOf(agentId) },
+            null,
+            2,
+          ),
+        );
+      },
+    });
+    // Offered only to an agent that has a Composio toolkit when the session opens; what it
+    // answers is read when it is called.
+    return [
+      toKernelTool(tool, () => undefined),
+      ...(deps.plugins.toolkitsOf(agentId).length > 0
+        ? [toKernelTool(listToolkits, () => undefined)]
+        : []),
+    ];
   };
 }

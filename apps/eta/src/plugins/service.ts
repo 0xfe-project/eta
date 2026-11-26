@@ -111,6 +111,10 @@ export interface VirtualPlugins {
   demand: (sets: () => string[][]) => void;
   /** Make ready what the agents have enabled now (nothing when it already is). */
   refresh: () => void;
+  /** What an agent is told of its plugins of this kind: slug, display name, and whether each is ready (null: not known). */
+  toolkitsFor: (
+    names: readonly string[],
+  ) => { slug: string; name: string; ready: boolean | null }[];
   /** What no session may pass on. */
   secrets: () => Redaction[];
   onChange: (listener: () => void) => void;
@@ -236,6 +240,20 @@ export class Plugins {
 
   stateOf(entry: PluginEntry): PluginState {
     return this.#usable(entry) ? "ready" : "needs_config";
+  }
+
+  /**
+   * The Composio toolkits an agent has enabled and the user has not switched off, whether or not
+   * they are ready: what `list_toolkits` tells it. Read from eta's own state; no request is made.
+   */
+  toolkitsOf(
+    agentId: string,
+  ): { slug: string; name: string; ready: boolean | null }[] {
+    const off = this.rows.disabled();
+    const names = this.rows
+      .enabled(agentId)
+      .filter((name) => this.#virtual?.owns(name) === true && !off.has(name));
+    return this.#virtual?.toolkitsFor(names) ?? [];
   }
 
   /** Whether a plugin can be turned on for an agent now. */
