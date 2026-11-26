@@ -876,8 +876,8 @@ export function Market(props: {
                     accessibilityLabel={item().name}
                     onPress={() => detail.set(toolkitKey(item()))}
                     style={{
-                      width: phone() ? undefined : 267, // design-value: card width, as on the installed page's Composio cards
-                      flex: phone() ? 1 : undefined,
+                      // One card per row on a phone, as the plugin cards below: a flex: 1 card with no width in this wrapping row is squeezed to a sliver.
+                      width: phone() ? "100%" : 267, // design-value: card width, as on the installed page's Composio cards
                       padding: space[12],
                       gap: 6, // design-value: 6px between a card's lines, not on the space scale
                       backgroundColor: c().canvas,

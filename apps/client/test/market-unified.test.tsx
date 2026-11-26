@@ -107,3 +107,22 @@ test("a search after a scroll goes back to the first batch", async () => {
   await app.clock!.runFor(400);
   expect(cards(app)).toBe(first);
 });
+
+// A flex: 1 toolkit card with no width, in the wrapping row, is squeezed to a sliver.
+test("on a phone a Composio toolkit card is one to a row and fills the row, like the plugins", async () => {
+  const app = await open1("./fixtures/market-unified-phone.tsx", NARROW);
+  const one = app.layout("label:Toolkit 0000")!;
+  const two = app.layout("label:Toolkit 0001")!;
+  expect(one.width).toBeGreaterThan(NARROW.width / 2);
+  expect(one.x).toBe(two.x);
+  expect(two.y).toBeGreaterThan(one.y);
+  await app.press("label:Show more");
+  const plugin = app.layout("label:Plugin 0000")!;
+  expect(one.width).toBe(plugin.width);
+});
+
+test("off a phone a Composio toolkit card keeps its width, and several share a row", async () => {
+  const app = await open1();
+  expect(app.layout("label:Toolkit 0000")!.width).toBe(267);
+  expect(columns(app)).toBeGreaterThan(1);
+});
