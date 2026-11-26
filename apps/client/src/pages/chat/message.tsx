@@ -750,9 +750,9 @@ export function Message(props: {
             <View
               style={{
                 ...row,
+                alignItems: "stretch",
                 height: space[24],
                 paddingLeft: space[12],
-                paddingRight: space[4],
                 justifyContent: "space-between",
                 borderBottomWidth: !processCollapsed() ? 1 : 0,
                 borderColor: c().border,
@@ -766,6 +766,7 @@ export function Message(props: {
                 style={{
                   ...row,
                   gap: space[4],
+                  paddingRight: space[8],
                   flex: 1,
                   minWidth: 0,
                   cursor: "pointer",
@@ -790,10 +791,19 @@ export function Message(props: {
               </View>
               <Button
                 label={uiText("stop")}
+                tone="ghost"
                 size={control.sm}
                 labelVariant="caption"
                 labelWeight={weight.strong}
-                style={{ paddingHorizontal: space[8] }}
+                focusRingKind="inset"
+                style={{
+                  alignSelf: "stretch",
+                  height: "auto",
+                  paddingHorizontal: space[8],
+                  borderWidth: 0,
+                  borderLeftWidth: 1,
+                  borderColor: c().border,
+                }}
                 disabled={item().status === "stopping"}
                 busy={stopping() && item().status !== "stopping"}
                 onPress={() => {
