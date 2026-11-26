@@ -315,7 +315,7 @@ function TranscriptImages(props: {
   );
 }
 
-function toolTitle(tool: ToolBlock) {
+export function toolTitle(tool: ToolBlock) {
   if (
     tool.name === "esmrun" &&
     tool.details &&
