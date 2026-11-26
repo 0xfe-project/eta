@@ -7,7 +7,8 @@ import {
   SafeArea,
   Screen,
 } from "../../src/components";
-import { showToast, ToastLayer } from "../../src/components/toast";
+import { NotificationHost } from "../../src/components/notifications";
+import { showToast } from "../../src/components/toast";
 import { space } from "../../src/components/tokens";
 import { uiText } from "../../src/i18n";
 
@@ -67,7 +68,7 @@ function Fixture() {
 
             <Button label="Copy code" onPress={copyValue} />
           </View>
-          <ToastLayer />
+          <NotificationHost />
         </SafeArea>
       </Screen.Provider>
     </Palette.Provider>

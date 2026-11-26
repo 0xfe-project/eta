@@ -1,8 +1,7 @@
 import type { JSX } from "nsh";
 import { Image, keymap, Scroll, signal, View, windowSize } from "nsh";
-import { Dialog } from "nsh/base";
 import { uiText } from "../i18n";
-import { Tooltip } from "../ui";
+import { NativeDialog, Tooltip } from "../ui";
 import { Button } from "./controls";
 import { CloseButton } from "./navigation-buttons";
 import { screenInsets } from "./safe-area";
@@ -201,7 +200,7 @@ function LightboxDialog(props: {
     { when: "always" },
   );
   return (
-    <Dialog
+    <NativeDialog
       animation="fade"
       accessibilityLabel={uiText("pictureTitle", {
         index: props.index() + 1,
@@ -317,6 +316,6 @@ function LightboxDialog(props: {
         </If>
         <CloseButton onPress={() => props.onIndex(undefined)} />
       </View>
-    </Dialog>
+    </NativeDialog>
   );
 }

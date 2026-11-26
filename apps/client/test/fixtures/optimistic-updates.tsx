@@ -5,7 +5,7 @@ import type {
 } from "@eta/client-contracts";
 import { mount, signal, Storage, View } from "nsh";
 import { Button, colors, Label, row } from "../../src/components";
-import { ToastLayer } from "../../src/components/toast";
+import { NotificationHost } from "../../src/components/notifications";
 import { space } from "../../src/components/tokens";
 import { StewardMenu } from "../../src/pages/chat/members";
 import { PluginEnabled } from "../../src/pages/plugins/plugin-name";
@@ -252,7 +252,7 @@ function Fixture(props: { mode: string }) {
           <TaskOptimisticHarness calls={calls} />
         </If>
 
-        <ToastLayer />
+        <NotificationHost />
       </View>
     </Host.Provider>
   );

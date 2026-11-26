@@ -115,6 +115,27 @@ export default antfu(
     },
   },
   {
+    // Native dialogs must go through NativeDialog / Modal so NotificationHost stays above
+    // every dialog backdrop.
+    files: ["apps/client/src/**/*.tsx"],
+    ignores: ["apps/client/src/ui/dialog.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "nsh/base",
+              importNames: ["Dialog"],
+              message:
+                "Use NativeDialog (or Modal) from ui/dialog so global notifications stay above dialog backdrops.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // The web tests name their cases in sentences that start with product names (Captain,
     // Markdown, Windows); lowercasing them reads wrong. They came from rstest, which this rule did
     // not see.

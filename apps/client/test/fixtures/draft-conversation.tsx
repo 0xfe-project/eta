@@ -1,7 +1,7 @@
 import type { MessageView } from "@eta/client-contracts";
 import { mount, signal, Text, UrlScheme, View, windowSize } from "nsh";
 import { Button } from "../../src/components";
-import { ToastLayer } from "../../src/components/toast";
+import { NotificationHost } from "../../src/components/notifications";
 import { ConversationTimeline } from "../../src/pages/chat/conversation-timeline";
 import { createHost, Host } from "../../src/services/host";
 
@@ -129,7 +129,7 @@ function Fixture() {
         <Each of={calls()} key="index">
           {(call) => <Text>{call()}</Text>}
         </Each>
-        <ToastLayer />
+        <NotificationHost />
       </View>
     </Host.Provider>
   );

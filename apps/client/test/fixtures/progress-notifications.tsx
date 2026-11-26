@@ -5,12 +5,11 @@ import type {
 import { mount, signal, Storage, View } from "nsh";
 import { Button, colors, Label, row } from "../../src/components";
 import { Chip } from "../../src/components/eta-editor/chip";
+import { NotificationHost } from "../../src/components/notifications";
 import {
   formatRemaining,
-  ProgressNotificationLayer,
   startProgress,
 } from "../../src/components/progress-notification";
-import { ToastLayer } from "../../src/components/toast";
 import { space } from "../../src/components/tokens";
 import { uiText } from "../../src/i18n";
 import { HostRestartScreen } from "../../src/pages/connection/host-restart";
@@ -186,8 +185,7 @@ function Fixture(props: { mode: string }) {
           </View>
         </If>
 
-        <ProgressNotificationLayer />
-        <ToastLayer />
+        <NotificationHost />
       </View>
     </Host.Provider>
   );

@@ -4,7 +4,7 @@ import type {
   UpgradeStatusView,
 } from "@eta/client-contracts";
 import { mount, signal, Storage, Text, View } from "nsh";
-import { ToastLayer } from "../../src/components/toast";
+import { NotificationHost } from "../../src/components/notifications";
 import { HostRestartScreen } from "../../src/pages/connection/host-restart";
 import { Machines } from "../../src/pages/settings/machines/machines";
 import { UpdateSettings } from "../../src/pages/settings/updates/update";
@@ -186,7 +186,7 @@ function Fixture(props: { page: string; script: string }) {
             onBack={noop}
           />
         </If>
-        <ToastLayer />
+        <NotificationHost />
         <HostRestartScreen onConnect={noop} />
       </View>
     </Host.Provider>

@@ -1,4 +1,5 @@
 import type { ViewStyle } from "nsh";
+import type { light } from "../components/theme";
 import { cleanup, Clipboard, signal } from "nsh";
 import { uiText } from "../i18n";
 import { Button } from "./button";
@@ -12,6 +13,8 @@ export function CopyButton(props: {
   copiedLabel?: string;
   iconOnly?: boolean;
   tone?: "primary" | "plain" | "ghost" | "danger";
+  labelTone?: keyof typeof light;
+  hoverTone?: keyof typeof light;
   size?: number;
   disabled?: boolean;
   tooltip?: string;
@@ -43,6 +46,8 @@ export function CopyButton(props: {
       icon={copied() ? "check" : "copy"}
       iconOnly={props.iconOnly}
       tone={props.tone}
+      labelTone={props.labelTone}
+      hoverTone={props.hoverTone}
       size={props.size}
       disabled={props.disabled}
       tooltip={props.tooltip}

@@ -1,12 +1,23 @@
 import type { JSX, ViewStyle } from "nsh";
-import { cleanup, Overlay, platform, signal, View, windowSize } from "nsh";
+import type { DialogProps } from "nsh/base";
+import {
+  cleanup,
+  computed,
+  Overlay,
+  platform,
+  signal,
+  View,
+  windowSize,
+} from "nsh";
 import { Dialog } from "nsh/base";
 import { Regular } from "../components/density";
 import { fade, fadeIn, fadeOut, motion, passing } from "../components/motion";
-import { ProgressNotificationLayer } from "../components/progress-notification";
+import {
+  NotificationDepth,
+  NotificationHost,
+} from "../components/notifications";
 import { screenInsets } from "../components/safe-area";
 import { colors, fill, row } from "../components/theme";
-import { ToastLayer } from "../components/toast";
 import {
   control,
   icon,
@@ -29,6 +40,61 @@ const grabberWidth = 36;
 
 /** The header bar: a phone sheet's (44 with no divider under it), a stepped dialog's. */
 const headerHeight = { sheet: 40, plainSheet: 44, step: 48 } as const;
+
+/**
+ * Shared native `<Dialog>` primitive that mounts the unified `NotificationHost` inside its native
+ * top-level layer so Toasts, Progress Notifications, and Host Error alerts stay above its backdrop.
+ */
+export function NativeDialog(
+  props: DialogProps & { leaving?: boolean; phone?: boolean },
+) {
+  const parentDepth = NotificationDepth();
+  const depth = () => parentDepth() + 1;
+  // Memoize children so sibling NotificationHost overlay updates never re-evaluate or remount the dialog body.
+  const content = computed(() => props.children);
+  return (
+    <Dialog
+      testID={props.testID}
+      open={props.open}
+      animation={props.animation}
+      presentation={props.presentation}
+      closeOnEscape={props.closeOnEscape}
+      closeOnBackdropPress={props.closeOnBackdropPress}
+      closeOnSwipe={props.closeOnSwipe}
+      detents={props.detents}
+      detent={props.detent}
+      defaultDetent={props.defaultDetent}
+      grabber={props.grabber}
+      largestUndimmedDetent={props.largestUndimmedDetent}
+      onDetentChange={props.onDetentChange}
+      transitionShader={props.transitionShader}
+      statusBar={props.statusBar}
+      accessibilityLabel={props.accessibilityLabel}
+      accessibilityDescription={props.accessibilityDescription}
+      role={props.role}
+      onOpen={props.onOpen}
+      onClose={props.onClose}
+      onCancel={props.onCancel}
+      onOpenChange={props.onOpenChange}
+      style={props.style}
+      class={props.class}
+      backdropStyle={props.backdropStyle}
+      backdropClass={props.backdropClass}
+      backdropTestID={props.backdropTestID}
+      ios={props.ios}
+      android={props.android}
+    >
+      <NotificationDepth.Provider value={depth}>
+        {content()}
+      </NotificationDepth.Provider>
+      <NotificationHost
+        active={props.open !== false && !props.leaving}
+        phone={props.phone}
+        depth={depth()}
+      />
+    </Dialog>
+  );
+}
 
 export function Modal(props: {
   title: string;
@@ -234,24 +300,24 @@ export function Modal(props: {
         </If>
         {props.children}
       </View>
-      <ToastLayer phone={props.phone} />
-      <ProgressNotificationLayer phone={props.phone} />
     </Regular>
   );
   if (focused)
     return (
-      <Dialog
+      <NativeDialog
         accessibilityLabel={props.title}
         style={{ ...fill, alignItems: "center", justifyContent: "center" }}
         animation="none"
         closeOnEscape={false}
         closeOnBackdropPress={false}
+        leaving={leaving()}
+        phone={props.phone}
         onOpenChange={({ open }) => {
           if (!open) close();
         }}
       >
         {panel()}
-      </Dialog>
+      </NativeDialog>
     );
   const dialog = (overlay: boolean) => (
     <View
@@ -269,11 +335,24 @@ export function Modal(props: {
       {panel()}
     </View>
   );
+  const parentDepth = NotificationDepth();
+  const modalDepth = () => parentDepth() + 1;
   return (
     <Each of={[Boolean(props.overPhoneNavigation) || !props.phone]}>
       {(overlay) =>
         overlay() ? (
-          <Overlay style={fill}>{dialog(true)}</Overlay>
+          <>
+            <Overlay style={fill}>
+              <NotificationDepth.Provider value={modalDepth}>
+                {dialog(true)}
+              </NotificationDepth.Provider>
+            </Overlay>
+            <NotificationHost
+              active={!leaving()}
+              phone={props.phone}
+              depth={modalDepth()}
+            />
+          </>
         ) : (
           dialog(false)
         )

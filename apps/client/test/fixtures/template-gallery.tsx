@@ -1,5 +1,5 @@
 import { mount, signal, Storage, Text, View } from "nsh";
-import { ToastLayer } from "../../src/components/toast";
+import { NotificationHost } from "../../src/components/notifications";
 import { openAgentChat } from "../../src/pages/templates/agent-chat";
 import { TemplateGallery } from "../../src/pages/templates/gallery";
 import { createHost, Host } from "../../src/services/host";
@@ -75,7 +75,7 @@ function Fixture(props: {
           }
           onModelServices={noop}
         />
-        <ToastLayer />
+        <NotificationHost />
       </View>
     </Host.Provider>
   );

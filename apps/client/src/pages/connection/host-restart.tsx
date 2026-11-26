@@ -3,13 +3,13 @@ import type { ProgressHandle } from "../../components/progress-notification";
 import type { light } from "../../components/theme";
 import type { UpgradeResult } from "../settings/updates/progress";
 import { cleanup, computed, effect, signal, untracked, View } from "nsh";
-import { Dialog } from "nsh/base";
 import {
   Button,
   colors,
   dialogWidth,
   fill,
   Label,
+  NativeDialog,
   row,
 } from "../../components";
 import { startProgress } from "../../components/progress-notification";
@@ -323,7 +323,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
       {(current) => (
         // A dialog of its own: Settings (and any other focused dialog) is a native layer over the
         // window, and only a layer opened after it covers it.
-        <Dialog
+        <NativeDialog
           accessibilityLabel={uiText("hostUpdateInProgress")}
           style={fill}
           animation="none"
@@ -556,7 +556,7 @@ export function HostRestartScreen(props: { onConnect: () => void }) {
               </>
             </View>
           </View>
-        </Dialog>
+        </NativeDialog>
       )}
     </If>
   );
