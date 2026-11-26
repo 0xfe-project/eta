@@ -76,6 +76,23 @@ const plainRun = [
   row(2, { role: "assistant", content: [{ type: "text", text: plain }] }),
 ];
 
+/** A reply that just started: no steps and no words yet. */
+const waitingRun = [
+  row(1, { role: "user", content: "Why does the model return 401?" }),
+];
+
+/** The first step has landed, with the answer streaming beneath it. */
+const firstStepRun = [
+  row(1, { role: "user", content: "Why does the model return 401?" }),
+  row(2, {
+    role: "assistant",
+    content: [
+      { type: "thinking", thinking: thought },
+      { type: "text", text: plain },
+    ],
+  }),
+];
+
 const activity = [
   {
     id: "t1",
@@ -125,25 +142,33 @@ function Fixture() {
   const host = createHost();
   host.address.set({ origin: "http://example.invalid" });
   const ending = signal<Ending>("working");
-  const plainSession = signal(false);
-  const runningToolSession = signal(false);
+  const sessionMode = signal<
+    "working" | "runningTool" | "plain" | "waiting" | "firstStep"
+  >("working");
   const retried = signal(0);
   /** Rows the run wrote after the fixture's own. */
   const later = signal<ViewMessageRow[]>([]);
   const reloaded = signal(false);
+  const baseRows = () => {
+    switch (sessionMode()) {
+      case "runningTool":
+        return runningTool;
+      case "plain":
+        return plainRun;
+      case "waiting":
+        return waitingRun;
+      case "firstStep":
+        return firstStepRun;
+      default:
+        return working;
+    }
+  };
   const sessionTarget = () => ({
     version: 1,
     revisions: {},
     sections: {
       transcript: {
-        messages: [
-          ...(runningToolSession()
-            ? runningTool
-            : plainSession()
-              ? plainRun
-              : working),
-          ...later(),
-        ],
+        messages: [...baseRows(), ...later()],
       },
       core: { session: "s-ada", running: true },
     },
@@ -205,12 +230,33 @@ function Fixture() {
           onReadDraft={() => {}}
           registerAction={() => () => {}}
         />
-        <Label>{`Retried: ${retried()}`}</Label>
+        <View testID="below-message">
+          <Label>{`Retried: ${retried()}`}</Label>
+        </View>
+        <Button
+          label="Start waiting"
+          onPress={() => {
+            sessionMode.set("waiting");
+            host.state.update((state) => ({
+              ...state,
+              targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
+            }));
+          }}
+        />
+        <Button
+          label="First step"
+          onPress={() => {
+            sessionMode.set("firstStep");
+            host.state.update((state) => ({
+              ...state,
+              targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
+            }));
+          }}
+        />
         <Button
           label="Running tool"
           onPress={() => {
-            runningToolSession.set(true);
-            plainSession.set(false);
+            sessionMode.set("runningTool");
             host.state.update((state) => ({
               ...state,
               targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
@@ -220,7 +266,7 @@ function Fixture() {
         <Button
           label="Complete tool"
           onPress={() => {
-            runningToolSession.set(false);
+            sessionMode.set("working");
             host.state.update((state) => ({
               ...state,
               targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
@@ -230,8 +276,7 @@ function Fixture() {
         <Button
           label="Write without tools"
           onPress={() => {
-            runningToolSession.set(false);
-            plainSession.set(true);
+            sessionMode.set("plain");
             host.state.update((state) => ({
               ...state,
               targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
@@ -261,7 +306,9 @@ function Fixture() {
         />
         <Button
           label="Finish"
-          onPress={() => ending.set(plainSession() ? "plain" : "done")}
+          onPress={() =>
+            ending.set(sessionMode() === "plain" ? "plain" : "done")
+          }
         />
         <Button label="End stopped" onPress={() => ending.set("stopped")} />
         <Button label="End failed" onPress={() => ending.set("failed")} />
