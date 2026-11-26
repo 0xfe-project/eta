@@ -12,7 +12,7 @@
 
 - Fields: `name`, `instructions` (appended after the base of every session's system prompt for this agent), `persona` (the name of a persona card; an empty string is the project's default card, which differs from "no persona"), `model` (`provider:modelId`, empty means follow settings), `thinking_level`.
 - On creation it gets its own workspace on the primary node, `<data directory>/agents/<id>/`, which is also a project of kind `agent_home` owned by it (`project.owner_agent_id`), and both appear together in one transaction. Renaming moves the directory.
-- An agent is talked to in groups; there are no private chats. `agents.direct` is gone and answers with an error that says so. Migration 0061 made every private chat a group of one (same id, name, archive state and timeline; the agent as its steward).
+- An agent is talked to in groups; there are no private chats, and no `agents.direct` to ask for one: a client makes its group of one with `conversations.create` and finds it again by `agentOnlyChat` (`@eta/client-contracts`). Migration 0061 made every private chat a group of one (same id, name, archive state and timeline; the agent as its steward).
 - Deleting an agent first stops the reply it is writing; the lines it wrote on the timeline are kept. Each kind of conversation is told (`ConversationPolicy.onAgentDeleted`); a group keeps its rows and loses the member.
 
 ## Projects and stewards

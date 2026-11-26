@@ -100,7 +100,7 @@ function sceneWire(rows: MessageView[]): WireClient {
   const info = {
     id: ID,
     projectId: "p1",
-    kind: "direct",
+    kind: "group",
     name: "Notes",
     readSeq: last,
     lastSeq: last,

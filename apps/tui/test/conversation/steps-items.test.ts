@@ -107,7 +107,7 @@ function items(input: Partial<ItemsInput>): TranscriptItem[] {
     rows: [],
     members: [],
     agents: [ADA, BEN],
-    kind: "direct",
+    kind: "group",
     sessions: new Map(),
     locale: "en",
     ...input,
@@ -239,6 +239,7 @@ describe("a group conversation", () => {
     const out = items({
       rows: [question, a, b],
       kind: "group",
+      members: [member(), member({ agentId: BEN.id, sessionId: "s-ben" })],
       stepsOpen: CLOSED,
     });
     expect(kindsAndKeys(out)).toEqual([
@@ -412,7 +413,12 @@ describe("a running reply", () => {
       srow(1, userMsg("go")),
       srow(2, assistant(20, [toolCall("c1", "ls")])),
     ]);
-    const out = items({ ...input, kind: "group", stepsOpen: CLOSED });
+    const out = items({
+      ...input,
+      kind: "group",
+      members: [member(), member({ agentId: BEN.id, sessionId: "s-ben" })],
+      stepsOpen: CLOSED,
+    });
     expect(kindsAndKeys(out)).toEqual([
       `author ${target.id}:author`,
       `steps ${target.id}:steps`,

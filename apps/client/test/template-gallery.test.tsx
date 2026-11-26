@@ -88,7 +88,7 @@ test("the agent made gets a chat of its own in its home project: conversations.c
     'conversations.create {"projectId":"home-new-agent","agentIds":["new-agent"],"stewardId":"new-agent"}',
   );
   expect(sent.split("conversations.create").length).toBe(2);
-  // agents.direct is gone from the host: asking for it is an error.
+  // The host has no agents.direct: nothing asks for one.
   expect(sent).not.toContain("agents.direct");
 });
 

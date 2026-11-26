@@ -23,9 +23,9 @@ afterEach(async () => {
   }));
 });
 
-const group = (id: string, kind: "direct" | "group", agents: string[]) => ({
+const group = (id: string, agents: string[]) => ({
   id,
-  kind,
+  kind: "group",
   name: id,
   archived: false,
   updated_at: "2026-10-14T00:00:00Z",
@@ -50,9 +50,9 @@ async function mount(path = "/?group=team&view=memory") {
       { id: "b", name: "研究员 B" },
     ],
     groups: [
-      group("dm", "direct", ["a"]),
-      group("solo", "group", ["a"]),
-      group("team", "group", ["a", "b"]),
+      group("dm", ["a"]),
+      group("solo", ["a"]),
+      group("team", ["a", "b"]),
     ],
     messages: [],
     interactions: [],

@@ -124,7 +124,7 @@ function conversation(
   hasMore = false,
 ): Partial<ConversationSections> {
   return {
-    info: { id: "c1", kind: "direct" } as never,
+    info: { id: "c1", kind: "group" } as never,
     members,
     timeline: { messages, held, hasMore },
   };

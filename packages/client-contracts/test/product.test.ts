@@ -42,10 +42,10 @@ describe("the product's targets on the generic pipe", () => {
         clientId: "client-1",
       },
     };
-    const direct: AgentCall = {
+    const agentCall: AgentCall = {
       op: "call",
       target: "agents",
-      action: "direct",
+      action: "delete",
       args: { agentId: "a1" },
     };
     const steward: ConversationCall = {
@@ -55,7 +55,7 @@ describe("the product's targets on the generic pipe", () => {
       // Null is a real answer: the group has no steward.
       args: { conversationId: "c1", agentId: null },
     };
-    for (const call of [send, direct, steward]) {
+    for (const call of [send, agentCall, steward]) {
       expect(JSON.parse(JSON.stringify(call))).toEqual(call);
     }
 

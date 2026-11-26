@@ -219,8 +219,10 @@ function attachmentsOf(data: Record<string, unknown>): AttachmentView[] {
 
 function replyItems(context: Context, row: MessageView): TranscriptItem[] {
   const { input } = context;
+  // A row says whose turn it was where there is more than one voice in the room. A group of one is
+  // that agent's own chat, and its name is the title there already.
   const author: TranscriptItem[] =
-    input.kind === "group"
+    input.kind === "group" && input.members.length > 1
       ? [
           {
             kind: "author",

@@ -50,9 +50,10 @@ const listed = new WeakMap<
 
 /**
  * The conversations without Captain's own one. A host lists it under its own kind, `captain`, if
- * at all (today's leaves it out of the list); a host from before that lists it as a private chat
- * whose only member is Captain, which Captain's word in the agents list tells apart. The same
- * arrays in give the same array out, so a selector that reads it does not render again.
+ * at all (today's leaves it out of the list); a host that lists it as the group of one it is gives
+ * a single member, which Captain's word in the agents list tells apart from an ordinary agent's own
+ * chat. The same arrays in give the same array out, so a selector that reads it does not render
+ * again.
  */
 export function withoutCaptainConversation(
   conversations: readonly ConversationSummary[],
@@ -67,7 +68,6 @@ export function withoutCaptainConversation(
     (conversation) =>
       conversation.kind !== "captain" &&
       !(
-        conversation.kind === "direct" &&
         conversation.participants.length === 1 &&
         captains.has(conversation.participants[0]!.agentId)
       ),
