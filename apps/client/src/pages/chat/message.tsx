@@ -12,6 +12,7 @@ import type { TextSelection } from "../../components/eta-editor";
 import type { DeliveryActions } from "./composer-delivery";
 import {
   captainProposalOf,
+  isPictureType,
   publishedRefs,
   runBlocks,
   runFromOf,
@@ -42,6 +43,8 @@ import { AgentFace } from "../../components/agent-face";
 import { EmptyState } from "../../components/empty-state";
 import {
   chatText,
+  chipMaxWidth,
+  LineRoom,
   shownFiles,
   shownMentions,
 } from "../../components/eta-editor";
@@ -56,6 +59,7 @@ import {
 } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
+import { PictureModes } from "../../services/picture-mode";
 import { problemReason } from "../../services/problem-text";
 import { Popover } from "../../ui";
 import { subtasksOf, TaskSummary } from "../tasks/status";
@@ -116,7 +120,11 @@ function StreamingCaret() {
 /** How wide your message's bubble runs, and on phones the least room a task draft's title keeps. A
  * draft's card has no width of its own: like a task's card it fills the column, whose width is
  * the appearance setting's. */
-const bubbleWidth = { phone: "84%", desktop: "72%" } as const;
+const bubbleShare = { phone: 0.84, desktop: 0.72 } as const;
+const bubbleWidth = {
+  phone: `${bubbleShare.phone * 100}%`,
+  desktop: `${bubbleShare.desktop * 100}%`,
+} as const;
 const draftTitleWidth = 200;
 
 /** How each code the host fails a reply with is said. */
@@ -311,6 +319,26 @@ export function Message(props: {
   };
   const discarded = () => item().data.discarded === true;
   const busy = signal(false);
+  const rowWidth = signal(0);
+  const share = () => (props.phone ? bubbleShare.phone : bubbleShare.desktop);
+  const bubbleBorderAndPadding = 2 * (1 + space[12]);
+  const measured = () => rowWidth() > 0;
+  const lineRoom = () =>
+    measured() ? Math.max(0, rowWidth() * share() - bubbleBorderAndPadding) : 0;
+  const pictureModes = PictureModes();
+  /** A chip is laid in the text's line and adds nothing to the bubble's own width, so a
+   * bubble that holds one is never narrower than the chip's longest. */
+  const holdsChip = () => {
+    const compact = pictureModes.mode() !== "expanded";
+    const chipIn = (message: MessageView) =>
+      !!pasteBlocksOf(message.data, message.text) ||
+      (compact && message.text.includes("!["));
+    return (
+      attached().some((file) => compact || !isPictureType(file.contentType)) ||
+      chipIn(item()) ||
+      props.additions.some((addition) => chipIn(addition))
+    );
+  };
   /** Stop was pressed and the host has not said the reply is stopping yet. */
   const stopping = signal(false);
   async function discard() {
@@ -348,7 +376,13 @@ export function Message(props: {
       }}
     >
       <If when={item().author === "user"}>
-        <View style={{ alignItems: "flex-end", gap: space[4] }}>
+        <View
+          // The row is as wide as the message, whatever the bubble holds: the line's room is
+          // the bubble's share of it, less the bubble's border and padding (the bubble itself
+          // fits its content, so it cannot be measured for this).
+          onLayout={({ bounds }) => rowWidth.set(bounds.size.width)}
+          style={{ alignItems: "flex-end", gap: space[4] }}
+        >
           <View
             accessibilityLabel={
               props.delivery
@@ -360,6 +394,13 @@ export function Message(props: {
             }
             style={{
               maxWidth: props.phone ? bubbleWidth.phone : bubbleWidth.desktop,
+              minWidth:
+                measured() && holdsChip()
+                  ? Math.min(
+                      chipMaxWidth + space[2] + bubbleBorderAndPadding,
+                      rowWidth() * share(),
+                    )
+                  : undefined,
               borderWidth: 1,
               borderColor: c().border,
               backgroundColor: props.delivery?.failure
@@ -373,33 +414,37 @@ export function Message(props: {
               paddingHorizontal: space[12],
             }}
           >
-            <chatText.View
-              text={{ ...stored(item()), files: attached() }}
-              plugins={shown}
-              label={uiText("yourMessage")}
-            />
-            <Each of={props.additions} key={(addition) => addition.id}>
-              {(addition) => (
-                <View
-                  style={{
-                    gap: space[2],
-                    marginTop: space[8],
-                    paddingTop: space[8],
-                    borderTopWidth: 1,
-                    borderColor: c().border,
-                  }}
-                >
-                  <Label variant="caption" tone="muted">
-                    {uiText("inserted", { clock: clock(addition().createdAt) })}
-                  </Label>
-                  <chatText.View
-                    text={stored(addition())}
-                    plugins={shown}
-                    label={uiText("insertedMessage")}
-                  />
-                </View>
-              )}
-            </Each>
+            <LineRoom.Provider value={lineRoom}>
+              <chatText.View
+                text={{ ...stored(item()), files: attached() }}
+                plugins={shown}
+                label={uiText("yourMessage")}
+              />
+              <Each of={props.additions} key={(addition) => addition.id}>
+                {(addition) => (
+                  <View
+                    style={{
+                      gap: space[2],
+                      marginTop: space[8],
+                      paddingTop: space[8],
+                      borderTopWidth: 1,
+                      borderColor: c().border,
+                    }}
+                  >
+                    <Label variant="caption" tone="muted">
+                      {uiText("inserted", {
+                        clock: clock(addition().createdAt),
+                      })}
+                    </Label>
+                    <chatText.View
+                      text={stored(addition())}
+                      plugins={shown}
+                      label={uiText("insertedMessage")}
+                    />
+                  </View>
+                )}
+              </Each>
+            </LineRoom.Provider>
           </View>
           <If when={props.delivery}>
             {(delivery) => (
