@@ -48,7 +48,7 @@ async function git(dir: string, ...args: string[]): Promise<string> {
 
 /**
  * A repository with the fixture plugin under `sub`, and a Cursor-layout plugin (manifest in
- * `.cursor-plugin/`, a skill, and an `agents/` folder eta does not load) under `cursor`.
+ * `.cursor-plugin/`, a skill, a bundled agent in `agents/`, and unsupported `hooks`/`rules/`) under `cursor`.
  */
 async function repo(): Promise<{ url: string; sha: string }> {
   const dir = await tempDir("eta-market-repo-");
@@ -59,6 +59,7 @@ async function repo(): Promise<{ url: string; sha: string }> {
   await mkdir(join(foreign, ".cursor-plugin"), { recursive: true });
   await mkdir(join(foreign, "skills", "a"), { recursive: true });
   await mkdir(join(foreign, "agents"), { recursive: true });
+  await mkdir(join(foreign, "rules"), { recursive: true });
   await writeFile(
     join(foreign, ".cursor-plugin", "plugin.json"),
     JSON.stringify({
@@ -66,6 +67,7 @@ async function repo(): Promise<{ url: string; sha: string }> {
       displayName: "Cursor demo",
       skills: "./skills/",
       agents: "./agents/",
+      hooks: "./hooks.json",
     }),
   );
   await writeFile(
@@ -73,6 +75,7 @@ async function repo(): Promise<{ url: string; sha: string }> {
     "---\nname: a\ndescription: Does a things.\n---\n\nBody.\n",
   );
   await writeFile(join(foreign, "agents", "x.md"), "x");
+  await writeFile(join(foreign, "rules", "r.mdc"), "r");
   await git(dir, "add", ".");
   await git(dir, "commit", "-qm", "first");
   return { url: `file://${dir}`, sha: await git(dir, "rev-parse", "HEAD") };
@@ -630,7 +633,7 @@ describe("installing from the catalog", () => {
     });
   });
 
-  it("previews a Cursor-layout plugin: skills load, what is ignored is listed", async () => {
+  it("previews a Cursor-layout plugin: skills and bundled agents load, what is ignored is listed", async () => {
     const { url, sha } = await repo();
     handler = () =>
       json({
@@ -647,11 +650,22 @@ describe("installing from the catalog", () => {
     const preview = await m.market.preview("cursor-demo");
     expect(preview.skills.map((s) => s.name)).toEqual(["a"]);
     expect(preview.servers).toEqual([]);
+    expect(preview.bundledAgents).toEqual([
+      {
+        id: "x",
+        name: "X",
+        description: "",
+        path: "agents/x.md",
+        instructions: "x",
+      },
+    ]);
     const reports = preview.reports.join("\n");
     expect(reports).not.toContain("manifest read from");
     expect(preview.layout).toBe(".cursor-plugin/plugin.json");
-    expect(reports).toContain("agents is not supported by eta; ignored");
-    expect(reports).toContain("agents/: not supported by eta; ignored");
+    expect(reports).not.toContain("agents is not supported by eta; ignored");
+    expect(reports).not.toContain("agents/: not supported by eta; ignored");
+    expect(reports).toContain("hooks is not supported by eta; ignored");
+    expect(reports).toContain("rules/: not supported by eta; ignored");
     expect(await m.market.install("cursor-demo", sha)).toBe("cursor-demo");
   });
 

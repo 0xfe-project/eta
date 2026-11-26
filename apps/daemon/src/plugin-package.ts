@@ -67,13 +67,14 @@ const FOREIGN_FIELDS = new Set(["displayName", "logo", "category", "tags"]);
 /** Components of those plugins that eta does not load. */
 const FOREIGN_COMPONENTS = [
   "commands",
-  "agents",
   "hooks",
   "rules",
   "lspServers",
   "outputStyles",
   "themes",
 ];
+const MAX_AGENT_FILE_BYTES = 256 * 1024;
+const MAX_PLUGIN_AGENTS = 64;
 const RESERVED_ENV = new Set(["PLUGIN_ROOT", "PLUGIN_DATA"]);
 const ENV_NAME = /^[A-Z_]\w*$/i;
 /** RFC 9110's `token`. */
@@ -135,6 +136,14 @@ interface PluginServerBinding {
   auth?: false | "oauth";
 }
 
+export interface LoadedPluginAgent {
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+  instructions: string;
+}
+
 export interface PluginPackage {
   /** The filesystem-resolved plugin root. */
   root: string;
@@ -144,6 +153,7 @@ export interface PluginPackage {
   /** The manifest path of a Claude Code or Cursor layout; absent for a native plugin.json. Information, not a problem. */
   layout?: string;
   skills: PluginSkill[];
+  agents: LoadedPluginAgent[];
   servers: PluginServer[];
   fields: PluginField[];
   /** Why `config` is invalid, when it is; the plugin cannot be configured until it is fixed. */
@@ -223,7 +233,7 @@ function parseManifest(
     if (MANIFEST_FIELDS.has(field)) continue;
     if (foreign && FOREIGN_FIELDS.has(field)) continue;
     // Claude and Cursor manifests carry fields eta does not know; that is normal, not a problem.
-    if (foreign && field === "mcpServers") continue;
+    if (foreign && (field === "mcpServers" || field === "agents")) continue;
     if (foreign && field === "skills") {
       if (!skillsInPlace(raw.skills, root))
         reports.push(
@@ -1155,6 +1165,497 @@ function mergeBindings(
   };
 }
 
+const toPosixRelative = (root: string, path: string): string =>
+  relative(root, path).split(sep).join("/");
+
+function slugifyAgentId(stem: string): string {
+  const slug = stem
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug === ""
+    ? "agent"
+    : slug.slice(0, 64).replace(/-+$/, "") || "agent";
+}
+
+function humanizeStem(stem: string): string {
+  const words = stem.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (words === "") return stem;
+  return words.replace(/\b[a-z]/g, (char) => char.toUpperCase());
+}
+
+function hasClosingQuote(text: string, quote: "'" | '"'): boolean {
+  if (text.length < 2 || !text.endsWith(quote)) return false;
+  if (quote === "'") {
+    let count = 0;
+    for (let i = text.length - 1; i >= 1 && text[i] === "'"; i--) count++;
+    return count % 2 === 1;
+  }
+  let backslashes = 0;
+  for (let i = text.length - 2; i >= 1 && text[i] === "\\"; i--) backslashes++;
+  return backslashes % 2 === 0;
+}
+
+function unquoteYamlScalar(raw: string): string {
+  const trimmed = raw.trim();
+  if (
+    trimmed.length >= 2 &&
+    trimmed.startsWith("'") &&
+    hasClosingQuote(trimmed, "'")
+  )
+    return trimmed.slice(1, -1).replaceAll("''", "'");
+  if (
+    trimmed.length >= 2 &&
+    trimmed.startsWith('"') &&
+    hasClosingQuote(trimmed, '"')
+  )
+    return trimmed.slice(1, -1).replace(/\\(.)/g, (_, escaped: string) => {
+      if (escaped === "n") return "\n";
+      if (escaped === "r") return "\r";
+      if (escaped === "t") return "\t";
+      if (escaped === '"') return '"';
+      if (escaped === "\\") return "\\";
+      return escaped;
+    });
+  if (trimmed === "null" || trimmed === "~") return "";
+  return trimmed;
+}
+
+function parseBlockScalar(lines: string[], style: "|" | ">"): string {
+  let end = lines.length - 1;
+  while (end >= 0 && lines[end]!.trim() === "") end--;
+  if (end < 0) return "";
+  const slice = lines.slice(0, end + 1);
+  let minIndent = Number.POSITIVE_INFINITY;
+  for (const line of slice) {
+    if (line.trim() === "") continue;
+    const indent = /^[ \t]*/.exec(line)![0].length;
+    if (indent < minIndent) minIndent = indent;
+  }
+  const dedented = slice.map((line) =>
+    line.trim() === "" ? "" : line.slice(minIndent),
+  );
+  if (style === "|") return dedented.join("\n").trim();
+  const paragraphs: string[] = [];
+  let current: string[] = [];
+  for (const line of dedented) {
+    if (line === "") {
+      if (current.length > 0) {
+        paragraphs.push(current.join(" "));
+        current = [];
+      }
+    } else {
+      current.push(line.trim());
+    }
+  }
+  if (current.length > 0) paragraphs.push(current.join(" "));
+  return paragraphs.join("\n\n").trim();
+}
+
+function parseAgentFrontmatter(lines: string[]): {
+  name: string;
+  description: string;
+} {
+  let name = "";
+  let description = "";
+  const assign = (key: string, value: string): void => {
+    const clean = value.trim();
+    if (key === "name") name = clean;
+    else if (key === "description") description = clean;
+  };
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i]!;
+    if (line.trim() === "" || line.trimStart().startsWith("#")) {
+      i++;
+      continue;
+    }
+    const match = /^([a-z_][\w-]*)[ \t]*:(.*)$/i.exec(line);
+    if (match === null) {
+      i++;
+      continue;
+    }
+    const key = match[1]!;
+    const rest = match[2]!.trim();
+    i++;
+    const blockHeader = /^([|>])(?:[+-]?\d*|\d*[+-]?)[ \t]*(?:#.*)?$/.exec(
+      rest,
+    );
+    if (blockHeader !== null) {
+      const blockLines: string[] = [];
+      while (
+        i < lines.length &&
+        (lines[i]!.trim() === "" || /^[ \t]/.test(lines[i]!))
+      ) {
+        blockLines.push(lines[i]!);
+        i++;
+      }
+      if (key === "name" || key === "description")
+        assign(key, parseBlockScalar(blockLines, blockHeader[1] as "|" | ">"));
+      continue;
+    }
+    if (rest === "") {
+      const indented: string[] = [];
+      while (
+        i < lines.length &&
+        (lines[i]!.trim() === "" || /^[ \t]/.test(lines[i]!))
+      ) {
+        indented.push(lines[i]!);
+        i++;
+      }
+      if (key === "name" || key === "description") {
+        const firstNonEmpty = indented.find((item) => item.trim() !== "");
+        if (
+          firstNonEmpty !== undefined &&
+          !firstNonEmpty.trimStart().startsWith("- ")
+        )
+          assign(key, unquoteYamlScalar(parseBlockScalar(indented, ">")));
+      }
+      continue;
+    }
+    const quote = rest.startsWith('"')
+      ? '"'
+      : rest.startsWith("'")
+        ? "'"
+        : undefined;
+    if (quote !== undefined) {
+      let combined = rest;
+      while (!hasClosingQuote(combined, quote) && i < lines.length) {
+        combined = `${combined}\n${lines[i]!.trim()}`;
+        i++;
+      }
+      if (key === "name" || key === "description")
+        assign(key, unquoteYamlScalar(combined));
+      continue;
+    }
+    const parts = [rest];
+    while (i < lines.length && /^[ \t]+\S/.test(lines[i]!)) {
+      parts.push(lines[i]!.trim());
+      i++;
+    }
+    if (key === "name" || key === "description")
+      assign(key, unquoteYamlScalar(parts.join(" ")));
+  }
+  return { name, description };
+}
+
+function extractFirstParagraph(lines: string[]): string {
+  const isBlockStart = (line: string): boolean =>
+    /^(?:#{1,6}[ \t]|```|~~~|>|[*+-][ \t]|\d+\.[ \t]|(?:---|\*\*\*|___)[ \t]*$|\|)/.test(
+      line,
+    );
+  let i = 0;
+  while (i < lines.length && lines[i]!.trim() === "") i++;
+  const collected: string[] = [];
+  while (i < lines.length) {
+    const line = lines[i]!.trim();
+    if (line === "" || isBlockStart(line)) break;
+    collected.push(line);
+    i++;
+  }
+  return collected.join(" ").trim();
+}
+
+function parseAgentMarkdown(
+  text: string,
+  stem: string,
+): { name: string; description: string; instructions: string } | null {
+  const normalized = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+  if (/^---[ \t]*(?:\n|$)/.test(normalized)) {
+    const lines = normalized.split("\n");
+    const closeIndex = lines.findIndex(
+      (line, index) => index > 0 && /^---[ \t]*$/.test(line),
+    );
+    if (closeIndex !== -1) {
+      const meta = parseAgentFrontmatter(lines.slice(1, closeIndex));
+      const instructions = lines
+        .slice(closeIndex + 1)
+        .join("\n")
+        .trim();
+      if (instructions === "") return null;
+      return {
+        name: meta.name || humanizeStem(stem),
+        description: meta.description,
+        instructions,
+      };
+    }
+  }
+  const trimmed = normalized.trim();
+  if (trimmed === "") return null;
+  const lines = trimmed.split("\n");
+  const firstLine = lines[0]!;
+  if (/^#[ \t]+\S/.test(firstLine)) {
+    const title = firstLine
+      .slice(1)
+      .trim()
+      .replace(/[ \t]+#+$/, "")
+      .trim();
+    const name = title || humanizeStem(stem);
+    const description = extractFirstParagraph(lines.slice(1));
+    return { name, description, instructions: trimmed };
+  }
+  return {
+    name: humanizeStem(stem),
+    description: "",
+    instructions: trimmed,
+  };
+}
+
+interface AgentCandidate {
+  relPath: string;
+  fullPath: string;
+  realPath: string;
+  stem: string;
+  size: number;
+}
+
+async function scanAgentDir(
+  dir: string,
+  root: string,
+  reports: string[],
+  candidates: AgentCandidate[],
+  seenReal: Set<string>,
+): Promise<void> {
+  for (const entryName of readdirSync(dir).sort()) {
+    if (entryName.startsWith(".")) continue;
+    const entryPath = join(dir, entryName);
+    const relEntry = toPosixRelative(root, entryPath);
+    let linkStat;
+    try {
+      linkStat = lstatSync(entryPath);
+    } catch {
+      continue;
+    }
+    const real = await resolvedPath(entryPath);
+    const stat = statSync(entryPath, { throwIfNoEntry: false });
+    if (!isWithin(root, real)) {
+      if (
+        /\.md$/i.test(entryName) ||
+        stat?.isDirectory() === true ||
+        linkStat.isSymbolicLink()
+      )
+        reports.push(`${relEntry}: resolves outside the plugin; skipped`);
+      continue;
+    }
+    if (stat === undefined) continue;
+    if (stat.isFile()) {
+      if (!/\.md$/i.test(entryName)) continue;
+      if (seenReal.has(real)) continue;
+      seenReal.add(real);
+      candidates.push({
+        relPath: relEntry,
+        fullPath: entryPath,
+        realPath: real,
+        stem: entryName.replace(/\.md$/i, ""),
+        size: stat.size,
+      });
+    } else if (stat.isDirectory()) {
+      const nestedFile = join(entryPath, "AGENT.md");
+      try {
+        lstatSync(nestedFile);
+      } catch {
+        continue;
+      }
+      const relNested = toPosixRelative(root, nestedFile);
+      const nestedReal = await resolvedPath(nestedFile);
+      if (!isWithin(root, nestedReal)) {
+        reports.push(`${relNested}: resolves outside the plugin; skipped`);
+        continue;
+      }
+      const nestedStat = statSync(nestedFile, { throwIfNoEntry: false });
+      if (nestedStat?.isFile() !== true) continue;
+      if (seenReal.has(nestedReal)) continue;
+      seenReal.add(nestedReal);
+      candidates.push({
+        relPath: relNested,
+        fullPath: nestedFile,
+        realPath: nestedReal,
+        stem: entryName,
+        size: nestedStat.size,
+      });
+    }
+  }
+}
+
+async function loadPluginAgents(
+  root: string,
+  reports: string[],
+  declared?: unknown,
+): Promise<LoadedPluginAgent[]> {
+  const candidates: AgentCandidate[] = [];
+  const seenReal = new Set<string>();
+  const scannedDirs = new Set<string>();
+  const badPaths = new Set<string>();
+
+  const scanOnce = async (dir: string, realDir: string): Promise<void> => {
+    if (scannedDirs.has(realDir)) return;
+    scannedDirs.add(realDir);
+    await scanAgentDir(dir, root, reports, candidates, seenReal);
+  };
+
+  const defaultDir = join(root, "agents");
+  let hasDefault = false;
+  try {
+    lstatSync(defaultDir);
+    hasDefault = true;
+  } catch {
+    hasDefault = false;
+  }
+  if (hasDefault) {
+    const resolved = await resolvedPath(defaultDir);
+    if (
+      !isWithin(root, resolved) ||
+      statSync(defaultDir, { throwIfNoEntry: false })?.isDirectory() !== true
+    ) {
+      badPaths.add("agents");
+      reports.push("agents: not a directory inside the plugin; ignored");
+    } else {
+      await scanOnce(defaultDir, resolved);
+    }
+  }
+
+  if (declared !== undefined) {
+    const items =
+      typeof declared === "string"
+        ? [declared]
+        : Array.isArray(declared)
+          ? declared
+          : null;
+    if (items === null) {
+      reports.push(
+        "plugin.json: agents must be a path or list of paths; ignored",
+      );
+    } else {
+      for (const item of items) {
+        if (typeof item !== "string" || item.trim() === "") {
+          reports.push(
+            "plugin.json: agents must be a path or list of paths; ignored",
+          );
+          continue;
+        }
+        if (isAbsolute(item) || item.split(/[\\/]/).includes("..")) {
+          reports.push(
+            `plugin.json: agents path ${item}: must be relative and stay inside the plugin; ignored`,
+          );
+          continue;
+        }
+        const target = join(root, item);
+        const relTarget = toPosixRelative(root, target);
+        if (badPaths.has(relTarget)) continue;
+        let exists = false;
+        try {
+          lstatSync(target);
+          exists = true;
+        } catch {
+          exists = false;
+        }
+        if (!exists) {
+          reports.push(
+            `plugin.json: agents path ${item}: does not exist; ignored`,
+          );
+          continue;
+        }
+        const real = await resolvedPath(target);
+        if (!isWithin(root, real)) {
+          reports.push(
+            `plugin.json: agents path ${item}: resolves outside the plugin; ignored`,
+          );
+          continue;
+        }
+        const stat = statSync(target, { throwIfNoEntry: false });
+        if (stat === undefined) {
+          reports.push(
+            `plugin.json: agents path ${item}: does not exist; ignored`,
+          );
+          continue;
+        }
+        if (stat.isDirectory()) {
+          await scanOnce(target, real);
+        } else if (stat.isFile()) {
+          const fileName = basename(target);
+          if (fileName.startsWith(".") || !/\.md$/i.test(fileName)) {
+            reports.push(
+              `plugin.json: agents path ${item}: must be a markdown file; ignored`,
+            );
+            continue;
+          }
+          if (seenReal.has(real)) continue;
+          seenReal.add(real);
+          candidates.push({
+            relPath: relTarget,
+            fullPath: target,
+            realPath: real,
+            stem: fileName.replace(/\.md$/i, ""),
+            size: stat.size,
+          });
+        } else {
+          reports.push(
+            `plugin.json: agents path ${item}: not a file or directory; ignored`,
+          );
+        }
+      }
+    }
+  }
+
+  candidates.sort((a, b) =>
+    a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0,
+  );
+
+  const agents: LoadedPluginAgent[] = [];
+  const usedIds = new Set<string>();
+  const uniqueId = (base: string): string => {
+    if (!usedIds.has(base)) {
+      usedIds.add(base);
+      return base;
+    }
+    for (let n = 2; ; n++) {
+      const suffix = `-${n}`;
+      const candidate =
+        base.slice(0, Math.max(1, 64 - suffix.length)).replace(/-+$/, "") +
+        suffix;
+      if (!usedIds.has(candidate)) {
+        usedIds.add(candidate);
+        return candidate;
+      }
+    }
+  };
+
+  for (const candidate of candidates) {
+    if (candidate.size > MAX_AGENT_FILE_BYTES) {
+      reports.push(`${candidate.relPath}: exceeds 256 KiB limit; skipped`);
+      continue;
+    }
+    let text: string;
+    try {
+      text = readFileSync(candidate.fullPath, "utf8");
+    } catch (error) {
+      reports.push(
+        `${candidate.relPath}: could not be read (${messageOf(error)}); skipped`,
+      );
+      continue;
+    }
+    const parsed = parseAgentMarkdown(text, candidate.stem);
+    if (parsed === null) {
+      reports.push(`${candidate.relPath}: empty instructions; skipped`);
+      continue;
+    }
+    if (agents.length >= MAX_PLUGIN_AGENTS) {
+      reports.push(
+        `agents: limit of ${MAX_PLUGIN_AGENTS} agents reached; remaining files skipped`,
+      );
+      break;
+    }
+    agents.push({
+      id: uniqueId(slugifyAgentId(candidate.stem)),
+      name: parsed.name,
+      description: parsed.description,
+      path: candidate.relPath,
+      instructions: parsed.instructions,
+    });
+  }
+  return agents;
+}
+
 /** Read and validate the plugin at `dir`; throws `PluginError` when the spec rejects it. */
 export async function loadPlugin(dir: string): Promise<PluginPackage> {
   const root = await resolvedPath(dir);
@@ -1175,6 +1676,11 @@ export async function loadPlugin(dir: string): Promise<PluginPackage> {
   const reports: string[] = [];
   const { manifest, extensions } = parseManifest(raw, reports, foreign, root);
   const skills = await loadSkillDirs(root, reports);
+  const agents = await loadPluginAgents(
+    root,
+    reports,
+    foreign && isPlain(raw) ? raw.agents : undefined,
+  );
   if (!foreign) {
     const listed = await loadServers(root, reports);
     const extension = parseExtension(
@@ -1182,7 +1688,7 @@ export async function loadPlugin(dir: string): Promise<PluginPackage> {
       listed,
       reports,
     );
-    return { root, manifest, reports, skills, ...extension };
+    return { root, manifest, reports, skills, agents, ...extension };
   }
   const mapped = await loadForeignServers(
     root,
@@ -1218,6 +1724,7 @@ export async function loadPlugin(dir: string): Promise<PluginPackage> {
     reports,
     layout: found,
     skills,
+    agents,
     ...extension,
     fields,
     bindings,

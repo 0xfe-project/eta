@@ -3,6 +3,7 @@
  * The spec's failure boundaries (§4.1, §5.2, §6.2, §7.1, §7.2.2, §8.1, §11.3): what rejects a
  * plugin, what turns one component type off, and what skips one entry and leaves the rest.
  */
+import type { LoadedPluginAgent } from "../src/plugin-package";
 import * as fs from "node:fs/promises";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -530,7 +531,7 @@ describe("a Cursor or Claude Code layout", () => {
     },
   );
 
-  it("lists what it ignores: unsupported fields, folders and MCP files", async () => {
+  it("lists what it ignores: unsupported fields, folders and MCP files, while loading agents/", async () => {
     const loaded = await loadPlugin(
       await foreign(
         ".cursor-plugin",
@@ -549,12 +550,21 @@ describe("a Cursor or Claude Code layout", () => {
     );
     const text = loaded.reports.join("\n");
     expect(text).toContain("hooks is not supported by eta; ignored");
-    expect(text).toContain("agents is not supported by eta; ignored");
-    expect(text).toContain("agents/: not supported by eta; ignored");
+    expect(text).not.toContain("agents is not supported by eta; ignored");
+    expect(text).not.toContain("agents/: not supported by eta; ignored");
     expect(text).toContain("rules/: not supported by eta; ignored");
     expect(text).not.toContain("will run after you confirm");
     expect(text).not.toContain("manifest read from");
     expect(loaded.servers.map((entry) => entry.name)).toEqual(["s"]);
+    expect(loaded.agents).toEqual([
+      {
+        id: "a",
+        name: "A",
+        description: "",
+        path: "agents/a.md",
+        instructions: "x",
+      },
+    ]);
   });
 
   describe("plugin.json mcpServers", () => {
@@ -1377,5 +1387,322 @@ describe("skill ignore files", () => {
     expect(loaded.reports.join("\n")).toContain(
       "skills/b: skipped: ignored by an ignore file",
     );
+  });
+});
+
+describe("bundled agents", () => {
+  it("returns an empty agents array when a plugin has no agents/", async () => {
+    const loaded = await loadPlugin(await plugin());
+    const agents: LoadedPluginAgent[] = loaded.agents;
+    expect(agents).toEqual([]);
+    expect(loaded.reports).toEqual([]);
+  });
+
+  it("parses YAML frontmatter including quoted values, multiline/folded descriptions, and ignores unknown Claude/Cursor keys", async () => {
+    const loaded = await loadPlugin(
+      await plugin({
+        "agents/code-reviewer.md": [
+          "---",
+          'name: "Code Reviewer"',
+          "description: >",
+          "  Reviews pull requests for correctness,",
+          "  security, and test coverage.",
+          "tools: Read, Grep, Glob",
+          "model: sonnet",
+          "color: blue",
+          "metadata:",
+          "  name: Nested Name Ignored",
+          "---",
+          "",
+          "You are a thorough code reviewer.",
+          "",
+          "Focus on edge cases.",
+        ].join("\n"),
+        "agents/security_auditor.md": [
+          "---",
+          "name: 'Security Auditor''s Bot'",
+          "description: |-",
+          "  Line one.",
+          "  Line two.",
+          "---",
+          "",
+          "Audit every input boundary.",
+        ].join("\n"),
+        "agents/unnamed-helper.md": [
+          "---",
+          "description: Plain multiline",
+          "  continuation value.",
+          "---",
+          "",
+          "Help with daily tasks.",
+        ].join("\n"),
+      }),
+    );
+    expect(loaded.reports).toEqual([]);
+    expect(loaded.agents).toEqual([
+      {
+        id: "code-reviewer",
+        name: "Code Reviewer",
+        description:
+          "Reviews pull requests for correctness, security, and test coverage.",
+        path: "agents/code-reviewer.md",
+        instructions:
+          "You are a thorough code reviewer.\n\nFocus on edge cases.",
+      },
+      {
+        id: "security-auditor",
+        name: "Security Auditor's Bot",
+        description: "Line one.\nLine two.",
+        path: "agents/security_auditor.md",
+        instructions: "Audit every input boundary.",
+      },
+      {
+        id: "unnamed-helper",
+        name: "Unnamed Helper",
+        description: "Plain multiline continuation value.",
+        path: "agents/unnamed-helper.md",
+        instructions: "Help with daily tasks.",
+      },
+    ]);
+  });
+
+  it("falls back cleanly for plain markdown with and without a # heading", async () => {
+    const loaded = await loadPlugin(
+      await plugin({
+        "agents/architect.md": [
+          "# System Architect",
+          "",
+          "Designs resilient backend systems",
+          "with clear boundaries.",
+          "",
+          "## Principles",
+          "- Keep interfaces narrow.",
+        ].join("\n"),
+        "agents/list-only.md": ["# Quick Checker", "", "- Check types"].join(
+          "\n",
+        ),
+        "agents/release_manager.md": "Prepare release notes and verify tags.\n",
+      }),
+    );
+    expect(loaded.reports).toEqual([]);
+    expect(loaded.agents).toEqual([
+      {
+        id: "architect",
+        name: "System Architect",
+        description: "Designs resilient backend systems with clear boundaries.",
+        path: "agents/architect.md",
+        instructions: [
+          "# System Architect",
+          "",
+          "Designs resilient backend systems",
+          "with clear boundaries.",
+          "",
+          "## Principles",
+          "- Keep interfaces narrow.",
+        ].join("\n"),
+      },
+      {
+        id: "list-only",
+        name: "Quick Checker",
+        description: "",
+        path: "agents/list-only.md",
+        instructions: "# Quick Checker\n\n- Check types",
+      },
+      {
+        id: "release-manager",
+        name: "Release Manager",
+        description: "",
+        path: "agents/release_manager.md",
+        instructions: "Prepare release notes and verify tags.",
+      },
+    ]);
+  });
+
+  it("ignores hidden dotfiles and non-markdown files, and supports agents/<dir>/AGENT.md", async () => {
+    const loaded = await loadPlugin(
+      await plugin({
+        "agents/.hidden.md": "Hidden prompt",
+        "agents/README.txt": "Not markdown",
+        "agents/config.json": "{}",
+        "agents/direct.md": "Direct prompt",
+        "agents/nested-bot/AGENT.md":
+          "---\nname: Nested Bot\ndescription: Lives in a subdir\n---\n\nNested body.",
+        "agents/nested-bot/extra.md": "Ignored sibling",
+      }),
+    );
+    expect(loaded.reports).toEqual([]);
+    expect(loaded.agents).toEqual([
+      {
+        id: "direct",
+        name: "Direct",
+        description: "",
+        path: "agents/direct.md",
+        instructions: "Direct prompt",
+      },
+      {
+        id: "nested-bot",
+        name: "Nested Bot",
+        description: "Lives in a subdir",
+        path: "agents/nested-bot/AGENT.md",
+        instructions: "Nested body.",
+      },
+    ]);
+  });
+
+  it("skips empty files and frontmatter-only files with a report", async () => {
+    const loaded = await loadPlugin(
+      await plugin({
+        "agents/empty.md": "   \n\t\n",
+        "agents/header-only.md": "---\nname: Empty Body\n---\n   \n",
+        "agents/valid.md": "Real instructions.",
+      }),
+    );
+    expect(loaded.agents.map((a) => a.id)).toEqual(["valid"]);
+    expect(loaded.reports).toEqual([
+      "agents/empty.md: empty instructions; skipped",
+      "agents/header-only.md: empty instructions; skipped",
+    ]);
+  });
+
+  it("rejects symlinks resolving outside the plugin and non-directory agents/", async () => {
+    const outside = await temp();
+    await writeFile(join(outside, "escape.md"), "Secret outside instructions");
+    const root = await plugin({
+      "agents/good.md": "Safe instructions",
+      "skills/a/SKILL.md": skill("a"),
+    });
+    await symlink(
+      join(outside, "escape.md"),
+      join(root, "agents", "escape.md"),
+    );
+    await mkdir(join(root, "agents", "sub"), { recursive: true });
+    await symlink(
+      join(outside, "escape.md"),
+      join(root, "agents", "sub", "AGENT.md"),
+    );
+
+    const loaded = await loadPlugin(root);
+    expect(loaded.agents.map((a) => a.id)).toEqual(["good"]);
+    expect(loaded.reports.join("\n")).toContain(
+      "agents/escape.md: resolves outside the plugin; skipped",
+    );
+    expect(loaded.reports.join("\n")).toContain(
+      "agents/sub/AGENT.md: resolves outside the plugin; skipped",
+    );
+
+    const fileAgents = await loadPlugin(
+      await plugin({
+        agents: "not a dir",
+        "skills/a/SKILL.md": skill("a"),
+        "mcp.json": mcp({ s: stdio }),
+      }),
+    );
+    expect(fileAgents.agents).toEqual([]);
+    expect(fileAgents.skills).toHaveLength(1);
+    expect(fileAgents.servers).toHaveLength(1);
+    expect(fileAgents.reports[0]).toContain("agents: not a directory");
+  });
+
+  it("skips files exceeding 256 KiB and caps at 64 agents per plugin", async () => {
+    const oversized = await loadPlugin(
+      await plugin({
+        "agents/big.md": "x".repeat(256 * 1024 + 1),
+        "agents/ok.md": "Small prompt.",
+      }),
+    );
+    expect(oversized.agents.map((a) => a.id)).toEqual(["ok"]);
+    expect(oversized.reports).toEqual([
+      "agents/big.md: exceeds 256 KiB limit; skipped",
+    ]);
+
+    const manyFiles: Record<string, string> = {};
+    for (let i = 1; i <= 66; i++)
+      manyFiles[`agents/bot-${String(i).padStart(2, "0")}.md`] =
+        `Prompt for bot ${i}.`;
+    const capped = await loadPlugin(await plugin(manyFiles));
+    expect(capped.agents).toHaveLength(64);
+    expect(capped.agents[0]!.id).toBe("bot-01");
+    expect(capped.agents[63]!.id).toBe("bot-64");
+    expect(capped.reports).toEqual([
+      "agents: limit of 64 agents reached; remaining files skipped",
+    ]);
+  });
+
+  it("sorts deterministically and deduplicates colliding agent ids with -2, -3", async () => {
+    const loaded = await loadPlugin(
+      await plugin({
+        "agents/foo_bar.md": "Underscore body",
+        "agents/foo-bar.md": "Dash body",
+        "agents/Foo Bar.md": "Space body",
+      }),
+    );
+    expect(loaded.reports).toEqual([]);
+    expect(loaded.agents.map((a) => [a.path, a.id])).toEqual([
+      ["agents/Foo Bar.md", "foo-bar"],
+      ["agents/foo-bar.md", "foo-bar-2"],
+      ["agents/foo_bar.md", "foo-bar-3"],
+    ]);
+  });
+
+  it("respects foreign manifest.agents paths, deduplicates with agents/, and rejects escaping paths", async () => {
+    const root = await temp();
+    const files: Record<string, unknown> = {
+      ".claude-plugin/plugin.json": {
+        name: "claude-agents",
+        agents: [
+          "./agents/",
+          "./agents/a.md",
+          "./custom/b.md",
+          "./extra-dir",
+          "../outside.md",
+          "/etc/passwd",
+          "./missing.md",
+        ],
+      },
+      "agents/a.md": "---\nname: Alpha\n---\n\nAlpha instructions.",
+      "custom/b.md": "# Beta\n\nBeta summary.\n\nBeta details.",
+      "extra-dir/gamma.md": "Gamma instructions.",
+    };
+    for (const [rel, content] of Object.entries(files)) {
+      const target = join(root, rel);
+      await mkdir(join(target, ".."), { recursive: true });
+      await writeFile(
+        target,
+        typeof content === "string" ? content : JSON.stringify(content),
+      );
+    }
+
+    const loaded = await loadPlugin(root);
+    expect(loaded.agents).toEqual([
+      {
+        id: "a",
+        name: "Alpha",
+        description: "",
+        path: "agents/a.md",
+        instructions: "Alpha instructions.",
+      },
+      {
+        id: "b",
+        name: "Beta",
+        description: "Beta summary.",
+        path: "custom/b.md",
+        instructions: "# Beta\n\nBeta summary.\n\nBeta details.",
+      },
+      {
+        id: "gamma",
+        name: "Gamma",
+        description: "",
+        path: "extra-dir/gamma.md",
+        instructions: "Gamma instructions.",
+      },
+    ]);
+    const reportText = loaded.reports.join("\n");
+    expect(reportText).toContain(
+      "../outside.md: must be relative and stay inside the plugin",
+    );
+    expect(reportText).toContain(
+      "/etc/passwd: must be relative and stay inside the plugin",
+    );
+    expect(reportText).toContain("./missing.md: does not exist");
   });
 });
