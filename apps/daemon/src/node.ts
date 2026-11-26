@@ -45,7 +45,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
-import { LINK_PROTOCOL } from "@eta/client-contracts";
+import { LINK_LIMITS, LINK_PROTOCOL } from "@eta/client-contracts";
 import { kernelOn } from "@eta/core";
 import { createRefreshDedupingFetch } from "@eta/mcp";
 import { Places } from "@eta/places";
@@ -568,6 +568,8 @@ export class DaemonNode {
         protocol: LINK_PROTOCOL,
         platform: daemonPlatform(),
         install: this.#options.install ?? installKind(),
+        chunked: true,
+        maxMessageBytes: LINK_LIMITS.maxMessageBytes,
       }),
       open: (args) => this.#open(args),
       catalog: ({ models }) => {

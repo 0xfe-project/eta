@@ -7,6 +7,7 @@
 import type { MachineView } from "@eta/client-contracts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { LINK_LIMITS } from "@eta/client-contracts";
 import { DaemonLink, enroll } from "@eta/daemon";
 import { describe, expect, it } from "vitest";
 import { MachineStore } from "../src/machines/store";
@@ -316,12 +317,64 @@ describe("the link", () => {
     );
   });
 
-  it("a frame over the limit is refused before it is sent", async () => {
+  it("a message over maxMessageBytes is refused before it is sent", async () => {
     const w = await world();
     const daemon = await startDaemon(w.host, w.client);
     await approve(w.client, daemon);
     const link = w.host.product.hub.link(daemon.machineId)!;
-    // 9 MB of script: the primary refuses to send it, so nothing reaches the daemon.
+    expect(link.peer.chunked).toBe(true);
+    // Over maxMessageBytes: the primary refuses to send it, so nothing reaches the daemon.
+    await expect(
+      link.daemon("exec", {
+        script: "x".repeat(LINK_LIMITS.maxMessageBytes + 1024),
+      }),
+    ).rejects.toThrow(/too big/);
+  });
+
+  it("does not chunk outbound frames to a legacy daemon that did not advertise chunking", async () => {
+    const w = await world();
+    const daemon = await startDaemon(w.host, w.client, { idle: true });
+    const node = daemon.node;
+    const attach = node.attach.bind(node);
+    node.attach = (peer) => {
+      const inner = attach(peer);
+      return {
+        close: inner.close,
+        receive(frame: unknown) {
+          const call = frame as {
+            op?: unknown;
+            target?: unknown;
+            action?: unknown;
+            requestId?: unknown;
+          };
+          if (
+            call.op === "call" &&
+            call.target === "machine" &&
+            call.action === "info" &&
+            typeof call.requestId === "string"
+          ) {
+            peer.sendPipe({
+              type: "reply",
+              requestId: call.requestId,
+              ok: true,
+              result: {
+                hostname: "legacy",
+                home: daemon.dataDir,
+                os: "linux",
+                version: "test",
+                protocol: 1,
+              },
+            });
+            return;
+          }
+          inner.receive(frame);
+        },
+      };
+    };
+    daemon.link.start();
+    await approve(w.client, daemon);
+    const link = w.host.product.hub.link(daemon.machineId)!;
+    expect(link.peer.chunked).toBe(false);
     await expect(
       link.daemon("exec", { script: "x".repeat(9 * 1024 * 1024) }),
     ).rejects.toThrow(/too big/);

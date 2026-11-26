@@ -63,6 +63,12 @@ export type DaemonInstall = "service" | "binary" | "source";
 export const LINK_LIMITS = {
   /** The largest text frame either side accepts, in bytes. */
   maxFrameBytes: 8 * 1024 * 1024,
+  /** Target payload size of each chunk envelope (`data` bytes) when splitting oversized envelopes. */
+  chunkBytes: 4 * 1024 * 1024,
+  /** The largest logical envelope either side will send or reassemble across chunks, in bytes. */
+  maxMessageBytes: 64 * 1024 * 1024,
+  /** Maximum number of concurrent inbound chunked envelopes being reassembled. */
+  maxInFlightChunks: 8,
   /** Calls one side will have running for the other at once. */
   maxInFlight: 64,
   /** How long an ordinary call may take. */
@@ -91,7 +97,8 @@ export const LINK_CLOSE = {
 export type LinkEnvelope =
   | { ch: "pipe"; frame: unknown }
   | { ch: "svc"; msg: SvcMessage }
-  | { ch: "ctl"; msg: CtlMessage };
+  | { ch: "ctl"; msg: CtlMessage }
+  | { ch: "chunk"; id: string; index: number; total: number; data: string };
 
 export type SvcMessage =
   | { op: "call"; id: string; method: string; params?: unknown }
@@ -108,6 +115,8 @@ export type CtlMessage =
       machineId: string;
       epoch: number;
       status: "pending" | "approved";
+      chunked?: boolean;
+      maxMessageBytes?: number;
     }
   /** From the primary, once a pending machine has been approved. */
   | { op: "approved" }
@@ -138,6 +147,8 @@ export interface MachineFacts {
   protocol?: number;
   platform?: DaemonPlatform;
   install?: DaemonInstall;
+  chunked?: boolean;
+  maxMessageBytes?: number;
 }
 
 /**

@@ -6,7 +6,7 @@ import type {
   SteerHeldResult,
 } from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
-import type { AskObserver } from "@eta/harness";
+import type { AskObserver, ImageLimits } from "@eta/harness";
 import type { ManagedSession, SessionMeta, SessionsService } from "@eta/server";
 import type { SshTransport } from "@eta/ssh";
 /**
@@ -41,6 +41,7 @@ import { homedir } from "node:os";
 import { heldFor } from "@eta/client-contracts/routing";
 import { kernelOn } from "@eta/core";
 import { lastSeq, LinkError, listen } from "@eta/daemon";
+import { imageLimitsFor } from "@eta/harness";
 import { parseModelId } from "@eta/server";
 import { explainRunError, missingModel } from "../agents/model";
 import { heldIn } from "../session-owner";
@@ -1055,7 +1056,11 @@ export class Engine {
     ref: string,
   ): Promise<{ mime: string; dataBase64: string }> {
     const running = this.#running.get(keyOf(conversationId, agentId));
-    if (running === undefined || !(await this.#takesImages(running.handle)))
+    const limits =
+      running === undefined
+        ? undefined
+        : await this.#imageLimits(running.handle);
+    if (limits === undefined)
       throw new Error("The model you run on does not support images.");
     const id = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/i.exec(
       ref.split(/[\\/]/).pop()!,
@@ -1063,7 +1068,7 @@ export class Engine {
     const record = id === undefined ? undefined : this.#attachments.get(id);
     if (record === undefined || record.conversationId !== conversationId)
       throw new Error(`No such attachment in this conversation: ${ref}`);
-    return await this.#attachments.image(record);
+    return await this.#attachments.image(record, limits);
   }
 
   /** The room an agent is in, as the `conversation_info` tool tells it. */
@@ -1693,29 +1698,37 @@ export class Engine {
     const lines = new Map<string, string>();
     if (files.length === 0) return { lines, images: [], unseen: false };
     const placed = await this.#place(files, machine);
-    const sees = await this.#takesImages(handle);
+    const limits = await this.#imageLimits(handle);
+    const prepared =
+      limits === undefined
+        ? { images: [], omitted: new Map<string, string>() }
+        : await this.#attachments.images(
+            files.filter((file) => placed.paths.has(file.id)),
+            limits,
+          );
     let unseen = false;
     for (const file of files) {
       const path = placed.paths.get(file.id);
       const image = file.contentType.startsWith("image/");
-      if (image && !sees) unseen = true;
+      const note =
+        path === undefined
+          ? undefined
+          : !image
+            ? undefined
+            : limits === undefined
+              ? "the model you run on does not support images"
+              : prepared.omitted.get(file.id);
+      if (note !== undefined) unseen = true;
       lines.set(
         file.id,
         path === undefined
           ? `[attachment ${file.name} could not be put where you can read it: ${placed.failed.get(file.id) ?? "unknown error"}]`
           : `[attachment: ${path} (${file.contentType}, ${file.size} bytes)${
-              image && !sees
-                ? "; not shown: the model you run on does not support images"
-                : ""
+              note === undefined ? "" : `; not shown: ${note}`
             }]`,
       );
     }
-    const images = sees
-      ? await this.#attachments.images(
-          files.filter((file) => placed.paths.has(file.id)),
-        )
-      : [];
-    return { lines, images, unseen };
+    return { lines, images: prepared.images, unseen };
   }
 
   /** Put the files where the conversation's sessions can open them; a machine out of reach fails them all. */
@@ -1739,16 +1752,17 @@ export class Engine {
     return this.#shell(machine);
   }
 
-  /** Whether the session's model accepts images; when that cannot be told, no images are sent. */
-  async #takesImages(handle: SessionHandle): Promise<boolean> {
+  /** The image limits of the session's model, or undefined when it does not accept images. */
+  async #imageLimits(handle: SessionHandle): Promise<ImageLimits | undefined> {
     try {
       const id = await handle.model();
-      if (id === undefined) return false;
+      if (id === undefined) return undefined;
       const { provider, modelId } = parseModelId(id);
       const model = this.#models?.()?.getModel(provider, modelId);
-      return model?.input?.includes("image") === true;
+      if (model?.input?.includes("image") !== true) return undefined;
+      return imageLimitsFor({ provider, modelId });
     } catch {
-      return false;
+      return undefined;
     }
   }
 

@@ -1,27 +1,41 @@
 /** The link's rules, between two peers wired back to back: no socket, no host. */
+import { Buffer } from "node:buffer";
+import { LINK_CLOSE } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { LinkError, Peer } from "../src/link/peer";
 
 /** Two peers whose sends arrive at each other (on the next tick, like a socket). */
-function pair(options: { maxFrameBytes?: number; maxInFlight?: number } = {}) {
+function pair(
+  options: {
+    maxFrameBytes?: number;
+    chunkBytes?: number;
+    maxMessageBytes?: number;
+    maxInFlightChunks?: number;
+    chunked?: boolean;
+    maxInFlight?: number;
+  } = {},
+) {
   const closed: { code: number; reason: string }[] = [];
   const pipes: unknown[] = [];
+  const frames: { from: "a" | "b"; text: string }[] = [];
   let b!: Peer;
-  const deliver = (to: () => Peer) => (text: string) =>
+  const deliver = (from: "a" | "b", to: () => Peer) => (text: string) => {
+    frames.push({ from, text });
     void queueMicrotask(() => to().receive(text));
+  };
   const a: Peer = new Peer({
-    send: deliver(() => b),
+    send: deliver("a", () => b),
     close: (code, reason) => closed.push({ code, reason }),
     onPipe: (frame) => pipes.push(frame),
     ...options,
   });
   b = new Peer({
-    send: deliver(() => a),
+    send: deliver("b", () => a),
     close: (code, reason) => closed.push({ code, reason }),
     onPipe: (frame) => pipes.push(frame),
     ...options,
   });
-  return { a, b, closed, pipes };
+  return { a, b, closed, pipes, frames };
 }
 
 describe("calls", () => {
@@ -148,5 +162,222 @@ describe("a lost link", () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
     a.markLost("done");
     expect(closed[0]?.code).toBe(4004);
+  });
+});
+
+describe("chunking", () => {
+  it("chunks and reassembles oversized svc calls, svc replies, and pipe frames within maxFrameBytes", async () => {
+    const { a, b, closed, pipes, frames } = pair({
+      maxFrameBytes: 400,
+      chunkBytes: 150,
+      chunked: true,
+    });
+    const payload = 'a"\\🎉😀'.repeat(120);
+    b.handle("echo", (params) => params);
+
+    const echoed = await a.call("echo", { text: payload });
+    expect(echoed).toEqual({ text: payload });
+
+    a.sendPipe({ type: "state", data: payload });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(pipes).toEqual([{ type: "state", data: payload }]);
+
+    expect(closed).toEqual([]);
+    expect(
+      frames.some((f) => f.from === "a" && f.text.includes('"ch":"chunk"')),
+    ).toBe(true);
+    expect(
+      frames.some((f) => f.from === "b" && f.text.includes('"ch":"chunk"')),
+    ).toBe(true);
+    for (const frame of frames) {
+      expect(Buffer.byteLength(frame.text, "utf8")).toBeLessThanOrEqual(400);
+    }
+  });
+
+  it("enforces maxMessageBytes on outbound sends and respects remote cap from enableChunking", async () => {
+    const { a, b, frames } = pair({
+      maxFrameBytes: 300,
+      chunkBytes: 100,
+      maxMessageBytes: 2_000,
+    });
+    b.handle("echo", (params) => params);
+    a.enableChunking({ maxMessageBytes: 800 });
+    expect(a.chunked).toBe(true);
+
+    await expect(a.call("echo", "x".repeat(900))).rejects.toMatchObject({
+      kind: "remote",
+      message: expect.stringMatching(/too big/),
+    });
+    expect(() => a.sendPipe("x".repeat(900))).toThrow(/too big/);
+    expect(frames).toHaveLength(0);
+  });
+
+  it("closes with 1009 when inbound chunked message exceeds maxMessageBytes", () => {
+    const { a, closed } = pair({ maxFrameBytes: 300, maxMessageBytes: 500 });
+    for (let index = 0; index < 3; index += 1) {
+      a.receive(
+        JSON.stringify({
+          ch: "chunk",
+          id: "big",
+          index,
+          total: 3,
+          data: "x".repeat(200),
+        }),
+      );
+    }
+    expect(closed).toEqual([
+      { code: LINK_CLOSE.tooBig, reason: "message too big" },
+    ]);
+    expect(a.reassemblingCount).toBe(0);
+  });
+
+  it("rejects invalid chunks, malformed payloads, nested chunks, and concurrent overflow", () => {
+    const cases: unknown[][] = [
+      [{ ch: "chunk", id: "a", index: -1, total: 2, data: "x" }],
+      [{ ch: "chunk", id: "a", index: 0, total: 0, data: "x" }],
+      [{ ch: "chunk", id: "a", index: 2, total: 2, data: "x" }],
+      [{ ch: "chunk", id: "a", index: 0, total: 2, data: "" }],
+      [{ ch: "chunk", id: "a", index: 1, total: 2, data: "x" }],
+      [
+        { ch: "chunk", id: "a", index: 0, total: 3, data: "x" },
+        { ch: "chunk", id: "a", index: 2, total: 3, data: "y" },
+      ],
+      [
+        { ch: "chunk", id: "a", index: 0, total: 2, data: "x" },
+        { ch: "chunk", id: "a", index: 1, total: 3, data: "y" },
+      ],
+      [{ ch: "chunk", id: "a", index: 0, total: 1, data: "not-json" }],
+      [
+        {
+          ch: "chunk",
+          id: "a",
+          index: 0,
+          total: 1,
+          data: JSON.stringify({
+            ch: "chunk",
+            id: "nested",
+            index: 0,
+            total: 1,
+            data: "{}",
+          }),
+        },
+      ],
+      [
+        { ch: "chunk", id: "c1", index: 0, total: 2, data: "a" },
+        { ch: "chunk", id: "c2", index: 0, total: 2, data: "b" },
+        { ch: "chunk", id: "c3", index: 0, total: 2, data: "c" },
+      ],
+    ];
+
+    for (const seq of cases) {
+      const { a, closed } = pair({ maxFrameBytes: 400, maxInFlightChunks: 2 });
+      for (const envelope of seq) a.receive(JSON.stringify(envelope));
+      expect(closed[0]?.code).toBe(LINK_CLOSE.protocol);
+      expect(a.reassemblingCount).toBe(0);
+    }
+  });
+
+  it("reassembles interleaved concurrent chunked messages", () => {
+    const { a, closed, pipes } = pair({
+      maxFrameBytes: 400,
+      maxMessageBytes: 5_000,
+      maxInFlightChunks: 4,
+    });
+    const m1 = JSON.stringify({ ch: "pipe", frame: `one-${"a".repeat(250)}` });
+    const m2 = JSON.stringify({ ch: "pipe", frame: `two-${"b".repeat(250)}` });
+    const half1 = Math.floor(m1.length / 2);
+    const half2 = Math.floor(m2.length / 2);
+
+    a.receive(
+      JSON.stringify({
+        ch: "chunk",
+        id: "m1",
+        index: 0,
+        total: 2,
+        data: m1.slice(0, half1),
+      }),
+    );
+    a.receive(
+      JSON.stringify({
+        ch: "chunk",
+        id: "m2",
+        index: 0,
+        total: 2,
+        data: m2.slice(0, half2),
+      }),
+    );
+    expect(a.reassemblingCount).toBe(2);
+    a.receive(
+      JSON.stringify({
+        ch: "chunk",
+        id: "m1",
+        index: 1,
+        total: 2,
+        data: m1.slice(half1),
+      }),
+    );
+    a.receive(
+      JSON.stringify({
+        ch: "chunk",
+        id: "m2",
+        index: 1,
+        total: 2,
+        data: m2.slice(half2),
+      }),
+    );
+
+    expect(closed).toEqual([]);
+    expect(a.reassemblingCount).toBe(0);
+    expect(pipes).toEqual([`one-${"a".repeat(250)}`, `two-${"b".repeat(250)}`]);
+  });
+
+  it("clears buffered chunk reassemblies on markLost", () => {
+    const { a, pipes } = pair({ maxFrameBytes: 400 });
+    a.receive(
+      JSON.stringify({
+        ch: "chunk",
+        id: "partial",
+        index: 0,
+        total: 2,
+        data: '{"ch":"pipe",',
+      }),
+    );
+    expect(a.reassemblingCount).toBe(1);
+    a.markLost("dropped");
+    expect(a.reassemblingCount).toBe(0);
+    a.receive(
+      JSON.stringify({
+        ch: "chunk",
+        id: "partial",
+        index: 1,
+        total: 2,
+        data: '"frame":"late"}',
+      }),
+    );
+    expect(pipes).toEqual([]);
+    expect(a.reassemblingCount).toBe(0);
+  });
+
+  it("preserves legacy behavior when chunking is not negotiated", async () => {
+    const { a, pipes, frames } = pair({ maxFrameBytes: 200 });
+    expect(a.chunked).toBe(false);
+    expect(() => a.sendPipe("x".repeat(300))).toThrow(/too big/);
+    await expect(a.call("echo", "x".repeat(300))).rejects.toMatchObject({
+      kind: "remote",
+      message: expect.stringMatching(/too big/),
+    });
+    expect(frames).toHaveLength(0);
+
+    const payload = JSON.stringify({ ch: "pipe", frame: "ok" });
+    a.receive(
+      JSON.stringify({
+        ch: "chunk",
+        id: "legacy-in",
+        index: 0,
+        total: 1,
+        data: payload,
+      }),
+    );
+    expect(pipes).toEqual(["ok"]);
   });
 });
