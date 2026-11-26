@@ -286,9 +286,9 @@ describe("the catalog", () => {
             source: { source: "command", command: "x" },
           },
           {
-            name: "gh",
+            name: "pkg",
             description: "d",
-            source: { source: "github", repo: "a/b" },
+            source: { source: "npm", package: "@acme/x" },
           },
           { name: "nosource", description: "d" },
         ],
@@ -298,11 +298,13 @@ describe("the catalog", () => {
     expect(c.entries?.map((e) => e.name)).toEqual([
       NAME,
       "cmd",
-      "gh",
+      "pkg",
       "nosource",
     ]);
     const cmd = c.entries!.find((e) => e.name === "cmd")!;
     expect(cmd.unsupported).toMatch(/format not supported: source "command"/);
+    const pkg = c.entries!.find((e) => e.name === "pkg")!;
+    expect(pkg.unsupported).toMatch(/format not supported: source "npm"/);
     expect(c.entries![0]!.unsupported).toBeNull();
     await expect(m.market.preview("cmd")).rejects.toThrow(
       /format not supported/,
@@ -310,6 +312,82 @@ describe("the catalog", () => {
     await expect(m.market.install("cmd", SHA)).rejects.toThrow(
       /format not supported/,
     );
+  });
+
+  it("supports Claude Code github entries with optional ref, sha and path, and rejects bad repo slugs", async () => {
+    handler = () =>
+      json({
+        plugins: [
+          {
+            name: "gh-basic",
+            description: "d",
+            source: { source: "github", repo: "acme/plugin-one" },
+          },
+          {
+            name: "gh-full",
+            description: "d",
+            source: {
+              source: "github",
+              repo: "acme/plugin-two.git",
+              ref: "v2",
+              sha: SHA,
+              path: "packages/my-plugin",
+            },
+          },
+          {
+            name: "gh-bad-slash",
+            description: "d",
+            source: { source: "github", repo: "just-one-part" },
+          },
+          {
+            name: "gh-bad-dots",
+            description: "d",
+            source: { source: "github", repo: "acme/../evil" },
+          },
+          {
+            name: "gh-bad-dash",
+            description: "d",
+            source: { source: "github", repo: "-evil/repo" },
+          },
+        ],
+      });
+    const m = await market();
+    const c = await m.market.setUrl(m.url);
+    expect(c.entries?.map((e) => e.name)).toEqual(["gh-basic", "gh-full"]);
+    expect(c.entries![0]).toMatchObject({
+      repo: "https://github.com/acme/plugin-one.git",
+      path: "",
+      rev: null,
+      unsupported: null,
+    });
+    expect(c.entries![1]).toMatchObject({
+      repo: "https://github.com/acme/plugin-two.git",
+      path: "packages/my-plugin",
+      rev: SHA,
+      unsupported: null,
+    });
+    expect(c.rejected.map((r) => r.name)).toEqual([
+      "gh-bad-slash",
+      "gh-bad-dots",
+      "gh-bad-dash",
+    ]);
+  });
+
+  it("accepts large catalogs up to 2000 entries and refuses over 2000", async () => {
+    const many = (count: number) =>
+      Array.from({ length: count }, (_, i) =>
+        item({ name: `plugin-${i}`, description: "d" }),
+      );
+    handler = () => json({ plugins: many(600) });
+    const m = await market();
+    const ok = await m.market.setUrl(m.url);
+    expect(ok.error).toBeNull();
+    expect(ok.entries).toHaveLength(600);
+
+    handler = () => json({ plugins: many(2001) });
+    const tooMany = await m.market.catalog();
+    expect(tooMany.entries).toBeNull();
+    expect(tooMany.error).toMatch(/more than 2000/);
   });
 
   it("drops the entries that do not fit, with the reason", async () => {
@@ -419,7 +497,13 @@ describe("installing from the catalog", () => {
     await m.market.setUrl(m.url);
 
     const preview = await m.market.preview("hello-catalog");
-    expect(preview).toMatchObject({ repo: url, path: "sub", sha });
+    expect(preview).toMatchObject({
+      name: "hello-catalog",
+      manifestName: NAME,
+      repo: url,
+      path: "sub",
+      sha,
+    });
     expect(preview.servers.length).toBeGreaterThan(0);
     expect(preview.servers[0]!.command?.length).toBeGreaterThan(0);
     expect(preview.servers[0]!.env.length).toBeGreaterThan(0);
@@ -456,7 +540,94 @@ describe("installing from the catalog", () => {
     const preview = await m.market.preview("hello-rel");
     expect(preview.sha).toBe(sha);
     await m.market.install("hello-rel", preview.sha);
-    expect(m.registry.get(NAME)!.source).toMatchObject({ sha, path: "sub" });
+    expect(m.registry.get(NAME)!.source).toMatchObject({
+      sha,
+      rev: "HEAD",
+      path: "sub",
+    });
+  });
+
+  it("pins the previewed commit on install while storing the tracking ref so Update advances", async () => {
+    const { url, sha: sha1 } = await repo();
+    const repoDir = fileURLToPath(url);
+    handler = () =>
+      json({
+        plugins: [
+          {
+            name: "hello-track",
+            description: "d",
+            source: { source: "git-subdir", url, path: "sub", ref: "main" },
+          },
+        ],
+      });
+    const m = await market();
+    await m.market.setUrl(m.url);
+    const preview = await m.market.preview("hello-track");
+    expect(preview.sha).toBe(sha1);
+
+    // Push a second commit to `main` AFTER preview, BEFORE install.
+    await writeFile(join(repoDir, "sub", "CHANGELOG.md"), "v2\n");
+    await git(repoDir, "add", ".");
+    await git(repoDir, "commit", "-qm", "second");
+    const sha2 = await git(repoDir, "rev-parse", "HEAD");
+    expect(sha2).not.toBe(sha1);
+
+    // Install still strictly pins sha1, while recording `rev: "main"`.
+    expect(await m.market.install("hello-track", sha1)).toBe(NAME);
+    expect(m.registry.get(NAME)!.source).toMatchObject({
+      kind: "git",
+      repo: url,
+      path: "sub",
+      rev: "main",
+      sha: sha1,
+    });
+
+    // Update resolves `main` anew and advances to sha2.
+    await m.registry.update(NAME);
+    expect(m.registry.get(NAME)!.source).toMatchObject({
+      kind: "git",
+      repo: url,
+      path: "sub",
+      rev: "main",
+      sha: sha2,
+    });
+  });
+
+  it("resolves refs/heads/<branch> and refs/tags/<tag> raw.githubusercontent.com catalog URLs", async () => {
+    const { url: localRepo, sha: sha1 } = await repo();
+    const repoDir = fileURLToPath(localRepo);
+    await git(repoDir, "checkout", "-qb", "release");
+    await writeFile(join(repoDir, "sub", "RELEASE.txt"), "release branch\n");
+    await git(repoDir, "add", ".");
+    await git(repoDir, "commit", "-qm", "release");
+    const releaseSha = await git(repoDir, "rev-parse", "HEAD");
+    await git(repoDir, "tag", "v1.0.0", sha1);
+
+    const headsUrl =
+      "https://raw.githubusercontent.com/o/n/refs/heads/release/.claude-plugin/marketplace.json";
+    const tagsUrl =
+      "https://raw.githubusercontent.com/o/n/refs/tags/v1.0.0/.claude-plugin/marketplace.json";
+    handler = () =>
+      json({
+        plugins: [{ name: "hello-rel", description: "d", source: "./sub" }],
+      });
+
+    const m = await market({ catalogRepo: localRepo });
+    m.raw.setProxy(`http://127.0.0.1:${server.port}/px/`);
+    for (const source of m.raw.sources()) m.raw.removeSource(source.url);
+    m.raw.addSource(headsUrl, "Heads");
+    m.raw.addSource(tagsUrl, "Tags");
+
+    const previewHeads = await m.raw.preview("hello-rel", headsUrl);
+    expect(previewHeads.sha).toBe(releaseSha);
+    const previewTags = await m.raw.preview("hello-rel", tagsUrl);
+    expect(previewTags.sha).toBe(sha1);
+
+    await m.raw.install("hello-rel", headsUrl, releaseSha);
+    expect(m.registry.get(NAME)!.source).toMatchObject({
+      rev: "release",
+      sha: releaseSha,
+    });
   });
 
   it("previews a Cursor-layout plugin: skills load, what is ignored is listed", async () => {

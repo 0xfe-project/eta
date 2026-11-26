@@ -256,11 +256,27 @@ export class Plugins {
     return this.#virtual?.toolkitsFor(names) ?? [];
   }
 
+  /** Why a plugin cannot be enabled for an agent, or null when it can. */
+  enableProblem(name: string): string | null {
+    if (this.#virtual?.owns(name) === true) {
+      return this.#virtual.has(name)
+        ? null
+        : "Composio toolkit is not connected or ready";
+    }
+    const entry = this.registry.get(name);
+    if (entry === undefined) return "it is not installed";
+    if (entry.plugin === undefined || entry.problem !== undefined)
+      return `its manifest is invalid${entry.problem ? ` (${entry.problem})` : ""}`;
+    if (entry.plugin.configProblems.length > 0)
+      return `its manifest config is invalid (${entry.plugin.configProblems.join("; ")})`;
+    if (this.#issues(entry).length > 0 || this.#missingEnv(entry).length > 0)
+      return "it needs configuring";
+    return null;
+  }
+
   /** Whether a plugin can be turned on for an agent now. */
   canEnable(name: string): boolean {
-    if (this.#virtual?.owns(name) === true) return this.#virtual.has(name);
-    const entry = this.registry.get(name);
-    return entry !== undefined && this.#usable(entry);
+    return this.enableProblem(name) === null;
   }
 
   /**
@@ -354,6 +370,15 @@ export class Plugins {
     return { entry: mcp, secrets: secretsOf(mcp) };
   }
 
+  #isRemoteDaemon(machineId: string | null | undefined): boolean {
+    if (machineId === null || machineId === undefined) return false;
+    const machine =
+      typeof this.#machines.get === "function"
+        ? this.#machines.get(machineId)
+        : this.#machines.list().find((candidate) => candidate.id === machineId);
+    return machine?.kind === "daemon";
+  }
+
   /** The plugins an agent's sessions load, and the ones it enabled that they skip. */
   #split(agentId: string): {
     active: PluginEntry[];
@@ -363,13 +388,22 @@ export class Plugins {
     const active: PluginEntry[] = [];
     const skipped: string[] = [];
     const virtual: string[] = [];
+    const agent = this.#agents.get(agentId);
+    // Remote daemon eta sessions do not receive Composio toolkits (only external runtimes do).
+    const virtualUnsupported =
+      agent !== undefined &&
+      agent.runtime === "eta" &&
+      this.#isRemoteDaemon(agent.machineId);
     // The user's switch comes first: a plugin that is off is no one's, and is not "skipped" either.
     const off = this.rows.disabled();
     for (const name of this.rows.enabled(agentId)) {
       if (off.has(name)) continue;
       // One that is not connected any more is not "skipped": nothing is wrong, it is only not there.
       if (this.#virtual?.owns(name) === true) {
-        if (this.#virtual.has(name)) virtual.push(name);
+        if (this.#virtual.has(name)) {
+          if (virtualUnsupported) skipped.push(name);
+          else virtual.push(name);
+        }
         continue;
       }
       const entry = this.registry.get(name);
@@ -406,7 +440,13 @@ export class Plugins {
     return [
       ...active.map((entry) => {
         const at = this.rows.configuredAt(entry.name);
-        return `${entry.name}@${entry.hash}:${at}`;
+        const levels = Object.entries(this.rows.levels(entry.name))
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([field, level]) => `${field}=${level}`)
+          .join("&");
+        return levels === ""
+          ? `${entry.name}@${entry.hash}:${at}`
+          : `${entry.name}@${entry.hash}:${at}:${levels}`;
       }),
       ...virtual.map((name) => `${name}@${identity}`),
     ].join(",");
@@ -790,7 +830,7 @@ export class Plugins {
   #serversOf(entry: PluginEntry): PluginServerView[] {
     const saved = this.rows.headers(entry.name);
     const host = this.rows.cursorCredential() !== undefined;
-    return serverViews(entry.plugin).map((view) => {
+    return serverViews(entry.plugin, this.rows.env(entry.name)).map((view) => {
       if (view.url === undefined || !isCursorServer(view.url)) return view;
       return {
         ...view,
