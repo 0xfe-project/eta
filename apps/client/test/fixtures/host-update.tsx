@@ -3,8 +3,9 @@ import type {
   UpgradeCheckView,
   UpgradeStatusView,
 } from "@eta/client-contracts";
-import { mount, signal, Storage, Text, View } from "nsh";
+import { mount, signal, Storage, Text, View, windowSize } from "nsh";
 import { NotificationHost } from "../../src/components/notifications";
+import { Screen } from "../../src/components/theme";
 import { HostRestartScreen } from "../../src/pages/connection/host-restart";
 import { Machines } from "../../src/pages/settings/machines/machines";
 import { UpdateSettings } from "../../src/pages/settings/updates/update";
@@ -111,20 +112,50 @@ const gpu: MachineView = {
   build: "outdated",
 };
 
-function Fixture(props: { page: string; script: string }) {
+function Fixture(props: {
+  page: string;
+  script: string;
+  prereleaseDelay: number;
+  prereleaseFailure: boolean;
+}) {
   const host = createHost();
+  const layout = () => (windowSize().width < 600 ? "phone" : "desktop");
   const sent = signal<string[]>([]);
   const machine = signal<MachineView>(gpu);
   const open = (status: "open" | "reconnecting") =>
     host.state.update((state) => ({
       ...state,
       status,
-      ops: ["upgrade.start", "upgrade.cancel", "machines.upgrade"],
+      ops: [
+        "upgrade.start",
+        "upgrade.cancel",
+        "upgrade.setPrerelease",
+        "machines.upgrade",
+      ],
     }));
   open("open");
   host.upgradeCheck.set(check);
-  host.call = (async (target: string, action: string) => {
+  host.call = (async (
+    target: string,
+    action: string,
+    args: { prerelease?: boolean } = {},
+  ) => {
     sent.set([...sent(), `${target}.${action}`]);
+    if (target === "upgrade" && action === "setPrerelease") {
+      if (props.prereleaseDelay)
+        await new Promise((resolve) =>
+          setTimeout(resolve, props.prereleaseDelay),
+        );
+      if (props.prereleaseFailure)
+        throw new Error("The Host rejected the channel change");
+      const current = host.upgradeCheck();
+      if (current)
+        host.upgradeCheck.set({
+          ...current,
+          prerelease: args.prerelease === true,
+        });
+      return {};
+    }
     if (target === "upgrade" && action === "start") return { id: "u1" };
     return {};
   }) as typeof host.call;
@@ -152,48 +183,61 @@ function Fixture(props: { page: string; script: string }) {
   const noop = () => {};
   return (
     <Host.Provider value={host}>
-      <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-          <Each of={Object.keys(statuses)} key={(name) => name}>
-            {(name) => button(name(), () => set(name()))}
-          </Each>
-          {button("Gone", actions.Gone!)}
-          {button("Back", actions.Back!)}
-          {button("Machine updating", () =>
-            machine.set({ ...machine(), build: "updating" }),
-          )}
-          {button("Machine updated", () =>
-            machine.set({ ...machine(), build: "current", version: "0.9.0" }),
-          )}
-          {button("Machine failed", () =>
-            machine.set({
-              ...machine(),
-              build: "outdated",
-              updateError:
-                "it is not run by a service, so it cannot restart itself",
-            }),
-          )}
-          <Text>{`Sent: ${sent().join(", ")}`}</Text>
+      <Screen.Provider value={layout}>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            <Each of={Object.keys(statuses)} key={(name) => name}>
+              {(name) => button(name(), () => set(name()))}
+            </Each>
+            {button("Gone", actions.Gone!)}
+            {button("Back", actions.Back!)}
+            {button("Machine updating", () =>
+              machine.set({ ...machine(), build: "updating" }),
+            )}
+            {button("Machine updated", () =>
+              machine.set({ ...machine(), build: "current", version: "0.9.0" }),
+            )}
+            {button("Machine failed", () =>
+              machine.set({
+                ...machine(),
+                build: "outdated",
+                updateError:
+                  "it is not run by a service, so it cannot restart itself",
+              }),
+            )}
+            <Text>{`Sent: ${sent().join(", ")}`}</Text>
+          </View>
+          <If
+            when={props.page === "machines"}
+            else={<UpdateSettings layout={layout()} onConnect={noop} />}
+          >
+            <Machines
+              machines={[machine()]}
+              layout={layout()}
+              onTask={noop}
+              onBack={noop}
+            />
+          </If>
+          <NotificationHost />
+          <HostRestartScreen onConnect={noop} />
         </View>
-        <If
-          when={props.page === "machines"}
-          else={<UpdateSettings layout="desktop" onConnect={noop} />}
-        >
-          <Machines
-            machines={[machine()]}
-            layout="desktop"
-            onTask={noop}
-            onBack={noop}
-          />
-        </If>
-        <NotificationHost />
-        <HostRestartScreen onConnect={noop} />
-      </View>
+      </Screen.Provider>
     </Host.Provider>
   );
 }
 
-void Promise.all([Storage.getItem("page"), Storage.getItem("script")]).then(
-  ([page, script]) =>
-    mount(() => <Fixture page={page ?? "update"} script={script ?? ""} />),
+void Promise.all([
+  Storage.getItem("page"),
+  Storage.getItem("script"),
+  Storage.getItem("prereleaseDelay"),
+  Storage.getItem("prereleaseFailure"),
+]).then(([page, script, prereleaseDelay, prereleaseFailure]) =>
+  mount(() => (
+    <Fixture
+      page={page ?? "update"}
+      script={script ?? ""}
+      prereleaseDelay={Number(prereleaseDelay) || 0}
+      prereleaseFailure={prereleaseFailure === "true"}
+    />
+  )),
 );

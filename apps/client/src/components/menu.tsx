@@ -206,27 +206,29 @@ export function MenuFrame(props: {
     </Menu>
   );
   const viaPopover = () => (
-    <Popover
-      placement="bottom"
-      align={props.align ?? "start"}
-      offset={props.offset ?? 3}
-      margin={props.margin ?? 8}
-      open={opened()}
-      onOpenChange={(event) => change(event.open)}
-      onPosition={(event) => room.set(event.available.height)}
-      popupStyle={{ ...props.popupStyle, ...rise().style }}
-      popupStartingStyle={rise().starting}
-      popupEndingStyle={rise().ending}
-      trigger={props.trigger}
-    >
-      <SmoothScroll
-        role="menu"
-        style={{ maxHeight: room(), flexShrink: 1 }}
-        scrollbar={false}
+    <MenuHost.Provider value={{ native: false, sheet: false, close }}>
+      <Popover
+        placement="bottom"
+        align={props.align ?? "start"}
+        offset={props.offset ?? 3}
+        margin={props.margin ?? 8}
+        open={opened()}
+        onOpenChange={(event) => change(event.open)}
+        onPosition={(event) => room.set(event.available.height)}
+        popupStyle={{ ...props.popupStyle, ...rise().style }}
+        popupStartingStyle={rise().starting}
+        popupEndingStyle={rise().ending}
+        trigger={props.trigger}
       >
-        {content(false)}
-      </SmoothScroll>
-    </Popover>
+        <SmoothScroll
+          role="menu"
+          style={{ maxHeight: room(), flexShrink: 1 }}
+          scrollbar={false}
+        >
+          {contentBody(false)}
+        </SmoothScroll>
+      </Popover>
+    </MenuHost.Provider>
   );
   const viaSheet = () => (
     <>

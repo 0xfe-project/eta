@@ -8,17 +8,13 @@ import {
   Button,
   colors,
   dialogWidth,
-  fontFamily,
-  Fonts,
   grow,
   Icon,
   Label,
   Modal,
   row,
   SmoothScroll,
-  textFaces,
 } from "../../../components";
-import { LayoutSelect } from "../../../components/select";
 import { StatusDot } from "../../../components/status-dot";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
@@ -29,11 +25,11 @@ import {
 } from "../../../services/client-update";
 import { useHost } from "../../../services/host";
 import { BusyList } from "./busy-list";
+import { UpdateChannelMenu } from "./channel";
 import { releaseRow, statusWidth } from "./host-release";
 
 /** The update dialog's height, and one item of the channel menu. */
 const dialogHeight = 248;
-const itemRow = 28;
 
 /** What the offer's one button says, from finding it to restarting into it. */
 export function clientUpdateAction(offer: ClientOffer) {
@@ -135,58 +131,27 @@ export function ClientUpdateConfirm(props: { onClose: () => void }) {
 }
 
 /** The desktop app's update channel menu. */
-export function ClientChannelSelect(props: { phone: boolean }) {
-  const c = colors();
-  const type = textFaces();
-  const fonts = Fonts();
+export function ClientChannelSelect() {
   const update = clientUpdate;
   const names: Record<ClientChannel, string> = {
     stable: uiText("updateFullReleases"),
     rc: uiText("updatePreReleases"),
   };
   return (
-    <LayoutSelect
-      accessibilityLabel={uiText("appUpdateChannel")}
-      items={[
-        { value: "stable", title: names.stable },
-        { value: "rc", title: names.rc },
+    <UpdateChannelMenu
+      label={uiText("appUpdateChannel")}
+      choices={[
+        { value: "stable", label: names.stable },
+        { value: "rc", label: names.rc },
       ]}
       value={update.channel()}
-      cover={false}
-      offset={2}
       disabled={update.busy() || update.ready()}
-      popupStyle={{
-        borderWidth: 1,
-        borderColor: c().strong,
-        backgroundColor: c().canvas,
-      }}
-      itemStyle={{
-        fontFamily: fontFamily(fonts().interface),
-        color: c().ink,
-        fontSize: type("small").size,
-        minHeight: itemRow,
-        paddingHorizontal: space[12],
-      }}
-      trigger={
-        <View
-          style={{
-            ...row,
-            height: props.phone ? space[32] : space[24],
-            gap: space[4],
-            paddingHorizontal: space[12],
-            borderWidth: 1,
-            borderColor: c().strong,
-            backgroundColor: c().canvas,
-          }}
-        >
-          <Label variant="small" lines={1} style={{ flex: 1 }}>
-            {names[update.channel()]}
-          </Label>
-          <Icon name="down" size={icon.sm} tone="muted" />
-        </View>
-      }
-      onChange={({ value }) => {
-        if (value === "stable" || value === "rc") update.changeChannel(value);
+      onChange={(value) => {
+        if (value === "stable" || value === "rc") {
+          update.changeChannel(value);
+          return true;
+        }
+        return false;
       }}
     />
   );

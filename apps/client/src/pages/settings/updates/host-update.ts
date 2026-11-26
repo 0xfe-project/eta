@@ -76,8 +76,8 @@ export function useHostUpdate() {
   async function save<A extends "setPrerelease" | "setUpstream" | "setToken">(
     action: A,
     args: UpgradeArgs[A],
-  ) {
-    if (!editable() || !host.can(`upgrade.${action}`)) return;
+  ): Promise<boolean> {
+    if (!editable() || !host.can(`upgrade.${action}`)) return false;
     error.set("");
     pending.set(action);
     try {
@@ -86,8 +86,10 @@ export function useHostUpdate() {
       draft.set("");
       notes.set(false);
       await read();
+      return true;
     } catch (problem) {
       error.set(describeError(problem));
+      return false;
     } finally {
       pending.set("");
     }

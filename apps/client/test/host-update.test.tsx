@@ -1,4 +1,5 @@
 import { expect, open, test } from "nsh/test";
+import type { Platform } from "nsh/test";
 
 // A Host update as the user follows it: Settings › Update says what is happening at each step,
 // the whole window is covered from the moment the service stops, and the end is told, with
@@ -6,18 +7,106 @@ import { expect, open, test } from "nsh/test";
 
 const fixture = "./fixtures/host-update.tsx";
 
-async function settings(page = "update", script = "") {
+async function settings(
+  page = "update",
+  script = "",
+  options: {
+    size?: { width: number; height: number };
+    platform?: Platform;
+    prereleaseDelay?: number;
+    prereleaseFailure?: boolean;
+  } = {},
+) {
   const app = await open(fixture, {
-    width: 1440,
-    height: 900,
+    width: options.size?.width ?? 1440,
+    height: options.size?.height ?? 900,
     locale: "en-US",
-    platform: "web",
-    storage: { page, script },
+    platform: options.platform ?? "web",
+    storage: {
+      page,
+      script,
+      prereleaseDelay: String(options.prereleaseDelay ?? 0),
+      prereleaseFailure: String(!!options.prereleaseFailure),
+    },
     clock: {},
   });
   await app.waitFor(page === "update" ? "text:0.9.0" : "text:gpu-box");
   return app;
 }
+
+test("the update channel uses the shared action menu", async () => {
+  const app = await settings();
+  expect(app.layout("label:Channel")!.height).toBe(32);
+  await app.press("label:Channel");
+  await app.waitFor("label:Pre-releases too");
+});
+
+for (const platform of ["android", "web"] as const) {
+  test(`choosing a channel in the ${platform} phone sheet closes it`, async () => {
+    const app = await settings("update", "", {
+      size: { width: 390, height: 844 },
+      platform,
+    });
+    await app.press("label:Channel");
+    await app.waitFor("label:Pre-releases too");
+    expect(app.shows("id:menu-grabber")).toBe(true);
+    expect(app.layout("id:menu-grabber")!.y).toBeLessThanOrEqual(500);
+
+    await app.press("label:Pre-releases too");
+
+    await app.waitFor("text:Sent: upgrade.setPrerelease");
+    await app.waitUntil(() => !app.shows("label:Pre-releases too"));
+    await app.clock!.runFor(1_000);
+    expect(app.shows("label:Pre-releases too")).toBe(false);
+  });
+}
+
+for (const platform of ["linux", "windows", "web"] as const) {
+  test(`choosing a channel in the ${platform} desktop popup closes it`, async () => {
+    const app = await settings("update", "", {
+      platform,
+      prereleaseDelay: 1_000,
+    });
+    await app.press("label:Channel");
+    await app.waitFor("label:Pre-releases too");
+    expect(app.shows("id:menu-grabber")).toBe(false);
+
+    await app.press("label:Pre-releases too");
+
+    await app.waitUntil(() => !app.shows("label:Pre-releases too"));
+    await app.clock!.runFor(1_000);
+    expect(app.shows("label:Pre-releases too")).toBe(false);
+  });
+}
+
+test("a channel choice shows before the Host answers", async () => {
+  const app = await settings("update", "", { prereleaseDelay: 1_000 });
+  await app.press("label:Channel");
+  await app.press("label:Pre-releases too");
+  await app.waitUntil(() => !app.shows("label:Pre-releases too"));
+  await app.clock!.runFor(16);
+
+  expect(app.shows("text:Pre-releases too")).toBe(true);
+  await app.clock!.runFor(1_000);
+  expect(app.shows("text:Pre-releases too")).toBe(true);
+});
+
+test("a failed channel save restores the old choice", async () => {
+  const app = await settings("update", "", {
+    prereleaseDelay: 1_000,
+    prereleaseFailure: true,
+  });
+  await app.press("label:Channel");
+  await app.press("label:Pre-releases too");
+  await app.waitUntil(() => !app.shows("label:Pre-releases too"));
+  await app.clock!.runFor(16);
+
+  expect(app.shows("text:Pre-releases too")).toBe(true);
+  await app.clock!.runFor(1_000);
+  await app.waitFor("text:The Host rejected the channel change");
+  expect(app.shows("text:Pre-releases too")).toBe(false);
+  expect(app.shows("text:Full releases only")).toBe(true);
+});
 
 test("pressing Update closes the dialog and says it is starting at once", async () => {
   const app = await settings();
