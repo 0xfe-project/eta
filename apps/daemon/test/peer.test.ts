@@ -124,6 +124,21 @@ describe("limits", () => {
     expect(closed).toEqual([{ code: 1009, reason: "frame too big" }]);
   });
 
+  it("counts a frame's size in bytes, not in UTF-16 code units", () => {
+    const { a, closed } = pair({ maxFrameBytes: 100 });
+    const payload = "字".repeat(30);
+    const frame = JSON.stringify({ ch: "pipe", frame: payload });
+    // Short in UTF-16 units, over the limit once written out as UTF-8.
+    expect(frame.length).toBeLessThanOrEqual(100);
+    const bytes = Buffer.byteLength(frame, "utf8");
+    expect(bytes).toBeGreaterThan(100);
+    expect(() => a.sendPipe(payload)).toThrow(
+      new RegExp(`${bytes} bytes, the limit is 100`),
+    );
+    a.receive(frame);
+    expect(closed).toEqual([{ code: 1009, reason: "frame too big" }]);
+  });
+
   it("garbage breaks the link", () => {
     const { a, closed } = pair();
     a.receive("not json");
