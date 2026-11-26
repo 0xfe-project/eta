@@ -324,6 +324,14 @@ function windowsEnvValue(
   return key === undefined ? undefined : env[key];
 }
 
+function nonEmptyWindowsEnvValue(
+  env: Readonly<Record<string, string | undefined>>,
+  upperName: string,
+): string | undefined {
+  const value = windowsEnvValue(env, upperName)?.trim();
+  return value !== undefined && value !== "" ? value : undefined;
+}
+
 function parseWindowsPathExt(raw: string | undefined): string[] {
   const source =
     raw !== undefined && raw.trim() !== "" ? raw : DEFAULT_WINDOWS_PATHEXT;
@@ -339,6 +347,7 @@ function parseWindowsPathExt(raw: string | undefined): string[] {
 function findWindowsExecutable(
   candidateBase: string,
   exts: readonly string[],
+  allowBareFile: boolean,
 ): string | null {
   const lower = candidateBase.toLowerCase();
   const hasKnownExt = exts.some((ext) => lower.endsWith(ext.toLowerCase()));
@@ -347,7 +356,9 @@ function findWindowsExecutable(
     const withExt = `${candidateBase}${ext}`;
     if (isFile(withExt)) return withExt;
   }
-  if (!hasKnownExt && isFile(candidateBase)) return candidateBase;
+  if (allowBareFile && !hasKnownExt && isFile(candidateBase)) {
+    return candidateBase;
+  }
   return null;
 }
 
@@ -358,7 +369,7 @@ function resolveWindowsCommand(
 ): string | null {
   const exts = parseWindowsPathExt(windowsEnvValue(env, "PATHEXT"));
   if (/[\\/]/u.test(command)) {
-    return findWindowsExecutable(win32.resolve(cwd, command), exts);
+    return findWindowsExecutable(win32.resolve(cwd, command), exts, true);
   }
   const searchPath = windowsEnvValue(env, "PATH") ?? "";
   const directories = [cwd, ...searchPath.split(";")];
@@ -366,7 +377,7 @@ function resolveWindowsCommand(
     const trimmed = rawDir.trim().replace(/^"(.*)"$/u, "$1");
     if (trimmed === "") continue;
     const candidate = win32.resolve(cwd, trimmed, command);
-    const found = findWindowsExecutable(candidate, exts);
+    const found = findWindowsExecutable(candidate, exts, false);
     if (found !== null) return found;
   }
   return null;
@@ -438,8 +449,8 @@ function resolveSpawnTarget(
     ...args.map(escapeWindowsShimArgument),
   ].join(" ");
   const shell =
-    windowsEnvValue(childEnv, "COMSPEC") ??
-    windowsEnvValue(process.env, "COMSPEC") ??
+    nonEmptyWindowsEnvValue(childEnv, "COMSPEC") ??
+    nonEmptyWindowsEnvValue(process.env, "COMSPEC") ??
     "cmd.exe";
   const shellArgs = ["/d", "/s", "/c", `"${line}"`];
   if (`"${shell}" ${shellArgs.join(" ")}`.length > 8191) {

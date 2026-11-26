@@ -1,7 +1,7 @@
 import type { HostTool, ServedMcpTools } from "@botiverse/oar";
 import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -979,6 +979,102 @@ describe("stdio ↔ HTTP MCP bridge", () => {
         argv: ["arg & safe"],
         apiKey: "bat-secret-67890",
         bridgeKeys: [],
+      });
+    },
+  );
+
+  it.runIf(process.platform === "win32")(
+    "exec mode ignores extensionless files in cwd and earlier PATH dirs and falls back when COMSPEC is empty",
+    async () => {
+      const rootDir = mkdtempSync(join(tmpdir(), "eta-mcp-bridge-win-shadow-"));
+      closers.push(async () =>
+        rmSync(rootDir, { recursive: true, force: true }),
+      );
+
+      const cwdDir = join(rootDir, "cwd");
+      const earlierDir = join(rootDir, "earlier-path");
+      const laterDir = join(rootDir, "later-path");
+      mkdirSync(cwdDir);
+      mkdirSync(earlierDir);
+      mkdirSync(laterDir);
+
+      const dumpJs = join(laterDir, "dump.mjs");
+      writeFileSync(
+        dumpJs,
+        [
+          "console.log(JSON.stringify({",
+          "  argv: process.argv.slice(2),",
+          "  apiKey: process.env.WIN_API_KEY,",
+          "}));",
+        ].join("\n"),
+      );
+
+      // Same-named extensionless files in cwd and an earlier PATH entry must not shadow later .cmd.
+      writeFileSync(join(cwdDir, "mytool"), "#!/bin/sh\necho cwd-shadow\n");
+      writeFileSync(
+        join(earlierDir, "mytool"),
+        "#!/bin/sh\necho earlier-path-shadow\n",
+      );
+      writeFileSync(
+        join(laterDir, "mytool.cmd"),
+        `@echo off\r\n"${process.execPath}" "${dumpJs}" %*\r\n`,
+      );
+
+      const pathKey =
+        Object.keys(process.env).find((key) => key.toUpperCase() === "PATH") ??
+        "PATH";
+      const runWithEnv = async (injectedEnv: Record<string, string>) => {
+        const bridged = bridgeStdioMcpServer(
+          defaultMcpBridge(),
+          {
+            name: "win-shadow",
+            command: "mytool",
+            args: ["hello world", "a & b"],
+            env: injectedEnv,
+          },
+          0,
+        );
+        const output = new PassThrough();
+        let stdout = "";
+        output.on("data", (chunk: Buffer) => {
+          stdout += chunk.toString("utf8");
+        });
+        const error = new PassThrough();
+        let stderr = "";
+        error.on("data", (chunk: Buffer) => {
+          stderr += chunk.toString("utf8");
+        });
+        const code = await runMcpBridge({
+          args: bridged.server.args.slice(defaultMcpBridge().args?.length ?? 0),
+          cwd: cwdDir,
+          env: {
+            ...process.env,
+            [pathKey]: `${earlierDir};${laterDir};${process.env[pathKey] ?? ""}`,
+            ...bridged.env,
+          },
+          output,
+          error,
+        });
+        return { code, stdout: stdout.trim(), stderr };
+      };
+
+      const shadowed = await runWithEnv({ WIN_API_KEY: "shadow-secret-12345" });
+      expect(shadowed.stderr).toBe("");
+      expect(shadowed.code).toBe(0);
+      expect(JSON.parse(shadowed.stdout)).toEqual({
+        argv: ["hello world", "a & b"],
+        apiKey: "shadow-secret-12345",
+      });
+
+      const emptyComspec = await runWithEnv({
+        WIN_API_KEY: "empty-comspec-secret",
+        COMSPEC: "",
+      });
+      expect(emptyComspec.stderr).toBe("");
+      expect(emptyComspec.code).toBe(0);
+      expect(JSON.parse(emptyComspec.stdout)).toEqual({
+        argv: ["hello world", "a & b"],
+        apiKey: "empty-comspec-secret",
       });
     },
   );
