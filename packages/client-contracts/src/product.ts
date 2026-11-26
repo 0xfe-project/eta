@@ -429,8 +429,6 @@ export interface AgentRuntimeInfo {
   /** `claude`, `codex`, ... or `acp.<id>`. */
   id: Exclude<AgentRuntime, "eta">;
   label: string;
-  /** Found on the machine without an editable external-agent configuration. */
-  discovered?: true;
   /** Installed and signed in; installed and not signed in; not installed; or asking failed. */
   status: "available" | "unauthenticated" | "missing" | "error";
   version?: string;
