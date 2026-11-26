@@ -1,8 +1,4 @@
-import type {
-  BoardTaskStatus,
-  MessageView,
-  SteerHeldResult,
-} from "@eta/client-contracts";
+import type { BoardTaskStatus, MessageView } from "@eta/client-contracts";
 import type { InputRef, Signal } from "nsh";
 import type { Chat } from "./conversation";
 import type { ComposerTarget } from "./mentions";
@@ -38,7 +34,7 @@ import {
   uploads,
 } from "./outbox";
 import { answeringElsewhere } from "./queue";
-import { forgetRows, rememberRows } from "./rows";
+import { forgetRows } from "./rows";
 
 /** A message's text at most. */
 const MAX_MESSAGE_CHARS = 100_000;
@@ -185,16 +181,14 @@ function waitingFor(row: MessageView): string {
 
 /**
  * Written but waiting for a lane (03a): one bordered block each, the text at reading size and cut at
- * two lines. Insert it into the turn in flight (`steerHeld`: the host takes it out of the queue and
- * joins in one step, so one a lane already read is not sent again), pull it back into the box, or
- * drop it. Only the host says it is gone.
+ * two lines. Pull it back into the box or drop it. Only the host says it is gone.
  */
 function HeldBand(props: { chat: Chat; onPullBack: (text: string) => void }) {
-  const busy = signal<{ id: string; steering: boolean } | undefined>(undefined);
+  const busy = signal<string | undefined>(undefined);
   // A second press before the first is answered does nothing: the host would only say it was taken.
   const take = async (messageId: string): Promise<boolean> => {
-    if (busy()?.id === messageId) return false;
-    busy.set({ id: messageId, steering: false });
+    if (busy() === messageId) return false;
+    busy.set(messageId);
     try {
       const answer = await call<{ recalled: boolean }>(
         "conversations",
@@ -213,35 +207,6 @@ function HeldBand(props: { chat: Chat; onPullBack: (text: string) => void }) {
       busy.set(undefined);
     }
   };
-  const steer = async (row: MessageView): Promise<void> => {
-    if (busy()?.id === row.id) return;
-    const names = waitingFor(row);
-    busy.set({ id: row.id, steering: true });
-    try {
-      const answer = await call<SteerHeldResult>("conversations", "steerHeld", {
-        conversationId: props.chat.id,
-        messageId: row.id,
-      });
-      if (answer.dropped.length > 0) forgetRows(props.chat.id, answer.dropped);
-      if (answer.message !== undefined)
-        rememberRows(props.chat.id, [answer.message, ...answer.replies]);
-      if (!answer.steered)
-        toast(
-          t(
-            answer.reason === "idle"
-              ? "chat.held.steerIdle"
-              : answer.reason === "ended"
-                ? "chat.held.steerEnded"
-                : "chat.held.steerTaken",
-            { names },
-          ),
-        );
-    } catch (error) {
-      toast(t("chat.held.steerFailed", { reason: reason(error) }));
-    } finally {
-      busy.set(undefined);
-    }
-  };
   return (
     <If when={props.chat.held().length > 0}>
       <View class="shrink-0 gap-1.5 px-4 pb-2">
@@ -249,23 +214,20 @@ function HeldBand(props: { chat: Chat; onPullBack: (text: string) => void }) {
           {(row) => {
             const index = () =>
               props.chat.held().findIndex((one) => one.id === row().id);
-            const mine = () => busy()?.id === row().id;
-            const steering = () => mine() && busy()?.steering === true;
+            const mine = () => busy() === row().id;
             return (
               <View class="shrink-0 border border-border">
                 <View class="flex-row items-center gap-2 px-[10px] pt-1.5">
                   <Text class="grow basis-0 text-sm leading-4 text-muted-foreground">
-                    {steering()
-                      ? t("chat.held.steering", { names: waitingFor(row()) })
-                      : `${t("chat.held.label")} · ${
-                          index() === 0
-                            ? t("chat.held.afterTurn", {
-                                names: waitingFor(row()),
-                              })
-                            : t("chat.held.afterPrevious")
-                        }`}
+                    {`${t("chat.held.label")} · ${
+                      index() === 0
+                        ? t("chat.held.afterTurn", {
+                            names: waitingFor(row()),
+                          })
+                        : t("chat.held.afterPrevious")
+                    }`}
                   </Text>
-                  <If when={props.chat.held().length > 1 && !steering()}>
+                  <If when={props.chat.held().length > 1}>
                     <Text class="text-sm leading-4 text-muted-foreground">
                       {`${index() + 1} / ${props.chat.held().length}`}
                     </Text>
@@ -275,19 +237,6 @@ function HeldBand(props: { chat: Chat; onPullBack: (text: string) => void }) {
                   {row().text}
                 </Text>
                 <View class="flex-row items-center px-0.5 pb-1">
-                  <View
-                    role="button"
-                    accessibilityLabel={t("chat.held.steer", {
-                      text: row().text,
-                    })}
-                    disabled={mine()}
-                    onPress={() => void steer(row())}
-                    class="h-9 justify-center px-2 active:opacity-60"
-                  >
-                    <Text class="text-sm leading-4 text-foreground underline">
-                      {t("chat.held.steerAction")}
-                    </Text>
-                  </View>
                   <View
                     role="button"
                     accessibilityLabel={t("chat.held.pull", {

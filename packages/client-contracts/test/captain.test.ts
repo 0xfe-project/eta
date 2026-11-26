@@ -1,6 +1,11 @@
 import type { MessageView } from "../src/index";
 import { describe, expect, it } from "vitest";
-import { captainProposalOf, isCaptainOutcome } from "../src/index";
+import {
+  captainOutcomeOperationId,
+  captainProposalOf,
+  isCaptainOutcome,
+  isCaptainReview,
+} from "../src/index";
 
 const OPERATION = "6f1c2a3b-0d4e-4f5a-8b6c-7d8e9f0a1b2c";
 
@@ -62,6 +67,77 @@ describe("the message that tells Captain how a proposal ended", () => {
       ),
     ).toBe(false);
     expect(isCaptainOutcome(message({ text: "hi" }))).toBe(false);
+  });
+
+  it.each(["captainOutcome", "captainGroupOutcome", "captainAgentOutcome"])(
+    "reads operationId from %s",
+    (key) => {
+      expect(
+        captainOutcomeOperationId(
+          message({
+            data: { [key]: { operationId: OPERATION, status: "applied" } },
+          }),
+        ),
+      ).toBe(OPERATION);
+      expect(
+        captainOutcomeOperationId(
+          message({ data: { [key]: { status: "applied" } } }),
+        ),
+      ).toBeUndefined();
+    },
+  );
+
+  it("reads operationId from legacy opening text and ignores non-system or non-message rows", () => {
+    const text = `Your proposed group "Launch" (operation ${OPERATION}) was confirmed by the user and created.`;
+    expect(captainOutcomeOperationId(message({ text }))).toBe(OPERATION);
+    expect(
+      captainOutcomeOperationId(message({ author: "user", text })),
+    ).toBeUndefined();
+    expect(
+      captainOutcomeOperationId(message({ kind: "system", text })),
+    ).toBeUndefined();
+    expect(
+      captainOutcomeOperationId(message({ text: "hello" })),
+    ).toBeUndefined();
+  });
+});
+
+describe("a Captain review prompt row", () => {
+  it("matches structured data.captainReview or <captain-review> tags on system messages only", () => {
+    expect(
+      isCaptainReview(
+        message({ data: { captainReview: { reviewIds: ["r1"] } } }),
+      ),
+    ).toBe(true);
+    expect(
+      isCaptainReview(
+        message({
+          text: "<captain-review>\n1. [task_stalled] stalled\n</captain-review>",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isCaptainReview(
+        message({
+          author: "user",
+          data: { captainReview: { reviewIds: ["r1"] } },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isCaptainReview(
+        message({
+          kind: "system",
+          text: "<captain-review>\n1. [task_stalled] stalled\n</captain-review>",
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isCaptainReview(message({ text: "unclosed <captain-review>" })),
+    ).toBe(false);
+    expect(isCaptainReview(message({ text: "plain system message" }))).toBe(
+      false,
+    );
   });
 });
 

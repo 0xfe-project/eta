@@ -247,6 +247,8 @@ test("a queued message waits above the box and pulls back above the draft", asyn
   await app.press("label:Queue one");
   expect(app.shows("label:Queued message: earlier")).toBe(true);
   expect(app.shows("text:Queued · waits for Ada to finish")).toBe(true);
+  expect(app.shows("text:Insert into this turn")).toBe(false);
+  expect(app.shows("label:Delete this one: earlier")).toBe(true);
   await app.press("label:Pull back into the box: earlier");
   expect(app.shows("label:Queued message: earlier")).toBe(false);
   await app.keyboard.press("enter");
@@ -264,12 +266,15 @@ test("a queued message the host had already handed on stays out of the box", asy
   await app.waitFor(sent(["alpha", "current", "queue", []]));
 });
 
-test("inserting a queued message that failed says why", async () => {
+test("a queued message can be deleted from the queue without entering the box", async () => {
   const app = await fixture();
+  await app.type(input, "draft");
   await app.press("label:Queue one");
-  await app.press("label:Insert into this turn: earlier");
-  await app.waitFor("text:Could not insert it: lane closed");
   expect(app.shows("label:Queued message: earlier")).toBe(true);
+  await app.press("label:Delete this one: earlier");
+  await app.waitUntil(() => !app.shows("label:Queued message: earlier"));
+  await app.keyboard.press("enter");
+  await app.waitFor(sent(["alpha", "draft", "queue", []]));
 });
 
 test("a second pasted file waits for the first upload in the same draft", async () => {

@@ -106,7 +106,6 @@ function Fixture() {
         held.set([]);
         return { recalled: !handedOn };
       }
-      if (action === "steerHeld") throw new Error("lane closed");
       if (action === "stop")
         result.set(
           args.messageId

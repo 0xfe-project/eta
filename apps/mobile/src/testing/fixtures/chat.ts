@@ -16,7 +16,6 @@ import type {
   InteractionView,
   MessageView,
   SendResult,
-  SteerHeldResult,
   TaskCardData,
   ToolActivity,
   ViewMessageRow,
@@ -1150,10 +1149,8 @@ export function installChat(host: FakeHost): void {
       let into: string | undefined;
       if (args.into !== undefined) {
         const target = conversation.rows.find((item) => item.id === args.into);
-        if (target === undefined || target.author !== "user")
-          throw new Error(
-            `no message ${args.into} of yours in this conversation`,
-          );
+        if (target === undefined)
+          throw new Error(`no message ${args.into} in this conversation`);
         const answering = conversation.answering(target.id);
         if (answering.length > 0) {
           into = target.id;
@@ -1369,47 +1366,6 @@ export function installChat(host: FakeHost): void {
       );
       conversation.publish();
       return { conversationId, recalled };
-    },
-  );
-
-  host.on(
-    "conversations.steerHeld",
-    ({
-      conversationId,
-      messageId,
-    }: {
-      conversationId: string;
-      messageId: string;
-    }): SteerHeldResult => {
-      const conversation = conversationOf(conversationId);
-      const none = { conversationId, joined: [], replies: [], dropped: [] };
-      const held = conversation.held.find((item) => item.id === messageId);
-      if (held === undefined)
-        return { ...none, steered: false, reason: "taken" };
-      const waiting = Array.isArray(held.data.woke)
-        ? (held.data.woke as string[])
-        : [];
-      const joined = waiting.filter(
-        (agentId) => conversation.active(agentId) !== undefined,
-      );
-      if (joined.length === 0)
-        return { ...none, steered: false, reason: "idle" };
-      const { held: _held, ...data } = held.data;
-      const message: MessageView = {
-        ...held,
-        revision: held.revision + 1,
-        data: {
-          ...data,
-          woke: waiting.filter((agentId) => !joined.includes(agentId)),
-          joined,
-        },
-      };
-      conversation.held = conversation.held.filter(
-        (item) => item.id !== messageId,
-      );
-      conversation.rows.push(message);
-      conversation.publish();
-      return { ...none, steered: true, joined, message };
     },
   );
 

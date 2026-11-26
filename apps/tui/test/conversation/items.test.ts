@@ -233,6 +233,87 @@ describe("a user row", () => {
     const user = row({ text: "hi", data: { joined: [] } });
     expect(items({ rows: [user] })).toHaveLength(1);
   });
+
+  it("put into a <captain-review> row renders in that chronological slot before Captain's reply even though the review row is hidden", () => {
+    const review = row({
+      author: "system",
+      text: "<captain-review>\n1. [task_stalled] Task #7 stalled\n</captain-review>",
+      data: { captainReview: { reviewIds: ["r1"] } },
+    });
+    const capReply = reply({
+      text: "Checking #7.",
+      replyToId: review.id,
+      rootMessageId: review.id,
+    });
+    const at = new Date(2026, 10, 24, 9, 12).getTime();
+    const steer = row({
+      text: "prioritize tests",
+      createdAt: at,
+      data: { into: review.id, joined: [ADA.id], woke: [] },
+    });
+
+    const drawn = items({ rows: [review, capReply, steer], locale: "en" });
+    expect(drawn.map((item) => item.key)).toEqual([
+      `${steer.id}:inserted`,
+      steer.id,
+      `${capReply.id}:text`,
+    ]);
+    expect(drawn[0]).toMatchObject({
+      kind: "notice",
+      text: "Inserted · 09:12",
+    });
+    expect(drawn[1]).toMatchObject({ kind: "user", text: "prioritize tests" });
+  });
+
+  it("put into a captain_proposal row renders directly after the proposal notice and before Captain's reply", () => {
+    const proposal = row({
+      kind: "system",
+      author: "system",
+      text: 'Captain proposed the group "Launch".',
+      data: {
+        event: "captain_proposal",
+        kind: "create_group",
+        operationId: "op-1",
+        proposal: { name: "Launch" },
+      },
+    });
+    const capReply = reply({
+      text: "Group created.",
+      replyToId: proposal.id,
+      rootMessageId: proposal.id,
+    });
+    const at = new Date(2026, 10, 24, 9, 15).getTime();
+    const steer = row({
+      text: "add Ada too",
+      createdAt: at,
+      data: { into: proposal.id, joined: [ADA.id], woke: [] },
+    });
+
+    const drawn = items({ rows: [proposal, capReply, steer], locale: "en" });
+    expect(drawn.map((item) => item.key)).toEqual([
+      proposal.id,
+      `${steer.id}:inserted`,
+      steer.id,
+      `${capReply.id}:text`,
+    ]);
+  });
+
+  it("put into an agent reply row renders directly under that reply row", () => {
+    const autonomous = reply({ text: "Background check complete." });
+    const at = new Date(2026, 10, 24, 9, 20).getTime();
+    const steer = row({
+      text: "run it again",
+      createdAt: at,
+      data: { into: autonomous.id, joined: [ADA.id], woke: [] },
+    });
+
+    const drawn = items({ rows: [autonomous, steer], locale: "en" });
+    expect(drawn.map((item) => item.key)).toEqual([
+      `${autonomous.id}:text`,
+      `${steer.id}:inserted`,
+      steer.id,
+    ]);
+  });
 });
 
 describe("a finished reply", () => {

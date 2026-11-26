@@ -12,6 +12,9 @@ import type { Locale } from "../../../config/types";
 import type { Translate } from "../../../i18n/messages";
 import type { TranscriptItem } from "../contract";
 import {
+  captainProposalOf,
+  isCaptainOutcome,
+  isCaptainReview,
   logBlocks,
   runFromOf,
   runStart,
@@ -109,31 +112,59 @@ export function transcriptItems(input: ItemsInput): TranscriptItem[] {
   });
 }
 
+function isAnchorRow(row: MessageView): boolean {
+  if (row.data.event === "task_draft_decided" || isCaptainOutcome(row))
+    return false;
+  return (
+    row.author === "user" ||
+    isCaptainReview(row) ||
+    captainProposalOf(row) !== undefined ||
+    (row.author === "agent" && row.kind === "message")
+  );
+}
+
 /**
- * A user message put into another one's turns (`data.into`) is drawn in that message, under it,
- * not where it was written — as the client draws it. One whose message is not among the rows is
+ * A user message put into another row's turns (`data.into`) is drawn in that anchor row, under it,
+ * not where it was written — as the client draws it. One whose anchor is not among the rows is
  * drawn where it is.
  */
 function indexInserts(all: readonly MessageView[]): {
   rows: MessageView[];
   additions: Map<string, MessageView[]>;
 } {
-  const prompts = new Set(
-    all.filter((row) => row.author === "user").map((row) => row.id),
-  );
+  const byId = new Map(all.map((row) => [row.id, row]));
+  const anchors = new Set(all.filter(isAnchorRow).map((row) => row.id));
+  const resolveFoldTarget = (row: MessageView): string | undefined => {
+    if (row.author !== "user" || typeof row.data.into !== "string")
+      return undefined;
+    let curId = row.data.into;
+    if (curId === row.id || !anchors.has(curId)) return undefined;
+    const seen = new Set<string>([row.id]);
+    for (let hops = 0; hops < 4; hops++) {
+      if (seen.has(curId)) break;
+      seen.add(curId);
+      const cur = byId.get(curId);
+      if (
+        cur !== undefined &&
+        cur.author === "user" &&
+        typeof cur.data.into === "string" &&
+        cur.data.into !== cur.id &&
+        anchors.has(cur.data.into)
+      ) {
+        curId = cur.data.into;
+        continue;
+      }
+      break;
+    }
+    return curId !== row.id && anchors.has(curId) ? curId : undefined;
+  };
   const additions = new Map<string, MessageView[]>();
   const rows = all.filter((row) => {
-    const { into } = row.data;
-    if (
-      row.author !== "user" ||
-      typeof into !== "string" ||
-      into === row.id ||
-      !prompts.has(into)
-    )
-      return true;
-    const list = additions.get(into) ?? [];
+    const target = resolveFoldTarget(row);
+    if (target === undefined) return true;
+    const list = additions.get(target) ?? [];
     list.push(row);
-    additions.set(into, list);
+    additions.set(target, list);
     return false;
   });
   return { rows, additions };

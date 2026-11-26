@@ -4,7 +4,7 @@ import type {
   TimelineSection,
 } from "@eta/client-contracts";
 import type { Layout } from "../../src/components";
-import { mount, UrlScheme, View, windowSize } from "nsh";
+import { mount, signal, Text, UrlScheme, View, windowSize } from "nsh";
 import { Button } from "../../src/components";
 import { Conversation } from "../../src/pages/chat/conversation";
 import { createHost, Host } from "../../src/services/host";
@@ -83,16 +83,59 @@ function heldTimeline(delivered: boolean): TimelineSection {
       };
 }
 
+const captainSummary: ConversationSummary = {
+  ...summary,
+  id: "captain",
+  kind: "captain",
+  name: "Captain",
+  stewardId: null,
+  participants: [
+    {
+      agentId: "Captain",
+      sessionId: null,
+      lastSeq: 0,
+      status: "working",
+      activeReplyId: "r2",
+    },
+  ],
+};
+
+function captainReviewTimeline(): TimelineSection {
+  const review: MessageView = {
+    ...message(
+      1,
+      "system",
+      '<captain-review>\n1. [task_stalled] Task #7 stalled\n{"taskNumber":7}\n</captain-review>',
+    ),
+    id: "r1",
+    conversationId: "captain",
+    data: { captainReview: { reviewIds: ["rev-1"] } },
+  };
+  const reply: MessageView = {
+    ...message(2, "agent", ""),
+    id: "r2",
+    conversationId: "captain",
+    agentId: "Captain",
+    status: "working",
+    replyToId: "r1",
+    rootMessageId: "r1",
+  };
+  return { messages: [review, reply], hasMore: false, held: [] };
+}
+
 /**
  * The conversation page in one of its states, picked by the opening URL:
  * eta://fixture/loading (no timeline yet), /empty, /short, /offline (a phone
  * that lost the host before any message arrived), /held (Ada busy, one message
  * waiting for her, with the reply the host queued for it; "Deliver" hands it
- * to her lane as the host does, and its Insert puts it into her turn).
+ * to her lane as the host does), /captain-review (Captain replying to a
+ * Supervisor review card, ready for inline Insert).
  */
 function Fixture() {
   const host = createHost();
+  const lastSend = signal("");
   const scenario = UrlScheme.url()?.replace("eta://fixture/", "") ?? "";
+  const conversationId = scenario === "captain-review" ? "captain" : "group";
   const timeline: TimelineSection | undefined =
     scenario === "empty"
       ? { messages: [], hasMore: false, held: [] }
@@ -107,7 +150,9 @@ function Fixture() {
           }
         : scenario === "held"
           ? heldTimeline(false)
-          : undefined;
+          : scenario === "captain-review"
+            ? captainReviewTimeline()
+            : undefined;
   host.state.update((s) => ({
     ...s,
     status: scenario === "offline" ? "reconnecting" : "open",
@@ -141,13 +186,13 @@ function Fixture() {
         version: 0,
       },
       conversations: {
-        sections: { list: [summary] },
+        sections: { list: [summary, captainSummary] },
         revisions: {},
         version: 0,
       },
       ...(timeline
         ? {
-            "conversations.group": {
+            [`conversations.${conversationId}`]: {
               sections: { timeline },
               revisions: {},
               version: 0,
@@ -169,40 +214,60 @@ function Fixture() {
         },
       },
     }));
-  // Insert from the lane, answered as the host does: the message leaves the lane and is a
-  // message of the conversation put into the turn it joined ("ping"), its queued reply gone.
-  host.call = async <T,>(_target: string, action: string) => {
-    if (action !== "steerHeld") return undefined as T;
-    const steered: MessageView = {
-      ...message(3, "user", "Queued words"),
-      createdAt: Date.UTC(2026, 10, 24, 9, 5),
-      data: { woke: [], joined: ["Ada"], into: "m1" },
+  // Inline insert (`conversations.send` with `into`), answered as the host does:
+  // writes the user row with `data.into` into the timeline so it renders under the anchor.
+  host.call = async <T,>(_target: string, action: string, args?: unknown) => {
+    if (action !== "send") return undefined as T;
+    const payload = (args ?? {}) as {
+      conversationId?: string;
+      text?: string;
+      into?: string;
+      mode?: "queue" | "steer";
+      mentions?: string[];
+      clientId?: string;
     };
-    const { messages } = heldTimeline(false);
-    host.state.update((s) => ({
-      ...s,
-      targets: {
-        ...s.targets,
-        "conversations.group": {
-          sections: {
-            timeline: {
-              messages: [messages[0]!, messages[1]!, steered],
-              hasMore: false,
-              held: [],
-            },
-          },
-          revisions: {},
-          version: 0,
-        },
+    const id = payload.conversationId ?? conversationId;
+    const mentions = payload.mentions ?? [];
+    lastSend.set(JSON.stringify({ into: payload.into, mode: payload.mode }));
+    const steered: MessageView = {
+      ...message(99, "user", payload.text ?? ""),
+      id: payload.clientId ?? "sent-insert",
+      conversationId: id,
+      createdAt: Date.UTC(2026, 10, 24, 9, 5),
+      updatedAt: Date.UTC(2026, 10, 24, 9, 5),
+      data: {
+        woke: [],
+        joined: mentions,
+        ...(payload.into === undefined ? {} : { into: payload.into }),
       },
-    }));
+    };
+    host.state.update((s) => {
+      const current = s.targets[`conversations.${id}`]?.sections?.timeline as
+        | TimelineSection
+        | undefined;
+      if (!current) return s;
+      return {
+        ...s,
+        targets: {
+          ...s.targets,
+          [`conversations.${id}`]: {
+            sections: {
+              timeline: {
+                ...current,
+                messages: [...current.messages, steered],
+              },
+            },
+            revisions: {},
+            version: 0,
+          },
+        },
+      };
+    });
     return {
-      conversationId: "group",
-      steered: true,
-      joined: ["Ada"],
       message: steered,
       replies: [],
-      dropped: ["m4"],
+      joined: mentions,
+      nobody: false,
     } as T;
   };
   const layout = (): Layout =>
@@ -219,7 +284,8 @@ function Fixture() {
           <Button label="Deliver" onPress={deliver} />
         </If>
         <Conversation
-          id="group"
+          id={conversationId}
+          captain={scenario === "captain-review"}
           rail={scenario === "short"}
           layout={layout()}
           onTask={noop}
@@ -228,6 +294,9 @@ function Fixture() {
           onRoutines={noop}
           onCloseTask={noop}
         />
+        <If when={lastSend()}>
+          <Text>{lastSend()}</Text>
+        </If>
       </View>
     </Host.Provider>
   );
