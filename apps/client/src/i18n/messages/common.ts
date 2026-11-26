@@ -135,6 +135,10 @@ export const commonMessages = {
   running: ["Running", "运行中"],
   runs: ["Runs · {{length}}", "运行 · {{length}}"],
   saveConfiguration: ["Save configuration", "保存配置"],
+  savedToDownloads: [
+    "Saved to Downloads · {{name}}",
+    "已保存到「下载」· {{name}}",
+  ],
   search: ["Search", "搜索"],
   selected: ["Selected", "已选"],
   selectModel: ["Select model", "选择模型"],
