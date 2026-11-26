@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 /**
  * Captain's own agent is made the way every agent is written (`createCaptainIdentity`): all of it
  * or none of it. It skips the rules for the agents users add — no model, the captain role, the
@@ -8,6 +7,7 @@ import { Database } from "bun:sqlite";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
+import { Database } from "bun:sqlite";
 import { describe, expect, it } from "vitest";
 import { AgentStore } from "../src/agents/store";
 import { resolveNamed } from "../src/conversations/routing";
