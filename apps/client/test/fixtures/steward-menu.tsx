@@ -6,6 +6,7 @@ import type {
 import type { PaletteId } from "../../src/components/palettes";
 import { colorScheme, mount, signal, Storage, UrlScheme, View } from "nsh";
 import { Palette, palette } from "../../src/components";
+import { NotificationHost } from "../../src/components/notifications";
 import { Conversation } from "../../src/pages/chat/conversation";
 import { createHost, Host } from "../../src/services/host";
 
@@ -142,6 +143,7 @@ function Fixture(props: {
             onRoutines={noop}
             onCloseTask={noop}
           />
+          <NotificationHost />
         </View>
       </Palette.Provider>
     </Host.Provider>

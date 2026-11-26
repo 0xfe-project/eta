@@ -1,9 +1,5 @@
 import { expect, open, test } from "nsh/test";
 import { motion } from "../src/components/motion";
-import {
-  createOptimisticStatus,
-  OptimisticStatus,
-} from "../src/components/optimistic-status";
 import { startProgress } from "../src/components/progress-notification";
 
 const fixture = "./fixtures/loading-primitives.tsx";
@@ -13,8 +9,6 @@ test("shared timing constants match 300ms reveal and 500ms minShown", () => {
   expect(motion.minShown).toBe(500);
   expect(motion.spinAction.minTurnMs).toBe(640);
   expect(typeof startProgress).toBe("function");
-  expect(typeof OptimisticStatus).toBe("function");
-  expect(typeof createOptimisticStatus).toBe("function");
 });
 
 test("shownWhile and settled wait 300ms before revealing and stay at least 500ms", async () => {
@@ -153,32 +147,6 @@ test("ProgressNotification supports cancel, >10s slow hint on indeterminate work
   expect(app.texts().some((t) => t.includes("export:retried"))).toBe(true);
 });
 
-test("OptimisticStatus delays Saving… by 300ms, shows Saved, and renders Retry on failure", async () => {
-  const app = await open(fixture, {
-    width: 1200,
-    height: 800,
-    locale: "en-US",
-    clock: {},
-  });
-
-  await app.press("label:Optimistic saving");
-  await app.clock!.runFor(200);
-  expect(app.shows("text:Saving…")).toBe(false);
-
-  await app.clock!.runFor(150);
-  expect(app.shows("text:Saving…")).toBe(true);
-
-  await app.press("label:Optimistic saved");
-  expect(app.shows("text:Saved")).toBe(true);
-  await app.clock!.runFor(2100);
-  expect(app.shows("text:Saved")).toBe(false);
-
-  await app.press("label:Optimistic fail");
-  expect(app.shows("text:Network error")).toBe(true);
-  await app.press("id:optimistic-status >> label:Retry");
-  expect(app.texts().some((t) => t.includes("optimistic:retried"))).toBe(true);
-});
-
 test("SpinningIcon starts immediately and finishes smoothly without reduced motion", async () => {
   const app = await open(fixture, {
     width: 1200,
@@ -210,7 +178,4 @@ test("SpinningIcon and primitives stay clean under reduced motion", async () => 
   await app.press("label:Start indeterminate");
   await app.clock!.runFor(400);
   expect(app.shows("id:progress-notification-clone")).toBe(true);
-
-  await app.press("label:Optimistic saved");
-  expect(app.shows("text:Saved")).toBe(true);
 });

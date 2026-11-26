@@ -27,7 +27,6 @@ import {
   sendShortcut,
   shownMentions,
 } from "../../components/eta-editor";
-import { OptimisticStatus } from "../../components/optimistic-status";
 import { StatusDot } from "../../components/status-dot";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -424,12 +423,6 @@ function DesktopOverview(props: {
                 />
               </If>
             </View>
-            <If when={props.state.editStatus.state().status !== "idle"}>
-              <OptimisticStatus
-                state={props.state.editStatus.state()}
-                onRetry={props.state.retryEdit}
-              />
-            </If>
           </View>
           <Prerequisites
             item={item()}
@@ -702,12 +695,6 @@ export function TaskOverview(props: {
                       {statusLine()}
                     </Label>
                   </View>
-                </If>
-                <If when={props.state.editStatus.state().status !== "idle"}>
-                  <OptimisticStatus
-                    state={props.state.editStatus.state()}
-                    onRetry={props.state.retryEdit}
-                  />
                 </If>
               </View>
               <CreatorChip creator={item().createdBy} />
