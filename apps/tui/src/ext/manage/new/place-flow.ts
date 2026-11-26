@@ -109,7 +109,7 @@ export const PROBLEM_KEYS = {
 
 const flowMachines = (machines: readonly MachineView[]): FlowMachine[] =>
   machines
-    .filter((m) => m.status !== "pending" && m.status !== "revoked")
+    .filter((m) => m.status !== "pending")
     .map(({ id, name, kind, status }) => ({ id, name, kind, status }));
 
 /** A failure as the host said it: its `problem.code`, or what went wrong on the way. */

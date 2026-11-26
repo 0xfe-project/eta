@@ -201,6 +201,48 @@ export class TaskRunStore {
     );
   }
 
+  /** Open runs targeting a specific machine. */
+  openOn(machineId: string): RunRecord[] {
+    return this.#db
+      .query<Row, [string]>(
+        `SELECT * FROM task_run
+          WHERE machine_id = ? AND status IN ('queued', 'starting', 'running')
+          ORDER BY created_at, rowid`,
+      )
+      .all(machineId)
+      .map(recordOf);
+  }
+
+  /** Open runs belonging to an agent (either as mentioned lane or task executor). */
+  openOfAgent(agentId: string): RunRecord[] {
+    return this.#db
+      .query<Row, [string, string]>(
+        `SELECT r.* FROM task_run r
+          JOIN task t ON t.id = r.task_id
+          WHERE r.status IN ('queued', 'starting', 'running')
+            AND (
+              r.agent_id = ?
+              OR (r.agent_id IS NULL AND COALESCE(t.assignee_agent, t.created_by_agent) = ?)
+            )
+          ORDER BY r.created_at, r.rowid`,
+      )
+      .all(agentId, agentId)
+      .map(recordOf);
+  }
+
+  /** Open runs targeting `machineId` or any agent in `agentIds`, deduplicated by run id. */
+  openForMachineOrAgents(
+    machineId: string,
+    agentIds: readonly string[],
+  ): RunRecord[] {
+    const byId = new Map<string, RunRecord>();
+    for (const run of this.openOn(machineId)) byId.set(run.id, run);
+    for (const agentId of agentIds) {
+      for (const run of this.openOfAgent(agentId)) byId.set(run.id, run);
+    }
+    return [...byId.values()];
+  }
+
   /** How many runs are starting or going on a machine: the slots it has used. */
   activeOn(machineId: string): number {
     return this.#db

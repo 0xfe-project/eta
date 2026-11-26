@@ -280,6 +280,18 @@ export class AttachmentStore {
     });
   }
 
+  /** A deleted conversation's files and in-flight uploads: its rows went with it, and the files go now. */
+  async dropConversation(conversationId: string): Promise<void> {
+    const owner = ownerKey({ conversationId });
+    for (const [uploadId, upload] of this.#uploads) {
+      if (upload.owner === owner) this.#uploads.delete(uploadId);
+    }
+    await rm(join(this.#root, owner), {
+      recursive: true,
+      force: true,
+    });
+  }
+
   /** Take back a file that was never sent. */
   async remove(owner: AttachmentOwner, id: string): Promise<boolean> {
     const record = this.get(id);

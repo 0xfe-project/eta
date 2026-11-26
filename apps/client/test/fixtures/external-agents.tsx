@@ -2,6 +2,7 @@ import type {
   AcpAgentConfig,
   AcpAgentView,
   AcpMachineList,
+  AgentView,
   MachineView,
 } from "@eta/client-contracts";
 import { mount, View, windowSize } from "nsh";
@@ -86,6 +87,28 @@ function Fixture() {
       },
     ],
   };
+  let etaAgents: AgentView[] = [
+    {
+      id: "a-cody",
+      name: "Cody",
+      instructions: "",
+      persona: "",
+      runtime: "acp.claude",
+      model: null,
+      thinkingLevel: null,
+      machineId: "m-gpu",
+      plugins: [],
+      skippedPlugins: [],
+      systemRole: null,
+      avatarSeed: null,
+      avatarSeeds: [],
+      home: "/tmp/a-cody",
+      homeProjectId: "p-cody",
+      status: "working",
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
   const lists = (): Record<string, AcpMachineList> =>
     Object.fromEntries(
       Object.entries(files).map(([id, agents]) => [
@@ -93,6 +116,14 @@ function Fixture() {
         { agents: agents.map(view) },
       ]),
     );
+  const publishAgents = () =>
+    host.state.update((prev) => ({
+      ...prev,
+      targets: {
+        ...prev.targets,
+        agents: { version: 1, revisions: {}, sections: { list: etaAgents } },
+      },
+    }));
   const publish = () =>
     host.state.update((prev) => ({
       ...prev,
@@ -104,10 +135,16 @@ function Fixture() {
   host.state.update((prev) => ({
     ...prev,
     status: "open",
-    ops: ["acp.refresh", "acp.save", "acp.test", "acp.delete"],
+    ops: [
+      "acp.refresh",
+      "acp.save",
+      "acp.test",
+      "acp.deletePreview",
+      "acp.delete",
+    ],
     targets: {
       machines: { version: 1, revisions: {}, sections: { list: machines } },
-      agents: { version: 1, revisions: {}, sections: { list: [] } },
+      agents: { version: 1, revisions: {}, sections: { list: etaAgents } },
     },
   }));
   publish();
@@ -118,6 +155,7 @@ function Fixture() {
       agent?: AcpAgentConfig;
       previousId?: string;
       id?: string;
+      deleteAgents?: boolean;
     };
     const where = machines.find((item) => item.id === given.machineId);
     if (where?.status !== "online")
@@ -139,10 +177,49 @@ function Fixture() {
               detail: `${given.agent?.command} is not installed`,
             }
       ) as T;
+    if (action === "deletePreview") {
+      const runtime = `acp.${given.id}`;
+      const dependents = etaAgents
+        .filter(
+          (item) =>
+            item.runtime === runtime && item.machineId === given.machineId,
+        )
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          runtime,
+          groupCount: 1,
+          busy: item.status !== "idle",
+        }));
+      return {
+        id: given.id ?? "",
+        machineId: given.machineId,
+        agents: dependents,
+      } as T;
+    }
     if (action === "delete") {
+      const runtime = `acp.${given.id}`;
+      const dependents = etaAgents.filter(
+        (item) =>
+          item.runtime === runtime && item.machineId === given.machineId,
+      );
+      if (dependents.length > 0 && given.deleteAgents !== true) {
+        throw new Error(
+          `Cannot delete ${given.id}: ${dependents.map((d) => d.name).join(", ")} runs on ${runtime}`,
+        );
+      }
       files[given.machineId] = agents.filter((item) => item.id !== given.id);
+      if (dependents.length > 0) {
+        const gone = new Set(dependents.map((d) => d.id));
+        etaAgents = etaAgents.filter((item) => !gone.has(item.id));
+        publishAgents();
+      }
       publish();
-      return {} as T;
+      return (
+        dependents.length > 0
+          ? { deletedAgents: dependents.map((d) => d.id) }
+          : {}
+      ) as T;
     }
     if (action === "save" && given.agent) {
       const agent = given.agent;

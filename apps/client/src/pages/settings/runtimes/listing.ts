@@ -9,13 +9,11 @@ import { follow, useHost } from "../../../services/host";
 import { problemText } from "../../../services/problem-text";
 import { askRuntimes, RUNTIMES_TIMEOUT_MS } from "./status";
 
-/** The primary and every daemon not revoked: the primary first, then by name. */
+/** The primary and every daemon: the primary first, then by name. */
 function runtimeMachines(machines: readonly MachineView[]) {
   return machines
     .filter(
-      (machine) =>
-        (machine.kind === "primary" || machine.kind === "daemon") &&
-        machine.status !== "revoked",
+      (machine) => machine.kind === "primary" || machine.kind === "daemon",
     )
     .sort(
       (a, b) =>

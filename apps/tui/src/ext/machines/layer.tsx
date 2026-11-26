@@ -1,12 +1,13 @@
 import type {
   MachineKind,
+  MachineRemovePreview,
   MachineStatus,
   MachineView,
 } from "@eta/client-contracts";
 import type { LayerHandle } from "../../extensions/types";
 import type { Translate } from "../../i18n/messages";
 import { Box, Text, useInput } from "ink";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useInputActive, useShell, useTheme } from "../../extensions/react";
 import { useMessages } from "../../i18n/react";
 import { LayerFrame } from "../../ui/components/layer-frame";
@@ -31,7 +32,6 @@ const STATUS_KEYS = {
   online: "statusOnline",
   offline: "statusOffline",
   pending: "statusPending",
-  revoked: "statusRevoked",
 } as const satisfies Record<MachineStatus, string>;
 
 /** What `machines.enroll` answers. */
@@ -206,15 +206,15 @@ function AddMachine({
   );
 }
 
-type Step = "actions" | "approve" | "revoke";
+type Step = "actions" | "approve" | "remove";
 
 function actionsFor(machine: MachineView, t: MachinesText) {
   return [
     ...(machine.status === "pending"
       ? [{ key: "approve", label: t("approve") }]
       : []),
-    ...(machine.kind !== "primary" && machine.status !== "revoked"
-      ? [{ key: "revoke", label: t("revoke") }]
+    ...(machine.kind !== "primary"
+      ? [{ key: "remove", label: t("remove") }]
       : []),
   ];
 }
@@ -230,17 +230,42 @@ function MachineDetail({
   const theme = useTheme();
   const { wire } = useShell();
   const [step, setStep] = useState<Step>("actions");
+  const [preview, setPreview] = useState<MachineRemovePreview>();
   const { busy, error, setError, run } = useHostCall();
+  const previewCall = useHostCall();
+  const previewSeqRef = useRef(0);
   const muted = inkColor(theme.muted);
 
-  const send = (action: "approve" | "revoke", args: object) =>
+  const openRemove = (machineId: string) => {
+    const seq = ++previewSeqRef.current;
+    setError(undefined);
+    setPreview(undefined);
+    previewCall.setError(undefined);
+    setStep("remove");
+    previewCall.run(
+      () =>
+        wire.call<MachineRemovePreview>("machines", "removePreview", {
+          machineId,
+        }),
+      (result) => {
+        if (previewSeqRef.current === seq) setPreview(result);
+      },
+    );
+  };
+
+  const send = (action: "approve" | "remove", args: object) =>
     run(
       async () => wire.call("machines", action, args),
-      () => setStep("actions"),
+      () => {
+        if (action === "remove") onBack();
+        else setStep("actions");
+      },
     );
 
   const toActions = () => {
+    previewSeqRef.current += 1;
     setError(undefined);
+    previewCall.setError(undefined);
     setStep("actions");
   };
 
@@ -286,23 +311,74 @@ function MachineDetail({
       </LayerFrame>
     );
 
-  if (step === "revoke")
+  if (step === "remove") {
+    const hasImpact =
+      preview !== undefined &&
+      (preview.agents.length > 0 ||
+        preview.projects.length > 0 ||
+        preview.conversations.length > 0 ||
+        preview.activeRuns > 0 ||
+        preview.activeReplies > 0);
+    const activeError = error ?? previewCall.error;
     return (
-      <LayerFrame title={machine.name} footer={t("revokeFooter")}>
+      <LayerFrame title={machine.name} footer={t("removeFooter")}>
         {facts}
         <Box marginTop={1} flexDirection="column">
-          <Text>{t("revokeQuestion", { name: machine.name })}</Text>
-          {busy && <Text color={muted}>{t("revoking")}</Text>}
-          {error !== undefined && (
-            <Text color={inkColor(theme.error)}>{error}</Text>
+          <Text>{t("removeQuestion", { name: machine.name })}</Text>
+          {previewCall.busy && <Text color={muted}>{t("removeLoading")}</Text>}
+          {preview !== undefined && !hasImpact && (
+            <Text color={muted}>{t("removeNothing")}</Text>
+          )}
+          {preview !== undefined && preview.agents.length > 0 && (
+            <Text color={muted}>
+              {t("removeAgents", {
+                count: preview.agents.length,
+                list: preview.agents
+                  .map((a) => `${a.name} (${a.runtime})`)
+                  .join(", "),
+              })}
+            </Text>
+          )}
+          {preview !== undefined && preview.projects.length > 0 && (
+            <Text color={muted}>
+              {t("removeProjects", {
+                count: preview.projects.length,
+                list: preview.projects.map((p) => p.name).join(", "),
+              })}
+            </Text>
+          )}
+          {preview !== undefined && preview.conversations.length > 0 && (
+            <Text color={muted}>
+              {t("removeConversations", {
+                count: preview.conversations.length,
+                list: preview.conversations.map((c) => c.name).join(", "),
+              })}
+            </Text>
+          )}
+          {preview !== undefined &&
+            (preview.activeRuns > 0 || preview.activeReplies > 0) && (
+              <Text color={inkColor(theme.warning)}>
+                {t("removeActive", {
+                  runs: preview.activeRuns,
+                  replies: preview.activeReplies,
+                })}
+              </Text>
+            )}
+          {busy && <Text color={muted}>{t("removing")}</Text>}
+          {activeError !== undefined && (
+            <Text color={inkColor(theme.error)}>{activeError}</Text>
           )}
         </Box>
         <ConfirmKeys
-          onConfirm={() => send("revoke", { machineId: machine.id })}
+          onConfirm={() => {
+            if (!busy && !previewCall.busy && preview !== undefined)
+              send("remove", { machineId: machine.id });
+          }}
           onCancel={toActions}
         />
       </LayerFrame>
     );
+  }
 
   const actions = actionsFor(machine, t);
   return (
@@ -313,6 +389,10 @@ function MachineDetail({
           items={actions}
           empty={t("nothingToDo")}
           onPick={(key) => {
+            if (key === "remove") {
+              openRemove(machine.id);
+              return;
+            }
             setError(undefined);
             setStep(key as Step);
           }}

@@ -26,6 +26,7 @@ import type { Timeline } from "../conversations/timeline";
 import type { MachineStore } from "../machines/store";
 import type { Plugins } from "../plugins/service";
 import type { ProjectStore } from "../projects/store";
+import type { TaskRunner } from "../tasks/runner";
 import type { AgentCreateDeps } from "./create";
 import type { AgentRecord, AgentStore } from "./store";
 import {
@@ -47,6 +48,7 @@ import {
   checkPlugins,
   createAgent,
 } from "./create";
+import { deleteAgent } from "./delete";
 import { homeOf } from "./home";
 import { checkModel, requireModel } from "./model";
 import { agentHome } from "./store";
@@ -62,6 +64,7 @@ export interface AgentsDeps {
   policies: ConversationPolicies;
   timeline: Timeline;
   engine: Engine;
+  runner?: Pick<TaskRunner, "stopAgent"> | undefined;
   plugins: Plugins;
   changed: (conversations?: readonly string[] | "all") => void;
   /** The external runtimes this host has, with their models; absent when it runs none. */
@@ -253,21 +256,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
 
         wire.handle("agents", "delete", (call) => {
           const id = new Args(call).string("agentId");
-          const agent = existing(id);
-          if (agent.systemRole === "captain")
-            throw new Error(
-              "the Captain cannot be deleted as an ordinary agent",
-            );
-          // Running replies first: they would otherwise outlive the agent that is writing them.
-          deps.engine.stopAgent(id);
-          const home = homeOf(deps, agent);
-          deps.db.transaction(() => {
-            deps.policies.agentDeleted(agent);
-            if (home !== undefined)
-              projects.update(home.id, { archived: true });
-            // Stewards and memberships go with the row (ON DELETE SET NULL / CASCADE).
-            agents.remove(agent.id);
-          })();
+          deleteAgent(deps, id);
           deps.changed("all");
           return { result: { agentId: id } };
         }),

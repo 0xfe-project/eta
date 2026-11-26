@@ -203,8 +203,7 @@ function MachineRow(props: {
 /** 10b: look, don't touch. Machines are managed on the computer. */
 function Machines(props: { build: string | undefined }) {
   const { running, queued } = useRuns();
-  const shown = () =>
-    machines().filter((machine) => machine.status !== "revoked");
+  const shown = () => machines();
   const taskRuns = () => running().filter((run) => run.task);
   return (
     <View>

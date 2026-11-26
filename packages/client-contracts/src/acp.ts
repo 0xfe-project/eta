@@ -49,11 +49,35 @@ export type AcpMachineList =
   | { agents: AcpAgentView[]; error?: undefined }
   | { error: string; agents?: undefined };
 
+export interface AcpDeletePreviewAgent {
+  id: string;
+  name: string;
+  runtime: `acp.${string}`;
+  groupCount: number;
+  busy: boolean;
+}
+
+export interface AcpDeletePreview {
+  id: string;
+  machineId: string;
+  agents: AcpDeletePreviewAgent[];
+}
+
+export interface AcpDeleteResult {
+  deletedAgents?: string[];
+}
+
 /**
  * The `acp` target's calls. Each takes a `machineId` (the primary when absent); a daemon that is
  * not online is an error, never the primary instead.
  */
-export const ACP_ACTIONS = ["refresh", "save", "delete", "test"] as const;
+export const ACP_ACTIONS = [
+  "refresh",
+  "save",
+  "deletePreview",
+  "delete",
+  "test",
+] as const;
 export type AcpAction = (typeof ACP_ACTIONS)[number];
 
 /** What an ACP agent's id has to look like. */

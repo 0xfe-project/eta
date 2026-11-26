@@ -1,9 +1,9 @@
 /**
  * `/machines` against a real host: the `machines` target, an install code from `machines.enroll`,
  * a machine made pending by trading that code at the host's `POST /machines/enroll` (what a new
- * machine's daemon does), and approving and revoking it.
+ * machine's daemon does), and approving and removing it.
  */
-import type { MachineView } from "@eta/client-contracts";
+import type { MachineRemovePreview, MachineView } from "@eta/client-contracts";
 import type { HostObserver } from "../ext-support/host-observer";
 import { MachineStore } from "@eta/app/src/machines/store";
 import { Tailscale } from "@eta/app/src/machines/tailscale";
@@ -176,7 +176,7 @@ describe("/machines", () => {
     await openMachine(r, "laptop");
     expect(r.screen()).toContain("Status: awaiting approval");
     expect(r.screen()).toContain("Approve");
-    expect(r.screen()).toContain("Revoke");
+    expect(r.screen()).toContain("Remove");
     await r.press(KEYS.enter);
     await r.waitFor("Fingerprint shown on that machine's terminal");
     await r.press(KEYS.paste(WRONG_FINGERPRINT));
@@ -195,17 +195,53 @@ describe("/machines", () => {
     expect(r.screen()).not.toContain("Approve");
   });
 
-  it("revokes after asking once more", async () => {
+  it("previews impact and removes after asking once more", async () => {
     const { r, host, calls } = await opened(["laptop"]);
+    const laptop = machine(host, "laptop")!;
+    // Approve laptop so we can attach a project & pinned agent to preview.
+    await host.client.call("machines", "approve", {
+      machineId: laptop.id,
+      fingerprint: FINGERPRINT,
+    });
+    const pinned = (await host.client.call("agents", "create", {
+      name: "LaptopBot",
+      model: "fake:model",
+      machineId: laptop.id,
+    })) as { agent: { id: string } };
+    const now = Date.now();
+    r.host.db
+      .query(
+        "INSERT INTO project (id, machine_id, path, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run("p-laptop", laptop.id, "/tmp/laptop-proj", "laptop-proj", now, now);
+    r.host.db
+      .query(
+        "INSERT INTO conversation (id, project_id, kind, name, created_at, updated_at) VALUES (?, ?, 'group', ?, ?, ?)",
+      )
+      .run("c-laptop", "p-laptop", "laptop-chat", now, now);
+
     await openMachine(r, "laptop");
-    await r.press(KEYS.down);
     await r.press(KEYS.enter);
-    await r.waitFor("Revoke laptop?");
-    expect(calls.filter((call) => call.op === "machines.revoke")).toEqual([]);
+    await r.waitFor("Remove laptop?");
+    await r.waitFor("Pinned agents (1): LaptopBot (eta)");
+    await r.waitFor("Projects (1): laptop-proj");
+    await r.waitFor("Conversations (1): laptop-chat");
+    expect(
+      calls.filter((call) => call.op === "machines.removePreview"),
+    ).toHaveLength(1);
+    expect(calls.filter((call) => call.op === "machines.remove")).toEqual([]);
     await r.press(KEYS.enter);
-    await host.until(() => machine(host, "laptop")?.status === "revoked");
-    await r.waitFor("Status: revoked");
-    await r.waitFor("Nothing to do for this machine.");
+    await host.until(() => machine(host, "laptop") === undefined);
+    await r.waitForGone("Remove laptop?");
+    expect(
+      r.host.db
+        .query<{ id: string }, [string]>("SELECT id FROM agent WHERE id = ?")
+        .get(pinned.agent.id),
+    ).toBeNull();
+    const previewOutcome = (await calls.find(
+      (call) => call.op === "machines.removePreview",
+    )?.outcome) as { ok: true; value: MachineRemovePreview } | undefined;
+    expect(previewOutcome?.value.agents).toHaveLength(1);
   });
 
   it("keeps the machine on Esc at the question", async () => {
@@ -213,11 +249,14 @@ describe("/machines", () => {
     await openMachine(r, "laptop");
     await r.press(KEYS.down);
     await r.press(KEYS.enter);
-    await r.waitFor("Revoke laptop?");
+    await r.waitFor("Remove laptop?");
+    await r.waitFor(
+      "No pinned agents, projects, or conversations on this machine.",
+    );
     await r.press(KEYS.escape);
-    await r.waitForGone("Revoke laptop?");
+    await r.waitForGone("Remove laptop?");
     await r.settle(200);
-    expect(calls.filter((call) => call.op === "machines.revoke")).toEqual([]);
+    expect(calls.filter((call) => call.op === "machines.remove")).toEqual([]);
     expect(machine(host, "laptop")?.status).toBe("pending");
   });
 
@@ -247,7 +286,7 @@ describe("/machines", () => {
     const { r } = await opened();
     await r.press(KEYS.enter);
     await r.waitFor("Nothing to do for this machine.");
-    expect(r.screen()).not.toContain("Revoke");
+    expect(r.screen()).not.toContain("Remove");
   });
 
   it("goes back from a machine and from the install code on Esc, and closes on Esc", async () => {

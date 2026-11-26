@@ -46,13 +46,11 @@ const machineMenuWidth = 488;
 // (`checkAcpDraft` in @eta/client-contracts); the host still has the last word, and what it
 // refuses is shown in its own words. A draft can be tested before it is saved.
 
-/** The primary and every daemon not revoked: the primary first, then by name. */
+/** The primary and every daemon: the primary first, then by name. */
 export function acpMachines(machines: readonly MachineView[]): MachineView[] {
   return machines
     .filter(
-      (machine) =>
-        (machine.kind === "primary" || machine.kind === "daemon") &&
-        machine.status !== "revoked",
+      (machine) => machine.kind === "primary" || machine.kind === "daemon",
     )
     .sort(
       (a, b) =>

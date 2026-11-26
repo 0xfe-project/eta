@@ -135,7 +135,7 @@ class Problem extends Error {
 
 const flowMachines = (): FlowMachine[] =>
   machines()
-    .filter((m) => m.status !== "pending" && m.status !== "revoked")
+    .filter((m) => m.status !== "pending")
     .map(({ id, name, kind, status }) => ({ id, name, kind, status }));
 
 export function createPlaceFlow(options: {

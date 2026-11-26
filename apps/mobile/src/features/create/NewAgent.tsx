@@ -76,8 +76,7 @@ function useDraft() {
     machines().filter(
       (machine) =>
         (machine.kind === "primary" || machine.kind === "daemon") &&
-        machine.status !== "pending" &&
-        machine.status !== "revoked",
+        machine.status !== "pending",
     );
   for (const machine of untracked(listed)) {
     if (machine.status === "online") void ask(machine);

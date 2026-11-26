@@ -197,7 +197,9 @@ interface Live {
   /** The executor called `finish_task`; a mentioned agent answered in the thread. */
   reported: boolean;
   /** Why the session was stopped from outside, if it was. */
-  stopped: "interrupt" | "closing" | undefined;
+  stopped: "interrupt" | "closing" | "failed" | undefined;
+  /** The reason given when `stopped` is `"failed"` or `"interrupt"`. */
+  stopError?: string | undefined;
   /** What the session last said, for the features that remember. */
   said: string;
 }
@@ -394,6 +396,66 @@ export class TaskRunner implements TaskRuns {
   stop(taskId: string, why: string): void {
     this.#forget(taskId);
     for (const run of this.#deps.runs.openOf(taskId)) this.#stop(run, why);
+  }
+
+  /**
+   * An agent is being deleted: fail all open runs belonging to it (either as a mentioned lane or as
+   * the task executor) and clear any parked comments waiting to wake it.
+   */
+  stopAgent(agentId: string, reason: string): void {
+    for (const [key, { lane }] of this.#waiting) {
+      if (lane.agentId === agentId) {
+        this.#waiting.delete(key);
+        continue;
+      }
+      if (lane.agentId === null) {
+        const task = this.#deps.tasks.get(lane.taskId);
+        if (task !== undefined && this.#executorOf(task) === agentId)
+          this.#waiting.delete(key);
+      }
+    }
+    const open = this.#deps.runs.openOfAgent(agentId);
+    for (const run of open) this.#failOpen(run, reason);
+    if (open.length > 0) this.pump();
+  }
+
+  /**
+   * A machine is being removed: fail all open runs targeting it or belonging to any pinned agent
+   * deleted with it, and clear any parked comments targeting that machine or those agents.
+   */
+  stopForMachine(
+    machineId: string,
+    agentIds: readonly string[],
+    reason: string,
+  ): void {
+    const goneAgents = new Set(agentIds);
+    for (const [key, { lane }] of this.#waiting) {
+      if (lane.agentId !== null && goneAgents.has(lane.agentId)) {
+        this.#waiting.delete(key);
+        continue;
+      }
+      const task = this.#deps.tasks.get(lane.taskId);
+      if (task === undefined) {
+        this.#waiting.delete(key);
+        continue;
+      }
+      const project =
+        task.projectId === null
+          ? undefined
+          : this.#deps.projects.get(task.projectId);
+      if (project?.machineId === machineId) {
+        this.#waiting.delete(key);
+        continue;
+      }
+      if (lane.agentId === null) {
+        const executor = this.#executorOf(task);
+        if (executor !== null && goneAgents.has(executor))
+          this.#waiting.delete(key);
+      }
+    }
+    const open = this.#deps.runs.openForMachineOrAgents(machineId, agentIds);
+    for (const run of open) this.#failOpen(run, reason);
+    if (open.length > 0) this.pump();
   }
 
   /**
@@ -973,14 +1035,29 @@ export class TaskRunner implements TaskRuns {
         }
         continue;
       }
+      if (machine === undefined) {
+        const error =
+          run.machineId === null
+            ? "This run has no machine to run on."
+            : "The machine for this run was removed.";
+        if (runs.finish(run.id, "failed", error) !== undefined) {
+          board.runEvent(run.taskId, {
+            kind: "run_failed",
+            runId: run.id,
+            actor: actorOf(run),
+            body: error,
+          });
+          this.#waiting.delete(laneKey(run));
+        }
+        continue;
+      }
       let reason: TaskQueueReason | null = null;
-      if (machine === undefined || machine.status !== "online")
-        reason = "machine_offline";
+      if (machine.status !== "online") reason = "machine_offline";
       else if (runs.busy(run)) reason = "task_busy";
       else if (gate?.state === "waiting") reason = "waiting_deps";
       else if (runs.activeOn(machine.id) >= machine.maxActiveRuns)
         reason = "machine_full";
-      if (reason !== null || machine === undefined) {
+      if (reason !== null) {
         if (runs.setQueueReason(run.id, reason)) board.runEvent(run.taskId);
         continue;
       }
@@ -1022,6 +1099,28 @@ export class TaskRunner implements TaskRuns {
     }
     live.stopped ??= "interrupt";
     if (live.inFlight) live.handle?.abort();
+  }
+
+  /**
+   * Fail an open run immediately because its agent or machine is gone, aborting any live session
+   * handle and recording the failure synchronously so nothing remains queued/starting/running.
+   */
+  #failOpen(run: RunRecord, reason: string): void {
+    this.#waiting.delete(laneKey(run));
+    const live = this.#live.get(run.id);
+    if (live !== undefined) {
+      live.stopped ??= "failed";
+      live.stopError ??= reason;
+      live.handle?.abort();
+    }
+    if (this.#deps.runs.finish(run.id, "failed", reason) !== undefined) {
+      this.#deps.board.runEvent(run.taskId, {
+        kind: "run_failed",
+        runId: run.id,
+        body: reason,
+        actor: actorOf(run),
+      });
+    }
   }
 
   /* ---------------------------------------------------------------- a run */
@@ -1066,8 +1165,16 @@ export class TaskRunner implements TaskRuns {
     }
     if (live.stopped === "closing")
       ended = { status: "failed", error: RUN_RESTART_TEXT };
+    else if (live.stopped === "failed" && ended.status !== "completed")
+      ended = {
+        status: "failed",
+        error: live.stopError ?? "The run failed.",
+      };
     else if (live.stopped === "interrupt" && ended.status !== "completed")
-      ended = { status: "interrupted", error: "Stopped by the user." };
+      ended = {
+        status: "interrupted",
+        error: live.stopError ?? "Stopped by the user.",
+      };
     this.#live.delete(run.id);
     const done = this.#deps.runs.finish(
       run.id,

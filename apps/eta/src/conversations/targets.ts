@@ -3,8 +3,8 @@
  * window of its timeline.
  *
  * Registered for every conversation when the plugin starts and for each new one as it is made, so
- * a client can subscribe to a conversation it learned of from the list. A conversation is never
- * removed, so nothing here takes one back until the plugin goes.
+ * a client can subscribe to a conversation it learned of from the list. When a machine is removed
+ * and its conversations cascade-delete, `remove` unregisters each target.
  */
 import type { WireService } from "@eta/server";
 import type { ViewDeps } from "./views";
@@ -47,6 +47,13 @@ export class ConversationTargets {
         timeline: () => timeline.window(id, TIMELINE_WINDOW),
       }),
     );
+  }
+
+  remove(id: string): void {
+    const off = this.#offs.get(id);
+    if (off === undefined) return;
+    this.#offs.delete(id);
+    off();
   }
 
   dispose(): void {

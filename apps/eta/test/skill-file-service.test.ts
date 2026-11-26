@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { SkillFileService } from "../src/skills/service";
 
 describe("skill target errors do not fall back", () => {
-  it("distinguishes missing, pending, offline, revoked, unknown home and project errors before I/O", async () => {
+  it("distinguishes missing, pending, offline, unknown home and project errors before I/O", async () => {
     const machine = {
       id: "box",
       kind: "daemon",
@@ -23,10 +23,10 @@ describe("skill target errors do not fall back", () => {
       home: "/fixture",
       scope: "personal" as const,
     };
-    for (const status of ["pending", "offline", "revoked"] as const) {
+    for (const status of ["pending", "offline"] as const) {
       machine.status = status;
       await expect(service.call("list", target, {})).rejects.toThrow(
-        status === "revoked" ? "machine_removed" : `machine_${status}`,
+        `machine_${status}`,
       );
     }
     machine.status = "online";

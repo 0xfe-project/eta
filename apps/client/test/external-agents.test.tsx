@@ -134,7 +134,28 @@ test("a removed agent leaves the list", async () => {
   await app.press("label:Fake Agent >> nth=0");
   await app.press("label:Remove");
   expect(app.texts()).toContain("Remove Fake Agent from studio (primary)?");
-  await app.press("label:Remove >> nth=1");
+  await app.waitUntil(() => app.enabled("label:Remove >> nth=0"));
+  await app.press("label:Remove >> nth=0");
   await app.waitUntil(() => !app.texts().includes("Fake Agent"));
   expect(app.texts()).toContain("Claude Code");
+});
+
+test("removing an external agent with dependent eta agents previews them and cascade-deletes on confirmation", async () => {
+  const app = await settings(1440, 900);
+  await app.press("label:Claude Code >> nth=0");
+  await app.press("label:Remove");
+  await app.waitFor("text:Cody · 1 group(s) · active");
+  expect(app.texts()).toContain(
+    "Removing this external agent will also permanently delete 1 agent(s) using it and stop any active replies or task runs. Past messages in groups will be kept.",
+  );
+  // Cancel keeps Claude Code in place.
+  await app.press("label:Cancel");
+  await app.waitUntil(() => !app.shows("label:Remove and delete agents"));
+  expect(app.texts()).toContain("Claude Code");
+
+  // Re-open and confirm cascade deletion.
+  await app.press("label:Remove");
+  await app.waitFor("label:Remove and delete agents");
+  await app.press("label:Remove and delete agents");
+  await app.waitUntil(() => !app.texts().includes("Claude Code"));
 });
