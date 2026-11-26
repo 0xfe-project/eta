@@ -264,8 +264,9 @@ export function EntityRow(props: {
 }
 
 /**
- * The 24px box standing in for an entity's logo or avatar: its models.dev logo (one colour, drawn
- * in the text colour at 60% of the box) when there is one, else its name's first letter.
+ * The 24px box standing in for an entity's logo or avatar: its logo (one-colour SVG markup, drawn
+ * in the text colour, or a data URI drawn as it is; at 60% of the box) when there is one, else its
+ * name's first letter.
  */
 export function LetterBox(props: {
   name: string;
@@ -296,7 +297,9 @@ export function LetterBox(props: {
       >
         {(logo) => (
           <Image
-            src={tintedLogo(logo(), c().ink)}
+            src={
+              logo().startsWith("data:") ? logo() : tintedLogo(logo(), c().ink)
+            }
             fadeDuration={0}
             style={{
               width: Math.round(size() * 0.6),

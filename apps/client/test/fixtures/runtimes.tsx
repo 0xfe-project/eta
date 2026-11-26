@@ -60,7 +60,10 @@ const sonnet = {
   efforts: ["low", "medium", "high"],
 };
 
-function primary(fresh: boolean): AgentRuntimeInfo[] {
+function primary(
+  fresh: boolean,
+  includeAntigravity = false,
+): AgentRuntimeInfo[] {
   return [
     {
       id: "claude",
@@ -103,6 +106,18 @@ function primary(fresh: boolean): AgentRuntimeInfo[] {
       detail: "pi: command not found on PATH",
       models: [],
     },
+    ...(includeAntigravity
+      ? [
+          {
+            id: "antigravity" as const,
+            label: "Antigravity",
+            status: "unauthenticated" as const,
+            version: "1.5.16",
+            detail: "Please sign in to view available models",
+            models: [],
+          },
+        ]
+      : []),
     {
       id: "acp.gemini",
       label: "Gemini CLI",
@@ -151,6 +166,9 @@ const accounts: Record<string, AgentRuntimeAccount> = {
   codex: {
     auth: { kind: "logged_out" },
     usage: { kind: "reauth_required", reason: "not_logged_in" },
+  },
+  antigravity: {
+    auth: { kind: "logged_out" },
   },
 };
 
@@ -228,11 +246,20 @@ const pi = {
   runtime: "pi",
 } as unknown as AgentView;
 
+const agy = {
+  ...bo,
+  id: "a-antigravity",
+  name: "Agy",
+  runtime: "antigravity",
+} as unknown as AgentView;
+
 function Fixture() {
   const host = createHost();
   const calls = signal<string[]>([]);
   const log: string[] = [];
   const page = UrlScheme.url()?.split("/").at(-1);
+  const includeAntigravity =
+    page === "antigravity" || page === "antigravity-runtimes";
   host.state.update((prev) => ({
     ...prev,
     status: "open",
@@ -242,7 +269,7 @@ function Fixture() {
       agents: {
         version: 1,
         revisions: {},
-        sections: { list: [bo, pi] },
+        sections: { list: [bo, pi, agy] },
       },
       usage: { version: 1, revisions: {}, sections: { providers: usage } },
     },
@@ -258,7 +285,10 @@ function Fixture() {
     };
     if (action === "runtimes")
       return {
-        runtimes: given.machineId === "m-gpu" ? gpu : primary(!!given.fresh),
+        runtimes:
+          given.machineId === "m-gpu"
+            ? gpu
+            : primary(!!given.fresh, includeAntigravity),
       } as T;
     if (action === "runtimeAccount")
       return { account: accounts[given.runtime ?? ""] ?? {} } as T;
@@ -279,7 +309,10 @@ function Page(props: {
   const layout = width < 600 ? "phone" : width < 1200 ? "tablet" : "desktop";
   const noop = () => {};
   const editing =
-    props.page === "editor" || props.page === "new" || props.page === "pi";
+    props.page === "editor" ||
+    props.page === "new" ||
+    props.page === "pi" ||
+    props.page === "antigravity";
   return (
     <View style={{ flex: 1 }}>
       <Text>{props.calls().join("\n")}</Text>
@@ -290,7 +323,9 @@ function Page(props: {
               ? bo.id
               : props.page === "pi"
                 ? pi.id
-                : undefined
+                : props.page === "antigravity"
+                  ? agy.id
+                  : undefined
           }
           phone={layout === "phone"}
           tablet={layout === "tablet"}

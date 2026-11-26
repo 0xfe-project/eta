@@ -4,7 +4,8 @@
  * A host tool reaches a runtime over MCP (`serveMcpTools`), and two things do not survive the trip:
  *
  * - **The name.** Each runtime reports a call in its own spelling: Claude Code and Pi say
- *   `mcp__eta__x`, OpenCode says `eta_x`, and Codex says `mcpToolCall` for every MCP tool and names
+ *   `mcp__eta__x`, OpenCode says `eta_x`, Antigravity says `mcp_eta_x` (and adds `toolSummary` to
+ *   arguments), and Codex says `mcpToolCall` for every MCP tool and names
  *   the server and the tool only in its native frame. Grok Build calls every MCP tool through its
  *   own `use_tool`, naming it `eta__x` beside the tool's own arguments (`tool_input`), and wraps
  *   the answer (`gateway`). The transcript holds the name the host gave the tool, whoever called
@@ -31,6 +32,12 @@ const PREFIXES: Partial<Record<RuntimeId, string>> = {
   claude: `mcp__${HOST_SERVER}__`,
   pi: `mcp__${HOST_SERVER}__`,
   opencode: `${HOST_SERVER}_`,
+  antigravity: `mcp_${HOST_SERVER}_`,
+};
+
+/** Runtime-injected extra parameter keys on host tool calls that the host tool did not declare. */
+const EXTRA_ARG_KEYS: Partial<Record<RuntimeId, readonly string[]>> = {
+  antigravity: ["toolSummary"],
 };
 
 /** A runtime's one tool that calls any MCP tool, by the name it is called under. */
@@ -51,6 +58,15 @@ interface Answer {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+function withoutExtras(runtime: RuntimeId, value: unknown): unknown {
+  const extras = EXTRA_ARG_KEYS[runtime];
+  if (extras === undefined || !isRecord(value)) return value;
+  if (!extras.some((key) => key in value)) return value;
+  const copy = { ...value };
+  for (const key of extras) delete copy[key];
+  return copy;
+}
 
 /** A value as text that does not depend on the order of its keys. */
 const canonical = (value: unknown): string =>
@@ -152,6 +168,11 @@ export class HostCalls {
     });
   }
 
+  /** Strip runtime-injected extra parameters from a host tool call's arguments object. */
+  normalizeArgs(args: Record<string, unknown>): Record<string, unknown> {
+    return withoutExtras(this.#runtime, args) as Record<string, unknown>;
+  }
+
   /** A tool answered: what it said, and what it left beside that. */
   answered(
     name: string,
@@ -161,7 +182,7 @@ export class HostCalls {
   ): void {
     this.#answers.push({
       name,
-      input: canonical(input),
+      input: canonical(withoutExtras(this.#runtime, input)),
       text: wordsOf(content),
       details: isRecord(details) ? details : undefined,
     });
@@ -174,7 +195,7 @@ export class HostCalls {
     parts: readonly ToolOutputPart[],
   ): Record<string, unknown> | undefined {
     const same = this.#answers.filter((answer) => answer.name === name);
-    const input = canonical(args);
+    const input = canonical(withoutExtras(this.#runtime, args));
     const text = wordsOf(parts);
     const found =
       same.find((answer) => answer.text === text && answer.input === input) ??

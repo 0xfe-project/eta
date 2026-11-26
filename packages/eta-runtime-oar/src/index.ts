@@ -1,6 +1,6 @@
 /**
- * Claude Code, Codex, OpenCode, Pi, Grok Build and Qwen Code as runtimes an eta session can run on, through
- * oar.
+ * Claude Code, Codex, OpenCode, Pi, Antigravity, Grok Build and Qwen Code as runtimes an eta
+ * session can run on, through oar.
  *
  * `createOarRuntimes` is what a session host is given (`SessionRuntimes`): for a session whose
  * metadata names one of these runtimes it opens a delegate that takes the session's runs, and the
@@ -8,6 +8,7 @@
  * reads: which runtimes this machine has, and their models.
  */
 import type { RuntimeRegistry } from "@botiverse/oar";
+import type { McpBridgeLauncher } from "@eta/runtime-kit";
 import type {
   SessionRuntime,
   SessionRuntimeInput,
@@ -26,6 +27,7 @@ export {
   type RuntimeModel,
 } from "./catalog";
 export { effortFor } from "./models";
+export { type McpBridgeLauncher, runMcpBridge } from "@eta/runtime-kit";
 
 export interface OarRuntimes extends SessionRuntimes {
   readonly catalog: RuntimeCatalog;
@@ -34,6 +36,8 @@ export interface OarRuntimes extends SessionRuntimes {
 export interface OarRuntimesOptions {
   /** The runtimes to reach; oar's built-in ones by default (a test hands in scripted ones). */
   registry?: RuntimeRegistry;
+  /** How a runtime that refuses credentials on `mcpServers` starts the stdio host MCP bridge. */
+  mcpBridge?: McpBridgeLauncher;
   warn?: (message: string) => void;
 }
 
@@ -60,6 +64,7 @@ export function createOarRuntimes(
         remember: input.remember,
         hostTools: input.hostTools,
         mcpServers: input.mcpServers,
+        mcpBridge: options.mcpBridge,
         launchArgs: input.launchArgs,
         wake: input.wake,
         warn,

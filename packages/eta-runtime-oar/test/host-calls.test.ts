@@ -151,6 +151,7 @@ describe("the name of a host tool's call", () => {
     ["claude", "mcp__eta__publish_artifact"],
     ["pi", "mcp__eta__publish_artifact"],
     ["opencode", "eta_publish_artifact"],
+    ["antigravity", "mcp_eta_publish_artifact"],
   ])("is the host's on %s, which says %s", (runtime, tool) => {
     const { see, end, resultOf, callNames, ended } = setup(runtime);
     see({ kind: "tool_call_started", callId: "c1", tool, input: "{}" });
@@ -196,6 +197,59 @@ describe("the name of a host tool's call", () => {
       end(tool, "ok");
     }
     expect(callNames()).toEqual(["eta_tools_reply", "docs_reply", "bash"]);
+  });
+
+  it("strips toolSummary from host calls on antigravity while leaving other tools intact", () => {
+    const { see, calls, end, resultOf, callNames, argsOf } =
+      setup("antigravity");
+    const cleanInput = { title: "Page 1" };
+    answer(calls, "publish_artifact", cleanInput, "published", published(1));
+
+    see({
+      kind: "tool_call_started",
+      callId: "a1",
+      tool: "mcp_eta_publish_artifact",
+      input: JSON.stringify({ ...cleanInput, toolSummary: "Publish page" }),
+    });
+    see({
+      kind: "tool_call_input",
+      callId: "a1",
+      input: JSON.stringify({ ...cleanInput, toolSummary: "Publish page" }),
+    });
+    end("a1", "published");
+
+    for (const [callId, tool, input] of [
+      ["p1", "mcp_docs_publish_artifact", { title: "D", toolSummary: "Doc" }],
+      ["p2", "mcp_eta_tools_reply", { body: "hi", toolSummary: "Other" }],
+      ["p3", "mcp_eta_not_served", { toolSummary: "Unknown" }],
+      ["b1", "run_command", { CommandLine: "ls", toolSummary: "List files" }],
+    ] as const) {
+      see({
+        kind: "tool_call_started",
+        callId,
+        tool,
+        input: JSON.stringify(input),
+      });
+      end(callId, "ok");
+    }
+
+    expect(callNames()).toEqual([
+      "publish_artifact",
+      "mcp_docs_publish_artifact",
+      "mcp_eta_tools_reply",
+      "mcp_eta_not_served",
+      "run_command",
+    ]);
+    expect(argsOf("a1")).toEqual(cleanInput);
+    expect(resultOf("a1")).toMatchObject({
+      toolName: "publish_artifact",
+      details: published(1),
+    });
+    expect(argsOf("b1")).toEqual({
+      CommandLine: "ls",
+      toolSummary: "List files",
+    });
+    expect(argsOf("p1")).toEqual({ title: "D", toolSummary: "Doc" });
   });
 
   it("stays the runtime's for a tool of another server on codex", () => {

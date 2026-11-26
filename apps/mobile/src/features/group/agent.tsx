@@ -14,6 +14,7 @@ const RUNTIMES: Record<Exclude<AgentView["runtime"], "eta">, string> = {
   codex: "Codex",
   opencode: "OpenCode",
   pi: "Pi",
+  antigravity: "Antigravity",
   grok: "Grok Build",
   qwen: "Qwen Code",
 };

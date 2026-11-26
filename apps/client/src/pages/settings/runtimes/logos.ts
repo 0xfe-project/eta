@@ -1,8 +1,8 @@
 // The runtimes' own marks, one colour (`currentColor`), from Lobe Icons
 // (@lobehub/icons-static-svg 1.104.0, MIT, Copyright (c) 2023 LobeHub; see THIRD_PARTY_NOTICES.md).
 // Kept in the client rather than asked of the host: runtimes are a short fixed list and an
-// external agent is matched to one by its id or name. Grok Build draws the mark
-// oar ships for it (`@botiverse/oar/brands`; see its assets/brands/NOTICE.md).
+// external agent is matched to one by its id or name. Antigravity and Grok Build draw the marks
+// oar ships for them (`@botiverse/oar/brands`; see its assets/brands/NOTICE.md).
 
 import { runtimeBrands } from "@botiverse/oar/brands";
 
@@ -43,6 +43,8 @@ const LOGOS: Readonly<Record<string, string>> = {
   trae: '<svg fill="currentColor" fill-rule="evenodd" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M24 20.541H3.428v-3.426H0V3.4h24V20.54zM3.428 17.115h17.144V6.827H3.428v10.288zm8.573-5.196l-2.425 2.424-2.424-2.424 2.424-2.424 2.425 2.424zm6.857-.001l-2.424 2.423-2.425-2.423 2.425-2.425 2.424 2.425z"></path></svg>',
   // One colour (`currentColor`), drawn in the text colour like the rest.
   grok: markupOf(runtimeBrands.grok.icon),
+  // In its own colours: a data URI, drawn as it is.
+  antigravity: runtimeBrands.antigravity.icon,
   codebuddy:
     '<svg fill="currentColor" fill-rule="evenodd" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18.777 1.647c.28-.02.536.114.972.51 1.018.926 2.437 2.828 3.318 4.452l.34.631.482.24.11.06v3.638a5.206 5.206 0 00-5.32-1.23c-.491.166-1.021.471-2.08 1.082l-6.09 3.516c-1.057.61-1.586.916-1.975 1.259a5.208 5.208 0 00-1.493 5.572c.165.49.471 1.02 1.082 2.08l.315.543h-3.26c-.685 0-1.34-.135-1.939-.377-.169-.956-.009-1.789.469-2.335.158-.18.164-.189.13-.493a11.846 11.846 0 01-.057-1.711l.02-.444-.667-1.18C2.1 15.622 1.445 14.078 1.192 12.9c-.133-.647-.125-.934.04-1.146.1-.128.427-.261.822-.334.994-.175 3.162-.017 5.575.41l.25.043.551-.487c.915-.81 1.522-1.264 2.641-1.962 1.167-.73 2.484-1.331 3.967-1.807l.476-.152.261-.688c.937-2.471 1.896-4.293 2.58-4.9.235-.21.25-.22.422-.23z"></path><path d="M12.139 18.2a1.203 1.203 0 011.642.44l1.296 2.243a1.204 1.204 0 01-2.083 1.203l-1.296-2.243a1.203 1.203 0 01.44-1.644zM18.629 14.452a1.203 1.203 0 011.642.44l1.295 2.244a1.203 1.203 0 11-2.083 1.203l-1.295-2.243a1.203 1.203 0 01.44-1.644z"></path></svg>',
 };
@@ -67,13 +69,15 @@ const MATCHES: readonly (readonly [RegExp, string])[] = [
   [/\broo\b|roocode|roo-code/, "roocode"],
   [/trae/, "trae"],
   [/codebuddy/, "codebuddy"],
+  [/antigravity|\bagy\b/, "antigravity"],
   [/grok/, "grok"],
 ];
 
 /**
  * A runtime's mark: a built-in runtime by its id (`claude`, `codex`, `opencode`, `pi`,
- * `grok`), an external agent (`acp.<id>`) by a known name in its id or label;
- * undefined draws its letter.
+ * `antigravity`, `grok`, `qwen`), an external agent (`acp.<id>`) by a known name in its id or
+ * label; undefined draws its letter. A mark is SVG markup drawn in the text colour, or a data URI
+ * (a mark in its own colours) drawn as it is.
  */
 export function runtimeLogo(id: string, label: string): string | undefined {
   if (id === "claude") return LOGOS.claudecode;

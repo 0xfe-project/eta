@@ -24,6 +24,7 @@ import { parseArgs } from "node:util";
  * questions. It refuses to start on the old directory rather than treat it as empty: a machine
  * that moved silently would just be a machine with no sessions.
  */
+import { runMcpBridge } from "@eta/runtime-oar";
 import { shellQuote } from "@eta/ssh";
 import { DaemonLink } from "./client";
 import { enroll } from "./enroll";
@@ -38,6 +39,15 @@ import { DAEMON_UNIT, installedEnv } from "./service";
 import { serviceManager } from "./service-manager";
 import { RESTART_EXIT, settleUpgrade, upgrade } from "./upgrade";
 import { VERSION } from "./version";
+
+// Handle `mcp-bridge` before parseArgs and legacyDir checks so a compiled daemon binary always
+// serves stdio ↔ HTTP MCP bridging regardless of dataDir state.
+if (process.argv[2] === "mcp-bridge") {
+  const controller = new AbortController();
+  for (const signal of ["SIGINT", "SIGTERM"] as const)
+    process.on(signal, () => controller.abort());
+  process.exit(await runMcpBridge({ signal: controller.signal }));
+}
 
 const { positionals, values } = parseArgs({
   options: {
