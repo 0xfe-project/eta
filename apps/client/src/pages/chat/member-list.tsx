@@ -258,9 +258,6 @@ function MemberFace(props: { agentId: string; session: string | null }) {
   );
 }
 
-/** "≈999 tok/s": the slot a rate fills, so the row keeps its width as the digits change. */
-const rateSlot = 10;
-
 /**
  * How fast a working member's model writes: the estimate of the generation in flight, else the
  * last generation's measured rate.
@@ -291,7 +288,7 @@ function MemberRate(props: { session: string }) {
             {`${current().basis === "estimate" ? "≈" : ""}${uiText(
               "memberRate",
               { rate: String(Math.round(current().tokensPerSec)) },
-            )}`.padEnd(rateSlot, "\u2007")}
+            )}`}
           </Label>
         </View>
       )}

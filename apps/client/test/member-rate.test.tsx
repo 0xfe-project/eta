@@ -13,6 +13,10 @@ test("a working member shows its output speed beside its status, an idle member 
   expect(rates(app.texts())).toEqual(["≈38 tok/s"]);
   await app.press("label:Generation ends");
   expect(rates(app.texts())).toEqual(["42 tok/s"]);
+  await app.press("label:Generation starts");
+  expect(rates(app.texts())).toEqual([]);
+  await app.press("label:First estimate");
+  expect(rates(app.texts())).toEqual(["≈7 tok/s"]);
   await app.press("label:Run ends");
   expect(rates(app.texts())).toEqual([]);
 });

@@ -31,7 +31,7 @@ const summary = (adaStatus: MemberStatus): ConversationSummary => ({
 
 const agent = (id: string, name: string) => ({ id, name }) as AgentView;
 
-const session = (id: string, rate: GenerationRate) => ({
+const session = (id: string, rate: GenerationRate | null) => ({
   sections: {
     ...memberSnapshot(id, "acp"),
     rate,
@@ -81,6 +81,22 @@ function Fixture() {
         }),
       },
     }));
+  const generationStarts = () =>
+    host.state.update((s) => ({
+      ...s,
+      targets: { ...s.targets, "sessions.s-ada": session("s-ada", null) },
+    }));
+  const firstEstimate = () =>
+    host.state.update((s) => ({
+      ...s,
+      targets: {
+        ...s.targets,
+        "sessions.s-ada": session("s-ada", {
+          tokensPerSec: 7.2,
+          basis: "estimate",
+        }),
+      },
+    }));
   const runEnds = () =>
     host.state.update((s) => ({
       ...s,
@@ -96,6 +112,20 @@ function Fixture() {
           onPress={generationEnds}
         >
           <Text>Generation ends</Text>
+        </View>
+        <View
+          role="button"
+          accessibilityLabel="Generation starts"
+          onPress={generationStarts}
+        >
+          <Text>Generation starts</Text>
+        </View>
+        <View
+          role="button"
+          accessibilityLabel="First estimate"
+          onPress={firstEstimate}
+        >
+          <Text>First estimate</Text>
         </View>
         <View role="button" accessibilityLabel="Run ends" onPress={runEnds}>
           <Text>Run ends</Text>
