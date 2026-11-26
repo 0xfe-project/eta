@@ -32,6 +32,10 @@ export interface AgentEditorProps {
   onRuntimes?: () => void;
   /** Start from a template instead (the template gallery); no button without it. */
   onTemplates?: () => void;
+  /** Jump to the Plugins marketplace tab; no link without it. */
+  onOpenMarket?: () => void;
+  /** Jump to the Plugins page (optionally on a specific plugin); no link without it. */
+  onOpenPlugins?: (plugin?: string) => void;
 }
 
 export function createAgentForm(props: AgentEditorProps) {
@@ -319,6 +323,8 @@ export function createAgentForm(props: AgentEditorProps) {
     avatar,
     customPersona,
     creating,
+    phone: props.phone,
+    tablet: Boolean(props.tablet),
     phoneEditor,
     stacked,
     controlHeight,
