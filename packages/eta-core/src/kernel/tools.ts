@@ -46,6 +46,11 @@ export interface ToolCallInfo {
    * keeping.
    */
   update?: (partial: unknown, options?: ToolUpdateOptions) => void;
+  /**
+   * Register a synchronous snapshot builder that produces the partial result
+   * recorded if this call is cancelled before settling inside `executeBatch`.
+   */
+  onAbortResult?: (snapshot: () => unknown) => void;
 }
 
 /** What a tool says about one progress update beyond the partial itself. */
@@ -90,28 +95,43 @@ const ABORTED_TOOL_RESULT = {
 function untilAborted<T>(
   work: Promise<T>,
   signal: AbortSignal | undefined,
-): Promise<T | typeof ABORTED_TOOL_RESULT> {
+  getAbortResult?: () => unknown,
+): Promise<T | unknown> {
   if (signal === undefined) return work;
+  const abortedResult = (): unknown => {
+    try {
+      return getAbortResult?.() ?? ABORTED_TOOL_RESULT;
+    } catch {
+      return ABORTED_TOOL_RESULT;
+    }
+  };
   if (signal.aborted) {
     void work.catch(() => undefined);
-    return Promise.resolve(ABORTED_TOOL_RESULT);
+    return Promise.resolve(abortedResult());
   }
-  return new Promise<T | typeof ABORTED_TOOL_RESULT>((resolve, reject) => {
+  return new Promise<T | unknown>((resolve, reject) => {
+    let settled = false;
     const onAbort = (): void => {
+      if (settled) return;
+      settled = true;
       signal.removeEventListener("abort", onAbort);
-      resolve(ABORTED_TOOL_RESULT);
+      resolve(abortedResult());
     };
     signal.addEventListener("abort", onAbort, { once: true });
     work.then(
       (value) => {
+        if (settled) return;
+        settled = true;
         signal.removeEventListener("abort", onAbort);
         resolve(value);
       },
       (error) => {
+        if (settled) return;
+        settled = true;
         signal.removeEventListener("abort", onAbort);
         // Cancelled while it ran: whatever the tool ended with on the way out is
         // that cancellation, not a failure of its own.
-        if (signal.aborted) resolve(ABORTED_TOOL_RESULT);
+        if (signal.aborted) resolve(abortedResult());
         else reject(error);
       },
     );
@@ -203,6 +223,7 @@ export class ToolService extends Service {
       // The call owns its update channel: open while it runs, closed the moment
       // it settles, whichever way that happens.
       let accepting = true;
+      let abortSnapshot: (() => unknown) | undefined;
       const onUpdate = options.onUpdate;
       try {
         const admitted = admit(() =>
@@ -213,6 +234,9 @@ export class ToolService extends Service {
             ...(options.toolContext === undefined
               ? {}
               : { toolContext: options.toolContext }),
+            onAbortResult: (snapshot: () => unknown) => {
+              if (accepting) abortSnapshot = snapshot;
+            },
             ...(onUpdate === undefined
               ? {}
               : {
@@ -233,7 +257,9 @@ export class ToolService extends Service {
         // The run waits for the call as the signal bounds it, not for the tool's
         // own promise: a tool that never settles stops being waited for the
         // moment the run is cancelled, and the abort's drain sees it settle too.
-        const bounded = untilAborted(admitted, options.signal);
+        const bounded = untilAborted(admitted, options.signal, () =>
+          abortSnapshot?.(),
+        );
         const tracked =
           options.track === undefined ? bounded : options.track(bounded);
         return await tracked;

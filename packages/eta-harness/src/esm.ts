@@ -31,6 +31,7 @@ import type {
   AskRequest,
   AskResult,
   Effect,
+  EffectScopeHandle,
   Layer,
   PlatformCall,
 } from "./realm";
@@ -553,6 +554,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       platform,
       state: etaState,
       ask,
+      signal: () => frames.getStore()?.signal,
       ...(options.mcp === undefined ? {} : { mcp: frameMcp(options.mcp) }),
       onConsole: (level, line) => {
         frames
@@ -572,6 +574,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       toolCallId: string;
       turn: number;
       signal?: AbortSignal | undefined;
+      onAbortResult?: ((snapshot: () => unknown) => void) | undefined;
     },
     timeoutMs: number | undefined,
   ): Promise<ToolResult> => {
@@ -589,19 +592,61 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     const parts: string[] = [];
     let isError = false;
     let effects: Effect[] = [];
+    let scopeHandle: EffectScopeHandle | undefined;
+    let sealedOnAbort = false;
+
+    const buildAbortResult = (): ToolResult => {
+      sealedOnAbort = true;
+      const snapshotEffects = scopeHandle?.seal() ?? [];
+      const abortSections = ["Tool execution was cancelled before completion."];
+      if (snapshotEffects.length > 0)
+        abortSections.push(
+          `effects:\n${snapshotEffects.map(effectLine).join("\n")}`,
+        );
+      if (frame.console.length > 0)
+        abortSections.push(`console:\n${frame.console.join("\n")}`);
+      for (const one of frame.asks)
+        abortSections.push(`eta.ask [${one.status}] ${one.stack.join(" > ")}`);
+      abortSections.push(`script: ${file}`);
+      return {
+        isError: true,
+        content: [{ type: "text", text: abortSections.join("\n\n") }],
+        details: {
+          aborted: true,
+          file,
+          effects: snapshotEffects,
+          calls: frame.calls.slice(),
+          asks: frame.asks.slice(),
+          stack: frame.stack.slice(),
+        },
+      };
+    };
+
+    call.onAbortResult?.(buildAbortResult);
+
     // A cancelled run ends the evaluation, not only the calls the script makes:
     // a script parked on an await that never settles stops with it.
     let cancelled = false;
     let cancellation: unknown;
+    const ensureNotAborted = (): void => {
+      if (call.signal?.aborted === true) throw call.signal.reason;
+    };
     await hydrate();
     await frames.run(frame, async () => {
       try {
+        ensureNotAborted();
         const realm = agent.realm();
         const module = snippetSource(source, (s) => realm.parses(s));
+        await abortable(agent.wake(), call.signal);
+        ensureNotAborted();
         const result = await abortable(
-          agent.run(module, {
+          agent.realm().evaluate(module, {
             identifier: file,
             ...(timeoutMs === undefined ? {} : { timeoutMs }),
+            onScope: (handle) => {
+              scopeHandle = handle;
+              if (sealedOnAbort) handle.seal();
+            },
           }),
           call.signal,
         );
@@ -611,6 +656,8 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
         // The run was cancelled while the script ran: that is not the script
         // failing, and the kernel reports the call as cancelled like any other.
         if (call.signal?.aborted === true) {
+          sealedOnAbort = true;
+          scopeHandle?.seal();
           cancelled = true;
           cancellation = error;
           return;
@@ -793,6 +840,9 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       const existed = existsSync(file);
       mkdirSync(capsDir, { recursive: true });
       writeFileSync(file, args.script, "utf8");
+      const cleanup = (): void => {
+        if (!existed) rmSync(file, { force: true });
+      };
       // A function written into the wrapper module, not a string: a string is compiled
       // outside any module and has no dynamic import. Its literals keep `toString()` (what
       // define persists) free of outside names.
@@ -807,14 +857,32 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
         `eta.define(${JSON.stringify(args.name)}, ${source}, ${JSON.stringify({ desc: args.desc })});`,
         `export default value;`,
       ].join("\n");
-      const result = await evaluate(
-        wrapper,
-        join(runsDir, `${stamp(run.call)}.js`),
-        run.call,
-        undefined,
-      );
+      let result: ToolResult;
+      try {
+        result = await evaluate(
+          wrapper,
+          join(runsDir, `${stamp(run.call)}.js`),
+          {
+            ...run.call,
+            ...(run.call.onAbortResult === undefined
+              ? {}
+              : {
+                  onAbortResult: (snapshot) => {
+                    run.call.onAbortResult?.(() => {
+                      cleanup();
+                      return snapshot();
+                    });
+                  },
+                }),
+          },
+          undefined,
+        );
+      } catch (error) {
+        cleanup();
+        throw error;
+      }
       if (result.isError === true) {
-        if (!existed) rmSync(file, { force: true });
+        cleanup();
         return result;
       }
       const first = result.content[0] as { type: "text"; text: string };

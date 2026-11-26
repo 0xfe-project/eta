@@ -306,30 +306,211 @@ export function mountNodeGlobals(realm: Realm): void {
  *
  * The dependency is `zx@lite` — a separate published version (`8.8.5-lite`),
  * not a subpath of the full package: its `.` export is the core build, 130 KB
- * against 880 KB. What it exports is what a shell is for, so nothing is
- * wrapped and nothing is renamed; `$` is mounted as `$`.
+ * against 880 KB.
  *
- * Worth stating what this does not do. A command's own reads, writes and
- * outbound calls happen on the far side of the seam, so none of them are
- * effects and none of them can be authorised. The ledger says a command ran
- * and nothing about what was inside it — the gap ESMMODE §1 already names.
+ * Each command is wrapped per-realm so it:
+ * - inherits the active evaluation's `AbortSignal` combined with the realm's
+ *   disposal `AbortSignal` (unless the caller passed an explicit `signal`/`ac`);
+ * - runs in its own process group on Unix (`detached: true`) so both abort and
+ *   `.timeout()` kill grandchildren and close pipes promptly;
+ * - records a `$` effect in the active `EffectScope` with callsite & command.
  */
-export function mountShell(realm: Realm, cwd?: string): void {
+const SHELL_OPTION_KEYS = [
+  "nothrow",
+  "quiet",
+  "verbose",
+  "cwd",
+  "env",
+  "prefix",
+  "postfix",
+  "shell",
+  "timeout",
+  "timeoutSignal",
+  "killSignal",
+  "stdio",
+  "detached",
+  "preferLocal",
+  "delimiter",
+] as const;
+
+function summarizeShellCommand(cmd: string): string {
+  const normalized = cmd.trim().replace(/\s+/g, " ");
+  return normalized.length > 80 ? `${normalized.slice(0, 77)}...` : normalized;
+}
+
+function renderShellCommand(
+  pieces: TemplateStringsArray,
+  args: readonly unknown[],
+): string {
+  const quoteFn = $.quote ?? quote;
+  try {
+    let out = pieces[0] ?? "";
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      const formatValue = (value: unknown): string => {
+        if (
+          value !== null &&
+          (typeof value === "object" || typeof value === "function") &&
+          typeof (value as { then?: unknown }).then === "function"
+        ) {
+          return "<pending>";
+        }
+        const str =
+          value !== null &&
+          typeof value === "object" &&
+          typeof (value as { stdout?: unknown }).stdout === "string"
+            ? (value as { stdout: string }).stdout.replace(/\n$/, "")
+            : String(value);
+        return quoteFn(str);
+      };
+      const rendered = Array.isArray(arg)
+        ? arg.map(formatValue).join(" ")
+        : formatValue(arg);
+      out += rendered + (pieces[i + 1] ?? "");
+    }
+    return out;
+  } catch {
+    return pieces.join(" ");
+  }
+}
+
+export function mountShell(
+  realm: Realm,
+  cwd?: string,
+  getSignal?: () => AbortSignal | undefined,
+): void {
   if (process.platform === "win32") selectGitBash();
   // Commands run in the session's working directory; `$.cwd` is not changed for the host.
-  const shell = cwd === undefined ? $ : $({ cwd });
-  const tag = realm.wrap(
-    shell as unknown as (...args: unknown[]) => unknown,
-  ) as unknown as Record<string, unknown>;
-  // `$.nothrow()` and friends are properties on the function itself; without
-  // them the shell is there but every failure is fatal.
-  for (const [key, value] of Object.entries(
-    $ as unknown as Record<string, unknown>,
-  )) {
-    if (typeof value === "function")
-      tag[key] = realm.wrap(value as (...args: unknown[]) => unknown);
+  const realmDefaults: Record<string, unknown> =
+    cwd === undefined ? {} : { cwd };
+
+  const wrapShell = (
+    extraOptions: Record<string, unknown>,
+  ): ((...args: unknown[]) => unknown) =>
+    realm.wrap((first: unknown, ...rest: unknown[]): unknown => {
+      if (!Array.isArray(first)) {
+        const nextOptions =
+          first !== null && typeof first === "object"
+            ? { ...extraOptions, ...(first as Record<string, unknown>) }
+            : extraOptions;
+        return wrapShell(nextOptions);
+      }
+
+      const pieces = first as unknown as TemplateStringsArray;
+      const merged: Record<string, unknown> = {
+        detached: process.platform !== "win32",
+        ...realmDefaults,
+        ...extraOptions,
+      };
+      const hasCustomSignal =
+        merged.signal !== undefined || merged.ac !== undefined;
+      const evalSignal = getSignal?.();
+      const combinedSignal = hasCustomSignal
+        ? (merged.signal as AbortSignal | undefined)
+        : evalSignal === undefined
+          ? realm.signal
+          : AbortSignal.any([realm.signal, evalSignal]);
+      const effectiveOpts: Record<string, unknown> = hasCustomSignal
+        ? merged
+        : { ...merged, signal: combinedSignal };
+
+      const initialDetail = summarizeShellCommand(
+        renderShellCommand(pieces, rest),
+      );
+      const finish = realm.trackCall("$", initialDetail);
+      if (realm.killed) {
+        finish("blocked", "the realm was killed");
+        throw new Error("$ was refused: the realm was killed");
+      }
+
+      const invokeShell = $ as unknown as (
+        opts: Record<string, unknown>,
+      ) => (p: TemplateStringsArray, ...a: unknown[]) => unknown;
+      let result: unknown;
+      try {
+        result = invokeShell(effectiveOpts)(pieces, ...rest);
+      } catch (error) {
+        const aborted =
+          (effectiveOpts.signal as AbortSignal | undefined)?.aborted === true;
+        finish(aborted ? "aborted" : "failed", initialDetail);
+        throw error;
+      }
+
+      const finalDetail = (): string => {
+        const cmd = (result as { cmd?: unknown } | undefined)?.cmd;
+        return typeof cmd === "string"
+          ? summarizeShellCommand(cmd)
+          : initialDetail;
+      };
+      const isAborted = (): boolean => {
+        const ppSignal = (result as { signal?: unknown } | undefined)?.signal;
+        const sig = (
+          ppSignal !== null &&
+          typeof ppSignal === "object" &&
+          "aborted" in ppSignal
+            ? ppSignal
+            : effectiveOpts.signal
+        ) as AbortSignal | undefined;
+        return sig?.aborted === true;
+      };
+
+      if (
+        result !== null &&
+        (typeof result === "object" || typeof result === "function") &&
+        typeof (result as { then?: unknown }).then === "function"
+      ) {
+        void (result as Promise<{ ok?: boolean }>).then(
+          (out) => {
+            if (isAborted()) {
+              finish("aborted", finalDetail());
+            } else if (
+              out !== null &&
+              typeof out === "object" &&
+              out.ok === false
+            ) {
+              finish("failed", finalDetail());
+            } else {
+              finish("ok", finalDetail());
+            }
+          },
+          () => {
+            finish(isAborted() ? "aborted" : "failed", finalDetail());
+          },
+        );
+        return result;
+      }
+
+      const syncOk =
+        result === null ||
+        typeof result !== "object" ||
+        (result as { ok?: boolean }).ok !== false;
+      finish(isAborted() ? "aborted" : syncOk ? "ok" : "failed", finalDetail());
+      return result;
+    });
+
+  const tag = wrapShell({}) as ((...args: unknown[]) => unknown) &
+    Record<string, unknown>;
+  tag.sync = wrapShell({ sync: true });
+  tag.kill = realm.wrap((...args: Parameters<typeof $.kill>) =>
+    $.kill(...args),
+  );
+  tag.quote = realm.wrap((arg: string) => ($.quote ?? quote)(arg));
+  const rawDollar = $ as unknown as Record<string, unknown>;
+  for (const key of SHELL_OPTION_KEYS) {
+    Object.defineProperty(tag, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => {
+        if (Object.hasOwn(realmDefaults, key)) return realmDefaults[key];
+        if (key === "detached") return process.platform !== "win32";
+        return rawDollar[key];
+      },
+      set: (value: unknown) => {
+        realmDefaults[key] = value;
+      },
+    });
   }
-  realm.global("$", tag as unknown as (...args: unknown[]) => unknown);
+  realm.global("$", tag);
 }
 
 /**
@@ -365,7 +546,10 @@ function selectGitBash(): void {
  * like the rest and an outbound call shows up in the effect list with the line
  * that made it.
  */
-export function mountGlobals(realm: Realm): void {
+export function mountGlobals(
+  realm: Realm,
+  getSignal?: () => AbortSignal | undefined,
+): void {
   realm.global(
     "fetch",
     realm.binding(
@@ -376,9 +560,22 @@ export function mountGlobals(realm: Realm): void {
           method?: string;
           headers?: Record<string, string>;
           body?: string;
+          signal?: AbortSignal;
         },
       ) => {
-        const response = await fetch(url, init as RequestInit);
+        const signals = [realm.signal, getSignal?.(), init?.signal].filter(
+          (s): s is AbortSignal => s !== undefined,
+        );
+        const signal =
+          signals.length === 0
+            ? undefined
+            : signals.length === 1
+              ? signals[0]
+              : AbortSignal.any(signals);
+        const response = await fetch(url, {
+          ...(init === undefined ? {} : (init as RequestInit)),
+          ...(signal === undefined ? {} : { signal }),
+        });
         const text = await response.text();
         return {
           ok: response.ok,

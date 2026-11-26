@@ -1,7 +1,8 @@
 import { existsSync, readdirSync } from "node:fs";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { kernelOn } from "@eta/core";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Type } from "typebox";
@@ -458,6 +459,327 @@ describe("cancelling the realm", () => {
       ),
     ]);
     expect(outcome).toBe("threw: AbortError: cancelled by the test");
+    session.stop();
+  });
+
+  it("preserves completed and in-flight effects on abort without bleeding late completions into the next evaluation", async () => {
+    let slowStarted!: () => void;
+    const onSlowStarted = new Promise<void>((resolve) => {
+      slowStarted = resolve;
+    });
+    let releaseSlow!: () => void;
+    const slowGate = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+
+    const slowTool = defineTool({
+      name: "slow_gate",
+      description: "Waits until released.",
+      parameters: Type.Object({}),
+      execute: async () => {
+        slowStarted();
+        await slowGate;
+        return { content: [{ type: "text", text: "slow:done" }] };
+      },
+    });
+
+    const root = await mkdtemp(join(tmpdir(), "esm-abort-root-"));
+    const cwd = await mkdtemp(join(tmpdir(), "esm-abort-cwd-"));
+    const session = await openSession({
+      storage: new MemoryStorage(),
+      models: fakeModels([
+        call(
+          "esmrun",
+          {
+            script: [
+              'import eta from "eta";',
+              'import { writeFile } from "node:fs/promises";',
+              'await writeFile("done.txt", "ok");',
+              'console.log("before-slow");',
+              "await eta.platform.slow_gate({});",
+              'await writeFile("after.txt", "late");',
+            ].join("\n"),
+          },
+          "c-abort-effects",
+        ),
+        call(
+          "esmrun",
+          {
+            script: [
+              'import { writeFile } from "node:fs/promises";',
+              'await writeFile("next.txt", "clean");',
+              '"turn2"',
+            ].join("\n"),
+          },
+          "c-next",
+        ),
+        stop("recovered"),
+      ]) as never,
+      cwd,
+      esm: { root },
+      tools: [slowTool as never],
+    });
+
+    const toolEnds: {
+      toolCallId: string;
+      result: unknown;
+      isError: boolean;
+    }[] = [];
+    const unsub = kernelOn(session.kernel.ctx)("tool:end", (event) => {
+      toolEnds.push({
+        toolCallId: event.toolCallId,
+        result: event.result,
+        isError: event.isError,
+      });
+    });
+
+    session.kernel.nextRun(userMsg("go"));
+    const run1 = session.runner.run();
+    await onSlowStarted;
+    session.runner.abort();
+    const res1 = await run1;
+    expect(res1.status).toBe("aborted");
+    expect(session.runner.running).toBe(false);
+
+    const abortedEnd = toolEnds.find(
+      (entry) => entry.toolCallId === "c-abort-effects",
+    );
+    expect(abortedEnd?.isError).toBe(true);
+    const transcriptEntry = session.runner
+      .getTranscript()
+      .find(
+        (m) => m.role === "toolResult" && m.toolCallId === "c-abort-effects",
+      ) as
+      | {
+          isError?: boolean;
+          content: { type: string; text?: string }[];
+          details?: {
+            aborted?: boolean;
+            file?: string;
+            effects?: { name: string; status: string }[];
+          };
+        }
+      | undefined;
+
+    expect(transcriptEntry?.isError).toBe(true);
+    const text = transcriptEntry?.content[0]?.text ?? "";
+    expect(text).toContain("Tool execution was cancelled before completion.");
+    expect(text).toContain("fs.writeFile done.txt");
+    expect(text).toContain("[aborted] eta.platform.slow_gate");
+    expect(text).toContain("console:\nbefore-slow");
+    expect(text).toContain("script:");
+    expect(transcriptEntry?.details?.aborted).toBe(true);
+    expect(transcriptEntry?.details?.effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "fs.writeFile", status: "ok" }),
+        expect.objectContaining({
+          name: "eta.platform.slow_gate",
+          status: "aborted",
+        }),
+      ]),
+    );
+    expect(abortedEnd?.result).toMatchObject({
+      isError: true,
+      details: { aborted: true },
+    });
+
+    // Release the late promise and confirm its completion does not bleed into the next evaluation.
+    releaseSlow();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    session.kernel.nextRun(userMsg("next"));
+    const res2 = await session.runner.run();
+    expect(res2.status).toBe("completed");
+    expect(resultOf(session, "c-next")).toContain("turn2");
+    const nextEntry = session.runner
+      .getTranscript()
+      .find((m) => m.role === "toolResult" && m.toolCallId === "c-next") as
+      | { details?: { effects?: { name: string; detail: string }[] } }
+      | undefined;
+    expect(nextEntry?.details?.effects).toHaveLength(1);
+    expect(nextEntry?.details?.effects?.[0]?.detail).toContain("next.txt");
+
+    unsub();
+    session.stop();
+  });
+
+  it("kills real shell child and grandchild processes on abort and records $ as aborted", async () => {
+    if (process.platform === "win32") return;
+    const { session, cwd } = await open([
+      call(
+        "esmrun",
+        {
+          script:
+            "await $`sh -c 'echo $$ > shell.pid; sleep 30 & echo $! > grand.pid; wait'`;",
+        },
+        "c-shell-abort",
+      ),
+      stop(),
+    ]);
+    session.kernel.nextRun(userMsg("go"));
+    const run = session.runner.run();
+
+    expect(
+      await until(
+        () =>
+          existsSync(join(cwd, "shell.pid")) &&
+          existsSync(join(cwd, "grand.pid")),
+        5000,
+      ),
+    ).toBe(true);
+    const shellPid = Number(
+      (await readFile(join(cwd, "shell.pid"), "utf8")).trim(),
+    );
+    const grandPid = Number(
+      (await readFile(join(cwd, "grand.pid"), "utf8")).trim(),
+    );
+
+    const started = Date.now();
+    session.runner.abort();
+    const res = await run;
+    expect(res.status).toBe("aborted");
+    expect(Date.now() - started).toBeLessThan(1500);
+
+    const isDead = (pid: number): boolean => {
+      try {
+        process.kill(pid, 0);
+        return false;
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === "ESRCH";
+      }
+    };
+    expect(await until(() => isDead(shellPid) && isDead(grandPid), 2000)).toBe(
+      true,
+    );
+
+    const entry = session.runner
+      .getTranscript()
+      .find(
+        (m) => m.role === "toolResult" && m.toolCallId === "c-shell-abort",
+      ) as
+      | { details?: { effects?: { name: string; status: string }[] } }
+      | undefined;
+    expect(entry?.details?.effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "$", status: "aborted" }),
+      ]),
+    );
+    session.stop();
+  });
+
+  it("keeps a background $ saved on eta.state alive across normal turns and kills it on session.stop()", async () => {
+    if (process.platform === "win32") return;
+    const { session } = await open([
+      call(
+        "esmrun",
+        {
+          script:
+            'import eta from "eta";\nconst p = $`sleep 30`;\neta.state.srv = p;\np.pid',
+        },
+        "c-bg-start",
+      ),
+      stop("started"),
+      call("esmrun", { script: '"still-here"' }, "c-bg-check"),
+      stop("checked"),
+    ]);
+
+    session.kernel.nextRun(userMsg("start"));
+    const r1 = await session.runner.run();
+    expect(r1.status).toBe("completed");
+    const pid = Number(resultOf(session, "c-bg-start").split("\n")[0]?.trim());
+    expect(Number.isInteger(pid) && pid > 0).toBe(true);
+    expect(() => process.kill(pid, 0)).not.toThrow();
+
+    session.kernel.nextRun(userMsg("next"));
+    const r2 = await session.runner.run();
+    expect(r2.status).toBe("completed");
+    expect(resultOf(session, "c-bg-check")).toContain("still-here");
+    expect(() => process.kill(pid, 0)).not.toThrow();
+
+    session.stop();
+    const dead = await until(() => {
+      try {
+        process.kill(pid, 0);
+        return false;
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === "ESRCH";
+      }
+    }, 2000);
+    expect(dead).toBe(true);
+  });
+
+  it("esmrunandkeep aborted mid-run does not register the capability and cleans up the new file", async () => {
+    const { session, root, cwd } = await open([
+      call(
+        "esmrunandkeep",
+        {
+          name: "latecap",
+          desc: "never finishes",
+          script: [
+            'import { writeFile } from "node:fs/promises";',
+            "export default async () => {",
+            '  await writeFile("cap-started.txt", "1");',
+            "  await new Promise(() => {});",
+            "};",
+          ].join("\n"),
+        },
+        "c-keep-abort",
+      ),
+      stop(),
+    ]);
+
+    session.kernel.nextRun(userMsg("go"));
+    const run = session.runner.run();
+    expect(
+      await until(() => existsSync(join(cwd, "cap-started.txt")), 5000),
+    ).toBe(true);
+
+    session.runner.abort();
+    const res = await run;
+    expect(res.status).toBe("aborted");
+
+    expect(
+      existsSync(join(root, "capabilities")) &&
+        readdirSync(join(root, "capabilities")).some((f) =>
+          f.startsWith("latecap."),
+        ),
+    ).toBe(false);
+    const listed = await session.kernel.tools.execute(
+      "list_capabilities",
+      {},
+      { turn: 1, toolCallId: "c-list" },
+    );
+    expect(JSON.stringify(listed)).not.toContain("latecap");
+
+    // Also test direct tools.execute("esmrunandkeep", ..., { signal }) abort cleanup.
+    const controller = new AbortController();
+    const direct = session.kernel.tools.execute(
+      "esmrunandkeep",
+      {
+        name: "directcap",
+        desc: "never finishes",
+        script: [
+          'import { writeFile } from "node:fs/promises";',
+          "export default async () => {",
+          '  await writeFile("direct-started.txt", "1");',
+          "  await new Promise(() => {});",
+          "};",
+        ].join("\n"),
+      },
+      { turn: 2, toolCallId: "c-direct-keep", signal: controller.signal },
+    );
+    expect(
+      await until(() => existsSync(join(cwd, "direct-started.txt")), 5000),
+    ).toBe(true);
+    controller.abort(new DOMException("aborted", "AbortError"));
+    await expect(direct).rejects.toThrow();
+    expect(
+      existsSync(join(root, "capabilities")) &&
+        readdirSync(join(root, "capabilities")).some((f) =>
+          f.startsWith("directcap."),
+        ),
+    ).toBe(false);
+
     session.stop();
   });
 });

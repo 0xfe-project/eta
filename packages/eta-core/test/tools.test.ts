@@ -229,6 +229,119 @@ describe("tool service", () => {
     dispose();
   });
 
+  it("a cooperative tool supplies a synchronous partial result on abort in sequential and parallel batches", async () => {
+    const { tools, dispose } = withTools();
+    tools.register({
+      name: "coop",
+      execute: (_args, call) => {
+        call.onAbortResult?.(() => ({
+          isError: true,
+          content: "partial from coop",
+          details: { partial: true },
+        }));
+        return new Promise(() => undefined);
+      },
+    });
+    tools.register({
+      name: "hang",
+      execute: () => new Promise(() => undefined),
+    });
+
+    const parallelController = new AbortController();
+    const parallelBatch = tools.executeBatch(
+      [
+        { id: "c1", name: "coop", arguments: {} },
+        { id: "c2", name: "hang", arguments: {} },
+      ],
+      {
+        execution: "parallel",
+        turn: 1,
+        signal: parallelController.signal,
+      },
+    );
+    setTimeout(() => parallelController.abort(), 30);
+    const parallelResults = await parallelBatch;
+    expect(parallelResults).toEqual([
+      {
+        id: "c1",
+        result: {
+          isError: true,
+          content: "partial from coop",
+          details: { partial: true },
+        },
+      },
+      {
+        id: "c2",
+        result: {
+          isError: true,
+          content: "Tool execution was cancelled before completion.",
+        },
+      },
+    ]);
+
+    const seqController = new AbortController();
+    const seqBatch = tools.executeBatch(
+      [
+        { id: "s1", name: "coop", arguments: {} },
+        { id: "s2", name: "echo", arguments: "never" },
+      ],
+      {
+        execution: "sequential",
+        turn: 1,
+        signal: seqController.signal,
+      },
+    );
+    setTimeout(() => seqController.abort(), 30);
+    const seqResults = await seqBatch;
+    expect(seqResults).toEqual([
+      {
+        id: "s1",
+        result: {
+          isError: true,
+          content: "partial from coop",
+          details: { partial: true },
+        },
+      },
+      {
+        id: "s2",
+        result: {
+          isError: true,
+          content: "Tool execution was cancelled before completion.",
+        },
+      },
+    ]);
+    dispose();
+  });
+
+  it("an onAbortResult callback that throws falls back to the default aborted result", async () => {
+    const { tools, dispose } = withTools();
+    tools.register({
+      name: "broken-snap",
+      execute: (_args, call) => {
+        call.onAbortResult?.(() => {
+          throw new Error("snapshot failed");
+        });
+        return new Promise(() => undefined);
+      },
+    });
+    const controller = new AbortController();
+    const batch = tools.executeBatch(
+      [{ id: "c1", name: "broken-snap", arguments: {} }],
+      { execution: "parallel", turn: 1, signal: controller.signal },
+    );
+    setTimeout(() => controller.abort(), 30);
+    expect(await batch).toEqual([
+      {
+        id: "c1",
+        result: {
+          isError: true,
+          content: "Tool execution was cancelled before completion.",
+        },
+      },
+    ]);
+    dispose();
+  });
+
   it("a detached middleware stops participating", async () => {
     const { tools, dispose } = withTools();
     tools.register(echo);

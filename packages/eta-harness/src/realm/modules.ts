@@ -544,6 +544,9 @@ export function mountModules(
         const defineFn = realm.binding(
           "eta.define",
           (name: string, source: unknown, meta?: unknown) => {
+            if (realm.scopeSealed || hooks?.signal?.()?.aborted === true) {
+              throw new Error("eta.define was refused: evaluation was aborted");
+            }
             // source can be a function (passed directly from env.js) or a string (to be compiled)
             let fn: any;
             let sourceCode: string;

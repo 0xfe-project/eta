@@ -1,7 +1,8 @@
-import type { Effect, Hooks } from "../../src/realm/index";
+import type { Effect, EffectScopeHandle, Hooks } from "../../src/realm/index";
 import { Buffer } from "node:buffer";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import hostOs, { tmpdir } from "node:os";
 
 import { join } from "node:path";
@@ -566,11 +567,313 @@ describe("$", () => {
     });
   });
 
-  it("a command is not a binding call, so it leaves no row", async () => {
+  it("commands record $ effects with callsite and status", async () => {
+    if (process.platform === "win32") return;
     const agent = new Agent({ root });
-    const result = await agent.run("await $`true`;\nexport default 1;", {
-      identifier: join(root, "probe.js"),
+    const result = await agent.run(
+      [
+        "await $`true`;",
+        "await $`exit 3`.nothrow();",
+        "await $({ nothrow: true })`exit 2`;",
+        "$.sync`echo sync`;",
+        "export default 1;",
+      ].join("\n"),
+      {
+        identifier: join(root, "probe.js"),
+      },
+    );
+    expect(result.effects).toHaveLength(4);
+    expect(result.effects[0]).toMatchObject({
+      name: "$",
+      status: "ok",
+      detail: "true",
+      at: { line: 1 },
     });
-    expect(result.effects).toHaveLength(0);
+    expect(result.effects[1]).toMatchObject({
+      name: "$",
+      status: "failed",
+      detail: "exit 3",
+      at: { line: 2 },
+    });
+    expect(result.effects[2]).toMatchObject({
+      name: "$",
+      status: "failed",
+      detail: "exit 2",
+      at: { line: 3 },
+    });
+    expect(result.effects[3]).toMatchObject({
+      name: "$",
+      status: "ok",
+      detail: "echo sync",
+      at: { line: 4 },
+    });
+    agent.dispose();
+  });
+
+  it(".timeout() kills background grandchildren holding stdout and settles promptly", async () => {
+    if (process.platform === "win32") return;
+    const agent = new Agent({ root, cwd: root });
+    const started = Date.now();
+    const res = await agent.run(
+      [
+        "const out = await $`sh -c 'sleep 30 & echo $! > bg1.pid; echo ok'`.timeout('300ms');",
+        "let waitTimedOut = false;",
+        "try { await $`sh -c 'sleep 30 & echo $! > bg2.pid; wait'`.timeout('300ms'); } catch { waitTimedOut = true; }",
+        "export default { stdout: out.stdout.trim(), waitTimedOut };",
+      ].join("\n"),
+      { identifier: join(root, "timeout.js") },
+    );
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeLessThan(2000);
+    expect(res.value).toEqual({ stdout: "ok", waitTimedOut: true });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    for (const file of ["bg1.pid", "bg2.pid"]) {
+      const pid = Number((await readFile(join(root, file), "utf8")).trim());
+      let alive = true;
+      try {
+        process.kill(pid, 0);
+      } catch (error) {
+        alive = (error as NodeJS.ErrnoException).code !== "ESRCH";
+      }
+      expect(alive).toBe(false);
+    }
+    agent.dispose();
+  });
+
+  it("aborts via hooks.signal, kills process group and grandchildren, and records aborted effect", async () => {
+    if (process.platform === "win32") return;
+    const controller = new AbortController();
+    let scopeHandle: EffectScopeHandle | undefined;
+    const agent = new Agent({
+      root,
+      cwd: root,
+      hooks: { signal: () => controller.signal },
+    });
+    const run = agent.run(
+      "await $`sh -c 'sleep 30 & echo $! > grand.pid; wait'`;\nexport default 1;",
+      {
+        identifier: join(root, "abort-shell.js"),
+        onScope: (handle) => {
+          scopeHandle = handle;
+        },
+      },
+    );
+
+    const pidPath = join(root, "grand.pid");
+    const deadline = Date.now() + 5000;
+    while (!existsSync(pidPath) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(existsSync(pidPath)).toBe(true);
+    const grandchildPid = Number((await readFile(pidPath, "utf8")).trim());
+
+    const snapshot = scopeHandle!.seal();
+    controller.abort(new Error("stop shell"));
+    const outcome = await Promise.race([
+      run.then(
+        () => "resolved",
+        (error: unknown) => `rejected:${String(error)}`,
+      ),
+      new Promise<string>((resolve) => setTimeout(resolve, 2000, "hung")),
+    ]);
+    expect(outcome).toMatch(/^rejected:/);
+    expect(snapshot).toHaveLength(1);
+    expect(snapshot[0]).toMatchObject({
+      name: "$",
+      status: "aborted",
+      at: { line: 1 },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    let alive = true;
+    try {
+      process.kill(grandchildPid, 0);
+    } catch (error) {
+      alive = (error as NodeJS.ErrnoException).code !== "ESRCH";
+    }
+    expect(alive).toBe(false);
+    agent.dispose();
+  });
+
+  it("respects an explicit caller signal option without overriding it", async () => {
+    if (process.platform === "win32") return;
+    const neverAborted = new AbortController();
+    const customAc = new AbortController();
+    const agent = new Agent({
+      root,
+      cwd: root,
+      hooks: {
+        state: { customSignal: customAc.signal },
+        signal: () => neverAborted.signal,
+      },
+    });
+    setTimeout(() => customAc.abort(new Error("caller abort")), 40);
+    const started = Date.now();
+    const error = await agent
+      .run(
+        [
+          'import eta from "eta";',
+          "await $({ signal: eta.state.customSignal })`sleep 10`;",
+        ].join("\n"),
+        { identifier: join(root, "custom-signal.js") },
+      )
+      .catch((e: Error) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(Date.now() - started).toBeLessThan(2000);
+    agent.dispose();
+  });
+
+  it("a background $ without await survives normal run completion and is killed on dispose", async () => {
+    if (process.platform === "win32") return;
+    const controller = new AbortController();
+    const state: Record<string, unknown> = {};
+    const agent = new Agent({
+      root,
+      cwd: root,
+      hooks: { state, signal: () => controller.signal },
+    });
+    const res = await agent.run(
+      [
+        'import eta from "eta";',
+        "const p = $`sleep 30`;",
+        "eta.state.bg = p;",
+        "export default p.pid;",
+      ].join("\n"),
+      { identifier: join(root, "bg.js") },
+    );
+    const pid = res.value as number;
+    expect(typeof pid).toBe("number");
+    expect(() => process.kill(pid, 0)).not.toThrow();
+
+    agent.dispose();
+    const waitDead = Date.now() + 2000;
+    let alive = true;
+    while (alive && Date.now() < waitDead) {
+      try {
+        process.kill(pid, 0);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ESRCH") alive = false;
+      }
+    }
+    expect(alive).toBe(false);
+  });
+});
+
+describe("effect scope and fetch abort", () => {
+  it("isolates evaluations, marks in-flight calls aborted on seal, and drops late completions", async () => {
+    let releaseSlow!: (value: string) => void;
+    let slowStarted!: () => void;
+    const slowReady = new Promise<void>((resolve) => {
+      slowStarted = resolve;
+    });
+    const onEffects: Effect[] = [];
+    const realm = new Realm({
+      name: "scope-test",
+      onEffect: (effect) => onEffects.push(effect),
+    });
+    realm.global(
+      "fastOp",
+      realm.binding("fast.op", (label: string) => `fast:${label}`),
+    );
+    realm.global(
+      "slowOp",
+      realm.binding("slow.op", (label: string) => {
+        slowStarted();
+        return new Promise<string>((resolve) => {
+          releaseSlow = () => resolve(`slow:${label}`);
+        });
+      }),
+    );
+
+    let handle1: EffectScopeHandle | undefined;
+    const eval1 = realm.evaluate(
+      'fastOp("one");\nconst v = await slowOp("p1");\nfastOp("after-seal");\nexport default v;',
+      {
+        identifier: join(root, "one.js"),
+        onScope: (handle) => {
+          handle1 = handle;
+        },
+      },
+    );
+    await slowReady;
+
+    const snapshot = handle1!.seal();
+    expect(snapshot).toHaveLength(2);
+    expect(snapshot[0]).toMatchObject({
+      name: "fast.op",
+      status: "ok",
+      detail: "one",
+      at: { identifier: "one.js", line: 1 },
+    });
+    expect(snapshot[1]).toMatchObject({
+      name: "slow.op",
+      status: "aborted",
+      detail: "p1",
+      at: { identifier: "one.js", line: 2 },
+    });
+    expect(handle1!.seal()).toEqual(snapshot);
+
+    const eval2 = await realm.evaluate('export default fastOp("two");', {
+      identifier: join(root, "two.js"),
+    });
+    expect(eval2.value).toBe("fast:two");
+    expect(eval2.effects).toHaveLength(1);
+    expect(eval2.effects[0]).toMatchObject({
+      name: "fast.op",
+      status: "ok",
+      detail: "two",
+      at: { identifier: "two.js", line: 1 },
+    });
+
+    // Settling the aborted promise late does not mutate the sealed snapshot, emit onEffect, or bleed into eval3.
+    const countBeforeLate = onEffects.length;
+    releaseSlow("late");
+    await eval1;
+    expect(snapshot).toHaveLength(2);
+    expect(snapshot[1]?.status).toBe("aborted");
+    expect(onEffects).toHaveLength(countBeforeLate);
+
+    const eval3 = await realm.evaluate('export default fastOp("three");', {
+      identifier: join(root, "three.js"),
+    });
+    expect(eval3.effects).toHaveLength(1);
+    expect(eval3.effects[0]?.detail).toBe("three");
+    expect(onEffects.some((e) => e.detail === "after-seal")).toBe(false);
+    realm.kill();
+  });
+
+  it("fetch aborts when hooks.signal aborts", async () => {
+    const sockets = new Set<import("node:net").Socket>();
+    const server = createServer((_req, _res) => {
+      // Intentionally leave request hanging until client aborts.
+    });
+    server.on("connection", (socket) => {
+      sockets.add(socket);
+      socket.once("close", () => sockets.delete(socket));
+    });
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", () => resolve());
+    });
+    try {
+      const address = server.address() as { port: number };
+      const controller = new AbortController();
+      const realm = new Realm({ name: "fetch-abort" });
+      mountGlobals(realm, () => controller.signal);
+
+      setTimeout(() => controller.abort(new Error("cancel fetch")), 40);
+      const started = Date.now();
+      const error = await realm
+        .evaluate(
+          `export default await fetch("http://127.0.0.1:${address.port}/hang");`,
+        )
+        .catch((e: Error) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect(Date.now() - started).toBeLessThan(2000);
+      realm.kill();
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
