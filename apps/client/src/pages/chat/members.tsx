@@ -109,7 +109,6 @@ export function StewardMenu(props: {
   const hovered = signal(false);
   const open = signal(false);
   const tone = () => (hovered() || open() ? "ink" : "muted");
-  const hover = canHover ? { borderColor: c().strong } : undefined;
   return (
     <View style={{ ...row, gap: space[8] }}>
       <MenuFrame
@@ -126,7 +125,7 @@ export function StewardMenu(props: {
             hitSlop={touchScreen ? (control.touch - control.sm) / 2 : undefined}
             onMouseEnter={() => hovered.set(canHover)}
             onMouseLeave={() => hovered.set(false)}
-            hoverStyle={hover}
+            hoverStyle={canHover ? { borderColor: c().strong } : undefined}
             expandedStyle={{ borderColor: c().strong }}
             focusVisibleStyle={focusRing(c())}
             style={{
