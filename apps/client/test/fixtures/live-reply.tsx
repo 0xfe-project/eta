@@ -6,7 +6,7 @@ import type {
 } from "@eta/client-contracts";
 import { colorScheme, mount, signal, View, windowSize } from "nsh";
 import { Button, Label, palette, Palette } from "../../src/components";
-import { ToastLayer } from "../../src/components/toast";
+import { NotificationHost } from "../../src/components/notifications";
 import { Message } from "../../src/pages/chat/message";
 import { createHost, Host } from "../../src/services/host";
 
@@ -354,7 +354,7 @@ function Fixture() {
               });
             }}
           />
-          <ToastLayer />
+          <NotificationHost />
         </View>
       </Host.Provider>
     </Palette.Provider>

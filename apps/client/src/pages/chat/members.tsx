@@ -1,7 +1,6 @@
 import type { MemberView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { signal, View, windowSize } from "nsh";
-import { Dialog } from "nsh/base";
 import {
   Button,
   colors,
@@ -12,6 +11,7 @@ import {
   Icon,
   Label,
   Modal,
+  NativeDialog,
   row,
   SmoothScroll,
 } from "../../components";
@@ -402,7 +402,7 @@ export function InviteAgents(props: {
         </Modal>
       }
     >
-      <Dialog
+      <NativeDialog
         accessibilityLabel={title()}
         animation="none"
         style={fill}
@@ -429,7 +429,7 @@ export function InviteAgents(props: {
         >
           {content()}
         </View>
-      </Dialog>
+      </NativeDialog>
     </If>
   );
 }

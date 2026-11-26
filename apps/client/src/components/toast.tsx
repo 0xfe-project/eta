@@ -1,17 +1,14 @@
-import { cleanup, signal, View } from "nsh";
+import { signal, View } from "nsh";
 import { uiText } from "../i18n";
-import { screenInsets } from "./safe-area";
 import { StatusDot } from "./status-dot";
 import { Label } from "./text";
-import { colors, focusRing, row, Screen } from "./theme";
-import { layer, shadow, space, weight } from "./tokens";
+import { colors, focusRing, row } from "./theme";
+import { shadow, space, weight } from "./tokens";
 
 const toastWidth = 356;
 
-// A short app-wide note that goes by itself ("Copied", "Updated to 0.9.1"). A native dialog
-// (Settings on a computer or tablet) is a layer over the window that nothing in the root can draw
-// above, so each layer that may be on top hosts a `ToastLayer`, and only the one opened last
-// shows the toasts.
+// A short app-wide note that goes by itself ("Copied", "Updated to 0.9.1"). Rendered inside the
+// unified `NotificationHost` overlay so it always stays above every dialog and backdrop.
 
 type ToastTone = "green" | "blue" | "warning" | "red";
 
@@ -36,7 +33,6 @@ const TOAST_SHORT_MS = 3000;
 const TOAST_LONG_MS = 6000;
 
 const toasts = signal<Shown[]>([]);
-const layers = signal<number[]>([]);
 let nextId = 0;
 
 function dismiss(id: number) {
@@ -55,29 +51,20 @@ export function showToast(note: ToastNote) {
   setTimeout(() => dismiss(id), duration);
 }
 
-/** Where toasts are drawn in a layer: the root, or a dialog over it. */
-export function ToastLayer(props: { phone?: boolean }) {
+/** Whether any toast is currently visible. */
+export function hasToasts() {
+  return toasts().length > 0;
+}
+
+/** Pure presentational stack of active toasts, positioned by `NotificationHost`. */
+export function ToastStack(props: { phone: () => boolean }) {
   const c = colors();
-  const layout = Screen();
-  const insets = screenInsets();
-  const id = ++nextId;
-  layers.update((all) => [...all, id]);
-  cleanup(() => layers.update((all) => all.filter((layer) => layer !== id)));
-  const phone = () => props.phone ?? layout() === "phone";
-  const top = () => layers().at(-1) === id;
   return (
-    <If when={top() && toasts().length > 0}>
-      {/* Top-center on desktop/tablet (clear of bottom composers and top-right progress cards);
-       * full-width top on phones (clear of tab bars and composers). */}
+    <If when={toasts().length > 0}>
       <View
         accessibilityLiveRegion="polite"
         style={{
-          position: "absolute",
-          zIndex: layer.toast,
-          top: (phone() ? space[8] : space[16]) + insets().top,
-          left: (phone() ? space[12] : space[16]) + insets().left,
-          right: (phone() ? space[12] : space[16]) + insets().right,
-          alignItems: phone() ? "stretch" : "center",
+          alignItems: props.phone() ? "stretch" : "center",
           gap: space[8],
           pointerEvents: "box-none",
         }}
@@ -95,7 +82,7 @@ export function ToastLayer(props: { phone?: boolean }) {
               style={{
                 ...row,
                 alignItems: "flex-start",
-                width: phone() ? "100%" : toastWidth,
+                width: props.phone() ? "100%" : toastWidth,
                 maxWidth: "100%",
                 gap: space[8],
                 paddingVertical: space[12],

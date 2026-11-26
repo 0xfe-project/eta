@@ -8,17 +8,15 @@ import {
   SafeArea,
   Screen,
 } from "../../src/components";
+import { NotificationHost } from "../../src/components/notifications";
 import {
   createOptimisticStatus,
   OptimisticStatus,
 } from "../../src/components/optimistic-status";
 import { settled, shownWhile } from "../../src/components/pending";
-import {
-  ProgressNotificationLayer,
-  startProgress,
-} from "../../src/components/progress-notification";
+import { startProgress } from "../../src/components/progress-notification";
 import { SpinningIcon } from "../../src/components/spinner";
-import { showToast, ToastLayer } from "../../src/components/toast";
+import { showToast } from "../../src/components/toast";
 import { icon, space } from "../../src/components/tokens";
 
 function Fixture() {
@@ -168,8 +166,7 @@ function Fixture() {
               <Label>{events().join(",") || "events:none"}</Label>
             </View>
           </View>
-          <ToastLayer />
-          <ProgressNotificationLayer />
+          <NotificationHost />
         </SafeArea>
       </Screen.Provider>
     </Palette.Provider>

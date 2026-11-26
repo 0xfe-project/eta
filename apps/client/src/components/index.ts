@@ -10,7 +10,7 @@ export {
   SkeletonBar,
   SkeletonReveal,
 } from "./loading-skeleton";
-export { dialogWidth, Modal } from "./modal";
+export { dialogWidth, Modal, NativeDialog } from "./modal";
 export { PaneHandle } from "./pane-handle";
 export { keyboardShown, SafeArea } from "./safe-area";
 export { SmoothScroll } from "./smooth-scroll";

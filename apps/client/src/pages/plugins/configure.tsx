@@ -6,7 +6,6 @@ import type {
   PluginView,
 } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { Dialog } from "nsh/base";
 import {
   Button,
   colors,
@@ -16,6 +15,7 @@ import {
   grow,
   Label,
   Modal,
+  NativeDialog,
   row,
   SmoothScroll,
   textFaces,
@@ -580,7 +580,7 @@ export function ConfigurePlugin(props: {
         </Modal>
       }
     >
-      <Dialog
+      <NativeDialog
         accessibilityLabel={title()}
         animation="none"
         // The same dialog on both: below the tablet header, centred on desktop.
@@ -631,7 +631,7 @@ export function ConfigurePlugin(props: {
           </View>
           {form()}
         </View>
-      </Dialog>
+      </NativeDialog>
     </If>
   );
 }

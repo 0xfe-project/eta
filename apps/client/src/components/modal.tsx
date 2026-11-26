@@ -1,1 +1,1 @@
-export { dialogWidth, Modal } from "../ui/dialog";
+export { dialogWidth, Modal, NativeDialog } from "../ui/dialog";
