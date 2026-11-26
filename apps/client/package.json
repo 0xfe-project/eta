@@ -8,6 +8,8 @@
     "package:web": "bun ../../scripts/nsh-client.ts package App.tsx --target web --out dist",
     "client:check": "bun ../../scripts/nsh-client.ts check",
     "client:test": "bun ../../scripts/nsh-client.ts test",
+    "typecheck": "bun run client:check",
+    "test": "bun run client:test",
     "lint": "ast-grep test --skip-snapshot-tests && bun scripts/check-design-values.ts",
     "templates": "bun scripts/agent-templates.ts",
     "package": "bun ../../scripts/nsh-client.ts package App.tsx",
