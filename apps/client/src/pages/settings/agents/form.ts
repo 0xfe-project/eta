@@ -10,6 +10,7 @@ import type {
 import {
   AGENT_RUNTIMES,
   agentThinking,
+  isExternalRuntime,
   keptLevel,
 } from "@eta/client-contracts";
 import { cleanup, effect, signal } from "nsh";
@@ -41,7 +42,9 @@ export function createAgentForm(props: AgentEditorProps) {
   const instructions = signal(saved?.instructions ?? "");
   const model = signal(saved?.model ?? "");
   const runtime = signal<AgentRuntime>(saved?.runtime ?? "eta");
-  const persona = signal(saved?.persona ?? "");
+  const persona = signal(
+    saved && !isExternalRuntime(saved.runtime) ? saved.persona : "",
+  );
   const plugins = signal(saved?.plugins ?? []);
   const machineId = signal<string | null>(saved?.machineId ?? null);
   const thinking = signal<ThinkingLevel | null>(saved?.thinkingLevel ?? null);
@@ -97,6 +100,7 @@ export function createAgentForm(props: AgentEditorProps) {
     !!saved && saved.systemRole !== "captain" && host.can("agents.delete");
   const canSave = () => {
     if (busy() || !name().trim()) return false;
+    if (isExternalRuntime(runtime()) && machineId() === null) return false;
     return (
       runtime() !== "eta" ||
       Boolean(model().trim()) ||
@@ -116,6 +120,7 @@ export function createAgentForm(props: AgentEditorProps) {
           item.status === "offline",
       );
   const showRunsOn = () =>
+    isExternalRuntime(runtime()) ||
     creating ||
     runtime() === "eta" ||
     Boolean(machineId()) ||
@@ -229,6 +234,15 @@ export function createAgentForm(props: AgentEditorProps) {
   function chooseRuntime(next: AgentRuntime) {
     if (runtime() === next) return;
     runtime.set(next);
+    if (isExternalRuntime(next)) {
+      persona.set("");
+      if (machineId() === null) {
+        const available = machines();
+        const preferred =
+          available.find((item) => item.kind === "primary") ?? available[0];
+        if (preferred) machineId.set(preferred.id);
+      }
+    }
     model.set("");
     settleThinking();
   }
@@ -257,7 +271,7 @@ export function createAgentForm(props: AgentEditorProps) {
       model: runtimeModel(),
       runtime: runtime(),
       plugins: plugins(),
-      persona: persona(),
+      persona: isExternalRuntime(runtime()) ? "" : persona(),
       machineId: machineId(),
       thinkingLevel: thinking(),
     };

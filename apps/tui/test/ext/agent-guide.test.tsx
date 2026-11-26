@@ -65,6 +65,8 @@ describe("the agent file's guide", () => {
         lines.some((line) => line.includes(key) && line.includes("null")),
       ).toBe(true);
     expect(guide(CHOICES, "zh")).toMatch(/null/);
+    expect(guide(CHOICES, "en")).toMatch(/eta only.*external runtimes/i);
+    expect(guide(CHOICES, "zh")).toMatch(/仅限 eta.*外部运行时/);
   });
 
   it("cuts a long list and says how many were left out", () => {

@@ -72,9 +72,11 @@ test("Retry asks the machine again with fresh: true", async () => {
     locale: "en-US",
     urlScheme: "eta://fixture/editor",
   });
-  expect(app.texts()[0]).toBe("agents.runtimes {}");
+  expect(app.texts()[0]).toBe('agents.runtimes {"machineId":"m-primary"}');
   await app.press("label:Retry");
-  await app.waitFor('text:agents.runtimes {}\nagents.runtimes {"fresh":true}');
+  await app.waitFor(
+    'text:agents.runtimes {"machineId":"m-primary"}\nagents.runtimes {"fresh":true,"machineId":"m-primary"}',
+  );
   // The fresh answer replaces the list: OpenCode answered this time.
   await app.press("label:Runtime");
   expect(app.enabled("label:OpenCode")).toBe(true);

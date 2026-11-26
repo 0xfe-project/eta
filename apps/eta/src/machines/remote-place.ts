@@ -251,10 +251,10 @@ export class RemotePlace implements SessionPlace {
       ...(external ? { runtime: agent.runtime } : {}),
       ...(model === undefined ? {} : { model }),
       ...(thinkingLevel === undefined ? {} : { thinkingLevel }),
-      ...(agent.persona === "" ? {} : { persona: agent.persona }),
+      ...(!external && agent.persona !== "" ? { persona: agent.persona } : {}),
       agentPrompt: input.prompt,
       stamp: input.stamp,
-      personaCards: await this.#cards(),
+      ...(external ? {} : { personaCards: await this.#cards() }),
       ...(known === undefined
         ? {}
         : {

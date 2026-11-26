@@ -43,12 +43,16 @@ export const agentMessages = defineMessages({
     modelFormat: "model: {value} is not provider:modelId",
     modelRuntime:
       "model: a {runtime} agent runs {runtime}:<model> or null, not {value}",
+    externalPersona:
+      'persona: {runtime} agents cannot use a persona card; leave persona "" or omit it',
+    externalMachineRequired:
+      "machineId: {runtime} agents must be pinned to one machine; choose a machine id instead of null",
     hostWords: "The host says: {message}",
     guideApply:
       "Agent {name}. Save and close the editor to apply; close it without saving to leave the agent as it is.",
     guideName: "name: the agent's name; it cannot be empty.",
     guidePersona:
-      'persona: a persona card, or "" for the default card. Cards: {list}',
+      'persona: a persona card, or "" for the default card (eta only; external runtimes cannot use a persona). Cards: {list}',
     guideRuntime: "runtime: one of {list}.",
     guideModel:
       "model: provider:modelId; an agent on eta needs one. On an external runtime it is runtime:modelId, and null is that runtime's default.",
@@ -58,7 +62,7 @@ export const agentMessages = defineMessages({
       "  The external runtimes' models could not be listed: {reason}",
     guideThinking: "thinkingLevel: one of {list}, or null for the default.",
     guideMachine:
-      "machineId: a machine's id, or null to run on the project's machine. Machines: {list}",
+      "machineId: a machine's id, or null to run on the project's machine (eta only; external runtimes must set a machine id and run only on that machine). Machines: {list}",
     guidePlugins:
       "plugins: a list of plugin names, such as [a, b]. Plugins: {list}",
     guideInstructions:
@@ -106,11 +110,16 @@ export const agentMessages = defineMessages({
     modelFormat: "model：{value} 不是 provider:modelId 的写法",
     modelRuntime:
       "model：{runtime} 运行时的智能体要写 {runtime}:<模型> 或 null，不能写 {value}",
+    externalPersona:
+      'persona：{runtime} 智能体不能使用 persona 卡片；请设为 "" 或留空',
+    externalMachineRequired:
+      "machineId：{runtime} 智能体必须固定到一台机器，请填写机器 id 而非 null",
     hostWords: "host 的回答：{message}",
     guideApply:
       "智能体 {name}。保存并关掉编辑器就应用；不保存直接关掉则不改动。",
     guideName: "name：智能体的名字，不能为空。",
-    guidePersona: 'persona：persona 卡片，"" 表示默认卡片。可选：{list}',
+    guidePersona:
+      'persona：persona 卡片，"" 表示默认卡片（仅限 eta；外部运行时不可使用 persona）。可选：{list}',
     guideRuntime: "runtime：{list} 之一。",
     guideModel:
       "model：provider:modelId；eta 运行时的智能体必须写一个。外部运行时写 runtime:modelId，null 表示该运行时的默认模型。",
@@ -119,7 +128,7 @@ export const agentMessages = defineMessages({
     guideRuntimesFailed: "  没能列出外部运行时的模型：{reason}",
     guideThinking: "thinkingLevel：{list} 之一，null 表示用默认档。",
     guideMachine:
-      "machineId：机器的 id，null 表示在项目所在的机器上运行。可选：{list}",
+      "machineId：机器的 id，null 表示在项目所在的机器上运行（仅限 eta；外部运行时必须指定机器 id 且仅限该机器）。可选：{list}",
     guidePlugins: "plugins：插件名的列表，例如 [a, b]。可选：{list}",
     guideInstructions:
       "instructions：常驻指示。写多行时保留 |，每行缩进两个空格。",

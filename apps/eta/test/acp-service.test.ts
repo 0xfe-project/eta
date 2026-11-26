@@ -49,7 +49,6 @@ function setup() {
     },
     link: () => (online ? (link as never) : undefined),
     agents: () => [],
-    projectMachines: () => new Set(),
     changed: () => undefined,
   });
   /** The oldest call still waiting with this method (and `settled`, for a list). */

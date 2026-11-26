@@ -40,15 +40,13 @@ export interface AcpServiceOptions {
   };
   /** The machine's link while it is up. */
   link: (machineId: string) => Pick<MachineLink, "daemon"> | undefined;
-  /** Every agent: its runtime, and the machine it is pinned to (null follows its projects). */
+  /** Every agent: its runtime, and the machine it is pinned to. */
   agents: () => readonly {
     id: string;
     name: string;
     runtime: string;
     machineId: string | null;
   }[];
-  /** The machines of the projects an agent that is pinned to none is in. */
-  projectMachines: (agentId: string) => ReadonlySet<string>;
   /** The lists moved: whoever watches them is told. */
   changed: () => void;
 }
@@ -263,11 +261,7 @@ export class AcpService {
     const users = this.#options
       .agents()
       .filter(
-        (agent) =>
-          agent.runtime === runtime &&
-          (agent.machineId === null
-            ? this.#options.projectMachines(agent.id).has(machine.id)
-            : agent.machineId === machine.id),
+        (agent) => agent.runtime === runtime && agent.machineId === machine.id,
       )
       .map((agent) => agent.name);
     if (users.length === 0) return;

@@ -68,8 +68,10 @@ import type { RunRecord, TaskRunStore } from "./runs";
 import type { TaskRecord, TaskStore } from "./store";
 import type { TaskUsageStore } from "./usage";
 import { homedir } from "node:os";
+import { isExternalRuntime } from "@eta/client-contracts";
 import { LinkError } from "@eta/daemon";
 import { shellQuote } from "@eta/ssh";
+import { externalAgentProjectError } from "../agents/bounds";
 import { explainRunError } from "../agents/model";
 import { mentionKey, sessionKeyOf, taskKey } from "../session-owner";
 import { workable } from "./status";
@@ -788,6 +790,16 @@ export class TaskRunner implements TaskRuns {
       return;
     const maker = agents.get(makerId);
     if (maker === undefined) return;
+    const project =
+      task.projectId === null
+        ? undefined
+        : this.#deps.projects.get(task.projectId);
+    if (
+      project !== undefined &&
+      externalAgentProjectError(maker, project, this.#deps.machines) !==
+        undefined
+    )
+      return;
     const executor = agents.get(this.#executorOf(task) ?? "")?.name;
     this.consult(
       task.id,
@@ -854,13 +866,16 @@ export class TaskRunner implements TaskRuns {
         ? runs.lastSessionOf(task.id, agentId)
         : undefined;
     // The run is on the machine of the agent that works in it — the mentioned agent, else the
-    // executor (the assignee before the maker) — a pinned agent's, else the project's.
+    // executor (the assignee before the maker) — external runtimes use only their pinned machine,
+    // while eta agents fall back to the project's machine.
     const runner = agents.get(agentId ?? this.#executorOf(task) ?? "");
     const machineId =
       runner === undefined
         ? project.machineId
-        : (this.#deps.engine.machineFor(runner, project.machineId)?.id ??
-          project.machineId);
+        : isExternalRuntime(runner.runtime)
+          ? runner.machineId
+          : (this.#deps.engine.machineFor(runner, project.machineId)?.id ??
+            project.machineId);
     // The executor's run that starts the work (a first run, a rerun) waits for the task's
     // dependencies; one woken by a comment carries on work that started, and a mentioned agent
     // only answers.
@@ -926,6 +941,36 @@ export class TaskRunner implements TaskRuns {
       if (gate?.state === "broken") {
         // It will never start on its own: the board blocks the task and withdraws this run.
         board.blockOnCancelled(run.taskId);
+        continue;
+      }
+      const task = this.#deps.tasks.get(run.taskId);
+      const project =
+        task?.projectId == null
+          ? undefined
+          : this.#deps.projects.get(task.projectId);
+      const runnerAgent =
+        task === undefined
+          ? undefined
+          : this.#deps.agents.get(run.agentId ?? this.#executorOf(task) ?? "");
+      const boundProblem =
+        runnerAgent !== undefined && project !== undefined
+          ? (externalAgentProjectError(runnerAgent, project, machines) ??
+            (isExternalRuntime(runnerAgent.runtime) &&
+            run.machineId !== runnerAgent.machineId
+              ? `${runnerAgent.name} runs on ${runnerAgent.runtime} and may only run on its pinned machine`
+              : undefined))
+          : undefined;
+      if (boundProblem !== undefined) {
+        if (runs.start(run.id)) {
+          runs.finish(run.id, "failed", boundProblem);
+          board.runEvent(run.taskId, {
+            kind: "run_failed",
+            runId: run.id,
+            actor: actorOf(run),
+            body: boundProblem,
+          });
+          this.#waiting.delete(laneKey(run));
+        }
         continue;
       }
       let reason: TaskQueueReason | null = null;
@@ -1080,6 +1125,20 @@ export class TaskRunner implements TaskRuns {
     if (project === undefined)
       return {
         ended: { status: "failed", error: "The task's project is gone." },
+      };
+    const boundProblem = externalAgentProjectError(
+      agent,
+      project,
+      this.#deps.machines,
+    );
+    if (boundProblem !== undefined)
+      return { ended: { status: "failed", error: boundProblem } };
+    if (isExternalRuntime(agent.runtime) && machine.id !== agent.machineId)
+      return {
+        ended: {
+          status: "failed",
+          error: `${agent.name} runs on ${agent.runtime} and may only run on its pinned machine.`,
+        },
       };
 
     // Where it works. A run on another machine than the project's (its agent is pinned there) has

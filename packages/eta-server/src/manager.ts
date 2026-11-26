@@ -313,12 +313,21 @@ export class SessionManager {
       options.runtime === undefined || options.runtime === "eta"
         ? undefined
         : options.runtime;
+    if (
+      runtime !== undefined &&
+      options.persona !== undefined &&
+      options.persona.trim() !== ""
+    ) {
+      throw new Error(`sessions on ${runtime} cannot take a persona card`);
+    }
     // The settings name eta's own levels; a runtime session has its own. No model comes from them:
     // a session without one is told so when it first runs.
     const settings =
       runtime === undefined ? ((await this.settings?.()) ?? {}) : {};
     const persona =
-      options.persona ?? this.defaults?.persona ?? settings.persona;
+      runtime === undefined
+        ? (options.persona ?? this.defaults?.persona ?? settings.persona)
+        : undefined;
     const model =
       options.model ??
       (runtime === undefined ? this.defaults?.model : undefined);
@@ -382,6 +391,16 @@ export class SessionManager {
     const live = this.open.get(id);
     const current = live?.meta ?? (await this.store.open(id))?.meta;
     if (current === undefined) return undefined;
+    if (
+      current.runtime !== undefined &&
+      current.runtime !== "eta" &&
+      patch.persona !== undefined &&
+      patch.persona.trim() !== ""
+    ) {
+      throw new Error(
+        `sessions on ${current.runtime} cannot take a persona card`,
+      );
+    }
     const next: SessionMeta = { ...current, ...patch };
     if (!(await this.store.save(next))) return undefined;
     // Keep the open handle's copy honest: `list()` and every state projection read it.

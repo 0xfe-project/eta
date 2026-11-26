@@ -72,6 +72,13 @@ async function harness(): Promise<Harness> {
     store: new MemorySessionStore(),
     modelsFor: () => fakeModels([assistantMessage()]) as never,
     personasFor: async () => [],
+    runtimes: {
+      open: () => ({
+        models: fakeModels([]) as never,
+        delegate: { run: async () => ({ status: "completed" as const }) },
+        dispose: async () => undefined,
+      }),
+    } as never,
   });
   // Registers the `sessions` target on the context; nothing reads it back.
   void new SessionsService(ctx, { manager, wire });
@@ -242,5 +249,69 @@ describe("putting a session on a card", () => {
     expect(created.session.kernel.inspect().activePersonaNames).toEqual([]);
     await h.manager.closeAll();
     await unload();
+  });
+
+  it("refuses personas.set on external-runtime sessions", async () => {
+    const h = await harness();
+    const unload = await h.load();
+    await card(
+      join(h.home, ".eta", "persona"),
+      "Executor",
+      "# Executor\nShip.\n",
+    );
+    const created = await h.manager.create({
+      cwd: h.project,
+      runtime: "claude",
+    });
+    const set = (args: unknown): Promise<unknown> =>
+      h.wire.dispatch({ op: "call", target: "personas", action: "set", args }, {
+        reply: () => undefined,
+      } as never);
+    await expect(
+      set({ session: created.meta.id, persona: "Executor" }),
+    ).rejects.toThrow(/cannot take a persona card/);
+    await h.manager.closeAll();
+    await unload();
+  });
+
+  it("strips eta defaults/settings and rejects personas on external sessions in SessionManager", async () => {
+    const root = await mkdtemp(join(tmpdir(), "eta-manager-defaults-"));
+    roots.push(root);
+    const manager = new SessionManager({
+      store: new MemorySessionStore(),
+      modelsFor: () => fakeModels([assistantMessage()]) as never,
+      defaults: { persona: "Executor", model: "openai:gpt-4o" },
+      settings: async () => ({
+        persona: "Executor",
+        thinkingLevel: "high",
+      }),
+      personasFor: async () => [],
+      runtimes: {
+        open: () => ({
+          models: fakeModels([]) as never,
+          delegate: { run: async () => ({ status: "completed" as const }) },
+          dispose: async () => undefined,
+        }),
+      } as never,
+    });
+
+    const ext = await manager.create({ cwd: root, runtime: "claude" });
+    expect(ext.meta.persona).toBeUndefined();
+    expect(ext.meta.model).toBeUndefined();
+    expect(ext.session.kernel.config.read("thinkingLevel")).not.toBe("high");
+
+    await expect(
+      manager.create({ cwd: root, runtime: "claude", persona: "Executor" }),
+    ).rejects.toThrow(/cannot take a persona card/);
+    await expect(
+      manager.setMeta(ext.meta.id, { persona: "Executor" }),
+    ).rejects.toThrow(/cannot take a persona card/);
+
+    const eta = await manager.create({ cwd: root });
+    expect(eta.meta.persona).toBe("Executor");
+    expect(eta.meta.model).toBe("openai:gpt-4o");
+    expect(eta.session.kernel.config.read("thinkingLevel")).toBe("high");
+
+    await manager.closeAll();
   });
 });

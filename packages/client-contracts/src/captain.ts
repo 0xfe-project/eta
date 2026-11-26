@@ -151,10 +151,12 @@ export interface CaptainAgentProposal {
   /** What the agent is for, and when it should retire: one sentence, read on the card. */
   purpose: string;
   instructions: string;
-  /** The id of an existing persona card: the agent's `persona` is this id, never the card's text. */
+  /** The id of an existing persona card (empty for external runtimes; never the card's text). */
   persona: string;
   model: string;
   runtime: AgentRuntime;
+  /** The id of the machine it runs on; null follows the project (`"eta"` only). */
+  machineId?: string | null;
   plugins: string[];
 }
 

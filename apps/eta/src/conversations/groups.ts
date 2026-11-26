@@ -7,12 +7,15 @@
  * it (the project's name). A project has no steward to fall back on: the group's is its own.
  */
 import type { AgentStore } from "../agents/store";
+import type { MachineStore } from "../machines/store";
 import type { ProjectStore } from "../projects/store";
 import type { ConversationRecord, ConversationStore } from "./store";
+import { checkExternalAgentProject } from "../agents/bounds";
 import { defaultGroupName } from "./views";
 
 export interface GroupDeps {
   agents: AgentStore;
+  machines: MachineStore;
   projects: ProjectStore;
   conversations: ConversationStore;
 }
@@ -41,6 +44,8 @@ export function createGroup(
   // A conversation nobody is in would be an empty room.
   if (members.length === 0)
     throw new Error("a group needs at least one member");
+  for (const id of members)
+    checkExternalAgentProject(agents.get(id)!, project, deps.machines);
   const stewardId =
     input.stewardId === undefined ? members[0]! : input.stewardId;
   if (stewardId !== null && !members.includes(agent(stewardId)))

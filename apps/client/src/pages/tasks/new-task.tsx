@@ -17,6 +17,7 @@ import {
 import { sendShortcut } from "../../components/eta-editor";
 import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { agentAllowedOnMachine } from "../../services/agent-machine";
 import { useHost } from "../../services/host";
 import { createDescription, DescriptionBox } from "./description-box";
 import { Segmented } from "./segmented";
@@ -53,11 +54,23 @@ export function NewTask(props: {
       ? groups().find((entry) => entry.id === chosenId)
       : undefined;
   };
+  const projectMachineId = () => {
+    const projectId = effectiveGroup()?.projectId;
+    if (!projectId) return undefined;
+    const project = host.projects().find((entry) => entry.id === projectId);
+    return project && project.kind !== "agent_home"
+      ? project.machineId
+      : undefined;
+  };
   const eligiblePeople = () => {
     const group = effectiveGroup();
-    if (group === undefined) return host.people();
+    const machineId = projectMachineId();
+    const allowed = host
+      .people()
+      .filter((entry) => agentAllowedOnMachine(entry, machineId));
+    if (group === undefined) return allowed;
     const members = new Set(group.participants.map((member) => member.agentId));
-    return host.people().filter((entry) => members.has(entry.id));
+    return allowed.filter((entry) => members.has(entry.id));
   };
   const executor = () => {
     const candidates = eligiblePeople();

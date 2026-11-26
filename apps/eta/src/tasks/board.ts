@@ -28,11 +28,14 @@ import type { Database } from "bun:sqlite";
 import type { AgentStore } from "../agents/store";
 import type { AttachmentStore } from "../conversations/attachments";
 import type { ConversationStore } from "../conversations/store";
+import type { MachineStore } from "../machines/store";
+import type { ProjectStore } from "../projects/store";
 import type { DraftInput, TaskCards } from "./cards";
 import type { GraphEdge, GraphTask } from "./graph";
 import type { TaskRunStore } from "./runs";
 import type { TaskRecord, TaskStore } from "./store";
 import { TASK_STATUSES } from "@eta/client-contracts";
+import { checkExternalAgentProject } from "../agents/bounds";
 import { viewOf as attachmentView } from "../conversations/attachments";
 import {
   assigneeScopeFor,
@@ -138,6 +141,8 @@ export interface TaskBoardDeps {
   runs: TaskRunStore;
   cards: TaskCards;
   conversations: ConversationStore;
+  projects: ProjectStore;
+  machines: MachineStore;
   /** Who an assignee is: the caller names it, the task keeps the registry's id. */
   agents: Pick<AgentStore, "get" | "list">;
   /** The newest version of each artifact published for a task. */
@@ -372,6 +377,11 @@ export class TaskBoard {
     const { base, assignee } = input;
     if (title === undefined) throw new Error("a task needs a title");
     const conversationId = this.#conversation(input.conversationId)!;
+    const conversation = this.#deps.conversations.get(conversationId);
+    const project =
+      conversation === undefined
+        ? undefined
+        : this.#deps.projects.get(conversation.projectId);
     const scope = assigneeScopeFor(conversationId, this.#deps.conversations);
     const assigneeAgent = resolveAssignee(assignee, this.#deps.agents, scope);
     if (
@@ -379,6 +389,10 @@ export class TaskBoard {
       this.#deps.agents.get(actor.agentId)?.systemRole === "captain"
     )
       throw new Error(CAPTAIN_ASSIGNEE_ERROR);
+    const executorId = assigneeAgent ?? actor.agentId;
+    const executor = this.#deps.agents.get(executorId);
+    if (executor !== undefined && project !== undefined)
+      checkExternalAgentProject(executor, project, this.#deps.machines);
     const dependsOn = this.#dependenciesOf(input.dependsOn);
     const parent =
       input.parent === undefined || input.parent.trim() === ""
@@ -472,6 +486,7 @@ export class TaskBoard {
         "a task needs a project to work in: give it a parent, or a conversation in a project",
       );
     const workspace = input.workspace ?? parent?.workspaceMode ?? "local";
+    const project = this.#deps.projects.get(projectId);
     const scope = assigneeScopeFor(conversationId, this.#deps.conversations);
     // Everything named is checked before anything is written.
     const planned = input.tasks.map((entry, index) => {
@@ -485,6 +500,9 @@ export class TaskBoard {
       );
       if (assigneeAgent === undefined)
         throw new Error(`task ${index + 1} needs an executor`);
+      const executor = this.#deps.agents.get(assigneeAgent);
+      if (executor !== undefined && project !== undefined)
+        checkExternalAgentProject(executor, project, this.#deps.machines);
       for (const at of [
         ...(entry.after ?? []),
         ...(entry.under === undefined ? [] : [entry.under]),
@@ -1564,7 +1582,23 @@ export class TaskBoard {
    * thread. One from Captain's own conversation, or from nowhere, can call in any agent.
    */
   #checkMentions(task: TaskRecord, mentions: readonly string[]): void {
-    if (mentions.length === 0 || task.originConversationId === null) return;
+    if (mentions.length === 0) return;
+    const project =
+      task.projectId === null
+        ? undefined
+        : this.#deps.projects.get(task.projectId);
+    if (project !== undefined) {
+      for (const agentId of mentions) {
+        const mentionedAgent = this.#deps.agents.get(agentId);
+        if (mentionedAgent !== undefined)
+          checkExternalAgentProject(
+            mentionedAgent,
+            project,
+            this.#deps.machines,
+          );
+      }
+    }
+    if (task.originConversationId === null) return;
     const origin = this.#deps.conversations.get(task.originConversationId);
     if (origin?.kind !== "group") return;
     const members = new Set(

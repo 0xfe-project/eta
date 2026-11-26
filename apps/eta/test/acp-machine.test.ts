@@ -87,7 +87,6 @@ async function machine(home: string) {
     },
     link: () => undefined,
     agents: () => [],
-    projectMachines: () => new Set(),
     changed: () => undefined,
   });
   return { db, machines, config, service };

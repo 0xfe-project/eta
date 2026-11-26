@@ -125,6 +125,11 @@ describe("an agent's runtime", () => {
     const { agent: moved } = (await w.client.call("agents", "update", {
       agentId: agent.id,
       runtime: "claude",
+      machineId: w.host.db
+        .query<{ id: string }, []>(
+          "SELECT id FROM machine WHERE kind = 'primary'",
+        )
+        .get()!.id,
     })) as { agent: AgentView };
     expect(moved).toMatchObject({ runtime: "claude", model: null });
   });
@@ -315,6 +320,11 @@ describe("a conversation with an agent on Claude Code", () => {
     await w.client.call("agents", "update", {
       agentId: agent.id,
       runtime: "claude",
+      machineId: w.host.db
+        .query<{ id: string }, []>(
+          "SELECT id FROM machine WHERE kind = 'primary'",
+        )
+        .get()!.id,
     });
     const done = await w.settled(
       chat,
@@ -774,7 +784,10 @@ describe("/compact on an agent on a runtime", () => {
       return { kind: "completed" } as CompactionOutcome;
     });
     const r = await remoteWorld({}, { node: { runtimes } });
-    const cody = await r.agent("Cody", { runtime: "claude" });
+    const cody = await r.agent("Cody", {
+      runtime: "claude",
+      machineId: r.daemon.machineId,
+    });
     const group = await r.group(r.remoteProject.id, [cody.id]);
     await r.watch(group.id);
     const sent = await r.send(group.id, "hi");

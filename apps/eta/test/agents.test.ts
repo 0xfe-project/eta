@@ -443,13 +443,23 @@ describe("an agent's model", () => {
       w.client.call("agents", "update", { agentId: agent.id, model: "" }),
     ).rejects.toThrow(/needs a model/);
 
-    // An external runtime has a default of its own: none is fine there, and so is moving back to
-    // eta only with a model.
+    // An external runtime has a default of its own and requires a pinned machine: none is fine for
+    // model there, and moving back to eta requires a model.
+    const primaryId = w.host.db
+      .query<{ id: string }, []>(
+        "SELECT id FROM machine WHERE kind = 'primary'",
+      )
+      .get()!.id;
     const { agent: moved } = (await w.client.call("agents", "update", {
       agentId: agent.id,
       runtime: "claude",
+      machineId: primaryId,
     })) as { agent: AgentView };
-    expect(moved).toMatchObject({ runtime: "claude", model: null });
+    expect(moved).toMatchObject({
+      runtime: "claude",
+      model: null,
+      machineId: primaryId,
+    });
     await expect(
       w.client.call("agents", "update", { agentId: agent.id, runtime: "eta" }),
     ).rejects.toThrow(/needs a model/);
@@ -463,8 +473,13 @@ describe("an agent's model", () => {
     const { agent: cody } = (await w.client.call("agents", "create", {
       name: "Cody",
       runtime: "codex",
+      machineId: primaryId,
     })) as { agent: AgentView };
-    expect(cody).toMatchObject({ runtime: "codex", model: null });
+    expect(cody).toMatchObject({
+      runtime: "codex",
+      model: null,
+      machineId: primaryId,
+    });
   });
 
   it("left unset from before: an edit that does not touch it still saves", async () => {

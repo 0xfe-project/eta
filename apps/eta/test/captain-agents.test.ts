@@ -410,7 +410,33 @@ describe("what a proposal is refused for", () => {
       [{ persona: "Nobody" }, /no such persona card: Nobody/],
       [{ model: "" }, /needs a model/],
       [{ model: "gpt-5" }, /provider:modelId/],
-      [{ runtime: "claude", model: "openai:gpt-5" }, /a claude agent runs/],
+      [
+        {
+          runtime: "claude",
+          persona: "",
+          machineId: primaryId(w),
+          model: "openai:gpt-5",
+        },
+        /a claude agent runs/,
+      ],
+      [
+        {
+          runtime: "claude",
+          persona: "default",
+          machineId: primaryId(w),
+          model: "claude:sonnet",
+        },
+        /cannot take a persona card/,
+      ],
+      [
+        {
+          runtime: "claude",
+          persona: "",
+          machineId: null,
+          model: "claude:sonnet",
+        },
+        /must be pinned to a machine/,
+      ],
       [{ plugins: ["nope"] }, /cannot be enabled/],
     ];
     // Every case gets a name of its own, so only the name cases are about the name.

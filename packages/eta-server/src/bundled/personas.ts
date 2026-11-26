@@ -105,6 +105,13 @@ export function personasPlugin(options: PersonasPluginOptions) {
             const { managed } = await context.sessions.open(session);
             if (managed === undefined)
               throw new Error(`no such session: ${session}`);
+            if (
+              managed.meta.runtime !== undefined &&
+              managed.meta.runtime !== "eta"
+            )
+              throw new Error(
+                `sessions on ${managed.meta.runtime} cannot take a persona card`,
+              );
             // The cards that apply to *this* session's directory, re-read: the user may have
             // just written one.
             const cards = await discoverPersonas({

@@ -27,8 +27,11 @@ import type { Database } from "bun:sqlite";
 import type { AgentStore } from "../agents/store";
 import type { ConversationStore } from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
+import type { MachineStore } from "../machines/store";
+import type { ProjectStore } from "../projects/store";
 import type { TaskRecord, TaskStore } from "./store";
 import { draftStatus } from "@eta/client-contracts";
+import { checkExternalAgentProject } from "../agents/bounds";
 import {
   assigneeScopeFor,
   CAPTAIN_ASSIGNEE_ERROR,
@@ -82,6 +85,8 @@ export interface TaskCardsDeps {
   tasks: TaskStore;
   timeline: Timeline;
   conversations: ConversationStore;
+  projects: ProjectStore;
+  machines: MachineStore;
   /** Who an assignee is: a draft names it as the user did, the task keeps the registry's id. */
   agents: Pick<AgentStore, "get" | "list">;
   /** The newest version of each artifact published for a task, for the card to list. */
@@ -147,6 +152,10 @@ export class TaskCards {
       this.#deps.agents.get(input.agentId)?.systemRole === "captain"
     )
       throw new Error(CAPTAIN_ASSIGNEE_ERROR);
+    const project = this.#deps.projects.get(conversation.projectId);
+    const executor = this.#deps.agents.get(assignee ?? input.agentId);
+    if (executor !== undefined && project !== undefined)
+      checkExternalAgentProject(executor, project, this.#deps.machines);
     // The draft belongs to the turn that is writing it: that row says both where the draft came
     // from (the range of messages below) and where the page should draw it.
     const turn = this.#turnOf(input.conversationId, input.agentId);
@@ -243,6 +252,14 @@ export class TaskCards {
           `agent "${drafter?.name ?? row.agentId}" (${row.agentId}) is no longer a member of group "${scope.conversationName ?? ""}"`,
         );
     }
+    const conversation = this.#deps.conversations.get(input.conversationId);
+    const project =
+      conversation === undefined
+        ? undefined
+        : this.#deps.projects.get(conversation.projectId);
+    const executor = this.#deps.agents.get(assignee ?? row.agentId ?? "");
+    if (executor !== undefined && project !== undefined)
+      checkExternalAgentProject(executor, project, this.#deps.machines);
     return db.transaction(() => {
       const task = tasks.create({
         title,

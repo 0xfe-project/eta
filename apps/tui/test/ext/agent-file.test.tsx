@@ -132,7 +132,11 @@ describe("reading the saved file", () => {
   it("needs an external runtime's model to start with that runtime", () => {
     expect(
       readAgentFile(
-        edited({ runtime: "runtime: claude", model: "model: a:m1" }),
+        edited({
+          runtime: "runtime: claude",
+          machineId: "machineId: m-1",
+          model: "model: a:m1",
+        }),
         BASE,
       ),
     ).toEqual({
@@ -140,11 +144,20 @@ describe("reading the saved file", () => {
     });
     expect(
       readAgentFile(
-        edited({ runtime: "runtime: claude", model: "model: claude:opus" }),
+        edited({
+          runtime: "runtime: claude",
+          machineId: "machineId: m-1",
+          model: "model: claude:opus",
+        }),
         BASE,
       ),
     ).toEqual({
-      fields: { ...BASE, runtime: "claude", model: "claude:opus" },
+      fields: {
+        ...BASE,
+        runtime: "claude",
+        machineId: "m-1",
+        model: "claude:opus",
+      },
     });
   });
 
@@ -152,6 +165,7 @@ describe("reading the saved file", () => {
     const onClaude: AgentFields = {
       ...BASE,
       runtime: "claude",
+      machineId: "m-1",
       model: "claude:opus",
     };
     const text = writeAgentFile(onClaude, [])
@@ -163,6 +177,47 @@ describe("reading the saved file", () => {
       problems: [
         { kind: "model-runtime", value: "codex:x", runtime: "claude" },
       ],
+    });
+  });
+
+  it("forbids non-empty personas and null machineId on external runtimes", () => {
+    expect(
+      readAgentFile(
+        edited({
+          runtime: "runtime: claude",
+          persona: "persona: writer",
+          model: "model: claude:opus",
+          machineId: "machineId: m-1",
+        }),
+        BASE,
+      ),
+    ).toEqual({
+      problems: [{ kind: "external-persona", runtime: "claude" }],
+    });
+    expect(
+      readAgentFile(
+        edited({
+          runtime: "runtime: acp.fake",
+          persona: "persona: writer",
+          model: "model: null",
+          machineId: "machineId: null",
+        }),
+        BASE,
+      ),
+    ).toEqual({
+      problems: [
+        { kind: "external-persona", runtime: "acp.fake" },
+        { kind: "external-machine-required", runtime: "acp.fake" },
+      ],
+    });
+    // Switching eta -> external without changing machineId: null also catches missing pin.
+    expect(
+      readAgentFile(
+        edited({ runtime: "runtime: codex", model: "model: null" }),
+        BASE,
+      ),
+    ).toEqual({
+      problems: [{ kind: "external-machine-required", runtime: "codex" }],
     });
   });
 

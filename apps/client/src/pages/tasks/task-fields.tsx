@@ -39,6 +39,7 @@ import {
   weight,
 } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { agentAllowedOnMachine } from "../../services/agent-machine";
 import { relativeTime, useHost } from "../../services/host";
 import { openCommentFiles } from "./comment-files";
 import { ActorName } from "./creator";
@@ -88,12 +89,24 @@ function useCommentEditor(state: TaskDetailState, origin: string | undefined) {
   // The task's own agents first (its executor, who ran in it, who spoke on it), then the others.
   const members = () => {
     const item = task();
+    const projectId =
+      item?.projectId ??
+      (item?.conversationId
+        ? host.conversation(item.conversationId)?.projectId
+        : undefined);
+    const project = projectId
+      ? host.projects().find((entry) => entry.id === projectId)
+      : undefined;
+    const projectMachineId =
+      project && project.kind !== "agent_home" ? project.machineId : undefined;
     const own = new Set<string>();
     if (item?.assigneeAgentId) own.add(item.assigneeAgentId);
     for (const run of item?.runs ?? []) if (run.agentId) own.add(run.agentId);
     for (const entry of state.activity())
       if (entry.actor.agentId) own.add(entry.actor.agentId);
-    const agents = host.agents();
+    const agents = host
+      .agents()
+      .filter((agent) => agentAllowedOnMachine(agent, projectMachineId));
     const ordered = [
       ...agents.filter((agent) => own.has(agent.id)),
       ...agents.filter((agent) => !own.has(agent.id)),

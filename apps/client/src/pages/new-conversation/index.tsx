@@ -17,6 +17,7 @@ import {
 } from "../../components";
 import { control, space, weight } from "../../components/tokens";
 import { localizedText, uiText } from "../../i18n";
+import { agentAllowedOnMachine } from "../../services/agent-machine";
 import { useHost } from "../../services/host";
 import { Callout } from "../../ui";
 import { ConversationMembers } from "./conversation-members";
@@ -57,16 +58,32 @@ export function NewConversation(props: {
     place,
   } = picker;
   const picked = signal<string[] | undefined>(undefined);
-  const agents = () =>
-    picked() ??
-    host
+  const targetMachineId = () => directory()?.machineId;
+  const agentAllowed = (id: string) => {
+    const found = host.agent(id);
+    return (
+      found === undefined || agentAllowedOnMachine(found, targetMachineId())
+    );
+  };
+  const agents = () => {
+    const chosen = picked();
+    if (chosen !== undefined) return chosen.filter(agentAllowed);
+    return host
       .agents()
+      .filter((agent) => agentAllowedOnMachine(agent, targetMachineId()))
       .slice(0, 1)
       .map((agent) => agent.id);
+  };
   const steward = signal<string | null | undefined>(undefined);
-  const currentSteward = () =>
-    steward() === null ? null : (steward() ?? agents()[0]);
+  const currentSteward = () => {
+    if (steward() === null) return null;
+    const members = agents();
+    const chosen = steward();
+    if (chosen && members.includes(chosen)) return chosen;
+    return members[0];
+  };
   const toggleAgent = (id: string) => {
+    if (!agentAllowed(id)) return;
     const members = agents();
     const next = members.includes(id)
       ? members.filter((member) => member !== id)

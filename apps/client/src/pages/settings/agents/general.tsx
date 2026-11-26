@@ -1,6 +1,6 @@
 import type { TextVariant } from "../../../components";
 import type { AgentForm } from "./form";
-import { levelSupport } from "@eta/client-contracts";
+import { isExternalRuntime, levelSupport } from "@eta/client-contracts";
 import { View } from "nsh";
 import { ActionItem, ActionMenu, Field, Label, row } from "../../../components";
 import { ModelSelect } from "../../../components/model-select";
@@ -52,27 +52,38 @@ export function AgentGeneral(props: {
     noModels,
     avatar,
   } = props.form;
-  const goToModelServices = (
-    variant: TextVariant,
-    tone: "ink" | "mutedInk",
-  ) => (
-    <View
-      role="link"
-      accessibilityLabel={localizedText("Go to model services", "前往模型服务")}
-      onPress={props.onModelServices}
-      style={{ cursor: "pointer" }}
-    >
-      <Label
-        variant={variant}
-        tone={tone}
-        style={
-          tone === "mutedInk" ? { textDecorationLine: "underline" } : undefined
-        }
-      >
-        {localizedText("Go to model services", "前往模型服务")}
-      </Label>
-    </View>
-  );
+  const modelWarningLink = (variant: TextVariant, tone: "ink" | "mutedInk") => {
+    const label = () =>
+      isExternalRuntime(runtime())
+        ? uiText("runtimeSeeInSettings")
+        : localizedText("Go to model services", "前往模型服务");
+    return (
+      <If when={!isExternalRuntime(runtime()) || props.onRuntimes}>
+        <View
+          role="link"
+          accessibilityLabel={label()}
+          onPress={() =>
+            isExternalRuntime(runtime())
+              ? props.onRuntimes?.()
+              : props.onModelServices()
+          }
+          style={{ cursor: "pointer" }}
+        >
+          <Label
+            variant={variant}
+            tone={tone}
+            style={
+              tone === "mutedInk"
+                ? { textDecorationLine: "underline" }
+                : undefined
+            }
+          >
+            {label()}
+          </Label>
+        </View>
+      </If>
+    );
+  };
   function modelWarning() {
     return (
       <If when={missingModel() || noModels()}>
@@ -89,7 +100,7 @@ export function AgentGeneral(props: {
                     )
                   : localizedText("No models available.", "暂无可用模型。")}
               </Label>
-              {goToModelServices("caption", "ink")}
+              {modelWarningLink("caption", "ink")}
             </View>
           }
         >
@@ -110,7 +121,7 @@ export function AgentGeneral(props: {
                 )}
               />
             </If>
-            {goToModelServices("small", "mutedInk")}
+            {modelWarningLink("small", "mutedInk")}
           </View>
         </If>
       </If>
@@ -315,7 +326,7 @@ export function AgentGeneral(props: {
           </Each>
         </ActionMenu>
       </EditorRow>
-      <If when={!creating}>
+      <If when={!creating && !isExternalRuntime(runtime())}>
         <PersonaField form={props.form} />
       </If>
     </View>

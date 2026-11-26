@@ -43,5 +43,9 @@ export function fileProblemText(problem: FileProblem, locale: Locale): string {
       return t("modelFormat", problem);
     case "model-runtime":
       return t("modelRuntime", problem);
+    case "external-persona":
+      return t("externalPersona", problem);
+    case "external-machine-required":
+      return t("externalMachineRequired", problem);
   }
 }

@@ -1,4 +1,5 @@
 import type { AgentForm } from "./form";
+import { isExternalRuntime } from "@eta/client-contracts";
 import { View } from "nsh";
 import {
   ActionItem,
@@ -92,7 +93,7 @@ export function PersonaField(props: { form: AgentForm }) {
 }
 
 export function AgentInstructions(props: { form: AgentForm }) {
-  const { creating, instructions, saved, phoneEditor } = props.form;
+  const { creating, instructions, saved, phoneEditor, runtime } = props.form;
   const c = colors();
   const type = textFaces();
   const limit = () =>
@@ -213,7 +214,9 @@ export function AgentInstructions(props: { form: AgentForm }) {
             {instructionsHelp()}
           </Label>
         </View>
-        <PersonaField form={props.form} />
+        <If when={!isExternalRuntime(runtime())}>
+          <PersonaField form={props.form} />
+        </If>
       </View>
     </If>
   );
