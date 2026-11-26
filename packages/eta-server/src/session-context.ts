@@ -1,4 +1,8 @@
-import type { ContextReading, MemberSpend } from "@eta/client-contracts";
+import type {
+  ContextReading,
+  GenerationRate,
+  MemberSpend,
+} from "@eta/client-contracts";
 import type { Usage } from "@eta/core";
 import type { UsageRow } from "@eta/core/storage";
 import type { OpenSession } from "@eta/harness";
@@ -6,7 +10,7 @@ import type { SessionMeta } from "./store";
 import { contextReason } from "@eta/client-contracts";
 import { kernelOn, reportedField } from "@eta/core";
 import { deleteValue, setValue, value } from "@eta/core/storage";
-import { estimateContextTokens } from "@eta/harness";
+import { estimateContextTokens, estimateTokens } from "@eta/harness";
 import { formatModelId } from "./model-id";
 
 function spendFor(usage: Usage): MemberSpend {
@@ -79,6 +83,8 @@ interface SessionContextRecord {
 
 const CONTEXT_VALUE = value<SessionContextRecord>("eta.session-context");
 const WRITE_INTERVAL = 5_000;
+/** The shortest time between two estimates of a generation in flight. */
+const RATE_INTERVAL = 1_000;
 
 function sameMeasurement(a: ContextReading, b: ContextReading): boolean {
   return a.used === b.used && a.window === b.window && a.model === b.model;
@@ -430,6 +436,60 @@ export async function attachSessionContext(
     name: "spend",
     project: () => spend,
     revision: () => JSON.stringify(spend),
+  });
+  // The last settled generation's rate, and the one in flight timed from its first output.
+  let settled: GenerationRate | null = null;
+  let rate: GenerationRate | null = null;
+  let firstOutputAt: number | undefined;
+  let lastOutputAt = 0;
+  let estimatedAt = 0;
+  const restart = () => {
+    firstOutputAt = undefined;
+    rate = settled;
+  };
+  on("message:start", restart);
+  on("generation:interrupted", restart);
+  on("turn:run-end", restart);
+  on("message:update", ({ message, event }) => {
+    if (
+      event.type === "start" ||
+      event.type === "done" ||
+      event.type === "error"
+    )
+      return;
+    const now = Date.now();
+    lastOutputAt = now;
+    if (firstOutputAt === undefined) {
+      firstOutputAt = estimatedAt = now;
+      return;
+    }
+    if (now - estimatedAt < RATE_INTERVAL) return;
+    estimatedAt = now;
+    rate = {
+      tokensPerSec: (estimateTokens(message) * 1000) / (now - firstOutputAt),
+      basis: "estimate",
+    };
+  });
+  on("message:end", ({ message }) => {
+    if (message.role !== "assistant" || firstOutputAt === undefined) return;
+    const elapsed = lastOutputAt - firstOutputAt;
+    firstOutputAt = undefined;
+    if (elapsed > 0) {
+      // A provider that reported no output leaves the generation counted from its text.
+      const output = reportedField(message.usage, "output");
+      settled = output
+        ? { tokensPerSec: (output * 1000) / elapsed, basis: "measured" }
+        : {
+            tokensPerSec: (estimateTokens(message) * 1000) / elapsed,
+            basis: "estimate",
+          };
+    }
+    rate = settled;
+  });
+  session.view.contribute({
+    name: "rate",
+    project: () => rate,
+    revision: () => JSON.stringify(rate),
   });
   return (next) => {
     if (nativeSessionId === next) return;

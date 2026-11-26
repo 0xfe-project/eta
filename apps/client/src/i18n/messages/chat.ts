@@ -380,6 +380,15 @@ export const chatMessages = {
     "输入 {{input}} · 输出 {{output}} · 缓存 {{cache}}",
   ],
   memberTools: ["tools {{count}}", "工具 {{count}}"],
+  memberRate: ["{{rate}} tok/s", "{{rate}} tok/s"],
+  memberRateEstimate: [
+    "Output speed of this generation, estimated from its text so far",
+    "本次生成的输出速度，按已输出的文本估算",
+  ],
+  memberRateMeasured: [
+    "Output speed of the last generation, measured from the output tokens it reported",
+    "上次生成的输出速度，按它报告的输出 token 实测",
+  ],
   contextRing: ["Context {{detail}}", "上下文 {{detail}}"],
   waitingForYouCaption: ["Waiting for you", "等你处理"],
   confirmationRequestFrom: [

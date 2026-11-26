@@ -1,4 +1,8 @@
-import type { ContextReading, MemberSpend } from "./context-usage";
+import type {
+  ContextReading,
+  GenerationRate,
+  MemberSpend,
+} from "./context-usage";
 import type {
   AgentMessage,
   AskPayload,
@@ -144,6 +148,7 @@ export interface SessionViewSections {
   usage: Usage;
   context: ContextReading;
   spend: MemberSpend;
+  rate: GenerationRate | null;
   goal: GoalState | undefined;
   tasks: StoredTask[];
   sideThread: SessionViewBtwThread[];

@@ -112,6 +112,16 @@ export type MemberSpend = Record<
   ReportedTokens | null
 >;
 
+/**
+ * How fast a member's model writes: output tokens per second of one generation, timed from its
+ * first output. `estimate` is counted from the text so far, `measured` from the output the
+ * provider reported once the generation ended.
+ */
+export interface GenerationRate {
+  tokensPerSec: number;
+  basis: "estimate" | "measured";
+}
+
 export function displaySpend(
   field: ReportedTokens | null | undefined,
   locale: string,
