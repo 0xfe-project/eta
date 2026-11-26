@@ -48,6 +48,7 @@ import { agentHome } from "../agents/store";
 import { summaryOf } from "../conversations/views";
 import { conversationOf, ownerOf, taskKey } from "../session-owner";
 import { assigneeScopeFor, resolveAssignee } from "../tasks/assignee";
+import { taskCardData } from "../tasks/cards";
 import { isActive } from "../tasks/status";
 import { executorOf } from "../tasks/store";
 import { CAPTAIN_KIND, captainConversations } from "./policy";
@@ -528,9 +529,9 @@ export class CaptainService {
 
   /**
    * Dispatch a board task directly to a group member as Captain: validates the group and member
-   * assignee (never Captain), posts a visible non-waking Captain announcement in the group timeline,
-   * creates a tracked `captain_assignment` (`status: 'working', taskCount: 1`), and creates/enqueues
-   * the task atomically inside `TaskBoard.create`'s transaction.
+   * assignee (never Captain), posts a live-synced `task_card` row in the group timeline without
+   * waking chat replies, creates a tracked `captain_assignment` (`status: 'working', taskCount: 1`),
+   * and creates/enqueues the task atomically inside `TaskBoard.create`'s transaction.
    */
   async dispatchTask(input: {
     conversationId: string;
@@ -621,14 +622,14 @@ export class CaptainService {
           this.#deps.timeline.append({
             id: messageId,
             conversationId: conversation.id,
-            kind: "message",
+            kind: "task_card",
             author: "captain",
             agentId: captain.agentId,
             text:
               customText || `Dispatched task "${title}" to ${assigneeName}.`,
             mentions: [assigneeId],
             rootMessageId: messageId,
-            data: { woke: [], joined: [] },
+            data: {},
           });
           assignment = this.#deps.store.createAssignment({
             conversationId: conversation.id,
@@ -653,12 +654,12 @@ export class CaptainService {
         },
         afterCreate: (made) => {
           this.#deps.timeline.setData(messageId, {
-            woke: [],
-            joined: [],
-            captainAssignmentId: assignment!.id,
-            captainRound: assignment!.round,
-            taskId: made.id,
-            taskNumber: made.number,
+            ...taskCardData(made, "", [], {
+              captainAssignmentId: assignment!.id,
+              captainRound: assignment!.round,
+              ...(customText ? { captainNote: customText } : {}),
+              taskNumber: made.number,
+            }),
           });
         },
       },

@@ -625,6 +625,11 @@ export interface TaskCardData {
    * draft, with the same meaning.
    */
   turnMessageId?: string | undefined;
+  /** Captain dispatch provenance, preserved across `TaskCards.sync()` refreshes. */
+  captainAssignmentId?: string | undefined;
+  captainRound?: number | undefined;
+  captainNote?: string | undefined;
+  taskNumber?: number | undefined;
   deleted?: true;
 }
 
