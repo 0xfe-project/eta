@@ -70,6 +70,8 @@ export interface PluginServerView {
   env: string[];
   /** The names of the variables the plugin fixes on a stdio server: shown, not editable. Absent from an older host. */
   lockedEnv?: string[];
+  /** The names of empty stdio env vars in the manifest that still have no user-supplied value. Absent from an older host. */
+  missingEnv?: string[];
   /** The names of the headers the plugin sets itself or eta adds from the configuration; never values. */
   headers: string[];
   /** Plain http to a host that is not this machine: the user's headers go there only once confirmed. */
@@ -567,6 +569,8 @@ export interface MarketServerView extends PluginServerView {
 /** What installing an entry would put on the machine, read from the files at the pinned commit. */
 export interface MarketPreview {
   name: string;
+  /** The plugin's own manifest name (what it will be installed as). Absent from an older host. */
+  manifestName?: string;
   version: string | null;
   description: string;
   repo: string;

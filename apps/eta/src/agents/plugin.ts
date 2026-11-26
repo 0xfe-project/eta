@@ -44,6 +44,7 @@ import {
 } from "./bounds";
 import {
   checkAgentName,
+  checkAvatarSeed,
   checkMachine,
   checkPlugins,
   createAgent,
@@ -89,9 +90,6 @@ export interface AgentsDeps {
    */
   modelLevels?: ((model: string) => ThinkingLevel[] | undefined) | undefined;
 }
-
-/** What a client may draw an avatar from: an agent's id is one, and so is a short random string. */
-const AVATAR_SEED = /^[\w-]{1,64}$/;
 
 export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
   const { agents, projects, machines, timeline, plugins } = deps;
@@ -149,6 +147,8 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
 
         wire.handle("agents", "create", async (call) => {
           const fields = fieldsOf(call, true);
+          const avatarSeed = new Args(call).optionalString("avatarSeed");
+          checkAvatarSeed(avatarSeed);
           if (
             fields.thinkingLevel !== undefined &&
             fields.thinkingLevel !== null
@@ -164,7 +164,11 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             );
           const { agent } = await createAgent(
             deps,
-            { ...fields, name: fields.name! },
+            {
+              ...fields,
+              name: fields.name!,
+              ...(avatarSeed === undefined ? {} : { avatarSeed }),
+            },
             null,
           );
           deps.changed();
@@ -181,10 +185,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             );
           const fields = fieldsOf(call, false);
           const avatarSeed = args.optionalString("avatarSeed");
-          if (avatarSeed !== undefined && !AVATAR_SEED.test(avatarSeed))
-            throw new Error(
-              "avatarSeed must be 1 to 64 letters, digits, - or _",
-            );
+          checkAvatarSeed(avatarSeed);
           const moved =
             fields.runtime !== undefined && fields.runtime !== before.runtime;
           const nextRuntime = fields.runtime ?? before.runtime;

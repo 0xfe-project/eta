@@ -104,31 +104,52 @@ describe("a required field that is missing", () => {
 });
 
 describe("a stdio variable the file leaves empty", () => {
-  it("is a blank to fill: needs config and no server until the user sets it", async () => {
-    const { plugins, meta } = await setup({ SERVICE_TOKEN: "" });
+  it("is a blank to fill: needs config, exposes missingEnv, and no server until the user sets it", async () => {
+    const { plugins, meta } = await setup({
+      Z_TOKEN: "",
+      A_TOKEN: "",
+      FIXED_VAL: "keep",
+    });
     plugins.configure("demo", { api_key: "s3cr3t-value-123" });
     const entry = plugins.registry.get("demo")!;
-    // The field is filled; the blank variable still keeps the plugin from running.
+    // The field is filled; the blank variables still keep the plugin from running.
     expect(plugins.stateOf(entry)).toBe("needs_config");
     expect(plugins.canEnable("demo")).toBe(false);
+    expect(plugins.view()[0]!.servers[0]!.missingEnv).toEqual([
+      "A_TOKEN",
+      "Z_TOKEN",
+    ]);
     expect(plugins.mcpSourcesFor("ada")).toEqual([]);
     expect(JSON.stringify(await plugins.runtimeExtrasFor(meta))).not.toContain(
       "demo-local",
     );
 
     plugins.setEnv("demo", "local", [
-      { name: "SERVICE_TOKEN", value: KEY, secret: true },
+      { name: "A_TOKEN", value: KEY, secret: true },
+    ]);
+    expect(plugins.stateOf(entry)).toBe("needs_config");
+    expect(plugins.view()[0]!.servers[0]!.missingEnv).toEqual(["Z_TOKEN"]);
+
+    plugins.setEnv("demo", "local", [
+      { name: "A_TOKEN", value: KEY, secret: true },
+      { name: "Z_TOKEN", value: KEY, secret: true },
     ]);
     expect(plugins.stateOf(entry)).toBe("ready");
+    expect(plugins.view()[0]!.servers[0]!.missingEnv).toEqual([]);
     const servers = plugins.mcpSourcesFor("ada")[0]?.servers as Record<
       string,
       { env?: Record<string, string> }
     >;
-    expect(servers["demo-local"]?.env?.SERVICE_TOKEN).toBe(KEY);
+    expect(servers["demo-local"]?.env?.A_TOKEN).toBe(KEY);
+    expect(servers["demo-local"]?.env?.Z_TOKEN).toBe(KEY);
 
-    // Taking it away again stops the server again.
+    // Taking it away again stops the server again and re-lists missingEnv.
     plugins.setEnv("demo", "local", []);
     expect(plugins.stateOf(entry)).toBe("needs_config");
+    expect(plugins.view()[0]!.servers[0]!.missingEnv).toEqual([
+      "A_TOKEN",
+      "Z_TOKEN",
+    ]);
     expect(plugins.mcpSourcesFor("ada")).toEqual([]);
   });
 });

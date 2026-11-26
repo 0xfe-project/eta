@@ -5,7 +5,9 @@ import { plainRemote, serverSupported } from "@eta/daemon";
 /** The MCP servers of a plugin as the user is shown them: what each runs, or where it connects. */
 export function serverViews(
   plugin: PluginPackage | undefined,
+  savedEnv: readonly { server: string; name: string }[] = [],
 ): PluginServerView[] {
+  const set = new Set(savedEnv.map((one) => `${one.server}\0${one.name}`));
   return (plugin?.servers ?? []).map((server) => {
     const binding = plugin?.bindings[server.name];
     const { config } = server;
@@ -30,6 +32,18 @@ export function serverViews(
                 "PLUGIN_DATA",
               ]),
             ],
+            missingEnv: [
+              ...new Set(
+                Object.entries(
+                  (config as { env?: Record<string, string> }).env ?? {},
+                )
+                  .filter(
+                    ([name, value]) =>
+                      value === "" && !set.has(`${server.name}\0${name}`),
+                  )
+                  .map(([name]) => name),
+              ),
+            ].sort(),
           }
         : {}),
       // Names only, never values: the ones the plugin file sets, and the ones eta fills from fields.

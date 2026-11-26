@@ -54,8 +54,15 @@ const messageOf = (error: unknown): string =>
  * see `plugins.ts` in `@eta/server`). One of those has no `plugin.json`, and is not a rejected
  * Agent Plugin.
  */
+const SHA = /^[0-9a-f]{40}$/;
+
 function isServerPlugin(dir: string): boolean {
-  if (existsSync(join(dir, "plugin.json"))) return false;
+  if (
+    existsSync(join(dir, "plugin.json")) ||
+    existsSync(join(dir, ".cursor-plugin", "plugin.json")) ||
+    existsSync(join(dir, ".claude-plugin", "plugin.json"))
+  )
+    return false;
   try {
     const manifest = JSON.parse(
       readFileSync(join(dir, "package.json"), "utf8"),
@@ -234,9 +241,21 @@ export class PluginRegistry {
   /** Fetch a source and say what it is, before anything records it. */
   async #fetched(
     source: Pick<GitSourceRow, "repo" | "rev" | "path">,
+    pinnedSha?: string,
   ): Promise<{ row: Omit<GitSourceRow, "name">; name: string }> {
     const path = cleanPath(source.path);
-    const { sha, ref } = await resolveRev(source.repo, source.rev);
+    let sha: string;
+    let ref: string | null;
+    if (pinnedSha !== undefined) {
+      if (!SHA.test(pinnedSha))
+        throw new PluginError("sha must be a full commit hash");
+      if (source.rev.startsWith("-"))
+        throw new PluginError(`not a revision: ${source.rev}`);
+      sha = pinnedSha;
+      ref = source.rev === "" || SHA.test(source.rev) ? null : source.rev;
+    } else {
+      ({ sha, ref } = await resolveRev(source.repo, source.rev));
+    }
     const dir = sourceDir(this.#sources, source.repo, path);
     await fetchInto({ dir, repo: source.repo, sha, ref, path });
     this.#read.delete(dir);
@@ -247,8 +266,40 @@ export class PluginRegistry {
     };
   }
 
-  async add(repo: string, rev: string, path: string): Promise<string> {
-    const { row, name } = await this.#fetched({ repo, rev, path });
+  /** Find the git source row for a plugin name, including colliding `<name>@git` entries. */
+  #gitSourceOf(
+    name: string,
+  ): { row: GitSourceRow; colliding: boolean } | undefined {
+    const entry = this.#entries.get(name);
+    if (entry?.source.kind === "local") return undefined;
+    const direct = this.#rows.source(name);
+    if (direct !== undefined) return { row: direct, colliding: false };
+    if (name.endsWith("@git")) {
+      const base = name.slice(0, -4);
+      const source = entry?.source;
+      const row =
+        this.#rows.source(base) ??
+        (source?.kind === "git"
+          ? this.#rows
+              .sources()
+              .find(
+                (candidate) =>
+                  candidate.repo === source.repo &&
+                  candidate.path === source.path,
+              )
+          : undefined);
+      if (row !== undefined) return { row, colliding: true };
+    }
+    return undefined;
+  }
+
+  async add(
+    repo: string,
+    rev: string,
+    path: string,
+    pinnedSha?: string,
+  ): Promise<string> {
+    const { row, name } = await this.#fetched({ repo, rev, path }, pinnedSha);
     if (this.#entries.has(name) && this.#rows.source(name) === undefined)
       throw new PluginError(`a plugin named ${name} already exists`);
     this.#rows.saveSource({ ...row, name });
@@ -258,24 +309,33 @@ export class PluginRegistry {
 
   /** Resolve `rev` anew. A repository that renamed the plugin is refused, not followed. */
   async update(name: string): Promise<void> {
-    const source = this.#rows.source(name);
-    if (source === undefined) throw new PluginError(`${name} is not from git`);
+    const found =
+      this.#gitSourceOf(name) ??
+      (() => {
+        const direct = this.#rows.source(name);
+        return direct === undefined
+          ? undefined
+          : { row: direct, colliding: true };
+      })();
+    if (found === undefined) throw new PluginError(`${name} is not from git`);
+    const { row: source } = found;
     const { row, name: fetched } = await this.#fetched(source);
-    if (fetched !== name) {
+    if (fetched !== source.name) {
       await fetchInto({
         ...source,
         dir: sourceDir(this.#sources, source.repo, source.path),
       });
       throw new PluginError(`${source.repo} is now plugin ${fetched}`);
     }
-    this.#rows.saveSource({ ...row, name });
+    this.#rows.saveSource({ ...row, name: source.name });
     await this.refresh();
   }
 
   async remove(name: string): Promise<void> {
-    const source = this.#rows.source(name);
-    if (source === undefined) throw new PluginError(`${name} is not from git`);
-    this.#rows.removeSource(name);
+    const found = this.#gitSourceOf(name);
+    if (found === undefined) throw new PluginError(`${name} is not from git`);
+    const { row: source, colliding } = found;
+    this.#rows.removeSource(source.name, colliding);
     const dir = sourceDir(this.#sources, source.repo, source.path);
     await rm(dir, { recursive: true, force: true });
     await rm(`${dir}.sha`, { force: true });
