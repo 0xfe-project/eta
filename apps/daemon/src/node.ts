@@ -230,8 +230,8 @@ export class DaemonNode {
     });
     this.#manager = new SessionManager({
       store: this.#store,
-      // Claude Code, Codex, OpenCode, Pi, Grok Build: an agent on one of them runs
-      // it on this machine.
+      // Claude Code, Codex, OpenCode, Pi, Antigravity, Grok Build, Qwen Code: an agent on one of
+      // them runs it on this machine.
       runtimes: this.#runtimes,
       // Generation is the primary's: this is a model layer that asks it.
       modelsFor: (meta) =>

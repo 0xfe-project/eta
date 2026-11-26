@@ -53,14 +53,23 @@ import type {
   RunDelegate,
   RunDelegateContext,
 } from "@eta/core";
+import type { HostToolServer, McpBridgeLauncher } from "@eta/runtime-kit";
 import type { RuntimeCompaction } from "@eta/server";
 import type { RuntimeCatalog, RuntimeId } from "./catalog";
 import { Buffer } from "node:buffer";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installedSessionCapabilities } from "@botiverse/oar";
-import { hostResultOf, HostTools, NO_RUN } from "@eta/runtime-kit";
+import { installedSessionCapabilities, ResumeCwdError } from "@botiverse/oar";
+import {
+  defaultMcpBridge,
+  HOST_MCP_TOKEN_ENV,
+  HOST_MCP_URL_ENV,
+  HOST_SERVER,
+  hostResultOf,
+  HostTools,
+  NO_RUN,
+} from "@eta/runtime-kit";
 import { HostCalls } from "./host-calls";
 import { effortFor, listedEfforts } from "./models";
 import { Translator } from "./translate";
@@ -84,6 +93,8 @@ export interface OarDelegateOptions {
   hostTools: () => readonly string[];
   /** MCP servers the runtime starts itself, beside the one serving the host's tools. */
   mcpServers?: readonly McpServer[] | undefined;
+  /** How a runtime that refuses credentials on `mcpServers` starts the stdio host MCP bridge. */
+  mcpBridge?: McpBridgeLauncher | undefined;
   /** Arguments for the runtime's process, on every open. */
   launchArgs?: readonly string[] | undefined;
   /**
@@ -121,6 +132,32 @@ interface Input {
  * started with.
  */
 const KEEPS_APPEND_ON_RESUME: ReadonlySet<RuntimeId> = new Set(["grok"]);
+
+/** Whether an MCP server carries a credential, as oar reads one: a stdio env, http headers. */
+function carriesCredentials(server: McpServer): boolean {
+  const values = "type" in server ? server.headers : server.env;
+  return values !== undefined && Object.keys(values).length > 0;
+}
+
+/** The bearer token from `serveMcpTools`'s Authorization header, if any. */
+function bearerTokenOf(server: HostToolServer): string | undefined {
+  const header = (
+    server.headers?.Authorization ?? server.headers?.authorization
+  )?.trim();
+  if (header === undefined || !/^bearer\s/iu.test(header)) return undefined;
+  const token = header.slice(6).trim();
+  return token === "" ? undefined : token;
+}
+
+/** Whether a resume failure means the runtime does not recognize or list the session id. */
+function isUnlistedResumeError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === "SessionNotFoundError") return true;
+  return (
+    (error instanceof ResumeCwdError || error.name === "ResumeCwdError") &&
+    (error as { reason?: unknown }).reason === "not_listed"
+  );
+}
 
 function inputOf(messages: readonly AgentMessage[]): Input {
   const texts: string[] = [];
@@ -261,11 +298,12 @@ export class OarDelegate implements RunDelegate {
         const run = this.#run;
         const calls = this.#calls;
         if (run === undefined || calls === undefined) return NO_RUN;
-        const raw = await run.executeTool(name, input, {
+        const cleanInput = this.#cleanToolInput(run, name, input);
+        const raw = await run.executeTool(name, cleanInput, {
           toolCallId: `mcp-${crypto.randomUUID()}`,
         });
         const { result, details } = hostResultOf(name, raw);
-        calls.answered(name, input, result.content, details);
+        calls.answered(name, cleanInput, result.content, details);
         return result;
       },
     });
@@ -540,8 +578,7 @@ export class OarDelegate implements RunDelegate {
       );
     } catch (error) {
       // The conversation is gone: the next run starts a new one, and there is nothing to compact.
-      if ((error as Error).name === "SessionNotFoundError")
-        return { outcome: "empty" };
+      if (isUnlistedResumeError(error)) return { outcome: "empty" };
       return {
         outcome: "failed",
         reason: error instanceof Error ? error.message : String(error),
@@ -653,12 +690,37 @@ export class OarDelegate implements RunDelegate {
       : undefined;
   }
 
+  /**
+   * Antigravity adds `toolSummary` to every session MCP call; strip it when the host tool's
+   * parameter schema does not declare it so strict (`additionalProperties: false`) validators
+   * accept the call.
+   */
+  #cleanToolInput(
+    run: RunDelegateContext,
+    name: string,
+    input: Readonly<Record<string, unknown>>,
+  ): Readonly<Record<string, unknown>> {
+    if (this.#options.runtime !== "antigravity" || !("toolSummary" in input))
+      return input;
+    const tool = run.tools().find((entry) => entry.name === name);
+    const properties = (
+      tool as
+        | { parameters?: { properties?: Record<string, unknown> } }
+        | undefined
+    )?.parameters?.properties;
+    if (properties !== undefined && "toolSummary" in properties) return input;
+    const copy: Record<string, unknown> = { ...input };
+    delete copy.toolSummary;
+    return copy;
+  }
+
   /** What a runtime session opens with. */
   #sessionOptions(
     { model, effort }: Settings,
     resume: string | undefined,
     mcpServers: readonly McpServer[],
     refused: RefusedSessionOptions,
+    env?: Readonly<Record<string, string>>,
   ): SessionOptions {
     const { launchArgs } = this.#options;
     const systemPrompt =
@@ -677,6 +739,7 @@ export class OarDelegate implements RunDelegate {
         ? {}
         : { appendSystemPrompt: systemPrompt }),
       ...(mcpServers.length === 0 ? {} : { mcpServers }),
+      ...(env === undefined || Object.keys(env).length === 0 ? {} : { env }),
       ...(launchArgs === undefined || launchArgs.length === 0
         ? {}
         : { launchArgs }),
@@ -691,29 +754,65 @@ export class OarDelegate implements RunDelegate {
     const runtime = catalog.runtime(id);
     const installation = await catalog.installation(id);
     const refusals = this.#refused(installation);
-    // The host's server carries its bearer token: a runtime that refuses credentials takes none.
-    const refused =
-      refusals.mcpServers !== undefined ||
-      refusals.mcpServerCredentials !== undefined;
-    const served = refused ? undefined : await this.#host.serve(context);
+    // A runtime that refuses credentials on `mcpServers` (Antigravity keeps an entry's env and
+    // headers in plain text in its conversation database) gets a credential-free stdio MCP bridge
+    // for the host's tools, with the ephemeral URL + bearer token passed in `SessionOptions.env`.
+    const noServers = refusals.mcpServers !== undefined;
+    const noCredentials = refusals.mcpServerCredentials !== undefined;
+    let hostServer: McpServer | undefined;
+    let env: Readonly<Record<string, string>> | undefined;
+    if (!noServers) {
+      if (!noCredentials) {
+        hostServer = await this.#host.serve(context);
+      } else if (refusals.env === undefined) {
+        const served = await this.#host.serve(context);
+        if (served !== undefined) {
+          const token = bearerTokenOf(served);
+          if (token !== undefined) {
+            const launcher = this.#options.mcpBridge ?? defaultMcpBridge();
+            hostServer = {
+              name: HOST_SERVER,
+              command: launcher.command,
+              ...(launcher.args === undefined || launcher.args.length === 0
+                ? {}
+                : { args: [...launcher.args] }),
+            };
+            env = {
+              [HOST_MCP_URL_ENV]: served.url,
+              [HOST_MCP_TOKEN_ENV]: token,
+            };
+          } else {
+            hostServer = served;
+          }
+        }
+      } else {
+        this.#options.warn(
+          `[eta-runtime-oar] ${id} refuses MCP credentials and SessionOptions.env; host tools left out`,
+        );
+      }
+    }
     const plugins = this.#options.mcpServers ?? [];
-    if (refused && plugins.length > 0)
-      this.#options.warn(
-        `[eta-runtime-oar] ${id} takes no MCP servers; ${plugins.map((server) => server.name).join(", ")} left out`,
-      );
-    const mcpServers = refused
+    const taken = noServers
       ? []
-      : [...(served === undefined ? [] : [served]), ...plugins];
+      : noCredentials
+        ? plugins.filter((server) => !carriesCredentials(server))
+        : plugins;
+    const left = plugins.filter((server) => !taken.includes(server));
+    if (left.length > 0)
+      this.#options.warn(
+        `[eta-runtime-oar] ${id} takes no MCP servers${noServers ? "" : " that carry credentials"}; ${left.map((server) => server.name).join(", ")} left out`,
+      );
+    const mcpServers = [
+      ...(hostServer === undefined ? [] : [hostServer]),
+      ...taken,
+    ];
     const options = (resume: string | undefined): SessionOptions =>
-      this.#sessionOptions(settings, resume, mcpServers, refusals);
+      this.#sessionOptions(settings, resume, mcpServers, refusals, env);
     let session: Session;
     try {
       session = await runtime.session(installation, options(this.#resume));
     } catch (error) {
-      if (
-        this.#resume === undefined ||
-        (error as Error).name !== "SessionNotFoundError"
-      )
+      if (this.#resume === undefined || !isUnlistedResumeError(error))
         throw error;
       this.#options.warn(
         `[eta-runtime-oar] ${id} session ${this.#resume} is gone; starting a new one`,
@@ -994,7 +1093,7 @@ export class OarDelegate implements RunDelegate {
             }
             settle({
               kind: "failed",
-              failure: "invalid_request",
+              failure: result.failure ?? "invalid_request",
               reason: `${result.code}: ${result.reason}`,
             });
           },

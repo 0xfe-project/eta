@@ -29,6 +29,7 @@ import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import process from "node:process";
 import { etaCompaction } from "@eta/compaction";
 import { createAcpRuntimes } from "@eta/runtime-acp";
 import { createOarRuntimes } from "@eta/runtime-oar";
@@ -48,6 +49,7 @@ import { buildsIn, defaultBuilds } from "./machines/builds";
 import { Tailscale } from "./machines/tailscale";
 import { clearMigrationInput, stageMigrationInput } from "./model-backfill";
 import { createProduct } from "./product";
+import { COMPILED } from "./resources";
 
 export interface HostOptions {
   /** Everything the host owns: the database, the sessions, the providers config. */
@@ -112,7 +114,7 @@ export interface HostOptions {
   /** Whether this host starts El Capitan. Tests that are not about Captain leave it off. */
   captain?: boolean;
   /**
-   * The external agent runtimes (Claude Code, Codex, OpenCode, Pi, Grok Build)
+   * The external agent runtimes (Claude Code, Codex, OpenCode, Pi, Antigravity, Grok Build, Qwen Code)
    * agents may run on: oar's, on this machine, by default. A test hands in scripted ones; `false`
    * runs none.
    */
@@ -199,7 +201,18 @@ export async function startHost(options: HostOptions): Promise<Host> {
     const others =
       options.runtimes === false
         ? undefined
-        : (options.runtimes ?? createOarRuntimes({ warn }));
+        : (options.runtimes ??
+          createOarRuntimes({
+            warn,
+            ...(COMPILED
+              ? {
+                  mcpBridge: {
+                    command: process.execPath,
+                    args: ["mcp-bridge"],
+                  },
+                }
+              : {}),
+          }));
     // Each set answers for its own ids; the catalog is one after the other.
     const runtimes =
       others === undefined && acp === undefined

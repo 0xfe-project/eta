@@ -1002,7 +1002,7 @@ describe("a session on an external runtime", () => {
     }
   });
 
-  it.each(["opencode", "grok", "qwen"] as const)(
+  it.each(["opencode", "antigravity", "grok", "qwen"] as const)(
     "publishes a root context pair from %s through the shared OAR channel",
     async (runtimeId) => {
       const { prompts, say, patch } = handDriven();

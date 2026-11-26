@@ -113,6 +113,8 @@ interface PendingCall {
   children: OarChildStep[];
   /** The runtime's MCP gateway tool this host tool was called through (Grok's `use_tool`). */
   via?: string;
+  /** Whether this call targets an `eta` host tool directly (not through a gateway). */
+  host?: boolean;
   runtimeTask?: OarRuntimeTask;
 }
 
@@ -541,8 +543,12 @@ export class Translator {
     const open = this.#ensure(undefined);
     const raw = argumentsOf(input);
     const gateway = this.#calls.gateway(tool, raw);
-    const name = gateway?.name ?? this.#calls.hostTool(callId, tool) ?? tool;
-    const args = gateway?.args ?? raw;
+    const host =
+      gateway === undefined ? this.#calls.hostTool(callId, tool) : undefined;
+    const name = gateway?.name ?? host ?? tool;
+    const args =
+      gateway?.args ??
+      (host !== undefined ? this.#calls.normalizeArgs(raw) : raw);
     open.message.content.push({
       type: "toolCall",
       id: callId,
@@ -556,6 +562,7 @@ export class Translator {
       startedAt: Date.now(),
       children: [],
       ...(gateway === undefined ? {} : { via: tool }),
+      ...(host === undefined ? {} : { host: true }),
     });
     this.#update({
       type: "toolcall_start",
@@ -589,9 +596,11 @@ export class Translator {
     const pending = this.#pending.get(callId);
     const raw = argumentsOf(input);
     const args =
-      pending?.via === undefined
-        ? raw
-        : (this.#calls.gateway(pending.via, raw)?.args ?? pending.args);
+      pending?.via !== undefined
+        ? (this.#calls.gateway(pending.via, raw)?.args ?? pending.args)
+        : pending?.host === true
+          ? this.#calls.normalizeArgs(raw)
+          : raw;
     if (pending !== undefined) pending.args = args;
     const open = this.#open;
     const index = this.#callIndex(callId);

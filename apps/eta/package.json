@@ -44,7 +44,7 @@
     "typebox": "1.3.34"
   },
   "devDependencies": {
-    "@botiverse/oar": "0.128.1",
+    "@botiverse/oar": "0.136.0",
     "@types/node": "22.19.19",
     "bun-types": "1.4.2",
     "typescript": "5.9.3",

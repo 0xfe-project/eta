@@ -375,7 +375,7 @@ export type AgentAction = (typeof AGENT_ACTIONS)[number];
 
 /**
  * What can answer for an agent. `eta` is eta's own loop on eta's models; the others are agent
- * runtimes installed on the machine (Claude Code, Codex, OpenCode, Pi, Grok Build, Qwen Code), each
+ * runtimes installed on the machine (Claude Code, Codex, OpenCode, Pi, Antigravity, Grok Build, Qwen Code), each
  * with its own tools, context and models, that the agent's sessions hand their runs to.
  */
 export const AGENT_RUNTIMES = [
@@ -384,6 +384,7 @@ export const AGENT_RUNTIMES = [
   "codex",
   "opencode",
   "pi",
+  "antigravity",
   "grok",
   "qwen",
 ] as const;

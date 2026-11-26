@@ -13,7 +13,8 @@ import { createHost, Host } from "../../src/services/host";
 // Settings › Runtimes and the agent editor's Runtime field, over a scripted host. Nothing here is
 // a real runtime or account: every probe answer is written below.
 // - The primary "studio" has Claude Code (signed in), Codex (not signed in), OpenCode (its probe
-//   timed out), Pi (not installed) and an external agent whose probe failed.
+//   timed out), Pi (not installed), Antigravity (not signed in), and an external agent whose
+//   probe failed.
 // - The daemon "gpu-box" is online with Claude Code and Codex; "attic" is offline.
 // - `agents.runtimes { fresh: true }` answers OpenCode as available, as a retry after a slow probe.
 // - `agents.runtimeAccount`: Claude Code is signed in with two plan windows, Codex is signed out.
@@ -104,6 +105,14 @@ function primary(fresh: boolean): AgentRuntimeInfo[] {
       models: [],
     },
     {
+      id: "antigravity",
+      label: "Antigravity",
+      status: "unauthenticated",
+      version: "1.5.16",
+      detail: "Please sign in to view available models",
+      models: [],
+    },
+    {
       id: "acp.gemini",
       label: "Gemini CLI",
       status: "error",
@@ -151,6 +160,9 @@ const accounts: Record<string, AgentRuntimeAccount> = {
   codex: {
     auth: { kind: "logged_out" },
     usage: { kind: "reauth_required", reason: "not_logged_in" },
+  },
+  antigravity: {
+    auth: { kind: "logged_out" },
   },
 };
 
@@ -228,6 +240,13 @@ const pi = {
   runtime: "pi",
 } as unknown as AgentView;
 
+const agy = {
+  ...bo,
+  id: "a-antigravity",
+  name: "Agy",
+  runtime: "antigravity",
+} as unknown as AgentView;
+
 function Fixture() {
   const host = createHost();
   const calls = signal<string[]>([]);
@@ -242,7 +261,7 @@ function Fixture() {
       agents: {
         version: 1,
         revisions: {},
-        sections: { list: [bo, pi] },
+        sections: { list: [bo, pi, agy] },
       },
       usage: { version: 1, revisions: {}, sections: { providers: usage } },
     },
@@ -279,7 +298,10 @@ function Page(props: {
   const layout = width < 600 ? "phone" : width < 1200 ? "tablet" : "desktop";
   const noop = () => {};
   const editing =
-    props.page === "editor" || props.page === "new" || props.page === "pi";
+    props.page === "editor" ||
+    props.page === "new" ||
+    props.page === "pi" ||
+    props.page === "antigravity";
   return (
     <View style={{ flex: 1 }}>
       <Text>{props.calls().join("\n")}</Text>
@@ -290,7 +312,9 @@ function Page(props: {
               ? bo.id
               : props.page === "pi"
                 ? pi.id
-                : undefined
+                : props.page === "antigravity"
+                  ? agy.id
+                  : undefined
           }
           phone={layout === "phone"}
           tablet={layout === "tablet"}

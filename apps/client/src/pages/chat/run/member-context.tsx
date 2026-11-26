@@ -31,7 +31,9 @@ const RUNTIME_NAMES: Record<string, string> = {
   codex: "Codex",
   opencode: "OpenCode",
   pi: "Pi",
+  antigravity: "Antigravity",
   grok: "Grok Build",
+  qwen: "Qwen Code",
 };
 
 /** A runtime's name: the settings screen's for the built-in ones, the label the user gave an ACP

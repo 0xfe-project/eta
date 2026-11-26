@@ -35,6 +35,7 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { parseArgs } from "node:util";
 import { installedEnv } from "@eta/daemon";
+import { runMcpBridge } from "@eta/runtime-oar";
 import { parseFailure, RUN_OPTIONS, USAGE } from "./cli";
 import { loadMigrations } from "./db";
 import { startHost } from "./host";
@@ -47,13 +48,20 @@ import { takeDesktopShell } from "./upgrade/desktop";
 import { HOST_UNIT, hostManager } from "./upgrade/service";
 import { VERSION, VERSION_JSON, VERSION_LINE } from "./version";
 
+// A subcommand comes first; every other argument is a flag of the run.
+const [command, ...rest] = process.argv.slice(2);
+if (command === "mcp-bridge") {
+  const controller = new AbortController();
+  for (const signal of ["SIGINT", "SIGTERM"] as const)
+    process.on(signal, () => controller.abort());
+  process.exit(await runMcpBridge({ signal: controller.signal }));
+}
+
 // Before anything can start a process that would inherit it.
 takeDesktopShell();
 
 const dataDir = join(homedir(), ".eta");
 
-// A subcommand comes first; every other argument is a flag of the run.
-const [command, ...rest] = process.argv.slice(2);
 if (command === "upgrade") process.exit(await upgradeCommand(rest));
 if (command === "running") {
   const running = await findRunningHost({ dataDir });

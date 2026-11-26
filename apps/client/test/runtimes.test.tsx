@@ -1,4 +1,6 @@
 import { expect, open, test } from "nsh/test";
+import { runtimeLogo } from "../src/pages/settings/runtimes/logos";
+import { LOGIN_COMMANDS } from "../src/pages/settings/runtimes/status";
 
 // The agent editor's Runtime field and Settings › Runtimes over the scripted host of
 // fixtures/runtimes.tsx: no real runtime or account is asked.
@@ -23,6 +25,7 @@ for (const [width, height] of sizes) {
       ["Codex", "Not signed in"],
       ["OpenCode", "Probe timed out (30s)"],
       ["Pi", "Not installed"],
+      ["Antigravity", "Not signed in"],
       ["Gemini CLI", "Probe failed"],
     ]) {
       expect(texts[texts.indexOf(runtime) + 1]).toBe(reason);
@@ -102,13 +105,14 @@ for (const [width, height] of sizes) {
     const after = (heading: string) => texts.slice(texts.indexOf(heading));
     expect(texts.indexOf("studio")).toBeLessThan(texts.indexOf("gpu-box"));
     expect(texts.indexOf("gpu-box")).toBeLessThan(texts.indexOf("attic"));
-    expect(after("studio")).toContain("primary · 5 runtimes");
+    expect(after("studio")).toContain("primary · 6 runtimes");
     expect(after("gpu-box")).toContain("2 runtimes");
     for (const runtime of [
       "Claude Code, Available",
       "Codex, Not signed in",
       "OpenCode, Probe timed out (30s)",
       "Pi, Not installed",
+      "Antigravity, Not signed in",
       "Gemini CLI, Probe failed",
     ])
       expect(app.count(`label:${runtime}`)).toBeGreaterThan(0);
@@ -185,6 +189,8 @@ test("a runtime that cannot run here is offered after the ones that can", async 
     "Probe timed out (30s)",
     "Pi",
     "Not installed",
+    "Antigravity",
+    "Not signed in",
     "Gemini CLI",
     "Probe failed",
   ]);
@@ -213,4 +219,32 @@ test("an agent's own runtime stays in the field and in the menu when it cannot r
   // Every other one that cannot run here stays out of reach.
   expect(app.enabled("label:Codex")).toBe(false);
   expect(app.enabled("label:Gemini CLI")).toBe(false);
+});
+
+test("Antigravity uses agy acp --login and its data-URI brand mark", async () => {
+  expect(LOGIN_COMMANDS.antigravity).toBe("agy acp --login");
+  const logo = runtimeLogo("antigravity", "Antigravity");
+  expect(logo?.startsWith("data:image/svg+xml,")).toBe(true);
+  expect(runtimeLogo("acp.antigravity", "Antigravity")).toBe(logo);
+  expect(runtimeLogo("acp.custom", "agy")).toBe(logo);
+
+  const editor = await open("./fixtures/runtimes.tsx", {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+    urlScheme: "eta://fixture/antigravity",
+  });
+  expect(editor.texts()).toContain(
+    "Antigravity isn't signed in: run agy acp --login in a terminal on its machine, then retry.",
+  );
+
+  const settings = await open("./fixtures/runtimes.tsx", {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+  });
+  await settings.press("label:Antigravity, Not signed in");
+  await settings.waitFor(
+    "text:Not signed in. Run agy acp --login in a terminal on studio to sign in.",
+  );
 });
