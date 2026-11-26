@@ -27,6 +27,7 @@ import {
   LLM_PROVIDER_ID,
   providerLabel,
   TASK_STATUSES,
+  TASK_WORKSPACE_MODES,
 } from "@eta/client-contracts";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
@@ -363,7 +364,7 @@ export function captainSessionTools(
     const assign = defineTool({
       name: "assign_in_group",
       description:
-        "Send a visible Captain instruction to one or more members of an existing group. With no agentIds, speak to the group's steward (or its only member when it has none), like a user message without mentions; a group with several members and no steward needs agentIds. This only chats and authorizes work; the target agents create and execute their own tasks. For staged work, ask for a task tree: a parent task per stage, subtasks under it (create_task parent), and dependsOn between them (a later stage depends on the earlier stage's parent; requireDone when it must wait until the earlier work is done, not only in review).",
+        "Send a visible Captain message in an existing group and wake one or more members in chat for coordination, investigation, discussion, or questions. With no agentIds, speak to the group's steward (or its only member when it has none), like a user message without mentions; a group with several members and no steward needs agentIds. To directly create and assign tracked board tasks (or staged task trees), use `dispatch_task` instead.",
       parameters: Type.Object({
         conversationId: Type.String(),
         text: Type.String(),
@@ -390,6 +391,99 @@ export function captainSessionTools(
       },
     });
 
+    const dispatchTask = defineTool({
+      name: "dispatch_task",
+      description:
+        "Create a tracked board task directly in an existing group conversation, assign it to a non-Captain group member (or default to the group's steward / sole non-Captain member), post a visible Captain announcement in the group without waking chat replies, and enqueue its run (unless status is `backlog`). For staged work / task trees, call `dispatch_task` with `parent` and `dependsOn`. Use `assign_in_group` when you want to talk to or coordinate members in group chat instead of directly creating a task.",
+      parameters: Type.Object(
+        {
+          conversationId: Type.String({
+            description: "The group conversation id.",
+          }),
+          title: Type.String({
+            description: "A short title for the task.",
+          }),
+          description: Type.String({
+            description:
+              "What to do, what has been decided, and how it will be judged done, written for an executor running in an isolated session.",
+          }),
+          assignee: Type.Optional(
+            Type.String({
+              description:
+                "Non-Captain member of the group (name or id) to execute the task; defaults to the group's steward or sole member.",
+            }),
+          ),
+          status: Type.Optional(
+            Type.Union([Type.Literal("todo"), Type.Literal("backlog")], {
+              description:
+                "todo (default, starts immediately) or backlog (queued on board without starting).",
+            }),
+          ),
+          workspace: Type.Optional(
+            Type.Union(
+              TASK_WORKSPACE_MODES.map((mode) => Type.Literal(mode)),
+              {
+                description:
+                  "worktree or local; defaults to the conversation project's mode.",
+              },
+            ),
+          ),
+          base: Type.Optional(
+            Type.String({
+              description: "Branch, commit, or #N the worktree starts from.",
+            }),
+          ),
+          parent: Type.Optional(
+            Type.String({
+              description:
+                "Parent task number (#N) or id when dispatching a subtask.",
+            }),
+          ),
+          dependsOn: Type.Optional(
+            Type.Array(
+              Type.Object({
+                task: Type.String({
+                  description:
+                    "The task waited for: its number (#12 or 12) or id.",
+                }),
+                requireDone: Type.Optional(
+                  Type.Boolean({
+                    description:
+                      "Only done resolves it. By default in_review is enough to start.",
+                  }),
+                ),
+              }),
+            ),
+          ),
+          message: Type.Optional(
+            Type.String({
+              description:
+                "Optional visible note to post in the group chat announcing the dispatched task.",
+            }),
+          ),
+        },
+        { additionalProperties: false },
+      ),
+      execute: async (args) => {
+        try {
+          const result = await deps.service.dispatchTask(args);
+          const assigneeName =
+            result.task.assigneeAgentId === null
+              ? "unassigned"
+              : (deps.agents.get(result.task.assigneeAgentId)?.name ??
+                result.task.assigneeAgentId);
+          return text(
+            `Dispatched task #${result.task.number} "${result.task.title}" to ${assigneeName} (assignment ${result.assignment.id}; message ${result.messageId}).`,
+            result,
+          );
+        } catch (error) {
+          return toolError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    });
+
     /**
      * Where a proposal's card goes: this conversation, or Captain's own conversation from a session held
      * in none (a task's, a routine run's).
@@ -405,10 +499,10 @@ export function captainSessionTools(
       name: "propose_group",
       description: [
         "Propose a new group conversation. Nothing is created yet: the proposal appears as a card in this conversation, and only the user's confirmation creates the group (adding the directory as a project first when it is not one). Every proposal needs that confirmation.",
-        "Before proposing, call list_conversations: if a suitable group already exists, use it with assign_in_group instead. A group with the same name in the same project is a conflict; the error returns that group's conversationId.",
+        "Before proposing, call list_conversations: if a suitable group already exists, use it with dispatch_task or assign_in_group instead. A group with the same name in the same project is a conflict; the error returns that group's conversationId.",
         "Directory: give projectId for an existing project, or path (absolute) plus optional machineId (default: the primary machine) for a directory that must already exist on that machine, e.g. a repository you just cloned. An agent's own workspace or an archived project is refused.",
         "memberIds needs at least one agent and must not include you. stewardId is the member who takes messages that name nobody: one of memberIds, or null for none; left out, it is the first member. Nobody is ever added to a group for that.",
-        "Several groups can be proposed in one turn; each gets its own card. Do not wait for the decision: once everything is proposed, end your turn. For each proposal the user confirms or rejects, a message in this conversation tells you the outcome and, if created, the new group's conversationId; then assign work there with assign_in_group.",
+        "Several groups can be proposed in one turn; each gets its own card. Do not wait for the decision: once everything is proposed, end your turn. For each proposal the user confirms or rejects, a message in this conversation tells you the outcome and, if created, the new group's conversationId; then dispatch tasks there with dispatch_task or coordinate with assign_in_group.",
       ].join(" "),
       parameters: Type.Object({
         name: Type.String({ description: "The group's name." }),
@@ -450,7 +544,7 @@ export function captainSessionTools(
         } catch (error) {
           if (error instanceof GroupConflictError)
             return toolError(
-              `Conflict: ${error.message}. Use that group with assign_in_group, or propose a different name.`,
+              `Conflict: ${error.message}. Use that group with dispatch_task or assign_in_group, or propose a different name.`,
             );
           return toolError(
             error instanceof Error ? error.message : String(error),
@@ -600,14 +694,17 @@ export function captainSessionTools(
       description: `Change a task's title, description or status. This does not change its creator or executor. ${
         ARCHIVED_RULE
       }`,
-      parameters: Type.Object({
-        taskId: Type.String(),
-        title: Type.Optional(Type.String()),
-        description: Type.Optional(Type.String()),
-        status: Type.Optional(
-          Type.Union(TASK_STATUSES.map((status) => Type.Literal(status))),
-        ),
-      }),
+      parameters: Type.Object(
+        {
+          taskId: Type.String(),
+          title: Type.Optional(Type.String()),
+          description: Type.Optional(Type.String()),
+          status: Type.Optional(
+            Type.Union(TASK_STATUSES.map((status) => Type.Literal(status))),
+          ),
+        },
+        { additionalProperties: false },
+      ),
       execute(args) {
         try {
           const task = deps.board.find(args.taskId);
@@ -1230,7 +1327,7 @@ export function captainSessionTools(
     const post = defineTool({
       name: "post_in_group",
       description:
-        "Post a plain message in a group conversation, as Captain, without waking anyone: no agent is named and no reply is started. Use it to share something (a routine's result the brief says to send there, a notice). To get work done, use assign_in_group instead. Only groups; not your own conversation with the user.",
+        "Post a plain message in a group conversation, as Captain, without waking anyone: no agent is named and no reply is started. Use it to share something (a routine's result the brief says to send there, a notice). To get work done, use dispatch_task (to create a tracked task) or assign_in_group (to wake members in chat) instead. Only groups; not your own conversation with the user.",
       parameters: Type.Object({
         conversationId: Type.String(),
         text: Type.String({ minLength: 1 }),
@@ -1393,6 +1490,7 @@ export function captainSessionTools(
       readMemory,
       readAttachment,
       assign,
+      dispatchTask,
       proposeGroup,
       listModels,
       listPersonaCards,

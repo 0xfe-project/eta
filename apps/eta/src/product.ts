@@ -756,6 +756,7 @@ export function createProduct(options: {
     runner: taskRunner,
     changed,
     warn,
+    workspaceFor: taskWorkspaceFor,
     resolvePath: async (machine, raw) => {
       try {
         return await onMachine.ask(machine, { op: "resolve", path: raw });
@@ -946,9 +947,6 @@ export function createProduct(options: {
         workspaceFor: taskWorkspaceFor,
         captain: {
           isCaptain: (agentId) => captain.identity()?.agentId === agentId,
-          assignmentFor: (conversationId, agentId) =>
-            captain.assignmentForAgent(conversationId, agentId),
-          taskCreated: (input) => captain.taskCreated(input),
         },
       }),
     },

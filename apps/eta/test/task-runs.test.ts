@@ -380,6 +380,10 @@ describe("a task run", () => {
   it("is run by the agent it was assigned to, which is not always the agent that made it", async () => {
     const r = await room(finishes());
     const bola = await r.w.agent("Bola");
+    await r.w.client.call("conversations", "invite", {
+      conversationId: r.group.id,
+      agentId: bola.id,
+    });
     const task = make(r, "For Bola", "local", { assignee: bola.id });
     await until(() => reviewed(r.w, task.id));
     // The executor's brief is Bola's: the assignee runs it, though Ada made it.
@@ -397,6 +401,10 @@ describe("a task run", () => {
   it("resolves an assignee named by name to its id, and refuses one nobody is", async () => {
     const r = await room(finishes());
     const bola = await r.w.agent("Bola");
+    await r.w.client.call("conversations", "invite", {
+      conversationId: r.group.id,
+      agentId: bola.id,
+    });
     const task = make(r, "For Bola by name", "local", { assignee: "Bola" });
     expect(task.assigneeAgentId).toBe(bola.id);
     await until(() => reviewed(r.w, task.id));
@@ -411,6 +419,10 @@ describe("a task run", () => {
   it("runs a task whose stored assignee was a name once the migration has made it an id", async () => {
     const r = await room(finishes());
     const bola = await r.w.agent("Bola");
+    await r.w.client.call("conversations", "invite", {
+      conversationId: r.group.id,
+      agentId: bola.id,
+    });
     const task = make(r, "For Bola", "local", { assignee: bola.id });
     await until(() => reviewed(r.w, task.id));
     // A row written before names were resolved: the queue cannot find `Bola` by id.
@@ -435,6 +447,10 @@ describe("a task run", () => {
   it("says the assignee is missing, not the maker, when the assignee is not registered", async () => {
     const r = await room(finishes());
     const bola = await r.w.agent("Bola");
+    await r.w.client.call("conversations", "invite", {
+      conversationId: r.group.id,
+      agentId: bola.id,
+    });
     const task = make(r, "For Bola", "local", { assignee: bola.id });
     await until(() => reviewed(r.w, task.id));
     r.w.host.db.query("DELETE FROM agent WHERE id = ?").run(bola.id);

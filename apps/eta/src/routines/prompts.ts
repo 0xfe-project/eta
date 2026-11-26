@@ -35,7 +35,7 @@ export function runPrompt(input: {
     "",
     "## How to do it",
     "",
-    "- You have all your usual Captain tools. Do the brief however fits: look things up yourself, assign work in a group with assign_in_group, post in a group with post_in_group, check tasks with captain_list_tasks. Work you dispatched may finish long after this run: a later run checks it and reports on it.",
+    "- You have all your usual Captain tools. Do the brief however fits: look things up yourself, dispatch tracked tasks in a group with dispatch_task, coordinate in group chat with assign_in_group, post in a group with post_in_group, check tasks with captain_list_tasks. Work you dispatched may finish long after this run: a later run checks it and reports on it.",
     "- If the brief says to send something somewhere (a group, a person), do that with your tools; the report below is not sent there by itself.",
     "- Before you report, check the earlier reports (list_runs, search_runs) so you do not repeat one.",
     "",

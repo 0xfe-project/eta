@@ -295,43 +295,50 @@ describe("captain assignment", () => {
     );
   });
 
-  it("authorizes an agent to create its own task without task.assignee", async () => {
-    const { models } = scriptedModels((request) =>
-      request.lastRole === "toolResult"
-        ? say("I made the task.")
-        : call("create_task", {
-            title: "Ship the Captain patch",
-            description: "Do the implementation",
-            workspace: "local",
-          }),
-    );
+  it("dispatches a task directly through dispatch_task without waking a chat turn", async () => {
+    let targetGroupId = "";
+    const { models } = scriptedModels((request) => {
+      if (request.agent === "Captain")
+        return request.lastRole === "toolResult"
+          ? say(`Result: ${request.last}`)
+          : call("dispatch_task", {
+              conversationId: targetGroupId,
+              title: "Ship the Captain patch",
+              description: "Implement and verify the patch",
+              assignee: "Ada",
+              workspace: "local",
+            });
+      return say("Unexpected chat reply.");
+    });
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
     const project = await w.project();
     const group = await w.group(project.id, [ada.id], "release");
+    targetGroupId = group.id;
     await w.watch(group.id);
+    const captain = await w.host.product.captain.direct();
+    await w.watch(captain.conversationId);
 
-    const result = await w.host.product.captain.assign({
-      conversationId: group.id,
-      text: "Ada, implement the release fix.",
-      agentIds: [ada.id],
-    });
-    await until(() => {
-      const row = w.host.db
-        .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM task")
-        .get();
-      return row?.n === 1;
-    });
+    const sent = await w.send(captain.conversationId, "Dispatch Ada to ship.");
+    const reply = await w.settled(captain.conversationId, sent.replies[0]!.id);
+    expect(reply.text).toContain(
+      'Dispatched task #1 "Ship the Captain patch" to Ada',
+    );
 
-    const message = w.row(group.id, result.messageId)!;
-    expect(message).toMatchObject({
-      author: "captain",
-      agentId: (await w.host.product.captain.identity())!.agentId,
-    });
-    expect(message.data.captainAssignmentId).toBe(result.assignment.id);
+    const groupRows = w.rows(group.id);
+    // Visible Captain announcement in the group, without waking an agent chat reply.
+    expect(groupRows.some((row) => row.author === "captain")).toBe(true);
+    expect(groupRows.some((row) => row.author === "agent")).toBe(false);
+
+    const captainMsg = groupRows.find((row) => row.author === "captain")!;
+    const assignment = w.host.product.captain.store.assignments()[0]!;
+    expect(captainMsg.data.captainAssignmentId).toBe(assignment.id);
+    expect(captainMsg.data.taskNumber).toBe(1);
+
     const task = w.host.db
       .query<
         {
+          id: string;
           created_by_agent: string;
           assignee_agent: string | null;
           captain_assignment_id: string;
@@ -339,20 +346,19 @@ describe("captain assignment", () => {
         },
         []
       >(
-        `SELECT created_by_agent, assignee_agent, captain_assignment_id,
+        `SELECT id, created_by_agent, assignee_agent, captain_assignment_id,
                 captain_message_id
            FROM task`,
       )
       .get()!;
     expect(task).toEqual({
-      created_by_agent: ada.id,
-      assignee_agent: null,
-      captain_assignment_id: result.assignment.id,
-      captain_message_id: result.messageId,
+      id: task.id,
+      created_by_agent: captain.agentId,
+      assignee_agent: ada.id,
+      captain_assignment_id: assignment.id,
+      captain_message_id: captainMsg.id,
     });
-    const assignment = w.host.product.captain.store.assignment(
-      result.assignment.id,
-    )!;
+    expect(assignment.status).toBe("working");
     expect(assignment.targets[0]).toMatchObject({
       agentId: ada.id,
       taskCount: 1,
@@ -360,120 +366,199 @@ describe("captain assignment", () => {
     });
   });
 
-  it("carries several targets in one assignment", async () => {
-    const { models } = scriptedModels((request) =>
-      request.lastRole === "toolResult"
-        ? say("done")
-        : call("create_task", {
-            title: "Parallel work",
-            description: "One task for each assigned agent",
-            workspace: "local",
-          }),
-    );
+  it("defaults dispatch_task assignee to steward or sole member, supports staged trees, and validates boundaries", async () => {
+    const { models } = scriptedModels(() => say("ok"));
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
     const bola = await w.agent("Bola");
+    const outsider = await w.agent("Outsider");
     const project = await w.project();
-    const group = await w.group(project.id, [ada.id, bola.id], "parallel");
-    await w.watch(group.id);
-
-    const result = await w.host.product.captain.assign({
-      conversationId: group.id,
-      text: "Both of you take one part.",
-      agentIds: [ada.id, bola.id],
-    });
-    await until(() => {
-      const row = w.host.db
-        .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM task")
-        .get();
-      return row?.n === 2;
-    });
-    expect(result.assignment.targets.map((target) => target.agentId)).toEqual([
-      ada.id,
+    const stewarded = await w.group(
+      project.id,
+      [ada.id, bola.id],
+      "stewarded",
       bola.id,
-    ]);
-    expect(
-      w.host.db
-        .query<{ n: number }, [string]>(
-          "SELECT COUNT(*) AS n FROM task WHERE captain_assignment_id = ?",
-        )
-        .get(result.assignment.id)!.n,
-    ).toBe(2);
-  });
-
-  it("does not let a target turn a Captain assignment into task.assignee", async () => {
-    let heard = "";
-    const { models } = scriptedModels((request) => {
-      if (request.lastRole === "toolResult") {
-        heard = request.last;
-        return say("done");
-      }
-      return call("create_task", {
-        title: "Wrong handoff",
-        description: "Must stay with the assigned agent",
-        workspace: "local",
-        assignee: "another-agent",
-      });
-    });
-    const w = await world({ ...options, models });
-    const ada = await w.agent("Ada");
-    const project = await w.project();
-    const group = await w.group(project.id, [ada.id], "handoff");
-    await w.watch(group.id);
-    const result = await w.host.product.captain.assign({
-      conversationId: group.id,
-      text: "Ada, make the fix.",
-      agentIds: [ada.id],
-    });
-    await w.settled(group.id, result.replyIds[0]!);
-    expect(heard).toMatch(
-      /Do not pass|does not use task.assignee|create the task yourself/,
     );
+    const crowd = await w.group(
+      project.id,
+      [ada.id, bola.id],
+      "no-steward",
+      null,
+    );
+    await w.watch(stewarded.id);
+    const captain = await w.host.product.captain.direct();
+
+    // Omitted assignee picks steward (Bola).
+    const parent = await w.host.product.captain.dispatchTask({
+      conversationId: stewarded.id,
+      title: "Stage 1",
+      description: "Parent stage",
+      status: "backlog",
+      workspace: "local",
+    });
+    expect(parent.task.assigneeAgentId).toBe(bola.id);
+    expect(parent.task.status).toBe("backlog");
+
+    // Child under parent with dependency inside the same dispatch.
+    const stepA = await w.host.product.captain.dispatchTask({
+      conversationId: stewarded.id,
+      title: "Step A",
+      description: "First step",
+      assignee: ada.id,
+      parent: `#${parent.task.number}`,
+      status: "backlog",
+      workspace: "local",
+    });
+    const stepB = await w.host.product.captain.dispatchTask({
+      conversationId: stewarded.id,
+      title: "Step B",
+      description: "Second step",
+      assignee: "Bola",
+      parent: `#${parent.task.number}`,
+      dependsOn: [{ task: stepA.task.id, requireDone: true }],
+      status: "backlog",
+      workspace: "local",
+      message: "Bola takes Step B after Step A.",
+    });
+    expect(stepB.task.parentId).toBe(parent.task.id);
+    expect(stepB.task.dependsOn).toEqual([
+      expect.objectContaining({ taskId: stepA.task.id, requireDone: true }),
+    ]);
+    await until(() => w.row(stewarded.id, stepB.messageId) !== undefined);
+    expect(w.row(stewarded.id, stepB.messageId)?.text).toBe(
+      "Bola takes Step B after Step A.",
+    );
+
+    // Refuses non-member, Captain, multi-member with no steward, Captain's direct chat, and archived group.
+    const beforeCount = w.host.db
+      .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM task")
+      .get()!.n;
+    const beforeAssignments = w.host.product.captain.store.assignments().length;
+    const beforeSeq = w.rows(stewarded.id).length;
+
+    await expect(
+      w.host.product.captain.dispatchTask({
+        conversationId: stewarded.id,
+        title: "Bad outsider",
+        description: "x",
+        assignee: outsider.id,
+      }),
+    ).rejects.toThrow(/not a member/);
+    for (const target of [captain.agentId, "Captain"])
+      await expect(
+        w.host.product.captain.dispatchTask({
+          conversationId: stewarded.id,
+          title: "Bad captain",
+          description: "x",
+          assignee: target,
+        }),
+      ).rejects.toThrow(/Captain cannot be assigned/);
+    await expect(
+      w.host.product.captain.dispatchTask({
+        conversationId: crowd.id,
+        title: "No steward",
+        description: "x",
+      }),
+    ).rejects.toThrow(/no steward/);
+    await expect(
+      w.host.product.captain.dispatchTask({
+        conversationId: captain.conversationId,
+        title: "Direct chat",
+        description: "x",
+        assignee: ada.id,
+      }),
+    ).rejects.toThrow(/group conversations/);
+    // Invalid parent/dependsOn rolls back the atomic transaction (no orphan message or assignment).
+    await expect(
+      w.host.product.captain.dispatchTask({
+        conversationId: stewarded.id,
+        title: "Broken dep",
+        description: "x",
+        dependsOn: [{ task: "#9999" }],
+      }),
+    ).rejects.toThrow(/no such task/);
+
     expect(
       w.host.db
         .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM task")
         .get()!.n,
-    ).toBe(0);
+    ).toBe(beforeCount);
+    expect(w.host.product.captain.store.assignments()).toHaveLength(
+      beforeAssignments,
+    );
+    expect(w.rows(stewarded.id)).toHaveLength(beforeSeq);
+
+    await w.client.call("conversations", "update", {
+      conversationId: crowd.id,
+      archived: true,
+    });
+    await expect(
+      w.host.product.captain.dispatchTask({
+        conversationId: crowd.id,
+        title: "Archived group",
+        description: "x",
+        assignee: ada.id,
+      }),
+    ).rejects.toThrow(/archived/);
   });
 
-  it("keeps provenance when the assigned agent drafts and the user confirms", async () => {
-    const { models } = scriptedModels((request) =>
-      request.lastRole === "toolResult"
-        ? say("Drafted.")
-        : call("draft_task", {
-            title: "Drafted under Captain",
-            goal: "Keep the source visible",
-            acceptance: "The task names the assignment",
-            workspace: "local",
-          }),
-    );
-    const w = await world({ ...options, models });
+  it("runs a dispatch_task as the assigned member end-to-end and completes the assignment without waking Captain as maker", async () => {
+    let runCount = 0;
+    let runSystem = "";
+    const { models } = scriptedModels((request) => {
+      if (request.system.includes("In this task you are")) {
+        runCount += 1;
+        runSystem = request.system;
+        return request.lastRole === "toolResult"
+          ? say("Finished.")
+          : call("finish_task", { summary: "Implemented and verified." });
+      }
+      return say("ok");
+    });
+    // Runs enabled so the dispatched task executes in its own session as Ada.
+    const w = await world({ captain: true, models });
     const ada = await w.agent("Ada");
     const project = await w.project();
-    const group = await w.group(project.id, [ada.id], "draft-work");
+    const group = await w.group(project.id, [ada.id], "e2e-dispatch");
     await w.watch(group.id);
-    const assigned = await w.host.product.captain.assign({
+    await w.client.call("tasks", "setSettings", { reactToResults: true });
+
+    const dispatched = await w.host.product.captain.dispatchTask({
       conversationId: group.id,
-      text: "Ada, draft the follow-up.",
-      agentIds: [ada.id],
+      title: "Run end to end",
+      description: "Implement cleanly",
+      assignee: ada.id,
+      workspace: "local",
     });
-    await w.settled(group.id, assigned.replyIds[0]!);
-    const draft = w.rows(group.id).find((row) => row.kind === "task_draft")!;
-    const confirmed = (await w.client.call("tasks", "confirmDraft", {
-      conversationId: group.id,
-      messageId: draft.id,
-    })) as {
-      task: {
-        captainAssignmentId?: string | null;
-        captainMessageId?: string | null;
-      };
-    };
-    expect(confirmed.task.captainAssignmentId).toBe(assigned.assignment.id);
-    expect(confirmed.task.captainMessageId).toBe(assigned.messageId);
+
+    await until(
+      () =>
+        w.host.product.board.detail(dispatched.task.id)?.status === "in_review",
+    );
+    expect(runSystem).toContain("In this task you are Ada");
+    // Only Ada ran it (reactToResults does NOT wake Captain as maker).
+    expect(runCount).toBe(1);
     expect(
-      w.host.product.captain.store.assignment(assigned.assignment.id)!
-        .targets[0],
-    ).toMatchObject({ agentId: ada.id, taskCount: 1, status: "working" });
+      w
+        .rows(group.id)
+        .some(
+          (row) =>
+            row.author === "agent" &&
+            row.agentId === ada.id &&
+            row.text.includes("Implemented and verified."),
+        ),
+    ).toBe(true);
+    await until(
+      () =>
+        w.host.product.captain.store.assignment(dispatched.assignment.id)
+          ?.targets[0]?.status === "completed",
+    );
+    expect(
+      w.host.product.captain.store.assignment(dispatched.assignment.id),
+    ).toMatchObject({
+      status: "completed",
+      targets: [{ agentId: ada.id, taskCount: 1, status: "completed" }],
+    });
   });
 });
 

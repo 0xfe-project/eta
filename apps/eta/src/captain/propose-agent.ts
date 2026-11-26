@@ -127,7 +127,7 @@ export function agentProposals(
     created: (_proposal, result) => [
       `agentId: ${result.agentId}`,
       `projectId: ${result.projectId}`,
-      "It is in no group yet: propose_group with its id as a member, then assign work there with assign_in_group.",
+      "It is in no group yet: propose_group with its id as a member, then dispatch tasks there with dispatch_task or coordinate in chat with assign_in_group.",
     ],
   };
 }

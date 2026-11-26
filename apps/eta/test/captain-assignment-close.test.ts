@@ -1,8 +1,9 @@
 /**
- * A Captain dispatch is open only while the work it asked for is going on. An agent that answers
- * the instruction without making a task has finished with it: the target must close when its reply
- * ends, or `openAssignmentFor` stays set for the whole group (refusing `task.assignee`, hiding the
- * agent's questions from the Inbox, and keeping Captain's review watching it).
+ * A Captain dispatch is open only while the work it asked for is going on:
+ * - An `assign_in_group` reply that ends closes the target (`completed`) so `openAssignmentFor`
+ *   stops returning it and unrelated later turns aren't treated as assigned work.
+ * - A `dispatch_task` assignment starts `working` (`taskCount: 1`), follows the task's lifecycle
+ *   (`blocked` -> `blocked`, `in_review` / `done` -> `completed`, `cancelled` / deleted -> `cancelled`).
  */
 import type { InteractionView } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
@@ -13,7 +14,7 @@ import { world } from "./support/world";
 const options = { captain: true, tasks: { runs: false } } as const;
 
 describe("captain assignment closing", () => {
-  it("closes a dispatch the agent answered without making a task", async () => {
+  it("closes an assign_in_group dispatch when the agent's reply ends", async () => {
     const { models } = scriptedModels(() => say("Looked; nothing to change."));
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
@@ -36,9 +37,7 @@ describe("captain assignment closing", () => {
     expect(captain.store.assignment(assigned.assignment.id)!.status).toBe(
       "completed",
     );
-    // What `assignment()` in create_task / draft_task asks, and what the Inbox filter asks.
     expect(captain.store.openAssignmentFor(group.id, ada.id)).toBeUndefined();
-    expect(captain.assignmentForAgent(group.id, ada.id)).toBeUndefined();
     const asked = {
       agentId: ada.id,
       conversationId: group.id,
@@ -76,7 +75,7 @@ describe("captain assignment closing", () => {
     expect(captain.store.openAssignmentFor(group.id, ada.id)).toBeUndefined();
   });
 
-  it("keeps the dispatch open while the agent's reply is still running", async () => {
+  it("keeps the assign_in_group dispatch open only while the reply it started is running", async () => {
     const hold = gate();
     const { models } = scriptedModels(async () => {
       await hold.opened;
@@ -95,8 +94,7 @@ describe("captain assignment closing", () => {
       agentIds: [ada.id],
     });
     try {
-      // Where a task made in this turn is linked to the dispatch, and where a question is relayed.
-      expect(captain.assignmentForAgent(group.id, ada.id)).toMatchObject({
+      expect(captain.store.openAssignmentFor(group.id, ada.id)).toMatchObject({
         assignmentId: assigned.assignment.id,
       });
       expect(
@@ -114,41 +112,8 @@ describe("captain assignment closing", () => {
     }
     await w.settled(group.id, assigned.replyIds[0]!);
     await until(
-      () => captain.assignmentForAgent(group.id, ada.id) === undefined,
+      () => captain.store.openAssignmentFor(group.id, ada.id) === undefined,
     );
-  });
-
-  it("leaves a dispatch that has a task working", async () => {
-    const { models } = scriptedModels((request) =>
-      request.lastRole === "toolResult"
-        ? say("I made the task.")
-        : call("create_task", {
-            title: "Ship the patch",
-            description: "Do the implementation",
-            workspace: "local",
-          }),
-    );
-    const w = await world({ ...options, models });
-    const ada = await w.agent("Ada");
-    const project = await w.project();
-    const group = await w.group(project.id, [ada.id], "with-task");
-    await w.watch(group.id);
-    const captain = w.host.product.captain;
-
-    const assigned = await captain.assign({
-      conversationId: group.id,
-      text: "Ada, implement it.",
-      agentIds: [ada.id],
-    });
-    await w.settled(group.id, assigned.replyIds[0]!);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    expect(
-      captain.store.assignment(assigned.assignment.id)!.targets[0],
-    ).toMatchObject({ agentId: ada.id, taskCount: 1, status: "working" });
-    expect(captain.assignmentForAgent(group.id, ada.id)).toMatchObject({
-      assignmentId: assigned.assignment.id,
-    });
   });
 
   it("closes only the target whose own reply ended", async () => {
@@ -193,44 +158,76 @@ describe("captain assignment closing", () => {
     expect(captain.store.openAssignmentFor(group.id, ada.id)).toBeUndefined();
   });
 
-  it("reopens the target when a task the agent drafted is confirmed after the reply", async () => {
-    const { models } = scriptedModels((request) =>
-      request.lastRole === "toolResult"
-        ? say("Drafted.")
-        : call("draft_task", {
-            title: "Drafted under Captain",
-            goal: "Keep the source visible",
-            acceptance: "The task names the assignment",
-            workspace: "local",
-          }),
-    );
+  it("tracks dispatch_task assignment status across blocked, in_review, done, cancelled, and deleted", async () => {
+    const { models } = scriptedModels(() => say("ok"));
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
     const project = await w.project();
-    const group = await w.group(project.id, [ada.id], "draft-after-reply");
+    const group = await w.group(project.id, [ada.id], "task-lifecycle");
     await w.watch(group.id);
     const captain = w.host.product.captain;
 
-    const assigned = await captain.assign({
+    const one = await captain.dispatchTask({
       conversationId: group.id,
-      text: "Ada, draft the follow-up.",
-      agentIds: [ada.id],
+      title: "Tracked task",
+      description: "Moves through statuses",
+      assignee: ada.id,
+      workspace: "local",
     });
-    await w.settled(group.id, assigned.replyIds[0]!);
-    // A draft is a proposal, not a task: the reply ended with none, so the dispatch closes.
-    await until(
-      () =>
-        captain.store.assignment(assigned.assignment.id)!.targets[0]!.status ===
-        "completed",
-    );
-    const draft = w.rows(group.id).find((row) => row.kind === "task_draft")!;
-    await w.client.call("tasks", "confirmDraft", {
-      conversationId: group.id,
-      messageId: draft.id,
+    expect(captain.store.assignment(one.assignment.id)).toMatchObject({
+      status: "working",
+      targets: [{ agentId: ada.id, taskCount: 1, status: "working" }],
     });
 
-    const after = captain.store.assignment(assigned.assignment.id)!;
-    expect(after.targets[0]).toMatchObject({ taskCount: 1, status: "working" });
-    expect(after.status).toBe("working");
+    await w.client.call("tasks", "update", {
+      taskId: one.task.id,
+      status: "blocked",
+    });
+    expect(captain.store.assignment(one.assignment.id)).toMatchObject({
+      status: "blocked",
+      targets: [{ agentId: ada.id, taskCount: 1, status: "blocked" }],
+    });
+
+    await w.client.call("tasks", "update", {
+      taskId: one.task.id,
+      status: "in_review",
+    });
+    expect(captain.store.assignment(one.assignment.id)).toMatchObject({
+      status: "completed",
+      targets: [{ agentId: ada.id, taskCount: 1, status: "completed" }],
+    });
+
+    await w.client.call("tasks", "update", {
+      taskId: one.task.id,
+      status: "done",
+    });
+    expect(captain.store.assignment(one.assignment.id)).toMatchObject({
+      status: "completed",
+      targets: [{ agentId: ada.id, taskCount: 1, status: "completed" }],
+    });
+
+    await w.client.call("tasks", "update", {
+      taskId: one.task.id,
+      status: "cancelled",
+    });
+    expect(captain.store.assignment(one.assignment.id)).toMatchObject({
+      status: "cancelled",
+      targets: [{ agentId: ada.id, taskCount: 1, status: "cancelled" }],
+    });
+
+    const two = await captain.dispatchTask({
+      conversationId: group.id,
+      title: "Deleted task",
+      description: "Deleted cleanly",
+      assignee: ada.id,
+      status: "backlog",
+      workspace: "local",
+    });
+    await w.client.call("tasks", "delete", { taskId: two.task.id });
+    expect(captain.store.assignment(two.assignment.id)).toMatchObject({
+      status: "cancelled",
+      targets: [{ agentId: ada.id, taskCount: 0, status: "cancelled" }],
+    });
+    void call;
   });
 });

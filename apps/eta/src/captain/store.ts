@@ -332,7 +332,13 @@ export class CaptainStore {
     rootMessageId: string | null;
     captainAgentId: string;
     round: number;
-    targets: readonly { agentId: string; replyId: string | null }[];
+    status?: CaptainAssignmentStatus | undefined;
+    targets: readonly {
+      agentId: string;
+      replyId: string | null;
+      status?: CaptainAssignmentStatus | undefined;
+      taskCount?: number | undefined;
+    }[];
   }): CaptainAssignmentView {
     const id = crypto.randomUUID();
     const now = Date.now();
@@ -341,7 +347,7 @@ export class CaptainStore {
         .query(
           `INSERT INTO captain_assignment
              (id, conversation_id, message_id, root_message_id, captain_agent_id, round, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'dispatched', ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
@@ -350,6 +356,7 @@ export class CaptainStore {
           input.rootMessageId,
           input.captainAgentId,
           input.round,
+          input.status ?? "dispatched",
           now,
           now,
         );
@@ -358,13 +365,15 @@ export class CaptainStore {
           .query(
             `INSERT INTO captain_assignment_target
                (id, assignment_id, agent_id, reply_id, status, task_count, created_at, updated_at)
-             VALUES (?, ?, ?, ?, 'dispatched', 0, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run(
             crypto.randomUUID(),
             id,
             target.agentId,
             target.replyId,
+            target.status ?? "dispatched",
+            target.taskCount ?? 0,
             now,
             now,
           );
@@ -422,50 +431,11 @@ export class CaptainStore {
         };
   }
 
-  linkTask(input: {
-    taskId: string;
-    assignmentId: string;
-    messageId: string;
-    agentId: string;
-  }): void {
-    const now = Date.now();
-    this.#db.transaction(() => {
-      this.#db
-        .query(
-          `UPDATE task SET captain_assignment_id = ?, captain_message_id = ?, updated_at = ?
-            WHERE id = ?`,
-        )
-        .run(input.assignmentId, input.messageId, now, input.taskId);
-      this.#db
-        .query(
-          `UPDATE captain_assignment_target
-              SET task_count = (
-                    SELECT COUNT(*) FROM task
-                     WHERE captain_assignment_id = ? AND created_by_agent = ?
-                  ),
-                  status = 'working', updated_at = ?
-            WHERE assignment_id = ? AND agent_id = ?`,
-        )
-        .run(
-          input.assignmentId,
-          input.agentId,
-          now,
-          input.assignmentId,
-          input.agentId,
-        );
-      this.#db
-        .query(
-          "UPDATE captain_assignment SET status = 'working', updated_at = ? WHERE id = ?",
-        )
-        .run(now, input.assignmentId);
-    })();
-  }
-
   /**
    * The reply a target was dispatched with has ended. A target still `dispatched` then made no task
-   * in it (one made in the turn moved it to `working` at once), so nothing more is coming from it:
-   * it is `completed`, and `openAssignmentFor` stops returning it. A target with a task is left to
-   * `refreshAssignments`. True when a target was closed.
+   * in it, so nothing more is coming from it: it is `completed`, and `openAssignmentFor` stops
+   * returning it. A target with a task is left to `refreshAssignments`. True when a target was
+   * closed.
    */
   closeAnswered(replyId: string): boolean {
     const now = Date.now();
@@ -477,7 +447,7 @@ export class CaptainStore {
             AND NOT EXISTS (
               SELECT 1 FROM task
                WHERE captain_assignment_id = captain_assignment_target.assignment_id
-                 AND created_by_agent = captain_assignment_target.agent_id
+                 AND COALESCE(assignee_agent, created_by_agent) = captain_assignment_target.agent_id
             )
           RETURNING assignment_id`,
       )
@@ -509,13 +479,13 @@ export class CaptainStore {
             SET task_count = (
               SELECT COUNT(*) FROM task
                WHERE captain_assignment_id = t.assignment_id
-                 AND created_by_agent = t.agent_id
+                 AND COALESCE(assignee_agent, created_by_agent) = t.agent_id
             ),
             status = CASE
               WHEN NOT EXISTS (
                 SELECT 1 FROM task
                  WHERE captain_assignment_id = t.assignment_id
-                   AND created_by_agent = t.agent_id
+                   AND COALESCE(assignee_agent, created_by_agent) = t.agent_id
               ) THEN CASE
                 WHEN t.status = 'working' THEN 'cancelled'
                 ELSE t.status
@@ -523,19 +493,19 @@ export class CaptainStore {
               WHEN EXISTS (
                 SELECT 1 FROM task
                  WHERE captain_assignment_id = t.assignment_id
-                   AND created_by_agent = t.agent_id
+                   AND COALESCE(assignee_agent, created_by_agent) = t.agent_id
                    AND status = 'blocked'
               ) THEN 'blocked'
               WHEN NOT EXISTS (
                 SELECT 1 FROM task
                  WHERE captain_assignment_id = t.assignment_id
-                   AND created_by_agent = t.agent_id
+                   AND COALESCE(assignee_agent, created_by_agent) = t.agent_id
                    AND status NOT IN ('done', 'in_review', 'cancelled')
               ) THEN CASE
                 WHEN EXISTS (
                   SELECT 1 FROM task
                    WHERE captain_assignment_id = t.assignment_id
-                     AND created_by_agent = t.agent_id
+                     AND COALESCE(assignee_agent, created_by_agent) = t.agent_id
                      AND status = 'cancelled'
                 ) THEN 'cancelled'
                 ELSE 'completed'
@@ -543,7 +513,7 @@ export class CaptainStore {
               WHEN EXISTS (
                 SELECT 1 FROM task
                  WHERE captain_assignment_id = t.assignment_id
-                   AND created_by_agent = t.agent_id
+                   AND COALESCE(assignee_agent, created_by_agent) = t.agent_id
               ) THEN 'working'
               ELSE t.status
             END`,
@@ -552,11 +522,21 @@ export class CaptainStore {
     for (const { id } of this.#db
       .query<{ id: string }, []>(
         `SELECT id FROM captain_assignment a
-          WHERE a.status IN ('dispatched', 'working')
-             OR (a.status = 'completed' AND EXISTS (
+          WHERE a.status IN ('dispatched', 'working', 'blocked')
+             OR EXISTS (
                SELECT 1 FROM captain_assignment_target t
-                WHERE t.assignment_id = a.id AND t.status IN ('dispatched', 'working')
-             ))`,
+                WHERE t.assignment_id = a.id
+                  AND (
+                    t.status IN ('dispatched', 'working', 'blocked')
+                    OR (
+                      a.status = 'completed'
+                      AND NOT EXISTS (
+                        SELECT 1 FROM captain_assignment_target t2
+                         WHERE t2.assignment_id = a.id AND t2.status != 'cancelled'
+                      )
+                    )
+                  )
+             )`,
       )
       .all())
       this.refreshAssignment(id);

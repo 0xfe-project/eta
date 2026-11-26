@@ -163,4 +163,60 @@ describe("captain and the task graph", () => {
     });
     expect(untouched.text).toBe("Task #3 updated.");
   });
+
+  it("refuses assignee and unknown fields on update_task_fields without mutating the task or recording activity", async () => {
+    const { w, make, use } = await setup();
+    const bola = await w.agent("Bola");
+    const task = make("Target");
+    const beforeTask = w.host.product.board.detail(task.id)!;
+    const beforeActivityCount = w.host.product.board.activity(task.id).length;
+
+    const nonexistentAssignee = await use("update_task_fields", {
+      taskId: task.id,
+      title: "Should not change",
+      assignee: "zzz-not-an-agent",
+    });
+    expect(nonexistentAssignee.isError).toBe(true);
+    expect(nonexistentAssignee.text).toMatch(
+      /invalid arguments for update_task_fields:.*\/assignee.*must not have additional properties/,
+    );
+
+    const realAssignee = await use("update_task_fields", {
+      taskId: task.id,
+      status: "done",
+      assignee: bola.id,
+    });
+    expect(realAssignee.isError).toBe(true);
+    expect(realAssignee.text).toMatch(
+      /invalid arguments for update_task_fields:.*\/assignee.*must not have additional properties/,
+    );
+
+    const unknownFields = await use("update_task_fields", {
+      taskId: task.id,
+      title: "Should not change",
+      foo: "bar",
+      bar: 1,
+    });
+    expect(unknownFields.isError).toBe(true);
+    expect(unknownFields.text).toMatch(
+      /invalid arguments for update_task_fields:.*\/foo.*\/bar.*must not have additional properties/,
+    );
+
+    expect(w.host.product.board.detail(task.id)).toMatchObject({
+      title: beforeTask.title,
+      status: beforeTask.status,
+      assigneeAgentId: beforeTask.assigneeAgentId,
+    });
+    expect(w.host.product.board.activity(task.id)).toHaveLength(
+      beforeActivityCount,
+    );
+
+    const allowed = await use("update_task_fields", {
+      taskId: task.id,
+      title: "Allowed",
+    });
+    expect(allowed.isError).toBe(false);
+    expect(allowed.text).toBe("Task #1 updated.");
+    expect(w.host.product.board.detail(task.id)!.title).toBe("Allowed");
+  });
 });

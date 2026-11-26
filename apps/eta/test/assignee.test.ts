@@ -9,13 +9,16 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { AgentStore } from "../src/agents/store";
+import { ConversationStore } from "../src/conversations/store";
 import {
   applyMigrations,
   loadMigrations,
   openDatabase,
   statementsOf,
 } from "../src/db";
-import { resolveAssignee } from "../src/tasks/assignee";
+import { MachineStore } from "../src/machines/store";
+import { ProjectStore } from "../src/projects/store";
+import { assigneeScopeFor, resolveAssignee } from "../src/tasks/assignee";
 
 const open: ReturnType<typeof openDatabase>[] = [];
 afterEach(() => {
@@ -104,6 +107,83 @@ describe("resolveAssignee", () => {
     expect(resolveAssignee(undefined, agents)).toBeUndefined();
     expect(resolveAssignee("", agents)).toBeUndefined();
     expect(resolveAssignee("  ", agents)).toBeUndefined();
+  });
+
+  it("refuses Captain by id or name and omits Captain from listed candidates", () => {
+    const db = openDatabase(":memory:");
+    open.push(db);
+    applyMigrations(db, loadMigrations());
+    const agents = new AgentStore(db);
+    const ada = agents.create({ name: "Ada" });
+    const captain = agents.create({ name: "Captain", systemRole: "captain" });
+
+    expect(() => resolveAssignee(captain.id, agents)).toThrow(
+      /Captain cannot be assigned/,
+    );
+    expect(() => resolveAssignee("Captain", agents)).toThrow(
+      /Captain cannot be assigned/,
+    );
+    expect(() => resolveAssignee("captain", agents)).toThrow(
+      /Captain cannot be assigned/,
+    );
+
+    let msg = "";
+    try {
+      resolveAssignee("Missing", agents);
+    } catch (error) {
+      msg = (error as Error).message;
+    }
+    expect(msg).toContain(`Ada (${ada.id})`);
+    expect(msg).not.toContain(captain.id);
+  });
+
+  it("restricts group assignees to current non-Captain group members", () => {
+    const db = openDatabase(":memory:");
+    open.push(db);
+    applyMigrations(db, loadMigrations());
+    const agents = new AgentStore(db);
+    const machines = new MachineStore(db);
+    const projects = new ProjectStore(db);
+    const conversations = new ConversationStore(db);
+    const ada = agents.create({ name: "Ada" });
+    const outsider = agents.create({ name: "Bea" });
+    const dupInside = agents.create({ name: "Twin" });
+    const dupOutside = agents.create({ name: "Twin" });
+    const captain = agents.create({ name: "Captain", systemRole: "captain" });
+    const machine = machines.ensurePrimary({
+      name: "desk",
+      home: "/tmp",
+      os: "linux",
+    });
+    const project = projects.create({
+      machineId: machine.id,
+      path: "/tmp/p",
+      name: "Core",
+    });
+    const group = conversations.create({
+      projectId: project.id,
+      kind: "group",
+      name: "Core",
+      agentIds: [ada.id, dupInside.id, captain.id],
+    });
+    const scope = assigneeScopeFor(group.id, conversations);
+
+    expect(resolveAssignee(ada.id, agents, scope)).toBe(ada.id);
+    expect(resolveAssignee("ada", agents, scope)).toBe(ada.id);
+    expect(resolveAssignee("Twin", agents, scope)).toBe(dupInside.id);
+
+    expect(() => resolveAssignee(outsider.id, agents, scope)).toThrow(
+      /is not a member of group "Core"/,
+    );
+    expect(() => resolveAssignee("Bea", agents, scope)).toThrow(
+      /is not a member of group "Core"/,
+    );
+    expect(() => resolveAssignee(dupOutside.id, agents, scope)).toThrow(
+      /is not a member of group "Core"/,
+    );
+    expect(() => resolveAssignee(captain.id, agents, scope)).toThrow(
+      /Captain cannot be assigned/,
+    );
   });
 });
 

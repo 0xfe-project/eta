@@ -296,6 +296,7 @@ describe("a run is Captain's", () => {
         "get_run",
         "search_runs",
         "assign_in_group",
+        "dispatch_task",
         "post_in_group",
         "captain_list_tasks",
         "list_routines",

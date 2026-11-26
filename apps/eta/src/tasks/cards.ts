@@ -29,7 +29,11 @@ import type { ConversationStore } from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
 import type { TaskRecord, TaskStore } from "./store";
 import { draftStatus } from "@eta/client-contracts";
-import { resolveAssignee } from "./assignee";
+import {
+  assigneeScopeFor,
+  CAPTAIN_ASSIGNEE_ERROR,
+  resolveAssignee,
+} from "./assignee";
 
 /** What the agent says about the work it proposes. */
 export interface DraftInput {
@@ -130,9 +134,19 @@ export class TaskCards {
       throw new Error(`no such conversation: ${input.conversationId}`);
     const title = input.draft.title.trim();
     if (title === "") throw new Error("a task needs a title");
-    // An assignee nobody is, or more than one agent is, is refused now, while the proposer can
-    // still name it again; the draft keeps the id, so the card and the task agree.
-    const assignee = resolveAssignee(input.draft.assignee, this.#deps.agents);
+    // An assignee nobody is, or not in this group, or Captain, is refused now, while the proposer
+    // can still name it again; the draft keeps the id, so the card and the task agree.
+    const scope = assigneeScopeFor(input.conversationId, conversations);
+    const assignee = resolveAssignee(
+      input.draft.assignee,
+      this.#deps.agents,
+      scope,
+    );
+    if (
+      assignee === undefined &&
+      this.#deps.agents.get(input.agentId)?.systemRole === "captain"
+    )
+      throw new Error(CAPTAIN_ASSIGNEE_ERROR);
     // The draft belongs to the turn that is writing it: that row says both where the draft came
     // from (the range of messages below) and where the page should draw it.
     const turn = this.#turnOf(input.conversationId, input.agentId);
@@ -213,9 +227,22 @@ export class TaskCards {
     if (draft.discarded) throw new Error("that draft was discarded");
     const title = (input.fields.title ?? draft.title).trim();
     if (title === "") throw new Error("a task needs a title");
-    // Resolved again: a draft written before assignees were resolved may hold a name, and the
-    // agent it named may have been renamed or removed since.
-    const assignee = resolveAssignee(draft.assignee, this.#deps.agents);
+    // Resolved again: a draft written before assignees were resolved may hold a name, the agent
+    // it named may have been renamed, removed, or removed from the group since.
+    const scope = assigneeScopeFor(
+      input.conversationId,
+      this.#deps.conversations,
+    );
+    const assignee = resolveAssignee(draft.assignee, this.#deps.agents, scope);
+    if (assignee === undefined && row.agentId !== null) {
+      const drafter = this.#deps.agents.get(row.agentId);
+      if (drafter?.systemRole === "captain")
+        throw new Error(CAPTAIN_ASSIGNEE_ERROR);
+      if (scope?.memberIds !== undefined && !scope.memberIds.has(row.agentId))
+        throw new Error(
+          `agent "${drafter?.name ?? row.agentId}" (${row.agentId}) is no longer a member of group "${scope.conversationName ?? ""}"`,
+        );
+    }
     return db.transaction(() => {
       const task = tasks.create({
         title,

@@ -162,6 +162,10 @@ describe("a task draft", () => {
     );
     expect(first.task.number).toBe(1);
     const bola = await w.agent("Bola");
+    await w.client.call("conversations", "invite", {
+      conversationId: group.id,
+      agentId: bola.id,
+    });
     // The draft comes through the agent tool, as it would in a real conversation.
     const draft2 = w.host.product.board.draft({
       conversationId: group.id,
@@ -198,6 +202,10 @@ describe("a task draft", () => {
     // #44: a draft named its assignee `林老师`, the row kept the name, and no run could find it.
     const { w, ada, group } = await drafted();
     const lin = await w.agent("林老师");
+    await w.client.call("conversations", "invite", {
+      conversationId: group.id,
+      agentId: lin.id,
+    });
     const draft = w.host.product.board.draft({
       conversationId: group.id,
       agentId: ada.id,
@@ -243,6 +251,82 @@ describe("a task draft", () => {
     expect(
       w.rows(group.id).filter((row) => row.kind === "task_draft"),
     ).toHaveLength(1);
+  });
+
+  it("refuses assignees outside the group or Captain on draft and re-checks membership at confirmation", async () => {
+    const w = await world({ captain: true, tasks: { runs: false } });
+    const ada = await w.agent("Ada");
+    const bola = await w.agent("Bola");
+    const outsider = await w.agent("Outsider");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id, bola.id], "scoped-draft");
+    const captain = (await w.client.call("captain", "ensure", {})) as {
+      identity: { agentId: string };
+    };
+
+    expect(() =>
+      w.host.product.board.draft({
+        conversationId: group.id,
+        agentId: ada.id,
+        draft: {
+          title: "Outsider work",
+          goal: "Blocked",
+          acceptance: "Never drafted",
+          workspace: "local",
+          assignee: outsider.id,
+        },
+      }),
+    ).toThrow(/not a member of group "scoped-draft"/);
+
+    for (const target of [captain.identity.agentId, "Captain"])
+      expect(() =>
+        w.host.product.board.draft({
+          conversationId: group.id,
+          agentId: ada.id,
+          draft: {
+            title: "Captain work",
+            goal: "Blocked",
+            acceptance: "Never drafted",
+            workspace: "local",
+            assignee: target,
+          },
+        }),
+      ).toThrow(/Captain cannot be assigned/);
+
+    // Valid draft for Bola, then Bola leaves the group before user confirms.
+    const assignedDraft = w.host.product.board.draft({
+      conversationId: group.id,
+      agentId: ada.id,
+      draft: {
+        title: "For Bola",
+        goal: "Needs member",
+        acceptance: "Checks on confirm",
+        workspace: "local",
+        assignee: bola.id,
+      },
+    });
+    // Self-assigned draft by Bola as well, before Bola leaves.
+    const selfDraft = w.host.product.board.draft({
+      conversationId: group.id,
+      agentId: bola.id,
+      draft: {
+        title: "Self draft",
+        goal: "Needs member",
+        acceptance: "Checks on confirm",
+        workspace: "local",
+      },
+    });
+    await w.client.call("conversations", "remove", {
+      conversationId: group.id,
+      agentId: bola.id,
+    });
+
+    await expect(confirm(w, group.id, assignedDraft.id)).rejects.toThrow(
+      /not a member of group "scoped-draft"/,
+    );
+    await expect(confirm(w, group.id, selfDraft.id)).rejects.toThrow(
+      /no longer a member of group "scoped-draft"/,
+    );
   });
 
   it("confirms once: a second confirm, edited or not, is the same task", async () => {

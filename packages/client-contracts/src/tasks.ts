@@ -6,7 +6,9 @@
  * the product's board, not the session's own todo list (`Task` in `data.ts`): the two have nothing
  * in common but the word.
  *
- * Only agents make tasks, and the agent that made one executes it: every run is a session of that
+ * Tasks are created by agents (`draft_task`, `create_task`, `create_subtask`) with an optional
+ * `assignee`, or by the user via `tasks.create` with an explicit `assignee`. A task's executor is
+ * `assigneeAgentId ?? createdBy.agentId`, fixed at creation time: every run is a session of that
  * agent in a workspace of the task's project (`TaskWorkspace`). The user confirms the draft that
  * starts it, moves it between statuses, comments (a comment reaches the executor: it steers the run
  * that is going, or wakes the task into another run in the same session when none is), interrupts a
@@ -123,8 +125,10 @@ export interface BoardTaskView {
   title: string;
   status: BoardTaskStatus;
   /**
-   * Who made it, and so who executes it when it is an agent. A task made before tasks ran has the
-   * user here and no executor: it stays a note on the board.
+   * Who made it, and so who executes it when it is an agent and `assigneeAgentId` is null. Tasks
+   * created by the user via `tasks.create` have `kind: "user"` and an explicit `assigneeAgentId`;
+   * legacy tasks made before tasks ran have `kind: "user"` and `assigneeAgentId: null`, leaving
+   * them as notes on the board with no executor.
    */
   createdBy: TaskActor & { kind: "user" | "agent" };
   /**

@@ -105,8 +105,13 @@ describe("the first start of Captain", () => {
       expect(resolveNamed([name], members, "someone-else").ids).toEqual([
         captain,
       ]);
-      expect(resolveAssignee(name.replace(/^@/, ""), agents)).toBe(captain);
+      expect(() => resolveAssignee(name.replace(/^@/, ""), agents)).toThrow(
+        /Captain cannot be assigned/,
+      );
     }
+    expect(() => resolveAssignee(captain, agents)).toThrow(
+      /Captain cannot be assigned/,
+    );
     // The user agent is still reachable by its id.
     expect(resolveNamed(["user-captain"], members, "x").ids).toEqual([
       "user-captain",
