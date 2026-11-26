@@ -33,6 +33,7 @@ import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { parseUpstream } from "@eta/releases";
 import { $ } from "bun";
+import { bunExecutable } from "./bun-executable";
 import { writeEmbedded } from "./embed";
 import { thirdPartyNotices } from "./notices";
 
@@ -61,7 +62,7 @@ writeFileSync(join(web, "THIRD_PARTY_NOTICES.md"), thirdPartyNotices(root));
 
 // The daemon for every platform it runs on: what this host keeps its machines at and installs new
 // ones from (`apps/eta/src/machines/builds.ts`).
-await $`bun run --cwd ${join(root, "apps", "daemon")} build:all`;
+await $`${bunExecutable()} run --cwd ${join(root, "apps", "daemon")} build:all`;
 const daemons = join(root, "apps", "daemon", "out", "dist");
 const { version } = JSON.parse(
   readFileSync(join(daemons, "manifest.json"), "utf8"),
@@ -104,6 +105,6 @@ const defines = [
     : []),
 ].flatMap((define) => ["--define", define]);
 const outfile = process.platform === "win32" ? "eta-host.exe" : "eta-host";
-await $`bun build --compile --target=bun ${defines} ${externals} ${entry} --outfile ${join(out, outfile)}`;
+await $`${bunExecutable()} build --compile --target=bun ${defines} ${externals} ${entry} --outfile ${join(out, outfile)}`;
 
 console.log(`built the host ${version} in ${out}`);
