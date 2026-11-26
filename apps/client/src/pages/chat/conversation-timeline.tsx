@@ -6,6 +6,7 @@ import type {
 import type { Bounds, JSX, ListRef, ViewRef } from "nsh";
 import type { TextSelection } from "../../components/eta-editor";
 import type { DeliveryActions } from "./composer-delivery";
+import { isCaptainOutcome } from "@eta/client-contracts";
 import { cleanup, computed, effect, List, Overlay, signal, View } from "nsh";
 import { onWindows } from "../../app/platform";
 import {
@@ -90,7 +91,12 @@ export function ConversationTimeline(props: {
   let transcriptList: ListRef | undefined;
   const firstVisibleId = signal<string>();
   const phone = () => props.phone;
-  const sameFailures = computed(() => sameFailureAsNext(props.rows));
+  // Captain's proposal outcome is context for Captain's next turn; the proposal card
+  // already shows how it ended, so the timeline skips it (matching apps/web/src/lib/timeline.ts).
+  const rows = computed(() =>
+    props.rows.filter((message) => !isCaptainOutcome(message)),
+  );
+  const sameFailures = computed(() => sameFailureAsNext(rows()));
   // The owning conversation is keyed by id. Always read the current row. Once it is a task card
   // (confirmed here, whose row update may come before the reply, or in another window) the form
   // has nothing left to confirm and closes; the card itself is the way to the task.
@@ -98,7 +104,7 @@ export function ConversationTimeline(props: {
   const selected = () => {
     const id = reading();
     return id && props.accessible
-      ? props.rows.find((row) => row.id === id && row.kind === "task_draft")
+      ? rows().find((row) => row.id === id && row.kind === "task_draft")
       : undefined;
   };
   const actions = new Map<string, () => void>();
@@ -135,7 +141,7 @@ export function ConversationTimeline(props: {
     transcriptList?.scrollToOffset({ offset, animated }),
   );
   props.revealer?.((replyId) => {
-    const index = questionRowIndex(props.rows, replyId);
+    const index = questionRowIndex(rows(), replyId);
     if (index !== undefined)
       transcriptList?.scrollToIndex({
         index,
@@ -161,9 +167,9 @@ export function ConversationTimeline(props: {
     pendingFocus = undefined;
     clearTimeout(focusTimer);
     top = undefined;
-    const rows = props.rows;
+    const currentRows = rows();
     void transcriptList?.measureScrollPosition().then((position) => {
-      const id = position && rows[position.index]?.id;
+      const id = position && currentRows[position.index]?.id;
       if (id && reading() === message.id) top = { id, offset: position.offset };
     });
     props.onReadDraft?.();
@@ -173,11 +179,11 @@ export function ConversationTimeline(props: {
     const draft = reading();
     if (!draft) return;
     // The row, whether still a draft or by now the task's card: focus goes back to its action.
-    const current = props.rows.find((row) => row.id === draft);
+    const current = rows().find((row) => row.id === draft);
     reading.set(undefined);
     if (top) {
       const { id, offset } = top;
-      const index = props.rows.findIndex((row) => row.id === id);
+      const index = rows().findIndex((row) => row.id === id);
       if (index >= 0)
         transcriptList?.scrollToIndex({
           index,
@@ -195,7 +201,7 @@ export function ConversationTimeline(props: {
         focus();
         return;
       }
-      const index = props.rows.findIndex((row) => row.id === current.id);
+      const index = rows().findIndex((row) => row.id === current.id);
       if (index < 0) {
         timelineFocus?.focus();
         return;
@@ -288,7 +294,7 @@ export function ConversationTimeline(props: {
           ref={(node) => {
             transcriptList = node;
           }}
-          each={props.rows}
+          each={rows()}
           keyExtractor={(message) => message.id}
           initialScrollAtEnd
           // design-value: a virtual list's first guess at a row's height, not a drawn size
@@ -459,7 +465,7 @@ export function ConversationTimeline(props: {
             <Each of={["agent", "user"] as const}>
               {(author) => {
                 const entries = () =>
-                  props.rows
+                  rows()
                     .map((message, index) => ({ message, index }))
                     .filter((entry) => entry.message.author === author())
                     .slice(-12);
