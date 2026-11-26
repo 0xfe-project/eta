@@ -130,3 +130,103 @@ test("a deleted artifact or task is named but cannot be opened", async () => {
   expect(app.count("label:Open artifact “Early benchmark draft”")).toBe(0);
   expect(app.count("label:Open task #9 “Draft the old login copy”")).toBe(0);
 });
+
+const narrowFixture = "./fixtures/task-thread-narrow.tsx";
+const longTitle = "Revert PR #957 (Antigravity ACP auto-discovery & preset)";
+const deletedArtifactTitle =
+  "Old draft (Antigravity ACP auto-discovery & preset)";
+const deletedTaskTitle =
+  "Removed PR #958 (Antigravity ACP auto-discovery & preset)";
+
+test("narrow zh panel keeps quotes attached to long target titles and preserves link interaction", async () => {
+  const app = await open(narrowFixture, {
+    width: 360,
+    height: 900,
+    locale: "zh-CN",
+    platform: "macos",
+  });
+  await app.waitUntil(() =>
+    app.texts().some((t) => t.includes(`添加了前置任务「${longTitle}」`)),
+  );
+  await app.wait(50);
+  const texts = app.texts();
+  expect(texts).toContain(`添加了前置任务「${longTitle}」`);
+  expect(texts).toContain(`被阻塞：「${longTitle}」已取消`);
+  expect(texts).toContain(`发布了产物「${longTitle}」`);
+  expect(texts).toContain(`发布了产物「${deletedArtifactTitle}」`);
+  expect(texts).toContain(`添加了前置任务「${deletedTaskTitle}」`);
+  expect(texts).toContain("（已删除）");
+  expect(texts).not.toContain("添加了前置任务「");
+  expect(texts).not.toContain("」");
+  expect(texts).not.toContain("」已取消");
+
+  const taskLabel = `label:打开任务 #957「${longTitle}」`;
+  const artifactLabel = `label:打开产物「${longTitle}」`;
+  expect(app.count(taskLabel)).toBe(2);
+  expect(app.count(artifactLabel)).toBe(1);
+  expect(app.count(`label:打开产物「${deletedArtifactTitle}」`)).toBe(0);
+  expect(app.count(`label:打开任务 #958「${deletedTaskTitle}」`)).toBe(0);
+  expect(app.accessibility(`${taskLabel} >> nth=0`)).toMatchObject({
+    role: "link",
+    label: `打开任务 #957「${longTitle}」`,
+  });
+
+  const actorLayout = app.layout("text:我 >> nth=0")!;
+  const sentenceLayout = app.layout(`${taskLabel} >> nth=0`)!;
+  expect(sentenceLayout.x + sentenceLayout.width).toBeLessThanOrEqual(360);
+  expect(sentenceLayout.height).toBeLessThanOrEqual(42);
+  expect(sentenceLayout.y).toBe(actorLayout.y);
+
+  const spanSelector = `${artifactLabel} >> text:${longTitle}`;
+  expect(app.spanStyle(spanSelector)).toMatchObject({
+    color: "#111111ff",
+    underline: false,
+  });
+  await app.hover(spanSelector);
+  expect(app.spanStyle(spanSelector)).toMatchObject({
+    color: "#006cb5ff",
+    underline: true,
+  });
+
+  await app.press(`${taskLabel} >> nth=0`);
+  expect(app.texts()).toContain("opened task t957");
+  await app.press(spanSelector);
+  expect(app.texts()).toContain("opened artifact art-long v1");
+});
+
+test("narrow en panel keeps quotes and suffixes inline around long target titles", async () => {
+  const app = await open(narrowFixture, {
+    width: 320,
+    height: 900,
+    locale: "en-US",
+    platform: "macos",
+  });
+  await app.waitUntil(() =>
+    app.texts().some((t) => t.includes(`added prerequisite “${longTitle}”`)),
+  );
+  await app.wait(50);
+  const texts = app.texts();
+  expect(texts).toContain(`added prerequisite “${longTitle}”`);
+  expect(texts).toContain(`was blocked: “${longTitle}” was cancelled`);
+  expect(texts).toContain(`published artifact “${longTitle}”`);
+  expect(texts).toContain(`published artifact “${deletedArtifactTitle}”`);
+  expect(texts).toContain(`added prerequisite “${deletedTaskTitle}”`);
+  expect(texts).toContain("(deleted)");
+  expect(texts).not.toContain("added prerequisite “");
+  expect(texts).not.toContain("”");
+  expect(texts).not.toContain("” was cancelled");
+
+  const taskLabel = `label:Open task #957 “${longTitle}”`;
+  expect(app.count(taskLabel)).toBe(2);
+  expect(app.count(`label:Open artifact “${deletedArtifactTitle}”`)).toBe(0);
+  expect(app.count(`label:Open task #958 “${deletedTaskTitle}”`)).toBe(0);
+
+  const actorLayout = app.layout("text:Me >> nth=0")!;
+  const sentenceLayout = app.layout(`${taskLabel} >> nth=0`)!;
+  expect(sentenceLayout.x + sentenceLayout.width).toBeLessThanOrEqual(320);
+  expect(sentenceLayout.height).toBeLessThanOrEqual(42);
+  expect(sentenceLayout.y).toBe(actorLayout.y);
+
+  await app.press(`${taskLabel} >> nth=1`);
+  expect(app.texts()).toContain("opened task t957");
+});
