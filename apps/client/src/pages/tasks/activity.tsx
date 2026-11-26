@@ -12,15 +12,19 @@ import {
   parentEntry,
   subtaskEntry,
 } from "@eta/client-contracts";
-import { signal, View } from "nsh";
+import { signal, Text, View } from "nsh";
 import {
   Caption,
   colors,
   focusRing,
+  fontFamily,
+  Fonts,
   Icon,
   Label,
   Markdown,
   row,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { AgentFace, UserFace } from "../../components/agent-face";
 import { EmptyState } from "../../components/empty-state";
@@ -306,6 +310,9 @@ export function TaskActivity(props: {
   onArtifact?: (artifact: ArtifactView, version?: number) => void;
 }) {
   const host = useHost();
+  const c = colors();
+  const fonts = Fonts();
+  const type = textFaces();
   // What a named task or artifact is now: one gone, or out of this board's reach, cannot be opened.
   follow(() => (props.onTask ? "tasks" : undefined));
   follow(() => (props.onArtifact ? "artifacts" : undefined));
@@ -351,54 +358,83 @@ export function TaskActivity(props: {
         : tasks.find((item) => item.id === target.taskId);
     return task ? { open: () => open(task.id) } : "gone";
   };
-  /** A target's name in its sentence: a link while it can be opened, marked once it is gone. */
-  const TargetLink = (link: { target: ActivityTarget; name: string }) => {
-    const c = colors();
-    const hovered = signal(false);
-    const state = () => resolve(link.target);
+  /**
+   * A sentence around a named target, rendered as one inline paragraph so quotes and trailing
+   * words wrap continuously with the title. While the target can be opened, the paragraph carries
+   * the link role, label and keyboard focus ring, and the title span highlights on hover or focus.
+   */
+  const TargetSentence = (sentence: {
+    target: ActivityTarget;
+    parts: [string, string, string];
+  }) => {
+    const focused = signal(false);
+    const state = () => resolve(sentence.target);
     const label = () =>
-      link.target.kind === "artifact"
-        ? uiText("activityOpenArtifact", { title: link.name })
+      sentence.target.kind === "artifact"
+        ? uiText("activityOpenArtifact", { title: sentence.parts[1] })
         : uiText("activityOpenTask", {
-            number: link.target.number,
-            title: link.target.title || `#${link.target.number}`,
+            number: sentence.target.number,
+            title: sentence.target.title || `#${sentence.target.number}`,
           });
     return (
       <If
         when={typeof state() === "object" ? state() : undefined}
         else={
-          <Label variant="caption" tone="muted">
-            {link.name}
+          <Label
+            variant="caption"
+            tone="muted"
+            style={{ flexShrink: 1, minWidth: 0 }}
+          >
+            {`${sentence.parts[0]}${sentence.parts[1]}${sentence.parts[2]}`}
           </Label>
         }
       >
-        {(target) => (
-          <View
-            role="link"
-            accessibilityLabel={label()}
-            onPress={() => (target() as { open: () => void }).open()}
-            onMouseEnter={() => hovered.set(canHover)}
-            onMouseLeave={() => hovered.set(false)}
-            focusVisibleStyle={focusRing(c())}
-            hitSlop={
-              touchScreen
-                ? { top: 12, bottom: 12, left: 6, right: 6 }
-                : undefined
-            }
-            style={{ flexShrink: 1, minWidth: 0, cursor: "pointer" }}
-          >
-            <Label
-              variant="caption"
-              tone={hovered() ? "blue" : "ink"}
+        {(target) => {
+          const open = () => (target() as { open: () => void }).open();
+          return (
+            <Text
+              role="link"
+              accessibilityLabel={label()}
+              onPress={open}
+              onFocus={() => focused.set(true)}
+              onBlur={() => focused.set(false)}
+              focusVisibleStyle={focusRing(c())}
+              hitSlop={
+                touchScreen
+                  ? { top: 12, bottom: 12, left: 6, right: 6 }
+                  : undefined
+              }
               style={{
-                textDecorationLine: hovered() ? "underline" : "none",
-                textDecorationThickness: 1,
+                fontFamily: fontFamily(fonts().interface),
+                ...textStyle(type("caption")),
+                fontWeight: weight.regular,
+                color: c().muted,
+                flexShrink: 1,
+                minWidth: 0,
               }}
             >
-              {link.name}
-            </Label>
-          </View>
-        )}
+              {sentence.parts[0]}
+              <Text
+                focusable={false}
+                onPress={open}
+                hoverStyle={
+                  canHover
+                    ? { color: c().blue, textDecorationLine: "underline" }
+                    : undefined
+                }
+                style={{
+                  color: focused() ? c().blue : c().ink,
+                  textDecorationLine: focused() ? "underline" : "none",
+                  textDecorationThickness: 1,
+                  cursor: "pointer",
+                }}
+              >
+                {sentence.parts[1]}
+              </Text>
+              {sentence.parts[2]}
+            </Text>
+          );
+        }}
       </If>
     );
   };
@@ -417,66 +453,73 @@ export function TaskActivity(props: {
       return target?.kind === "artifact" && resolve(target) === "gone";
     };
     return (
-      <View style={{ ...row, gap: space[4], flexWrap: "wrap" }}>
-        <Label variant="caption" tone="muted">
-          {name(lineActor(line.entry))}
-        </Label>
-        <If when={mark()}>
-          {(glyph) => (
-            <Icon name={glyph().name} size={icon.sm} tone={glyph().tone} />
-          )}
-        </If>
-        <If
-          when={parts()}
-          else={
-            <Label
-              variant="caption"
-              tone={line.entry.kind === "run_failed" ? "red" : "muted"}
-            >
-              {taskActivitySentence(line.entry)}
-            </Label>
-          }
+      <View style={{ ...row, alignItems: "flex-start", gap: space[4] }}>
+        <View
+          style={{
+            ...row,
+            gap: space[4],
+            flexShrink: 0,
+            minHeight: type("caption").line,
+          }}
         >
-          {(part) => (
-            // The sentence around its target's name, the name alone pressable.
-            <View style={{ ...row, flexWrap: "wrap", flexShrink: 1 }}>
-              <If when={part()[0]}>
-                <Label variant="caption" tone="muted">
-                  {part()[0]}
-                </Label>
-              </If>
-              <TargetLink
-                target={activityTarget(line.entry)!}
-                name={part()[1]}
-              />
-              <If when={part()[2]}>
-                <Label variant="caption" tone="muted">
-                  {part()[2]}
-                </Label>
-              </If>
-            </View>
-          )}
-        </If>
-        <If when={gone()}>
-          <Label variant="caption" tone="faint">
-            {uiText("activityArtifactDeleted")}
+          <Label variant="caption" tone="muted">
+            {name(lineActor(line.entry))}
           </Label>
-        </If>
-        <Label variant="caption" tone="muted">
-          {taskMoment(line.entry.createdAt)}
-        </Label>
-        <If when={props.onLog && run()}>
-          {(item) => (
-            <View
-              role="button"
-              accessibilityLabel={uiText("executionLog")}
-              onPress={() => props.onLog?.(item())}
-              style={{ cursor: "pointer" }}
-            >
-              <Label variant="caption">{uiText("executionLog")}</Label>
-            </View>
-          )}
-        </If>
+          <If when={mark()}>
+            {(glyph) => (
+              <Icon name={glyph().name} size={icon.sm} tone={glyph().tone} />
+            )}
+          </If>
+        </View>
+        <View
+          style={{
+            ...row,
+            gap: space[4],
+            flexWrap: "wrap",
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          <If
+            when={parts()}
+            else={
+              <Label
+                variant="caption"
+                tone={line.entry.kind === "run_failed" ? "red" : "muted"}
+                style={{ flexShrink: 1, minWidth: 0 }}
+              >
+                {taskActivitySentence(line.entry)}
+              </Label>
+            }
+          >
+            {(part) => (
+              <TargetSentence
+                target={activityTarget(line.entry)!}
+                parts={part()}
+              />
+            )}
+          </If>
+          <If when={gone()}>
+            <Label variant="caption" tone="faint">
+              {uiText("activityArtifactDeleted")}
+            </Label>
+          </If>
+          <Label variant="caption" tone="muted">
+            {taskMoment(line.entry.createdAt)}
+          </Label>
+          <If when={props.onLog && run()}>
+            {(item) => (
+              <View
+                role="button"
+                accessibilityLabel={uiText("executionLog")}
+                onPress={() => props.onLog?.(item())}
+                style={{ cursor: "pointer" }}
+              >
+                <Label variant="caption">{uiText("executionLog")}</Label>
+              </View>
+            )}
+          </If>
+        </View>
       </View>
     );
   };
