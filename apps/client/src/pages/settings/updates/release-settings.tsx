@@ -5,25 +5,21 @@ import {
   Button,
   colors,
   focusRing,
-  fontFamily,
-  Fonts,
   Icon,
   Label,
   row,
-  textFaces,
 } from "../../../components";
-import { LayoutSelect } from "../../../components/select";
 import { control, icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { clientPlatform } from "../../../services/client-update";
 import { useHost } from "../../../services/host";
+import { UpdateChannelMenu } from "./channel";
 import { ClientChannelSelect } from "./client-app";
 import { GroupHeading } from "./group-heading";
 
 /** A setting row, and the channel menu with one of its items. */
 const settingRow = 56;
 const channelWidth = 160;
-const itemRow = 28;
 
 function SettingBand(props: {
   title: string;
@@ -88,17 +84,11 @@ function ChannelRow(props: {
 
 export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
   const c = colors();
-  const type = textFaces();
-  const fonts = Fonts();
   const host = useHost();
   const { advanced, check, source, token, editable, save, edit } = props.update;
   const advancedOpen = () =>
     advanced() ??
     ((!!source() && source()!.source !== "build") || !!check()?.error);
-  const channelName = () =>
-    check()?.prerelease
-      ? uiText("updatePreReleases")
-      : uiText("updateFullReleases");
   const sourceKind = () =>
     source()?.source === "env"
       ? uiText("updateEnvironment")
@@ -128,56 +118,25 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
         <GroupHeading title={uiText("whichVersions")} phone={props.phone} />
         <If when={check()}>
           <ChannelRow title={uiText("channelHost")} phone={props.phone}>
-            <LayoutSelect
-              accessibilityLabel={uiText("channel")}
-              items={[
-                { value: "full", title: uiText("updateFullReleases") },
-                { value: "pre", title: uiText("updatePreReleases") },
+            <UpdateChannelMenu
+              label={uiText("channel")}
+              choices={[
+                { value: "full", label: uiText("updateFullReleases") },
+                { value: "pre", label: uiText("updatePreReleases") },
               ]}
               value={check()?.prerelease ? "pre" : "full"}
-              cover={false}
-              offset={2}
               disabled={!editable() || !host.can("upgrade.setPrerelease")}
-              popupStyle={{
-                borderWidth: 1,
-                borderColor: c().strong,
-                backgroundColor: c().canvas,
-              }}
-              itemStyle={{
-                fontFamily: fontFamily(fonts().interface),
-                color: c().ink,
-                fontSize: type("small").size,
-                minHeight: itemRow,
-                paddingHorizontal: space[12],
-              }}
-              trigger={
-                <View
-                  style={{
-                    ...row,
-                    height: props.phone ? space[32] : space[24],
-                    gap: space[4],
-                    paddingHorizontal: space[12],
-                    borderWidth: 1,
-                    borderColor: c().strong,
-                    backgroundColor: c().canvas,
-                  }}
-                >
-                  <Label variant="small" lines={1} style={{ flex: 1 }}>
-                    {channelName()}
-                  </Label>
-                  <Icon name="down" size={icon.sm} tone="muted" />
-                </View>
-              }
-              onChange={({ value }) => {
-                if (value && (value === "pre") !== check()?.prerelease)
-                  void save("setPrerelease", { prerelease: value === "pre" });
+              onChange={(value) => {
+                if ((value === "pre") !== check()?.prerelease)
+                  return save("setPrerelease", { prerelease: value === "pre" });
+                return true;
               }}
             />
           </ChannelRow>
         </If>
         <If when={clientPlatform === "desktop"}>
           <ChannelRow title={uiText("desktopApp")} phone={props.phone}>
-            <ClientChannelSelect phone={props.phone} />
+            <ClientChannelSelect />
           </ChannelRow>
         </If>
         <View

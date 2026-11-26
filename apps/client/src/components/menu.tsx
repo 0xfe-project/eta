@@ -32,19 +32,17 @@ export function menuPresentation(layout: Layout): MenuPresentation {
 export type MenuEngine = "menu" | "popover" | "sheet";
 
 /**
- * Which NSH component draws a presentation on this platform. NSH's `Menu`
- * chooses by platform, not by the window: a popup at the trigger on the
- * desktops, a sheet at the bottom on phones and tablets (NSH 0.6 keeps a
- * popup only on an iPad in a regular width). So `Menu` draws only what it
- * draws there anyway, a `Popover` draws the popup on a touch platform and a
- * `Sheet` the sheet on a desktop.
+ * Which NSH component draws a presentation on this platform. A popup is
+ * NSH's `Menu` on a desktop and a `Popover` on touch. A sheet is always eta's
+ * `Sheet`: unlike NSH's `Menu`, it lets a short menu keep the same framing
+ * and minimum height as a long one.
  */
 export function menuEngine(
   presentation: MenuPresentation,
   desktop: boolean = platform.desktop,
 ): MenuEngine {
   if (presentation === "popup") return desktop ? "menu" : "popover";
-  return desktop ? "sheet" : "menu";
+  return "sheet";
 }
 
 interface MediaQueryHost {
@@ -169,8 +167,8 @@ export function MenuFrame(props: {
   };
   // The popover's rows scroll within the room on its side, as a menu's do.
   const room = signal<number | undefined>(undefined);
-  const content = (native: boolean) => (
-    <MenuHost.Provider value={{ native, sheet: sheet(), close }}>
+  const contentBody = (native: boolean) => (
+    <>
       <If when={sheet()}>
         <Grabber />
         {props.sheetHeader}
@@ -181,6 +179,11 @@ export function MenuFrame(props: {
           {(text) => <MenuEmpty text={text()} native={native} />}
         </If>
       </Compact>
+    </>
+  );
+  const content = (native: boolean) => (
+    <MenuHost.Provider value={{ native, sheet: sheet(), close }}>
+      {contentBody(native)}
     </MenuHost.Provider>
   );
   const viaMenu = () => (
@@ -203,27 +206,29 @@ export function MenuFrame(props: {
     </Menu>
   );
   const viaPopover = () => (
-    <Popover
-      placement="bottom"
-      align={props.align ?? "start"}
-      offset={props.offset ?? 3}
-      margin={props.margin ?? 8}
-      open={opened()}
-      onOpenChange={(event) => change(event.open)}
-      onPosition={(event) => room.set(event.available.height)}
-      popupStyle={{ ...props.popupStyle, ...rise().style }}
-      popupStartingStyle={rise().starting}
-      popupEndingStyle={rise().ending}
-      trigger={props.trigger}
-    >
-      <SmoothScroll
-        role="menu"
-        style={{ maxHeight: room(), flexShrink: 1 }}
-        scrollbar={false}
+    <MenuHost.Provider value={{ native: false, sheet: false, close }}>
+      <Popover
+        placement="bottom"
+        align={props.align ?? "start"}
+        offset={props.offset ?? 3}
+        margin={props.margin ?? 8}
+        open={opened()}
+        onOpenChange={(event) => change(event.open)}
+        onPosition={(event) => room.set(event.available.height)}
+        popupStyle={{ ...props.popupStyle, ...rise().style }}
+        popupStartingStyle={rise().starting}
+        popupEndingStyle={rise().ending}
+        trigger={props.trigger}
       >
-        {content(false)}
-      </SmoothScroll>
-    </Popover>
+        <SmoothScroll
+          role="menu"
+          style={{ maxHeight: room(), flexShrink: 1 }}
+          scrollbar={false}
+        >
+          {contentBody(false)}
+        </SmoothScroll>
+      </Popover>
+    </MenuHost.Provider>
   );
   const viaSheet = () => (
     <>
@@ -236,17 +241,20 @@ export function MenuFrame(props: {
       >
         {props.trigger}
       </View>
-      <Sheet
-        side="bottom"
-        open={opened()}
-        onOpenChange={(event) => change(event.open)}
-        popupStyle={{ ...sheetStyle(), maxHeight: sheetMaxHeight }}
-        backdropStyle={{ backgroundColor: c().sheetScrim }}
-      >
-        <SmoothScroll role="menu" style={{ flexShrink: 1 }} scrollbar={false}>
-          {content(false)}
-        </SmoothScroll>
-      </Sheet>
+      {/* The sheet renders children in a top layer, so provide its menu host around it. */}
+      <MenuHost.Provider value={{ native: false, sheet: true, close }}>
+        <Sheet
+          side="bottom"
+          open={opened()}
+          onOpenChange={(event) => change(event.open)}
+          popupStyle={{ ...sheetStyle(), maxHeight: sheetMaxHeight }}
+          backdropStyle={{ backgroundColor: c().sheetScrim }}
+        >
+          <SmoothScroll role="menu" style={{ flexShrink: 1 }} scrollbar={false}>
+            {contentBody(false)}
+          </SmoothScroll>
+        </Sheet>
+      </MenuHost.Provider>
     </>
   );
   return (

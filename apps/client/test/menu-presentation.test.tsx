@@ -18,9 +18,9 @@ test("the layout alone says sheet or popup", () => {
   expect(menuPresentation("desktop")).toBe("popup");
 });
 
-test("NSH's Menu draws only what it draws on the platform anyway", () => {
-  // NSH's Menu is a sheet on touch platforms and a popup on the desktops.
-  expect(menuEngine("sheet", false)).toBe("menu");
+test("the menu engine follows the requested presentation", () => {
+  // A sheet is eta's own Sheet, so every platform gets the same height and framing.
+  expect(menuEngine("sheet", false)).toBe("sheet");
   expect(menuEngine("popup", true)).toBe("menu");
   expect(menuEngine("popup", false)).toBe("popover");
   expect(menuEngine("sheet", true)).toBe("sheet");

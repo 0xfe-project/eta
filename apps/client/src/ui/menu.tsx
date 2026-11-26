@@ -12,7 +12,14 @@ import {
   touchScreen,
 } from "../components/menu";
 import { colors, focusRing, grow, row, Screen } from "../components/theme";
-import { control, icon, shadow, space, weight } from "../components/tokens";
+import {
+  control,
+  icon,
+  opacity,
+  shadow,
+  space,
+  weight,
+} from "../components/tokens";
 import { useText } from "../i18n";
 import { Button } from "./button";
 import { Icon, Label } from "./text";
@@ -22,6 +29,8 @@ const menuWidth = 172;
 /** A choice's row in a phone sheet, and in a menu. */
 const sheetRowHeight = 52;
 const checkRowHeight = 32;
+/** A phone action menu stays at least half the screen high. */
+const menuSheetMinHeight = "50%";
 
 /**
  * Adaptive action menu: phone bottom sheet (full width, grabber, 52pt rows) or desktop/tablet
@@ -29,7 +38,7 @@ const checkRowHeight = 32;
  */
 export function ActionMenu(props: {
   label: string;
-  value?: string;
+  value?: string | (() => string);
   /** Drawn before the value, such as a status glyph. */
   leading?: JSX.Element;
   /** The colour of the value and its caret. */
@@ -47,6 +56,7 @@ export function ActionMenu(props: {
   /** As a popup: its width, and a lifted shadow (the design's tablet menus). */
   popupWidth?: number;
   lifted?: boolean;
+  disabled?: boolean;
   /** What it says while it has no options: pass it only then. */
   empty?: string;
   children?: JSX.Element;
@@ -55,17 +65,21 @@ export function ActionMenu(props: {
   const picker = pickerTarget("ActionMenu", "apps/client/src/ui/menu.tsx");
   const text = useText();
   const open = signal(false);
+  const value = () =>
+    typeof props.value === "function" ? props.value() : props.value;
   const pressed = () =>
-    open() && !props.value && props.triggerStyle?.borderWidth === undefined;
+    open() && !value() && props.triggerStyle?.borderWidth === undefined;
   const layout = Screen();
   const titled = () =>
     menuPresentation(layout()) === "sheet" && !!props.sheetTitle;
   return (
     <MenuFrame
       align="end"
+      disabled={props.disabled}
       empty={props.empty}
       open={titled() ? open() : undefined}
       onOpenChange={(next) => open.set(next)}
+      sheetStyle={{ minHeight: menuSheetMinHeight }}
       popupStyle={{
         width: props.popupWidth ?? menuWidth,
         paddingVertical: props.lifted ? space[4] : 0,
@@ -103,6 +117,7 @@ export function ActionMenu(props: {
         <View
           {...picker}
           accessibilityLabel={props.label}
+          accessibilityState={{ disabled: props.disabled }}
           hitSlop={touchScreen ? 7 : undefined}
           hoverStyle={
             canHover
@@ -112,13 +127,14 @@ export function ActionMenu(props: {
           focusVisibleStyle={focusRing(c())}
           style={{
             ...row,
-            justifyContent: props.value ? "space-between" : "center",
+            justifyContent: value() ? "space-between" : "center",
             minWidth: space[32],
             height: control.lg,
             paddingHorizontal: space[8],
             gap: space[8],
-            cursor: "pointer",
-            borderWidth: props.value ? 1 : 0,
+            cursor: props.disabled ? "default" : "pointer",
+            opacity: props.disabled ? opacity.disabled : undefined,
+            borderWidth: value() ? 1 : 0,
             borderColor: c().strong,
             ...(pressed()
               ? {
@@ -128,12 +144,13 @@ export function ActionMenu(props: {
                   outlineOffset: -1,
                 }
               : {}),
-            backgroundColor: open() && !props.value ? c().selected : undefined,
+            backgroundColor:
+              !props.disabled && open() && !value() ? c().selected : undefined,
             ...props.triggerStyle,
           }}
         >
           {props.leading}
-          <If when={props.value}>
+          <If when={value()}>
             <Label
               variant="small"
               tone={props.valueTone}
@@ -144,14 +161,14 @@ export function ActionMenu(props: {
                   : undefined
               }
             >
-              {props.value}
+              {value()}
             </Label>
           </If>
           <If when={!props.noCaret}>
             <Icon
-              name={props.value ? "down" : "more"}
+              name={value() ? "down" : "more"}
               size={
-                props.value
+                value()
                   ? props.valueTone
                     ? icon.md
                     : icon.sm
@@ -175,17 +192,19 @@ export function ActionItem(props: {
   /** The design's tablet menu row: `body` text in a 32px row. */
   roomy?: boolean;
   disabled?: boolean;
-  checked?: boolean;
+  checked?: boolean | (() => boolean);
   tone?: "red";
   onSelect: () => void;
 }) {
   const c = colors();
+  const checked = () =>
+    typeof props.checked === "function" ? props.checked() : props.checked;
   return (
     <MenuRow
       label={props.label}
       disabled={props.disabled}
-      role={props.checked === undefined ? "menuitem" : "menuitemradio"}
-      checked={props.checked}
+      role={checked() === undefined ? "menuitem" : "menuitemradio"}
+      checked={checked()}
       style={
         inSheet()
           ? {
@@ -224,7 +243,7 @@ export function ActionItem(props: {
           {props.detail}
         </Label>
       </If>
-      <If when={props.checked}>
+      <If when={checked()}>
         <Icon name="check" size={icon.sm} />
       </If>
     </MenuRow>
