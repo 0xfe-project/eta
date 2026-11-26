@@ -12,15 +12,16 @@ import {
 import { uiText } from "../i18n";
 import { Host } from "../services/host";
 import { Button } from "../ui/button";
+import { CopyButton } from "../ui/copy-button";
 import { Regular } from "./density";
 import { hasVisibleProgress, ProgressStack } from "./progress-notification";
 import { screenInsets } from "./safe-area";
-import { Label } from "./text";
-import { colors, fill, Fonts, monoFontFamily, row, Screen } from "./theme";
+import { Icon, Label } from "./text";
+import { colors, fill, row, Screen } from "./theme";
 import { hasToasts, ToastStack } from "./toast";
-import { layer, shadow, space } from "./tokens";
+import { border, control, icon, layer, shadow, space, weight } from "./tokens";
 
-const hostErrorMaxWidth = 560;
+const hostErrorMaxWidth = 480;
 const wideNotificationWidth = 1080;
 
 interface ActiveHost {
@@ -59,7 +60,6 @@ function HostErrorAlert(props: {
   phone: () => boolean;
 }) {
   const c = colors();
-  const fonts = Fonts();
   effect(() => {
     const key = `${props.host.error()}\0${props.host.errorDetail()}`;
     if (key !== lastErrorKey) {
@@ -73,53 +73,137 @@ function HostErrorAlert(props: {
       testID="host-error-banner"
       accessibilityLiveRegion="assertive"
       style={{
-        ...row,
         width: "100%",
         maxWidth: props.phone() ? "100%" : hostErrorMaxWidth,
-        padding: space[8],
-        gap: space[8],
-        backgroundColor: c().redFill,
+        backgroundColor: c().canvas,
         borderWidth: 1,
-        borderColor: c().red,
+        borderLeftWidth: border.thick,
+        borderColor: c().border,
+        borderLeftColor: c().red,
         boxShadow: [shadow.float],
         pointerEvents: "auto",
       }}
     >
-      <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
-        <Label variant="small" tone="red">
-          {props.host.error()}
-        </Label>
-        <If when={errorDetailsOpen() && props.host.errorDetail()}>
+      <View
+        style={{
+          ...row,
+          alignItems: "flex-start",
+          paddingVertical: space[12],
+          paddingLeft: space[12],
+          paddingRight: space[8],
+          gap: space[12],
+        }}
+      >
+        <View
+          style={{
+            width: control.sm,
+            height: control.sm,
+            flexShrink: 0,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: c().redFill,
+          }}
+        >
+          <Icon name="warning" size={icon.md} tone="red" />
+        </View>
+        <View
+          style={{
+            flex: 1,
+            minWidth: 0,
+            minHeight: control.sm,
+            justifyContent: "center",
+            gap: space[4],
+          }}
+        >
+          <Label variant="small" weight={weight.strong}>
+            {props.host.error()}
+          </Label>
+          <If when={props.phone() && props.host.errorDetail()}>
+            <Button
+              label={
+                errorDetailsOpen()
+                  ? uiText("hideDetails")
+                  : uiText("showDetails")
+              }
+              icon={errorDetailsOpen() ? "down" : "right"}
+              tone="ghost"
+              size={control.sm}
+              labelTone="muted"
+              hoverTone="ink"
+              expanded={errorDetailsOpen()}
+              style={{ alignSelf: "flex-start", paddingHorizontal: space[4] }}
+              onPress={() => errorDetailsOpen.set(!errorDetailsOpen())}
+            />
+          </If>
+        </View>
+        <View style={{ ...row, gap: space[4], flexShrink: 0 }}>
+          <If when={!props.phone() && props.host.errorDetail()}>
+            <Button
+              label={
+                errorDetailsOpen()
+                  ? uiText("hideDetails")
+                  : uiText("showDetails")
+              }
+              icon={errorDetailsOpen() ? "down" : "right"}
+              tone="ghost"
+              size={control.sm}
+              labelTone="muted"
+              hoverTone="ink"
+              expanded={errorDetailsOpen()}
+              onPress={() => errorDetailsOpen.set(!errorDetailsOpen())}
+            />
+          </If>
+          <Button
+            label={uiText("dismissError")}
+            icon="close"
+            iconOnly
+            tone="ghost"
+            size={control.sm}
+            labelTone="muted"
+            hoverTone="ink"
+            tooltip={uiText("dismissError")}
+            onPress={() => {
+              props.host.error.set("");
+              errorDetailsOpen.set(false);
+              lastErrorKey = "";
+            }}
+          />
+        </View>
+      </View>
+      <If when={errorDetailsOpen() && props.host.errorDetail()}>
+        <View
+          style={{
+            ...row,
+            alignItems: "flex-start",
+            gap: space[8],
+            paddingVertical: space[8],
+            paddingLeft: space[12],
+            paddingRight: space[8],
+            borderTopWidth: 1,
+            borderColor: c().border,
+            backgroundColor: c().selectedSoft,
+          }}
+        >
           <Label
             variant="caption"
-            tone="muted"
-            style={{ fontFamily: monoFontFamily(fonts()) }}
+            tone="mutedInk"
+            mono
+            style={{ flex: 1, minWidth: 0, paddingVertical: space[4] }}
           >
             {props.host.errorDetail()}
           </Label>
-        </If>
-      </View>
-      <If when={props.host.errorDetail()}>
-        <Button
-          label={
-            errorDetailsOpen() ? uiText("hideDetails") : uiText("showDetails")
-          }
-          tone="ghost"
-          expanded={errorDetailsOpen()}
-          onPress={() => errorDetailsOpen.set(!errorDetailsOpen())}
-        />
+          <CopyButton
+            value={() => props.host.errorDetail()}
+            label={uiText("copy")}
+            iconOnly
+            tone="ghost"
+            size={control.sm}
+            labelTone="muted"
+            hoverTone="ink"
+            tooltip={uiText("copy")}
+          />
+        </View>
       </If>
-      <Button
-        label={uiText("dismissError")}
-        icon="close"
-        iconOnly
-        tone="ghost"
-        onPress={() => {
-          props.host.error.set("");
-          errorDetailsOpen.set(false);
-          lastErrorKey = "";
-        }}
-      />
     </View>
   );
 }

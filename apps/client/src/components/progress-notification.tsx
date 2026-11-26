@@ -13,7 +13,15 @@ import { canHover, touchScreen } from "./menu";
 import { motion } from "./motion";
 import { Icon, Label } from "./text";
 import { colors, focusRing, row } from "./theme";
-import { control, icon, opacity, shadow, space, weight } from "./tokens";
+import {
+  border,
+  control,
+  icon,
+  opacity,
+  shadow,
+  space,
+  weight,
+} from "./tokens";
 
 const progressCardWidth = 320;
 const indeterminateBarWidth = 96;
@@ -469,7 +477,9 @@ function ProgressCard(props: {
         padding: space[12],
         gap: space[8],
         borderWidth: 1,
-        borderColor: props.entry().phase === "error" ? c().red : c().border,
+        borderLeftWidth: props.entry().phase === "error" ? border.thick : 1,
+        borderColor: c().border,
+        borderLeftColor: props.entry().phase === "error" ? c().red : c().border,
         backgroundColor: c().canvas,
         boxShadow: [shadow.float],
         cursor: canOpen() ? "pointer" : "default",
@@ -477,7 +487,7 @@ function ProgressCard(props: {
       }}
     >
       <View style={{ ...row, alignItems: "flex-start", gap: space[12] }}>
-        {/* Square icon tile: neutral while running, solid green + check when done, red on error. */}
+        {/* Square icon tile: neutral while running, solid green + check when done, soft red fill on error. */}
         <View
           style={{
             width: control.lg,
@@ -485,8 +495,11 @@ function ProgressCard(props: {
             flexShrink: 0,
             alignItems: "center",
             justifyContent: "center",
-            borderWidth: props.entry().phase === "done" ? 0 : 1,
-            borderColor: props.entry().phase === "error" ? c().red : c().border,
+            borderWidth:
+              props.entry().phase === "done" || props.entry().phase === "error"
+                ? 0
+                : 1,
+            borderColor: c().border,
             backgroundColor:
               props.entry().phase === "done"
                 ? c().green
@@ -522,7 +535,7 @@ function ProgressCard(props: {
             {(line) => (
               <Label
                 variant="caption"
-                tone={props.entry().phase === "error" ? "red" : "muted"}
+                tone={props.entry().phase === "error" ? "mutedInk" : "muted"}
                 lines={2}
               >
                 {line()}

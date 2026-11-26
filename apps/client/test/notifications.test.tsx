@@ -28,8 +28,10 @@ async function assertAllNotificationsClickable(
   // 1. Expand & collapse Host Error details, then dismiss without closing dialog.
   await app.press("id:host-error-banner >> label:Details");
   expect(app.texts()).toContain("ECONNREFUSED 127.0.0.1:4312");
+  expect(app.shows("id:host-error-banner >> label:Copy")).toBe(true);
   await app.press("id:host-error-banner >> label:Hide details");
   expect(app.texts()).not.toContain("ECONNREFUSED 127.0.0.1:4312");
+  expect(app.shows("id:host-error-banner >> label:Copy")).toBe(false);
   await app.press("id:host-error-banner >> label:Dismiss error");
   expect(app.shows("id:host-error-banner")).toBe(false);
   expect(counterValue(app, closedCounterKey)).toBe(0);
