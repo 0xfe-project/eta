@@ -132,6 +132,7 @@ export function EntityRow(props: {
   accessibilityLabel?: string;
 }) {
   const c = colors();
+  const hasMenu = () => Boolean(props.menu && !props.stacked);
   const trailingHeight = () => (props.stacked ? 28 : 24);
   const title = () => (
     <Label
@@ -148,14 +149,16 @@ export function EntityRow(props: {
     </Label>
   );
   return (
+    // The hover is the whole row's and the button fills it, padding inside, up to the rule;
+    // the menu sits over the button's right padding, beside it rather than inside it.
     <View
+      hoverStyle={
+        props.onPress && canHover
+          ? { backgroundColor: c().selected }
+          : undefined
+      }
       style={{
-        ...row,
-        alignItems: "flex-start",
         flexShrink: 0,
-        gap: space[8],
-        paddingHorizontal: space[16],
-        paddingVertical: space[8],
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
@@ -169,18 +172,18 @@ export function EntityRow(props: {
             : props.accessibilityLabel
         }
         onPress={props.onPress}
-        hoverStyle={
-          props.onPress && canHover
-            ? { backgroundColor: c().selected }
-            : undefined
-        }
         focusVisibleStyle={props.onPress ? focusRing(c(), "inset") : undefined}
         style={{
           ...row,
           alignItems: "flex-start",
-          flex: 1,
           minWidth: 0,
+          minHeight: hasMenu() ? space[8] + control.sm + space[8] : undefined,
           gap: space[8],
+          paddingLeft: space[16],
+          paddingRight: hasMenu()
+            ? space[16] + control.sm + space[8]
+            : space[16],
+          paddingVertical: space[8],
           cursor: props.onPress ? "pointer" : undefined,
         }}
       >
@@ -221,38 +224,40 @@ export function EntityRow(props: {
         <If when={props.lane !== false && !props.stacked && !props.wideMeta}>
           <StatusLane status={props.status} width={props.laneWidth} />
         </If>
+        <If when={!hasMenu() && (!props.stacked || props.caret)}>
+          <View
+            style={{
+              width: space[24],
+              height: trailingHeight(),
+              flexShrink: 0,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <If when={props.caret}>
+              <Icon name="right" size={icon.md} tone="mutedInk" />
+            </If>
+          </View>
+        </If>
       </View>
-      <If
-        when={props.menu && !props.stacked}
-        else={
-          <If when={!props.stacked || props.caret}>
-            <View
-              style={{
-                width: space[24],
-                height: trailingHeight(),
-                flexShrink: 0,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <If when={props.caret}>
-                <Icon name="right" size={icon.md} tone="mutedInk" />
-              </If>
-            </View>
-          </If>
-        }
-      >
-        <ActionMenu
-          label={props.menuLabel ?? props.title}
-          triggerStyle={{
-            minWidth: space[24],
-            width: space[24],
-            height: space[24],
-            paddingHorizontal: 0,
-          }}
-        >
-          {props.menu}
-        </ActionMenu>
+      <If when={hasMenu()}>
+        <View style={{ position: "absolute", top: space[8], right: space[16] }}>
+          <ActionMenu
+            label={props.menuLabel ?? props.title}
+            triggerStyle={{
+              minWidth: space[24],
+              width: space[24],
+              height: space[24],
+              paddingHorizontal: 0,
+            }}
+            // The row under it is already highlighted: a step darker, so the menu reads as its own target.
+            triggerHoverStyle={
+              props.onPress ? { backgroundColor: c().border } : undefined
+            }
+          >
+            {props.menu}
+          </ActionMenu>
+        </View>
       </If>
     </View>
   );
