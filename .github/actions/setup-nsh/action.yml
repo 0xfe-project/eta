@@ -18,11 +18,11 @@ runs:
         target="$RUNNER_TEMP/eta-nsh"
         mkdir -p "$target"
         cd "$target"
-        # Native Shell nightly rather than a release tag: the Windows IME fix
-        # (longbridge/nsh#2497, merge commit d474e13) landed after v0.6.1 was cut, so no
-        # stable tag contains it yet. Move back to the first stable tag that does
-        # (v0.6.2 or later) as soon as one is published.
-        url="https://github.com/longbridge/nsh/releases/download/nightly/$archive"
+        # Pinned to v0.7.1: v0.7.0 is the first stable release containing the Windows
+        # IME fix (longbridge/nsh#2497, merge commit d474e13), and v0.7.1 is its patch
+        # release (Windows title-bar accent leak, HiDPI Input wheel scrolling, and
+        # runtime GStreamer loading on Linux).
+        url="https://github.com/longbridge/nsh/releases/download/v0.7.1/$archive"
         curl --fail --silent --show-error --location --retry 3 --output "$archive" "$url"
         curl --fail --silent --show-error --location --retry 3 --output checksum "$url.sha256"
         digest=$(awk 'NR == 1 { print $1 }' checksum)
@@ -37,7 +37,7 @@ runs:
         esac
         bin=$(find "$target" -type d -name bin -print -quit)
         test -n "$bin"
-        # The nightly tag moves; print the build so a log says which one ran.
+        # Print the installed build so the log records the exact version that ran.
         "$bin/nsh" --version 2>/dev/null || "$bin/nsh.exe" --version 2>/dev/null || true
         if [[ "$RUNNER_PLATFORM" == Windows ]]; then bin=$(cygpath -w "$bin"); fi
         echo "$bin" >> "$GITHUB_PATH"

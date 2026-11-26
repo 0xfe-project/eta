@@ -65,7 +65,7 @@ test("onboarding PersonaStep delays skeleton, avoids duplicate Loading… text, 
 
   await app.press("label:Fail personas");
   await app.clock!.runFor(550);
-  expect(app.shows("text:Unable to load agents")).toBe(true);
+  expect(app.shows("text:Agents didn't load")).toBe(true);
   await app.press("label:Retry");
   expect(app.shows("text:persona-retries:1")).toBe(true);
 });
@@ -92,7 +92,7 @@ test("Widget reserves stable min-height while loading and offers Retry on 8s tim
   expect(app.shows("text:Revenue chart unavailable")).toBe(false);
 });
 
-test("TaskDetail renders error state with Retry instead of hanging forever on missing target", async () => {
+test("TaskDetail renders gone state with Back to tasks instead of hanging forever on missing target", async () => {
   const app = await open(fixture, {
     width: 1024,
     height: 768,
@@ -101,7 +101,7 @@ test("TaskDetail renders error state with Retry instead of hanging forever on mi
   });
 
   await app.press("label:Tab task");
-  expect(app.shows("text:Couldn’t load this task")).toBe(true);
-  await app.press("label:Retry");
-  expect(app.shows("text:task-reconnects:1")).toBe(true);
+  expect(app.shows("text:This task no longer exists")).toBe(true);
+  await app.press("label:Back to tasks");
+  expect(app.shows("text:task-closed:1")).toBe(true);
 });

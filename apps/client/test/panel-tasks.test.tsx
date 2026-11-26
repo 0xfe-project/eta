@@ -42,7 +42,7 @@ test("by default the tasks are grouped by what they need", async () => {
     locale: "en-US",
   });
   await app.waitFor("text:Build the login API");
-  expect(app.texts()).toContain("Sort: Needs you first");
+  expect(app.texts()).toContain("Needs you first");
   expect(order(app.texts())).toEqual([
     "Build the login API",
     "Write the login API tests",
@@ -59,7 +59,7 @@ test("Recently updated lists the open tasks newest first", async () => {
   await app.waitFor("text:Build the login API");
   await app.press("label:Sort tasks");
   await app.press("label:Recently updated");
-  expect(app.texts()).toContain("Sort: Recently updated");
+  expect(app.texts()).toContain("Recently updated");
   expect(app.texts()).not.toContain("Needs you 1");
   expect(order(app.texts())).toEqual([
     "Wire up the login page",
@@ -80,7 +80,7 @@ test("the sort chosen on this device is kept", async () => {
     locale: "en-US",
     storage: { "eta.tasks-panel-sort.v1": "updated" },
   });
-  await app.waitFor("text:Sort: Recently updated");
+  await app.waitFor("text:Recently updated");
   expect(order(app.texts())).toEqual([
     "Wire up the login page",
     "Build the login API",

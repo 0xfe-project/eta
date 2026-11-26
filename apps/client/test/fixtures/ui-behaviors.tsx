@@ -48,6 +48,7 @@ function keyEvent(key: string, shift = false): KeyEvent {
     code: "",
     modifiers: {
       alt: false,
+      altGraph: false,
       control: false,
       platform: false,
       shift,

@@ -32,15 +32,18 @@ function Fixture() {
 
   // TaskDetail missing state
   const taskMissing = signal(true);
-  const taskReconnects = signal(0);
+  const taskClosed = signal(0);
 
   const stubHost = {
     state: () => ({
       status: "open" as const,
       targets: {},
       missing: taskMissing() ? { "tasks.t-missing": true } : {},
+      ops: [],
       error: "",
     }),
+    disconnected: () => false,
+    paused: () => false,
     section: () => undefined,
     list: () => [],
     tasks: () => [],
@@ -54,7 +57,9 @@ function Fixture() {
     watch: () => () => {},
     subscribe: () => () => {},
     follow: () => () => {},
-    reconnect: () => taskReconnects.update((n) => n + 1),
+    wake: () => personaRetries.update((n) => n + 1),
+    retry: () => personaRetries.update((n) => n + 1),
+    reconnect: () => personaRetries.update((n) => n + 1),
     action: async <T,>(fn: () => Promise<T>) => fn(),
     call: async () => ({}),
     optimistic: async <T,>(
@@ -147,11 +152,11 @@ function Fixture() {
 
             <If when={mode() === "task"}>
               <View style={{ flex: 1, paddingTop: space[12] }}>
-                <Label>{`task-reconnects:${taskReconnects()}`}</Label>
+                <Label>{`task-closed:${taskClosed()}`}</Label>
                 <TaskDetail
                   id="t-missing"
                   layout="desktop"
-                  onClose={() => {}}
+                  onClose={() => taskClosed.update((n) => n + 1)}
                   onTask={() => {}}
                 />
               </View>
