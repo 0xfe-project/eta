@@ -19,6 +19,7 @@ import {
   textFaces,
 } from "../../../components";
 import { LayoutSelect } from "../../../components/select";
+import { StatusDot } from "../../../components/status-dot";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import {
@@ -27,12 +28,11 @@ import {
   clientVersion,
 } from "../../../services/client-update";
 import { useHost } from "../../../services/host";
-
 import { BusyList } from "./busy-list";
+import { releaseRow, statusWidth } from "./host-release";
 
-/** The update dialog's height, the channel menu and one of its items. */
+/** The update dialog's height, and one item of the channel menu. */
 const dialogHeight = 248;
-const channelWidth = 160;
 const itemRow = 28;
 
 /** What the offer's one button says, from finding it to restarting into it. */
@@ -134,7 +134,8 @@ export function ClientUpdateConfirm(props: { onClose: () => void }) {
   );
 }
 
-function ChannelSelect(props: { phone: boolean }) {
+/** The desktop app's update channel menu. */
+export function ClientChannelSelect(props: { phone: boolean }) {
   const c = colors();
   const type = textFaces();
   const fonts = Fonts();
@@ -144,156 +145,169 @@ function ChannelSelect(props: { phone: boolean }) {
     rc: uiText("updatePreReleases"),
   };
   return (
-    <View
-      style={{
-        ...(props.phone ? {} : row),
-        gap: props.phone ? space[4] : space[12],
+    <LayoutSelect
+      accessibilityLabel={uiText("appUpdateChannel")}
+      items={[
+        { value: "stable", title: names.stable },
+        { value: "rc", title: names.rc },
+      ]}
+      value={update.channel()}
+      cover={false}
+      offset={2}
+      disabled={update.busy() || update.ready()}
+      popupStyle={{
+        borderWidth: 1,
+        borderColor: c().strong,
+        backgroundColor: c().canvas,
       }}
-    >
-      <View
-        style={{
-          flex: props.phone ? undefined : 1,
-          minWidth: 0,
-          gap: space[2],
-        }}
-      >
-        <Label variant="small">{uiText("channel")}</Label>
-        <Label variant="small" tone="muted">
-          {uiText("preReleasesRcBetaGetNew")}
-        </Label>
-      </View>
-      <View
-        style={{ width: props.phone ? "100%" : channelWidth, flexShrink: 0 }}
-      >
-        <LayoutSelect
-          accessibilityLabel={uiText("appUpdateChannel")}
-          items={[
-            { value: "stable", title: names.stable },
-            { value: "rc", title: names.rc },
-          ]}
-          value={update.channel()}
-          cover={false}
-          offset={2}
-          disabled={update.busy() || update.ready()}
-          popupStyle={{
+      itemStyle={{
+        fontFamily: fontFamily(fonts().interface),
+        color: c().ink,
+        fontSize: type("small").size,
+        minHeight: itemRow,
+        paddingHorizontal: space[12],
+      }}
+      trigger={
+        <View
+          style={{
+            ...row,
+            height: props.phone ? space[32] : space[24],
+            gap: space[4],
+            paddingHorizontal: space[12],
             borderWidth: 1,
             borderColor: c().strong,
             backgroundColor: c().canvas,
           }}
-          itemStyle={{
-            fontFamily: fontFamily(fonts().interface),
-            color: c().ink,
-            fontSize: type("small").size,
-            minHeight: itemRow,
-            paddingHorizontal: space[12],
-          }}
-          trigger={
-            <View
-              style={{
-                ...row,
-                height: props.phone ? space[32] : space[24],
-                gap: space[4],
-                paddingHorizontal: space[12],
-                borderWidth: 1,
-                borderColor: c().strong,
-                backgroundColor: c().canvas,
-              }}
-            >
-              <Label variant="small" lines={1} style={{ flex: 1 }}>
-                {names[update.channel()]}
-              </Label>
-              <Icon name="down" size={icon.sm} tone="muted" />
-            </View>
-          }
-          onChange={({ value }) => {
-            if (value === "stable" || value === "rc")
-              update.changeChannel(value);
-          }}
-        />
-      </View>
-    </View>
+        >
+          <Label variant="small" lines={1} style={{ flex: 1 }}>
+            {names[update.channel()]}
+          </Label>
+          <Icon name="down" size={icon.sm} tone="muted" />
+        </View>
+      }
+      onChange={({ value }) => {
+        if (value === "stable" || value === "rc") update.changeChannel(value);
+      }}
+    />
   );
 }
 
 /** This app's own updates: the desktop app replaces itself, the Android app
- * takes a package of its code, or an APK when the code needs a newer one. */
+ * takes a package of its code, or an APK when the code needs a newer one.
+ * The row reads as the Host's does: version, product and machine, status. */
 export function ClientAppUpdate(props: { phone: boolean }) {
   const c = colors();
   const update = clientUpdate;
   const confirm = signal(false);
+  const status = () => {
+    if (update.checking())
+      return { tone: "blue", label: uiText("checkingForUpdates") } as const;
+    if (update.failure() && !update.offer())
+      return { tone: "red", label: uiText("updateCheckFailed") } as const;
+    if (update.checked() && !update.offer())
+      return { tone: "green", label: uiText("updateUpToDate") } as const;
+    return undefined;
+  };
+  const statusLine = () => (
+    <If when={update.offer() ? undefined : status()}>
+      {(shown) => (
+        <View style={{ ...row, gap: space[4] }}>
+          <StatusDot color={c()[shown().tone]} />
+          <Label variant="small" tone="mutedInk">
+            {shown().label}
+          </Label>
+        </View>
+      )}
+    </If>
+  );
+  const action = () => (
+    <If when={update.offer()}>
+      {(offer) => (
+        <If
+          when={!update.downloading()}
+          else={
+            <Label variant="small" tone="muted">
+              {clientUpdateAction(offer())}
+            </Label>
+          }
+        >
+          <Button
+            label={clientUpdateAction(offer())}
+            tone={update.ready() ? "primary" : undefined}
+            size={props.phone ? control.touch : undefined}
+            style={
+              props.phone
+                ? { marginTop: space[8], alignSelf: "stretch" }
+                : undefined
+            }
+            busy={update.restarting()}
+            onPress={() => pressClientUpdate(() => confirm.set(true))}
+          />
+        </If>
+      )}
+    </If>
+  );
   return (
     <View
       style={{
-        padding: space[16],
-        gap: space[8],
-        borderTopWidth: 1,
+        ...(props.phone ? {} : row),
+        alignItems: props.phone ? "stretch" : "flex-start",
+        gap: props.phone ? space[4] : space[8],
+        minHeight: releaseRow,
+        paddingVertical: space[8],
+        paddingHorizontal: space[16],
+        borderBottomWidth: 1,
         borderColor: c().border,
       }}
     >
-      <View style={{ ...row, gap: space[8] }}>
-        <Label weight={weight.strong} style={{ flex: 1 }}>
+      <If when={!props.phone}>
+        <View
+          style={{
+            width: space[24],
+            height: space[24],
+            flexShrink: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Icon name="arrowCircleUp" tone="muted" size={icon.md} />
+        </View>
+      </If>
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <Label weight={weight.regular}>{clientVersion() ?? "dev"}</Label>
+        <If when={props.phone}>{statusLine()}</If>
+        <Label variant="small" tone="muted">
           {clientPlatform === "android"
-            ? uiText("androidApp")
-            : uiText("desktopApp")}
+            ? uiText("androidAppHere")
+            : uiText("desktopAppHere")}
         </Label>
-        <Label variant="small" tone="muted">
-          {clientVersion() ?? "dev"}
-        </Label>
-        <Button
-          label={
-            update.checked() ? uiText("checkAgain") : uiText("checkAppUpdate")
-          }
-          size={props.phone ? control.md : control.sm}
-          disabled={
-            update.downloading() || update.restarting() || update.ready()
-          }
-          busy={update.checking()}
-          onPress={() => void update.check()}
-        />
+        <If when={update.ready() && update.offer()?.kind === "package"}>
+          <Label variant="small" tone="muted">
+            {uiText("reopenEtaToUse", { version: update.offer()!.version })}
+          </Label>
+        </If>
+        <If when={update.failure() && !confirm()}>
+          <Label variant="small" tone="red">
+            {update.failure()}
+          </Label>
+        </If>
       </View>
-      <If when={clientPlatform === "desktop"}>
-        <ChannelSelect phone={props.phone} />
-      </If>
-      <If when={update.checked() && !update.offer()}>
-        <Label variant="small" tone="muted">
-          {uiText("noAppUpdateAvailable")}
-        </Label>
-      </If>
-      <If when={update.offer()}>
-        {(offer) => (
-          <View style={{ gap: space[4] }}>
-            <View style={{ ...row, gap: space[8] }}>
-              <Label variant="small" style={{ flex: 1 }}>
-                {uiText("versionAvailable", { version: offer().version })}
-              </Label>
-              <If
-                when={!update.downloading()}
-                else={
-                  <Label variant="small" tone="muted">
-                    {clientUpdateAction(offer())}
-                  </Label>
-                }
-              >
-                <Button
-                  label={clientUpdateAction(offer())}
-                  tone={update.ready() ? "primary" : undefined}
-                  busy={update.restarting()}
-                  onPress={() => pressClientUpdate(() => confirm.set(true))}
-                />
-              </If>
-            </View>
-            <If when={update.ready() && offer().kind === "package"}>
-              <Label variant="small" tone="muted">
-                {uiText("reopenEtaToUse", { version: offer().version })}
-              </Label>
-            </If>
+      <If
+        when={props.phone}
+        else={
+          <View
+            style={{
+              width: statusWidth,
+              alignItems: "flex-start",
+              gap: space[8],
+            }}
+          >
+            {statusLine()}
+            {action()}
           </View>
-        )}
-      </If>
-      <If when={update.failure() && !confirm()}>
-        <Label variant="small" tone="red">
-          {update.failure()}
-        </Label>
+        }
+      >
+        {action()}
       </If>
       <If when={confirm()}>
         <ClientUpdateConfirm onClose={() => confirm.set(false)} />
