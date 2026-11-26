@@ -3,6 +3,7 @@ import type {
   CaptainResults,
   ProvidersView,
 } from "@eta/client-contracts";
+import type { ViewRef } from "nsh";
 import type { Layout } from "../components";
 import type { MotionFrom } from "../components/motion";
 import type { Flavor, PaletteId } from "../components/palettes";
@@ -79,6 +80,21 @@ export function Workspace(props: {
   const captain = signal("");
   const mobileOpen = signal(Boolean(start.conversation));
   const collapsed = signal(false);
+  /** A tablet's group list folded away, so the conversation takes the width. */
+  const listFolded = signal(false);
+  const listHidden = () => props.layout === "tablet" && listFolded();
+  // The button that folds the list and the one that brings it back are two views: the one pressed
+  // is gone once the list changes, so the other takes the focus, as the desktop toggle does.
+  let focusListToggle = false;
+  function toggleList() {
+    focusListToggle = true;
+    listFolded.set(!listFolded());
+  }
+  function attachListToggle(node: ViewRef | null) {
+    if (!node || !focusListToggle) return;
+    focusListToggle = false;
+    node.focus();
+  }
   const desktopRail = () => props.layout === "desktop" && collapsed();
   const narrowChat = () => desktopRail() && props.chatWidth === "standard";
   const settings = signal<SettingsSection | undefined>(
@@ -414,6 +430,8 @@ export function Workspace(props: {
               captainProblem={captainProblem()}
               onRetryCaptain={() => void openCaptain()}
               onCreate={() => newGroup.set(true)}
+              onExpandList={listHidden() ? toggleList : undefined}
+              attachExpandList={attachListToggle}
             />
           }
         >
@@ -421,6 +439,8 @@ export function Workspace(props: {
             id={captain()}
             layout={props.layout}
             captain
+            onExpandList={listHidden() ? toggleList : undefined}
+            attachExpandList={attachListToggle}
             onPending={() => navigate("pending")}
             onTask={openTask}
             onAccessLost={leaveUnavailableChat}
@@ -442,6 +462,8 @@ export function Workspace(props: {
             onReadDraft={() => mobileOpen.set(true)}
             captain={page() === "captain"}
             layout={props.layout}
+            onExpandList={listHidden() ? toggleList : undefined}
+            attachExpandList={attachListToggle}
             onPending={() => navigate("pending")}
             onTask={openTask}
             onAccessLost={leaveUnavailableChat}
@@ -511,10 +533,11 @@ export function Workspace(props: {
         >
           <If
             when={
-              (page() === "chat" &&
+              ((page() === "chat" &&
                 (props.layout === "tablet" ||
                   (phone() && (!mobileOpen() || chatPush.under())))) ||
-              (page() === "captain" && props.layout === "tablet")
+                (page() === "captain" && props.layout === "tablet")) &&
+              !listHidden()
             }
           >
             <ChatList
@@ -526,6 +549,8 @@ export function Workspace(props: {
               onConversation={open}
               onCreate={() => newGroup.set(true)}
               onArchived={leaveArchived}
+              onFold={props.layout === "tablet" ? toggleList : undefined}
+              attachFold={attachListToggle}
             />
           </If>
           <If

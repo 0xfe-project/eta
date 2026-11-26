@@ -1,4 +1,4 @@
-import type { Point } from "nsh";
+import type { Point, ViewRef } from "nsh";
 import type { Layout } from "../components";
 import { signal, View } from "nsh";
 import {
@@ -35,7 +35,13 @@ export interface ChatListProps {
 }
 
 export function ChatList(
-  props: ChatListProps & { width?: number; collapsed?: boolean },
+  props: ChatListProps & {
+    width?: number;
+    collapsed?: boolean;
+    /** A tablet's list folds away: the button that does it, in the list's header. */
+    onFold?: () => void;
+    attachFold?: (node: ViewRef | null) => void;
+  },
 ) {
   const text = useText();
   const c = colors();
@@ -117,6 +123,17 @@ export function ChatList(
               iconSize={phone() ? icon.md : undefined}
               onPress={() => props.onCreate()}
             />
+            <If when={props.onFold}>
+              <RailButton
+                label={text("collapseSidebar")}
+                icon="sidebar"
+                size={control.md}
+                iconSize={icon.md}
+                expanded
+                attach={props.attachFold}
+                onPress={() => props.onFold?.()}
+              />
+            </If>
           </Header>
         </If>
         <If when={searching()}>
