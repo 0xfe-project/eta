@@ -2,7 +2,7 @@ import type { LlmModel, ProvidersView } from "@eta/client-contracts";
 import type { TextStyle, ViewStyle } from "nsh";
 import type { SelectProps } from "nsh/base";
 import { etaModelThinking } from "@eta/client-contracts";
-import { View } from "nsh";
+import { safeArea, signal, View } from "nsh";
 import { Select } from "nsh/base";
 import {
   canHover,
@@ -14,27 +14,32 @@ import {
   touchRow,
   touchScreen,
 } from "../components/menu";
+import { screenInsets } from "../components/safe-area";
 import {
   colors,
   focusRing,
   fontFamily,
   Fonts,
   groupHeaderStyle,
+  grow,
   row,
   Screen,
   textFaces,
   textStyle,
 } from "../components/theme";
-import { control, icon, space } from "../components/tokens";
-import { uiText } from "../i18n";
+import { control, icon, space, weight } from "../components/tokens";
+import { uiText, useText } from "../i18n";
 import { useHost } from "../services/host";
 import { createTypeahead } from "./behaviors";
+import { Button } from "./button";
 import { Icon, Label } from "./text";
 
 /** The menu of a select on a desktop, unless its caller says. */
 const menuWidth = 220;
 /** A choice's row in a phone sheet. */
 const sheetRowHeight = 52;
+/** How much of the screen a phone's select sheet may take. */
+const sheetMaxHeight = "80%";
 
 /** The model picker's popup: wide enough for a provider's long model ids. */
 const popupWidth = 336;
@@ -46,9 +51,9 @@ const searchHeight = 36;
  * the bottom in the phone layout, a popup at the trigger in the tablet and
  * desktop layouts, whatever the platform. NSH's `Select` chooses by platform
  * (a popup on the desktops, a sheet on phones and tablets), so it draws the
- * list only where that is what the layout asks; elsewhere (a tablet's touch
- * screen, a narrow desktop window) the list is a `MenuFrame` of the same
- * items with keyboard typeahead via `createTypeahead`.
+ * list only for desktop popups; on every phone layout (including iOS and
+ * Android) and touch-tablet popups, `MenuFrame` draws the styled sheet or
+ * popover with keyboard typeahead via `createTypeahead`.
  */
 export function LayoutSelect(
   props: SelectProps & {
@@ -61,7 +66,13 @@ export function LayoutSelect(
   const type = textFaces();
   const fonts = Fonts();
   const layout = Screen();
-  const native = () => menuEngine(menuPresentation(layout())) === "menu";
+  const presentation = () => menuPresentation(layout());
+  const sheet = () => presentation() === "sheet";
+  const native = () =>
+    presentation() === "popup" && menuEngine("popup") === "menu";
+  const text = useText();
+  const open = signal(false);
+  const titled = () => sheet() && !!props.accessibilityLabel;
   const items = () => props.items ?? [];
   const itemStyle = () => (props.itemStyle ?? {}) as TextStyle;
   const choose = (value: string) => props.onChange?.({ value });
@@ -83,10 +94,47 @@ export function LayoutSelect(
           disabled={props.disabled}
           align={props.align === "end" ? "end" : "start"}
           offset={props.offset}
+          open={props.open ?? (titled() ? open() : undefined)}
+          onOpenChange={(next) => {
+            open.set(next);
+            props.onOpenChange?.({
+              open: next,
+              reason: next ? "triggerPress" : "cancel",
+            });
+          }}
           popupStyle={{
             width: props.menuWidth ?? menuWidth,
             ...(props.popupStyle as ViewStyle | undefined),
           }}
+          sheetHeader={
+            <If when={props.accessibilityLabel}>
+              <View
+                testID="select-sheet-header"
+                style={{
+                  ...row,
+                  height: control.touch,
+                  paddingLeft: space[16],
+                  paddingRight: space[8],
+                }}
+              >
+                <Label weight={weight.strong} lines={1} style={grow}>
+                  {props.accessibilityLabel}
+                </Label>
+                <Button
+                  label={text("close")}
+                  icon="close"
+                  iconOnly
+                  iconSize={icon.md}
+                  tone="ghost"
+                  size={control.lg}
+                  onPress={() => {
+                    open.set(false);
+                    props.onOpenChange?.({ open: false, reason: "cancel" });
+                  }}
+                />
+              </View>
+            </If>
+          }
           trigger={
             // NSH's Select names its trigger; the trigger here says the same.
             <View
@@ -119,7 +167,7 @@ export function LayoutSelect(
                     disabled={item().disabled}
                     style={{
                       ...row,
-                      gap: space[8],
+                      gap: inSheet() ? space[12] : space[8],
                       minHeight: inSheet()
                         ? sheetRowHeight
                         : touchScreen
@@ -128,6 +176,9 @@ export function LayoutSelect(
                       paddingHorizontal: inSheet()
                         ? space[16]
                         : (itemStyle().paddingHorizontal ?? space[8]),
+                      ...(inSheet()
+                        ? { borderTopWidth: 1, borderColor: c().border }
+                        : {}),
                       backgroundColor: chosen() ? c().selected : undefined,
                     }}
                     onSelect={() => choose(item().value)}
@@ -224,6 +275,10 @@ export function ModelSelect(props: {
   const c = colors();
   const type = textFaces();
   const fonts = Fonts();
+  const layout = Screen();
+  const phone = () => layout() === "phone";
+  const surfaceInsets = screenInsets();
+  const bottomInset = () => Math.max(safeArea().bottom, surfaceInsets().bottom);
   const models = useModels();
   const items = () => {
     const all = models().map((model) => ({
@@ -250,32 +305,49 @@ export function ModelSelect(props: {
       searchAccessibilityLabel={uiText("searchModels")}
       cover={false}
       offset={2}
-      popupStyle={{
-        minWidth: popupWidth,
-        borderWidth: 1,
-        borderColor: c().strong,
-        backgroundColor: c().canvas,
-        maxHeight: popupHeight,
-      }}
+      backdropStyle={phone() ? { backgroundColor: c().sheetScrim } : undefined}
+      popupStyle={
+        phone()
+          ? {
+              width: "100%",
+              borderWidth: 0,
+              borderTopWidth: 1,
+              borderColor: c().strong,
+              backgroundColor: c().canvas,
+              maxHeight: sheetMaxHeight,
+              paddingBottom: space[8] + bottomInset(),
+            }
+          : {
+              minWidth: popupWidth,
+              borderWidth: 1,
+              borderColor: c().strong,
+              backgroundColor: c().canvas,
+              maxHeight: popupHeight,
+            }
+      }
       searchStyle={{
         color: c().ink,
         placeholderColor: c().muted,
         fontFamily: fontFamily(fonts().interface),
         ...textStyle(type("small")),
-        paddingHorizontal: space[12],
-        height: searchHeight,
+        paddingHorizontal: phone() ? space[16] : space[12],
+        height: phone() ? control.touch : searchHeight,
         backgroundColor: "transparent",
         borderBottomWidth: 1,
         borderColor: c().border,
       }}
       groupStyle={{
         ...groupHeaderStyle(type("caption"), fonts(), c()),
-        paddingHorizontal: space[12],
+        paddingHorizontal: phone() ? space[16] : space[12],
         paddingTop: space[8],
         paddingBottom: space[4],
       }}
       itemStyle={{
-        minHeight: control.md,
+        minHeight: phone()
+          ? sheetRowHeight
+          : touchScreen
+            ? touchRow
+            : control.md,
         paddingHorizontal: 0,
         color: c().ink,
         fontFamily: fontFamily(fonts().interface),
@@ -299,9 +371,14 @@ export function ModelSelect(props: {
           style={{
             ...row,
             flex: 1,
-            height: control.md,
-            gap: space[8],
-            paddingHorizontal: space[12],
+            height: phone()
+              ? sheetRowHeight
+              : touchScreen
+                ? touchRow
+                : control.md,
+            gap: phone() ? space[12] : space[8],
+            paddingHorizontal: phone() ? space[16] : space[12],
+            ...(phone() ? { borderTopWidth: 1, borderColor: c().border } : {}),
             backgroundColor:
               item.value === props.value ? c().selected : "transparent",
           }}

@@ -1,7 +1,12 @@
 import type { ViewStyle } from "nsh";
 import { View } from "nsh";
 import { colors, Icon, Label, row } from "../../../components";
-import { canHover } from "../../../components/menu";
+import {
+  canHover,
+  inSheet,
+  touchRow,
+  touchScreen,
+} from "../../../components/menu";
 import { LayoutSelect } from "../../../components/select";
 import { control, icon, shadow, space } from "../../../components/tokens";
 
@@ -45,15 +50,23 @@ export function SkillSelect(props: {
         return (
           <View
             hoverStyle={
-              canHover ? { backgroundColor: c().selected } : undefined
+              !inSheet() && canHover
+                ? { backgroundColor: c().selected }
+                : undefined
             }
             style={{
               ...row,
               flex: 1,
-              gap: space[8],
-              height: control.md,
-              paddingHorizontal: space[8],
-              backgroundColor: chosen() ? c().selected : undefined,
+              gap: inSheet() ? space[12] : space[8],
+              minHeight: inSheet()
+                ? undefined
+                : touchScreen
+                  ? touchRow
+                  : undefined,
+              height: inSheet() || touchScreen ? undefined : control.md,
+              paddingHorizontal: inSheet() ? 0 : space[8],
+              backgroundColor:
+                !inSheet() && chosen() ? c().selected : undefined,
             }}
           >
             <View style={{ ...row, flex: 1, minWidth: 0, gap: space[4] }}>
