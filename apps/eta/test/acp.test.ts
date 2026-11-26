@@ -399,7 +399,10 @@ describe("an ACP agent on a daemon", () => {
       id: "acp.fake",
       status: "available",
     });
-    const ace = await r.agent("Ace", { runtime: "acp.fake" });
+    const ace = await r.agent("Ace", {
+      runtime: "acp.fake",
+      machineId: r.daemon.machineId,
+    });
     const group = await r.group(r.remoteProject.id, [ace.id]);
     await r.watch(group.id);
     const sent = await r.send(group.id, "state");
@@ -407,8 +410,11 @@ describe("an ACP agent on a daemon", () => {
     expect(done.status).toBe("done");
     expect(JSON.parse(done.text)).toMatchObject({ prompts: 1 });
 
-    // An id only the primary knows does not run there.
-    const lost = await r.agent("Lost", { runtime: "acp.elsewhere" });
+    // An id only the primary knows does not run on the daemon.
+    const lost = await r.agent("Lost", {
+      runtime: "acp.elsewhere",
+      machineId: r.daemon.machineId,
+    });
     const other = await r.group(r.remoteProject.id, [lost.id]);
     await r.watch(other.id);
     const asked = await r.send(other.id, "hello");
@@ -542,35 +548,36 @@ describe("one machine at a time: the settings page on a daemon", () => {
     expect(entry(r)?.agents).toBeDefined();
   });
 
-  it("counts only the agents on that machine as still using an id", async () => {
+  it("counts only the agents pinned to that machine as still using an id", async () => {
     const r = await remoteWorld();
     const machineId = r.daemon.machineId;
     const { config } = fakeAgent("fake");
     await save(r, config);
     await save(r, config, undefined, machineId);
     // Pinned to the daemon: holds the daemon's, not the primary's.
-    await r.agent("Pinned", { runtime: "acp.fake", machineId });
-    // Pinned to none, and in a conversation in the daemon's project: holds the daemon's too.
-    const follower = await r.agent("Follower", { runtime: "acp.fake" });
-    await r.group(r.remoteProject.id, [follower.id]);
+    await r.agent("OnDaemon", { runtime: "acp.fake", machineId });
+    // Pinned to the primary: holds the primary's, not the daemon's.
+    const onPrimary = await r.agent("OnPrimary", { runtime: "acp.fake" });
+    const project = await r.project();
+    await r.group(project.id, [onPrimary.id]);
     await expect(
       r.client.call("acp", "delete", { machineId, id: "fake" }),
-    ).rejects.toThrow(/Cannot delete fake: Follower, Pinned run on acp\.fake/);
+    ).rejects.toThrow(/Cannot delete fake: OnDaemon runs on acp\.fake/);
     await expect(
       save(r, { ...config, id: "moved" }, "fake", machineId),
-    ).rejects.toThrow(/Cannot rename fake: Follower, Pinned run on acp\.fake/);
-    // On the primary only the follower (its home is there) runs on it.
+    ).rejects.toThrow(/Cannot rename fake: OnDaemon runs on acp\.fake/);
+    // On the primary only OnPrimary counts.
     await expect(
       r.client.call("acp", "delete", { id: "fake" }),
-    ).rejects.toThrow(/Cannot delete fake: Follower runs on acp\.fake/);
+    ).rejects.toThrow(/Cannot delete fake: OnPrimary runs on acp\.fake/);
   });
 
-  it("does not count an agent that follows its projects when none is on that machine", async () => {
+  it("ignores agents pinned to another machine even when deleting an ACP definition here", async () => {
     const r = await remoteWorld();
     const machineId = r.daemon.machineId;
     const { config } = fakeAgent("fake");
     await save(r, config, undefined, machineId);
-    // Its home, and so its only project, is on the primary.
+    // Pinned to the primary: its sessions run there, never on the daemon.
     await r.agent("Homebody", { runtime: "acp.fake" });
     expect(
       await r.client.call("acp", "delete", { machineId, id: "fake" }),

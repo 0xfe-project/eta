@@ -1,5 +1,6 @@
 import type { AgentUsage, AgentView } from "@eta/client-contracts";
 import type { IconName } from "../../components/icons";
+import { isExternalRuntime } from "@eta/client-contracts";
 import { ActionItem, colors, Icon, Label } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { useModels } from "../../components/model-select";
@@ -55,7 +56,7 @@ export function AgentSetting(props: {
       .section<readonly AgentUsage[]>("usage", "agents")
       ?.find((entry) => entry.agentId === props.agent.id)?.windows["7d"].total;
   const brief = () =>
-    props.agent.persona ||
+    (isExternalRuntime(props.agent.runtime) ? "" : props.agent.persona) ||
     props.agent.instructions.split("\n")[0] ||
     uiText("agentNoInstructions");
   const meta = () =>

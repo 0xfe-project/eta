@@ -38,7 +38,7 @@ import { join } from "node:path";
 import { kernelOn, thinkingLevelsFor } from "@eta/core";
 import { parseModelId, peerAddressOf, redactionMiddleware } from "@eta/server";
 import { acpPlugin } from "./acp/plugin";
-import { AcpService, projectMachinesOf } from "./acp/service";
+import { AcpService } from "./acp/service";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
 import { approvalMiddleware } from "./approval-middleware";
@@ -621,10 +621,14 @@ export function createProduct(options: {
       tasks: taskRows,
       timeline,
       conversations,
+      projects,
+      machines,
       agents,
       artifactsOf,
     }),
     conversations,
+    projects,
+    machines,
     agents,
     artifactsOf,
     changed,
@@ -1330,8 +1334,6 @@ export function createProduct(options: {
                 machines,
                 link: (machineId) => hub.link(machineId),
                 agents: () => agents.list(),
-                projectMachines: (agentId) =>
-                  projectMachinesOf({ projects, conversations }, agentId),
                 changed: () => wire?.pushNow("acp"),
               }),
             },

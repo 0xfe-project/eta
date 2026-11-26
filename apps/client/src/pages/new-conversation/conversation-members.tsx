@@ -1,11 +1,20 @@
+import type { MachineView } from "@eta/client-contracts";
 import type { DirectoryChoice } from "./use-place-flow";
 import { View } from "nsh";
 import { Button, colors, grow, Icon, Label, row } from "../../components";
 import { AgentFace } from "../../components/agent-face";
 import { CheckControl } from "../../components/check-control";
 import { EmptyState } from "../../components/empty-state";
-import { avatar, control, icon, space, weight } from "../../components/tokens";
+import {
+  avatar,
+  control,
+  icon,
+  opacity,
+  space,
+  weight,
+} from "../../components/tokens";
 import { localizedText, uiText } from "../../i18n";
+import { onlyOnMachineNote } from "../../services/agent-machine";
 import { useHost } from "../../services/host";
 import { useLoadState } from "../../services/load-status";
 
@@ -27,6 +36,7 @@ export function ConversationMembers(props: {
   const host = useHost();
   const load = useLoadState({ targets: () => ["agents"] });
   const c = colors();
+  const machines = () => host.list<MachineView>("machines");
   return (
     <>
       <View
@@ -59,8 +69,12 @@ export function ConversationMembers(props: {
       </Label>
       <Each of={host.agents()} key={(agent) => agent.id}>
         {(agent, index) => {
-          const checked = () => props.agentIds.includes(agent().id);
-          const steward = () => props.stewardId === agent().id;
+          const note = () =>
+            onlyOnMachineNote(agent(), props.directory.machineId, machines());
+          const disabled = () => note() !== undefined;
+          const checked = () =>
+            !disabled() && props.agentIds.includes(agent().id);
+          const steward = () => !disabled() && props.stewardId === agent().id;
           return (
             <View
               style={{
@@ -79,7 +93,10 @@ export function ConversationMembers(props: {
               <CheckControl
                 label={agent().name}
                 checked={checked()}
-                onChange={() => props.onToggleAgent(agent().id)}
+                disabled={disabled()}
+                onChange={() => {
+                  if (!disabled()) props.onToggleAgent(agent().id);
+                }}
                 hoverStyle={{ backgroundColor: c().selected }}
                 size={icon.md}
                 indicatorStyle={{
@@ -91,7 +108,8 @@ export function ConversationMembers(props: {
                   alignSelf: "stretch",
                   gap: space[12],
                   paddingHorizontal: space[4],
-                  cursor: "pointer",
+                  cursor: disabled() ? "default" : "pointer",
+                  ...(disabled() ? { opacity: opacity.disabled } : {}),
                 }}
               >
                 <AgentFace id={agent().id} size={avatar.md} />
@@ -99,13 +117,14 @@ export function ConversationMembers(props: {
                   {agent().name}
                 </Label>
                 <Label variant="caption" tone="muted">
-                  {agent().runtime === "claude"
-                    ? "Claude Code"
-                    : agent().runtime === "codex"
-                      ? "Codex"
-                      : agent().runtime === "eta" || !agent().runtime
-                        ? localizedText("eta (built-in)", "eta（内置）")
-                        : agent().runtime}
+                  {note() ??
+                    (agent().runtime === "claude"
+                      ? "Claude Code"
+                      : agent().runtime === "codex"
+                        ? "Codex"
+                        : agent().runtime === "eta" || !agent().runtime
+                          ? localizedText("eta (built-in)", "eta（内置）")
+                          : agent().runtime)}
                 </Label>
               </CheckControl>
               {/* The steward is chosen on its own row; pressed again, the

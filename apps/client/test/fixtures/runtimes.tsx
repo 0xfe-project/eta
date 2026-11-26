@@ -226,7 +226,7 @@ const bo = {
   runtime: "codex",
   model: null,
   thinkingLevel: null,
-  machineId: null,
+  machineId: "m-primary",
   plugins: [],
   skippedPlugins: [],
   systemRole: null,

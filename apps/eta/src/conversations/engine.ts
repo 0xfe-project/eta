@@ -38,10 +38,12 @@ import type { ConversationPolicies } from "./policy";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
 import { homedir } from "node:os";
+import { isExternalRuntime } from "@eta/client-contracts";
 import { heldFor } from "@eta/client-contracts/routing";
 import { kernelOn } from "@eta/core";
 import { lastSeq, LinkError, listen } from "@eta/daemon";
 import { parseModelId } from "@eta/server";
+import { externalAgentProjectError } from "../agents/bounds";
 import { explainRunError, missingModel } from "../agents/model";
 import { heldIn } from "../session-owner";
 import { viewOf as attachmentView } from "./attachments";
@@ -282,13 +284,19 @@ export class Engine {
   }
 
   /**
-   * The machine an agent's sessions in a project are made on: its own, when it is pinned to one
-   * that is still here, else the project's.
+   * The machine an agent's sessions in a project are made on: external runtimes use only their
+   * pinned machine and never fall back to the project's; built-in `"eta"` agents use their pinned
+   * machine when set, else the project's.
    */
   machineFor(
     agent: AgentRecord,
     projectMachineId: string,
   ): MachineRecord | undefined {
+    if (isExternalRuntime(agent.runtime)) {
+      return agent.machineId === null
+        ? undefined
+        : this.#machines.get(agent.machineId);
+    }
     const pinned =
       agent.machineId === null
         ? undefined
@@ -499,6 +507,14 @@ export class Engine {
     /** The machine the task's project is on, when the session is made on another one. */
     awayFrom?: MachineRecord | undefined;
   }): Promise<SessionHandle> {
+    if (
+      isExternalRuntime(input.agent.runtime) &&
+      (input.agent.machineId === null ||
+        input.machine.id !== input.agent.machineId)
+    )
+      throw new Error(
+        `${input.agent.name} runs on ${input.agent.runtime} and may only run on its pinned machine`,
+      );
     const unset = missingModel(input.agent);
     if (unset !== undefined) throw new Error(unset);
     const place = this.#placeOf(input.machine);
@@ -1414,10 +1430,21 @@ export class Engine {
       project === undefined ? undefined : this.#machines.get(project.machineId);
     if (project === undefined || home === undefined)
       return fail("unavailable", "The conversation's project is gone.");
+    const boundProblem = externalAgentProjectError(
+      agent,
+      project,
+      this.#machines,
+    );
+    if (boundProblem !== undefined) return fail("unavailable", boundProblem);
     // An agent pinned to a machine answers from there, wherever the project is: in its home
     // directory, told (out of the transcript's sight) that the project's paths are another
     // machine's.
-    const machine = this.machineFor(agent, project.machineId) ?? home;
+    const machine = this.machineFor(agent, project.machineId);
+    if (machine === undefined)
+      return fail(
+        "unavailable",
+        `${agent.name}'s machine (${agent.machineId ?? "unassigned"}) is not registered.`,
+      );
     const elsewhere = machine.id !== home.id;
     const cwd = elsewhere ? homeOf(machine) : project.path;
     const away = elsewhere

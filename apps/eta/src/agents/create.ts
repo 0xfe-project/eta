@@ -14,6 +14,8 @@ import type { Plugins } from "../plugins/service";
 import type { ProjectRecord, ProjectStore } from "../projects/store";
 import type { AgentRecord, AgentStore } from "./store";
 import { mkdir, rm } from "node:fs/promises";
+import { isExternalRuntime } from "@eta/client-contracts";
+import { checkExternalMachineRequired, checkExternalPersona } from "./bounds";
 import { requireModel } from "./model";
 import { agentHome } from "./store";
 
@@ -60,8 +62,11 @@ export function checkNewAgent(
 ): void {
   const name = input.name.trim();
   if (name === "") throw new Error("an agent needs a name");
+  const runtime = input.runtime ?? "eta";
   checkAgentName(deps.agents, name);
-  requireModel(input.runtime ?? "eta", input.model ?? null);
+  checkExternalPersona(runtime, input.persona);
+  checkExternalMachineRequired(runtime, input.machineId);
+  requireModel(runtime, input.model ?? null);
   checkMachine(deps.machines, input.machineId);
   checkPlugins(deps.plugins, undefined, input.plugins);
   if (deps.machines.primary() === undefined)
@@ -149,7 +154,15 @@ async function writeAgent(
     // The agent and its workspace appear together or not at all.
     return deps.db.transaction(() => {
       const { plugins: wanted, ...fields } = input;
-      const agent = agents.create({ ...fields, name }, id);
+      const runtime = fields.runtime ?? "eta";
+      const agent = agents.create(
+        {
+          ...fields,
+          name,
+          ...(isExternalRuntime(runtime) ? { persona: "" } : {}),
+        },
+        id,
+      );
       const project = projects.create({
         machineId: primary.id,
         path: home,

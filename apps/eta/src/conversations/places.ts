@@ -249,7 +249,9 @@ export class LocalPlace implements SessionPlace {
       conversationId: conversation.id,
       ...(agent.runtime === "eta" ? {} : { runtime: agent.runtime }),
       ...(agent.model === null ? {} : { model: agent.model }),
-      ...(agent.persona === "" ? {} : { persona: agent.persona }),
+      ...(agent.runtime !== "eta" || agent.persona === ""
+        ? {}
+        : { persona: agent.persona }),
     });
     input.created(id);
     if (agent.thinkingLevel !== null) {
@@ -296,7 +298,10 @@ export class LocalPlace implements SessionPlace {
     await sessions.open(id);
     if (this.#opened.get(id) !== stamp) {
       await sessions.setMeta(id, {
-        persona: agent.persona === "" ? undefined : agent.persona,
+        persona:
+          agent.runtime !== "eta" || agent.persona === ""
+            ? undefined
+            : agent.persona,
       });
       await sessions.close(id);
     }

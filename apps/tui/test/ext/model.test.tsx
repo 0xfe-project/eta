@@ -3,7 +3,11 @@
  * thinking level, and what the host's agent holds afterwards.
  */
 import type { HostOptions } from "@eta/app/src/host";
-import type { AgentRuntimeInfo, AgentView } from "@eta/client-contracts";
+import type {
+  AgentRuntimeInfo,
+  AgentView,
+  MachineView,
+} from "@eta/client-contracts";
 import type { HostRendered } from "../ext-support/render-with-host";
 import { describe, expect, it } from "vitest";
 import model from "../../src/ext/model";
@@ -91,15 +95,29 @@ async function hostWith(
     extensions: [model],
     host: { dataDir, overrides },
   });
+  const primaryId = (
+    (r.wire.store.getState().targets.machines?.sections.list ??
+      []) as MachineView[]
+  ).find((machine) => machine.kind === "primary")?.id;
   const ids: Record<string, string> = {};
   for (const fields of agents) {
+    const external = fields.runtime !== undefined && fields.runtime !== "eta";
     // An agent on eta's own loop names a model: the host refuses one without.
+    // External runtimes require a pinned machine.
     const { agent } = await r.wire.call<{ agent: AgentView }>(
       "agents",
       "create",
-      fields.runtime === undefined && fields.model === undefined
-        ? { ...fields, model: "local:m1" }
-        : fields,
+      {
+        ...(fields.runtime === undefined && fields.model === undefined
+          ? { model: "local:m1" }
+          : {}),
+        ...(external &&
+        fields.machineId === undefined &&
+        primaryId !== undefined
+          ? { machineId: primaryId }
+          : {}),
+        ...fields,
+      },
     );
     ids[agent.name] = agent.id;
   }

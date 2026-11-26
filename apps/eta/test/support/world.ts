@@ -99,12 +99,24 @@ export async function world(
     host,
     client,
     async agent(name, fields = {}) {
-      // An agent on eta's own loop names a model (the host refuses one without); the scripted
-      // model layer answers to any.
+      // An agent on eta's own loop names a model (the host refuses one without); external
+      // runtimes must be pinned to one machine (default to primary in single-machine tests
+      // unless the caller passes another machineId or null).
+      const external = (fields.runtime ?? "eta") !== "eta";
+      const primaryId = host.db
+        .query<{ id: string }, []>(
+          "SELECT id FROM machine WHERE kind = 'primary'",
+        )
+        .get()?.id;
       const { agent } = await call<{ agent: AgentView }>("agents", "create", {
         name,
-        ...((fields.runtime ?? "eta") === "eta" && fields.model === undefined
+        ...(!external && fields.model === undefined
           ? { model: "fake:fake-model" }
+          : {}),
+        ...(external &&
+        fields.machineId === undefined &&
+        primaryId !== undefined
+          ? { machineId: primaryId }
           : {}),
         ...fields,
       });

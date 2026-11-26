@@ -39,6 +39,7 @@ import type { CaptainMemory } from "./memory";
 import type { AgentProposalDeps } from "./propose-agent";
 import type { CaptainReviewRecord, CaptainStore } from "./store";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
+import { checkExternalPersona } from "../agents/bounds";
 import { createCaptainIdentity } from "../agents/create";
 import { ensureHome, homeOf } from "../agents/home";
 import { checkModel } from "../agents/model";
@@ -795,11 +796,14 @@ export class CaptainService {
       throw new Error(
         "the base prompt and Captain's own prompt require user approval",
       );
-    if (
-      input.kind !== "base" &&
-      this.#deps.agents.get(input.subjectId) === undefined
-    )
+    const target =
+      input.kind === "base"
+        ? undefined
+        : this.#deps.agents.get(input.subjectId);
+    if (input.kind !== "base" && target === undefined)
       throw new Error("no such agent");
+    if (target !== undefined && input.kind === "persona")
+      checkExternalPersona(target.runtime, content);
     const version = this.#deps.store.appendPromptVersion({ ...input, content });
     if (input.kind === "base") {
       this.#basePrompt = content;

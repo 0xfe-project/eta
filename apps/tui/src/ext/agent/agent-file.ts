@@ -8,7 +8,7 @@ import type {
   ThinkingLevel,
 } from "@eta/client-contracts";
 import type { Scalar, YAMLError } from "yaml";
-import { isAgentRuntime } from "@eta/client-contracts";
+import { isAgentRuntime, isExternalRuntime } from "@eta/client-contracts";
 import { Document, isMap, isScalar, LineCounter, parseDocument } from "yaml";
 
 /** The keys of the file, in the order it lists them. */
@@ -67,7 +67,9 @@ export type FileProblem =
   | { kind: "unknown-runtime"; value: string }
   | { kind: "unknown-thinking-level"; value: string }
   | { kind: "model-format"; value: string }
-  | { kind: "model-runtime"; value: string; runtime: AgentRuntime };
+  | { kind: "model-runtime"; value: string; runtime: AgentRuntime }
+  | { kind: "external-persona"; runtime: AgentRuntime }
+  | { kind: "external-machine-required"; runtime: AgentRuntime };
 
 /** A key missing from the file is missing from `fields`: the agent keeps that value. */
 export type ReadResult =
@@ -237,6 +239,25 @@ function checkFields(
 
   const machineId = textOrNull("machineId");
   if (machineId !== undefined) fields.machineId = machineId;
+
+  const effectiveRuntime = fields.runtime ?? baseline.runtime;
+  if (
+    isExternalRuntime(effectiveRuntime) &&
+    persona !== undefined &&
+    persona.trim() !== ""
+  )
+    problems.push({ kind: "external-persona", runtime: effectiveRuntime });
+
+  const effectiveMachineId =
+    fields.machineId === undefined ? baseline.machineId : fields.machineId;
+  if (
+    isExternalRuntime(effectiveRuntime) &&
+    (effectiveMachineId === null || effectiveMachineId.trim() === "")
+  )
+    problems.push({
+      kind: "external-machine-required",
+      runtime: effectiveRuntime,
+    });
 
   if (values.has("plugins")) {
     const plugins = values.get("plugins");

@@ -589,7 +589,7 @@ export function captainSessionTools(
       name: "propose_agent",
       description: [
         "Propose a new agent. Nothing is created yet: the proposal appears as a card in this conversation, and only the user's confirmation creates the agent, its workspace and its first instructions and persona versions. Every proposal needs that confirmation.",
-        "Before proposing, call list_persona_cards and pick the single card that fits the work best: persona must be one of those ids. Never write a card and never invent one — the agent wears the card you name.",
+        "For the built-in eta runtime, call list_persona_cards before proposing and pick the single card that fits the work best: persona must be one of those ids (never write or invent a card). External runtimes (any non-eta runtime, such as OAR or ACP) cannot carry a persona card (omit persona) and must be pinned to one concrete machineId (they cannot participate in groups or tasks on other machines).",
         "model has no default: call list_models first, then ask the user which model the agent should run with ask_user, offering the available models, and propose the one they choose.",
         "name must not be the name of an agent that already exists. purpose is one sentence: what the agent is responsible for, and when it should be retired. instructions is what it is told to do, and cannot be empty.",
         "Several agents can be proposed in one turn; each gets its own card. Do not wait for the decision: once everything is proposed, end your turn. When the user decides, you are told the outcome in that conversation as a message that starts your next turn. Only a proposal you made is reported back — an agent the user creates in the agent dialog is not yours to track.",
@@ -605,9 +605,12 @@ export function captainSessionTools(
         instructions: Type.String({
           description: "What the agent is told to do. It cannot be empty.",
         }),
-        persona: Type.String({
-          description: "An id from list_persona_cards.",
-        }),
+        persona: Type.Optional(
+          Type.String({
+            description:
+              "An id from list_persona_cards (eta runtime only; omit for external runtimes).",
+          }),
+        ),
         model: Type.String({
           description:
             "provider:modelId, chosen by the user. There is no default.",
@@ -617,16 +620,26 @@ export function captainSessionTools(
             description: `One of ${AGENT_RUNTIMES.join(", ")}, or acp.<id> for an ACP agent the host lists.`,
           }),
         ),
+        machineId: Type.Optional(
+          Type.String({
+            description:
+              "Machine id to pin this agent to (required for any non-eta runtime; omit for eta to follow the project).",
+          }),
+        ),
         plugins: Type.Optional(Type.Array(Type.String())),
       }),
       execute: async (args) => {
         try {
-          const { runtime, ...rest } = args;
+          const { runtime, machineId, ...rest } = args;
           if (runtime !== undefined && !isAgentRuntime(runtime))
             throw new Error(`unknown runtime: ${runtime}`);
           const { operation } = await deps.service.proposals.propose(
             deps.service.propose.agent,
-            { ...rest, ...(runtime === undefined ? {} : { runtime }) },
+            {
+              ...rest,
+              ...(runtime === undefined ? {} : { runtime }),
+              ...(machineId === undefined ? {} : { machineId }),
+            },
             await proposalOrigin(),
           );
           return text(

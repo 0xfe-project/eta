@@ -1019,7 +1019,10 @@ describe("a session on a daemon's machine", () => {
     await until(() => view(r).state === "ready");
     const agent = await enable(
       r,
-      await r.agent("Rem", runtime === "eta" ? {} : { runtime }),
+      await r.agent(
+        "Rem",
+        runtime === "eta" ? {} : { runtime, machineId: r.daemon.machineId },
+      ),
     );
     const group = await r.group(r.remoteProject.id, [agent.id]);
     await r.watch(group.id);

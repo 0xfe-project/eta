@@ -8,6 +8,7 @@
  */
 import type { ConversationSummary } from "@eta/client-contracts";
 import type { AgentStore } from "../agents/store";
+import type { MachineStore } from "../machines/store";
 import type { ProjectStore } from "../projects/store";
 import type { AttachmentStore } from "./attachments";
 import type { Engine } from "./engine";
@@ -15,6 +16,7 @@ import type { ConversationPolicies } from "./policy";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { ConversationTargets } from "./targets";
 import type { Timeline } from "./timeline";
+import { checkExternalAgentProject } from "../agents/bounds";
 import { Args, productPlugin, publish } from "../wire";
 import { createGroup, groupNamed } from "./groups";
 import { announceSteward } from "./steward";
@@ -22,6 +24,7 @@ import { summaryOf } from "./views";
 
 export interface ConversationsDeps {
   agents: AgentStore;
+  machines: MachineStore;
   projects: ProjectStore;
   conversations: ConversationStore;
   policies: ConversationPolicies;
@@ -172,7 +175,16 @@ export function conversationsPlugin(
           if (agentIds.length === 0)
             throw new Error("conversations.invite needs agentIds");
           // Which one is missing is the error: `no such agent: <id>`.
-          for (const id of agentIds) agent(id);
+          const project = deps.projects.get(conversation.projectId);
+          for (const id of agentIds) {
+            agent(id);
+            if (project !== undefined)
+              checkExternalAgentProject(
+                agents.get(id)!,
+                project,
+                deps.machines,
+              );
+          }
           conversations.addParticipants(conversation.id, agentIds);
           deps.changed([conversation.id]);
           return { result: { conversation: summary(conversation) } };

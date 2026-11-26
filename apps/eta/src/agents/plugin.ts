@@ -21,6 +21,7 @@ import type { CallFrame } from "@eta/client-wire-proto";
 import type { Database } from "bun:sqlite";
 import type { Engine } from "../conversations/engine";
 import type { ConversationPolicies } from "../conversations/policy";
+import type { ConversationStore } from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
 import type { MachineStore } from "../machines/store";
 import type { Plugins } from "../plugins/service";
@@ -30,10 +31,16 @@ import type { AgentRecord, AgentStore } from "./store";
 import {
   agentThinking,
   isAgentRuntime,
+  isExternalRuntime,
   levelSupport,
 } from "@eta/client-contracts";
 import { THINKING_LEVELS } from "@eta/core";
 import { Args, productPlugin, publish } from "../wire";
+import {
+  checkExternalMachineChange,
+  checkExternalMachineRequired,
+  checkExternalPersona,
+} from "./bounds";
 import {
   checkAgentName,
   checkMachine,
@@ -50,6 +57,7 @@ export interface AgentsDeps {
   agents: AgentStore;
   machines: MachineStore;
   projects: ProjectStore;
+  conversations: ConversationStore;
   /** Each kind of conversation is told when an agent is renamed or deleted. */
   policies: ConversationPolicies;
   timeline: Timeline;
@@ -176,17 +184,40 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             );
           const moved =
             fields.runtime !== undefined && fields.runtime !== before.runtime;
+          const nextRuntime = fields.runtime ?? before.runtime;
+          const nextMachineId =
+            fields.machineId === undefined
+              ? before.machineId
+              : fields.machineId;
+          checkExternalPersona(nextRuntime, fields.persona);
+          checkExternalMachineRequired(nextRuntime, nextMachineId);
+          if (
+            isExternalRuntime(nextRuntime) &&
+            (moved || before.persona !== "")
+          )
+            fields.persona = "";
           // Another runtime's names mean nothing on this one: a move that names no model clears it.
           if (moved && fields.model === undefined) fields.model = null;
           // Clearing the model of an agent on eta's own loop, or moving one there without a model,
           // is refused; an edit that leaves the model alone (its plugins, say) is not held up by it.
           (fields.model !== undefined || moved ? requireModel : checkModel)(
-            fields.runtime ?? before.runtime,
+            nextRuntime,
             fields.model === undefined ? before.model : fields.model,
           );
           if (fields.name !== undefined)
             checkAgentName(agents, fields.name, id);
-          checkMachine(machines, fields.machineId);
+          checkMachine(
+            machines,
+            moved && isExternalRuntime(nextRuntime)
+              ? nextMachineId
+              : fields.machineId,
+          );
+          checkExternalMachineChange(
+            { conversations: deps.conversations, projects, machines },
+            before,
+            nextRuntime,
+            nextMachineId,
+          );
           checkPlugins(plugins, id, fields.plugins);
           const thinkingCleared = await settleLevel(before, fields);
           const { agent, sessions } = deps.engine.saveAgent(before, {

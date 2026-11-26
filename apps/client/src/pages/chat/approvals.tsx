@@ -390,7 +390,14 @@ function proposalFields(
     case "create_agent":
       return [
         ["proposalPurpose", text("purpose")],
-        ["proposalPersona", text("persona")],
+        ...(typeof payload.runtime === "string" &&
+        payload.runtime !== "" &&
+        payload.runtime !== "eta"
+          ? []
+          : ([["proposalPersona", text("persona")]] satisfies [
+              Parameters<typeof uiText>[0],
+              string,
+            ][])),
         ["proposalModel", text("model")],
         ["proposalRuntime", text("runtime")],
       ];

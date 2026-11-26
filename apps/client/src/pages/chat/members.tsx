@@ -1,4 +1,4 @@
-import type { MemberView } from "@eta/client-contracts";
+import type { MachineView, MemberView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { signal, View, windowSize } from "nsh";
 import {
@@ -33,11 +33,16 @@ import {
   avatar,
   control,
   icon,
+  opacity,
   shadow,
   space,
   weight,
 } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
+import {
+  agentAllowedOnMachine,
+  onlyOnMachineNote,
+} from "../../services/agent-machine";
 import { useHost } from "../../services/host";
 import { useLoadState } from "../../services/load-status";
 
@@ -196,14 +201,31 @@ export function InviteAgents(props: {
   const selected = signal<string[]>([]);
   const saving = signal(false);
   const agentsLoad = useLoadState({ targets: () => ["agents"] });
+  const projectMachineId = () => {
+    const conversation = host
+      .conversations()
+      .find((entry) => entry.id === props.conversationId);
+    const project = conversation
+      ? host.projects().find((entry) => entry.id === conversation.projectId)
+      : undefined;
+    return project && project.kind !== "agent_home"
+      ? project.machineId
+      : undefined;
+  };
+  const machines = () => host.list<MachineView>("machines");
   const candidates = () =>
     host
       .people()
       .filter(
         (agent) => !props.members.some((member) => member.agentId === agent.id),
       );
-  const inviteIds = () =>
-    selected().filter((id) => candidates().some((agent) => agent.id === id));
+  const inviteIds = () => {
+    const machineId = projectMachineId();
+    return selected().filter((id) => {
+      const found = candidates().find((agent) => agent.id === id);
+      return found !== undefined && agentAllowedOnMachine(found, machineId);
+    });
+  };
   async function invite() {
     const agentIds = inviteIds();
     if (saving() || !agentIds.length) return;
@@ -273,45 +295,54 @@ export function InviteAgents(props: {
           scrollbar={false}
         >
           <Each of={candidates()} key={(agent) => agent.id}>
-            {(agent, index) => (
-              <CheckControl
-                size={icon.md}
-                checked={selected().includes(agent().id)}
-                label={agent().name}
-                onChange={(checked) =>
-                  selected.update((ids) =>
-                    checked
-                      ? [...ids, agent().id]
-                      : ids.filter((id) => id !== agent().id),
-                  )
-                }
-                style={{
-                  ...row,
-                  gap: phone() ? space[12] : space[8],
-                  paddingHorizontal: phone() ? space[4] : 0,
-                  minHeight: phone()
-                    ? agentRowHeight.phone
-                    : agentRowHeight.desktop,
-                  borderTopWidth: phone() && index() === 0 ? 1 : 0,
-                  borderBottomWidth: phone() ? 1 : 0,
-                  borderColor: c().border,
-                  cursor: "pointer",
-                }}
-              >
-                <AgentFace
-                  id={agent().id}
-                  size={phone() ? avatar.md : avatar.sm}
-                />
-                <Label style={{ flex: phone() ? 1 : undefined }}>
-                  {agent().name}
-                </Label>
-                <Label variant="caption" tone="muted">
-                  {agent().runtime === "eta"
-                    ? uiText("etaBuiltIn")
-                    : agent().runtime}
-                </Label>
-              </CheckControl>
-            )}
+            {(agent, index) => {
+              const note = () =>
+                onlyOnMachineNote(agent(), projectMachineId(), machines());
+              const disabled = () => note() !== undefined;
+              return (
+                <CheckControl
+                  size={icon.md}
+                  checked={!disabled() && selected().includes(agent().id)}
+                  disabled={disabled()}
+                  label={agent().name}
+                  onChange={(checked) => {
+                    if (disabled()) return;
+                    selected.update((ids) =>
+                      checked
+                        ? [...ids, agent().id]
+                        : ids.filter((id) => id !== agent().id),
+                    );
+                  }}
+                  style={{
+                    ...row,
+                    gap: phone() ? space[12] : space[8],
+                    paddingHorizontal: phone() ? space[4] : 0,
+                    minHeight: phone()
+                      ? agentRowHeight.phone
+                      : agentRowHeight.desktop,
+                    borderTopWidth: phone() && index() === 0 ? 1 : 0,
+                    borderBottomWidth: phone() ? 1 : 0,
+                    borderColor: c().border,
+                    cursor: disabled() ? "default" : "pointer",
+                    ...(disabled() ? { opacity: opacity.disabled } : {}),
+                  }}
+                >
+                  <AgentFace
+                    id={agent().id}
+                    size={phone() ? avatar.md : avatar.sm}
+                  />
+                  <Label style={{ flex: phone() ? 1 : undefined }}>
+                    {agent().name}
+                  </Label>
+                  <Label variant="caption" tone="muted">
+                    {note() ??
+                      (agent().runtime === "eta"
+                        ? uiText("etaBuiltIn")
+                        : agent().runtime)}
+                  </Label>
+                </CheckControl>
+              );
+            }}
           </Each>
           <If when={!candidates().length}>
             <EmptyState

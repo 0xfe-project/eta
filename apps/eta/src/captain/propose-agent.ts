@@ -14,7 +14,12 @@ import type {
 import type { PersonaCard } from "@eta/core";
 import type { AgentCreateDeps } from "../agents/create";
 import type { ProposalKind, ProposalOrigin } from "./proposals";
+import { isExternalRuntime } from "@eta/client-contracts";
 import { describeCard, discoverPersonas } from "@eta/server";
+import {
+  checkExternalMachineRequired,
+  checkExternalPersona,
+} from "../agents/bounds";
 import { checkNewAgent, createAgent } from "../agents/create";
 
 /** What Captain asks for when it proposes an agent. */
@@ -22,11 +27,13 @@ export interface AgentProposalInput {
   name: string;
   purpose: string;
   instructions: string;
-  /** The id of an existing card. Never a new card. */
-  persona: string;
+  /** The id of an existing card (`eta` only; must be omitted or empty for external runtimes). */
+  persona?: string | undefined;
   /** Chosen by the user: there is no default. */
   model: string;
   runtime?: AgentRuntime | undefined;
+  /** The id of the machine to run on; required for external runtimes, optional (`null`) for `eta`. */
+  machineId?: string | null | undefined;
   plugins?: readonly string[] | undefined;
 }
 
@@ -87,23 +94,43 @@ export function agentProposals(
       const instructions = input.instructions.trim();
       const model = input.model.trim();
       const runtime = input.runtime ?? "eta";
+      const external = isExternalRuntime(runtime);
+      const rawPersona = input.persona?.trim() ?? "";
+      const machineId =
+        input.machineId === undefined || input.machineId === ""
+          ? null
+          : input.machineId;
       const plugins = [...new Set(input.plugins ?? [])];
       if (input.name.trim() === "") throw new Error("an agent needs a name");
       if (purpose === "") throw new Error("an agent needs a purpose");
       if (instructions === "")
         throw new Error("instructions must not be empty");
       if (model === "") throw new Error("an agent needs a model");
-      checkNewAgent(deps, { name: input.name, runtime, model, plugins });
-      const card = (await personaCards(deps)).get(input.persona);
-      if (card === undefined)
-        throw new Error(`no such persona card: ${input.persona}`);
+      checkExternalPersona(runtime, input.persona);
+      checkExternalMachineRequired(runtime, machineId);
+      checkNewAgent(deps, {
+        name: input.name,
+        runtime,
+        model,
+        machineId,
+        persona: external ? "" : rawPersona,
+        plugins,
+      });
+      let persona = "";
+      if (!external) {
+        const card = (await personaCards(deps)).get(rawPersona);
+        if (card === undefined)
+          throw new Error(`no such persona card: ${rawPersona}`);
+        persona = card.id;
+      }
       return {
         name: input.name.trim(),
         purpose,
         instructions,
-        persona: card.id,
+        persona,
         model,
         runtime,
+        machineId,
         plugins,
       };
     },
@@ -117,6 +144,7 @@ export function agentProposals(
           persona: proposal.persona,
           runtime: proposal.runtime,
           model: proposal.model,
+          machineId: proposal.machineId ?? null,
           plugins: proposal.plugins,
         },
         operation.actorAgentId,

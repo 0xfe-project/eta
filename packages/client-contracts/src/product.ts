@@ -31,7 +31,7 @@ export interface AgentView {
   name: string;
   /** Standing instructions, added to the base of the system prompt of each of its sessions. */
   instructions: string;
-  /** The persona card it wears, by name. Empty means the project's default card. */
+  /** The persona card it wears, by name. Empty for external runtimes, or the project's default card on `"eta"`. */
   persona: string;
   /** What answers for it: eta's own loop, or an external runtime on the machine. */
   runtime: AgentRuntime;
@@ -43,9 +43,9 @@ export interface AgentView {
   model: string | null;
   thinkingLevel: ThinkingLevel | null;
   /**
-   * The machine it runs on, when it is pinned to one: its sessions are made there whatever
-   * machine the conversation's or task's project is on, and an external runtime is that machine's.
-   * Null follows the project.
+   * The machine it runs on, when it is pinned to one. Built-in `"eta"` agents may use `null` to
+   * follow the project or run across machines when pinned; external runtimes (`runtime !== "eta"`)
+   * are always pinned to one machine and cannot be used across machines.
    */
   machineId: string | null;
   /** The plugins it has enabled, by name. */
@@ -406,6 +406,14 @@ export function isAgentRuntime(value: string): value is AgentRuntime {
   );
 }
 
+/**
+ * Whether a runtime runs outside eta's own loop (any built-in OAR runtime or custom ACP runtime).
+ * External runtimes never carry a persona card and are strictly bound to one machine.
+ */
+export function isExternalRuntime(runtime: AgentRuntime): boolean {
+  return runtime !== "eta";
+}
+
 /** A model an external runtime can run, in its own names. */
 export interface AgentRuntimeModel {
   /** What its `--model` takes; an agent stores it as `runtime:id`. */
@@ -486,7 +494,7 @@ export interface AgentFields {
   /** `provider:modelId` (`runtime:modelId` on an external runtime); null clears it. */
   model?: string | null;
   thinkingLevel?: ThinkingLevel | null;
-  /** The machine to run on; null follows the project. */
+  /** The machine to run on; null follows the project (allowed only for `"eta"` agents). */
   machineId?: string | null;
   /** The plugins it has enabled. Adding one that cannot be enabled is refused. */
   plugins?: string[];

@@ -1,4 +1,5 @@
 import type { AgentForm } from "./form";
+import { isExternalRuntime } from "@eta/client-contracts";
 import { View } from "nsh";
 import {
   ActionItem,
@@ -19,21 +20,33 @@ import { EditorRow } from "./editor-row";
 const optionRow = 56;
 
 export function MachineField(props: { form: AgentForm }) {
-  const { phoneEditor, machineId, machines, creating, stacked, selectStyle } =
-    props.form;
+  const {
+    phoneEditor,
+    machineId,
+    machines,
+    creating,
+    stacked,
+    selectStyle,
+    runtime,
+  } = props.form;
+  const external = () => isExternalRuntime(runtime());
   const c = colors();
   // The editor lists the choices as rows (the design's Runs on block); the creator keeps a select.
   if (!creating) {
     const items = () => [
-      {
-        id: null,
-        title: localizedText("Follow the project", "随项目选择"),
-        detail: localizedText(
-          "Runs on the machine the project is on",
-          "在项目所在的机器上运行",
-        ),
-        online: false,
-      },
+      ...(external()
+        ? []
+        : [
+            {
+              id: null,
+              title: localizedText("Follow the project", "随项目选择"),
+              detail: localizedText(
+                "Runs on the machine the project is on",
+                "在项目所在的机器上运行",
+              ),
+              online: false,
+            },
+          ]),
       ...machines().map((item) => ({
         id: item.id,
         title:
@@ -99,7 +112,7 @@ export function MachineField(props: { form: AgentForm }) {
             );
           }}
         </Each>
-        <If when={!phoneEditor()}>
+        <If when={!phoneEditor() && machineId() === null}>
           <View
             style={{
               paddingHorizontal: space[16],
@@ -127,15 +140,19 @@ export function MachineField(props: { form: AgentForm }) {
           machines().find((item) => item.id === machineId())?.name ??
           (machineId()
             ? localizedText("Unavailable machine", "机器不可用")
-            : uiText("followProject"))
+            : external()
+              ? localizedText("Choose a machine", "选择机器")
+              : uiText("followProject"))
         }
         triggerStyle={selectStyle()}
       >
-        <ActionItem
-          label={uiText("followProject")}
-          checked={!machineId()}
-          onSelect={() => machineId.set(null)}
-        />
+        <If when={!external()}>
+          <ActionItem
+            label={uiText("followProject")}
+            checked={!machineId()}
+            onSelect={() => machineId.set(null)}
+          />
+        </If>
         <Each of={machines()} key={(item) => item.id}>
           {(item) => (
             <ActionItem
