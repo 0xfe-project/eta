@@ -1,6 +1,7 @@
 import type {
   AgentView,
   CaptainResults,
+  PluginBundledAgentView,
   ProvidersView,
 } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
@@ -11,6 +12,7 @@ import type { Page } from "../navigation/routes";
 import type { PluginsTab } from "../pages/plugins/plugins";
 import type { ChatWidth, Theme } from "../pages/settings/appearance";
 import type { SettingsSection } from "../pages/settings/overview";
+import type { ImportedBotDraft } from "../pages/templates/local-import";
 import {
   cleanup,
   effect,
@@ -45,7 +47,10 @@ import { NewTask } from "../pages/tasks/new-task";
 import { TaskDetail } from "../pages/tasks/task-detail";
 import { TaskWorkspace } from "../pages/tasks/task-workspace";
 import { openAgentChat } from "../pages/templates/agent-chat";
-import { TemplateGallery } from "../pages/templates/gallery";
+import {
+  pluginBundledAgentDraft,
+  TemplateGallery,
+} from "../pages/templates/gallery";
 import { requestedTemplate } from "../pages/templates/link";
 import { follow, useHost } from "../services/host";
 import { dismissTop, topDismissable } from "../ui/behaviors";
@@ -176,6 +181,16 @@ export function Workspace(props: {
   >(undefined);
   /** The template gallery, open on a template id ("" for none in particular). */
   const templateGallery = signal<string | undefined>(undefined);
+  /** A pre-loaded draft (e.g. a plugin-bundled agent) to open the template gallery on. */
+  const templateDraft = signal<ImportedBotDraft | undefined>(undefined);
+  function closeTemplateGallery() {
+    templateGallery.set(undefined);
+    templateDraft.set(undefined);
+  }
+  function openPluginAgent(pluginName: string, agent: PluginBundledAgentView) {
+    templateDraft.set(pluginBundledAgentDraft(pluginName, agent));
+    templateGallery.set("");
+  }
   // A template link (`eta://template?id=…`, `?template=…`) opens the gallery on it.
   effect(() => {
     const id = requestedTemplate();
@@ -184,6 +199,7 @@ export function Workspace(props: {
     // An agent is made in Settings › Agents now: a link gets out of Settings first.
     const section = settings();
     if (section) closeSettings(section);
+    templateDraft.set(undefined);
     templateGallery.set(id);
   });
   const newTask = signal(false);
@@ -631,6 +647,7 @@ export function Workspace(props: {
               initialTab={pluginsIntent()?.tab}
               initialPlugin={pluginsIntent()?.plugin}
               onPluginSettings={() => showSettings("Plugins")}
+              onImportAgent={openPluginAgent}
               onBack={
                 phone()
                   ? () => {
@@ -717,6 +734,7 @@ export function Workspace(props: {
                 onClose={() => closeSettings(section())}
                 onTemplates={() => {
                   closeSettings(section());
+                  templateDraft.set(undefined);
                   templateGallery.set("");
                 }}
                 onOpenMarket={() => {
@@ -744,21 +762,22 @@ export function Workspace(props: {
           phone={phone()}
           tablet={props.layout === "tablet"}
           initialId={templateGallery() || undefined}
-          onClose={() => templateGallery.set(undefined)}
+          initialDraft={templateDraft()}
+          onClose={closeTemplateGallery}
           onCreated={(agent) => {
-            templateGallery.set(undefined);
+            closeTemplateGallery();
             void chatWith(agent);
           }}
           onModelServices={() => {
-            templateGallery.set(undefined);
+            closeTemplateGallery();
             showSettings("Model services");
           }}
           onOpenMarket={() => {
-            templateGallery.set(undefined);
+            closeTemplateGallery();
             openPlugins({ tab: "Market" });
           }}
           onOpenPlugins={(plugin) => {
-            templateGallery.set(undefined);
+            closeTemplateGallery();
             openPlugins({ tab: "Plugins", plugin });
           }}
         />
