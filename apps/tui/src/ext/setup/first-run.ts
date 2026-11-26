@@ -1,5 +1,4 @@
 // What decides whether the first-time setup opens by itself, and the facts it reads off the wire.
-// The preselected model and the "one agent per card" rule follow apps/web/src/pages/onboard.tsx.
 
 import type {
   AgentView,

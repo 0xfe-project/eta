@@ -22,6 +22,7 @@
     "check": "bun --bun dprint check && turbo run build typecheck lint //#lint:repo test //#knip",
     "check:affected": "bun --bun dprint check && turbo run build typecheck lint //#lint:repo test //#knip --affected",
     "test": "turbo run test",
+    "test:scripts": "bun --bun vitest --run scripts/host-launcher",
     "lint": "turbo run lint //#lint:repo",
     "format": "bun --bun dprint fmt",
     "knip": "knip",
@@ -39,6 +40,7 @@
     "knip": "^6.44.1",
     "lefthook": "^2.2.2",
     "turbo": "^2.11.10",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
   }
 }

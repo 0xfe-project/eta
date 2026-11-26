@@ -1,5 +1,4 @@
-// The kit's interface texts. `llmProblemMessages` is the gateway's codes in the words of
-// apps/web/src/locales/en/llm.json and apps/web/src/locales/zh/llm.json (`problems`), with
+// The kit's interface texts. `llmProblemMessages` is the gateway's codes, with
 // `{{name}}` written as `{name}`.
 
 import { defineMessages } from "../../i18n/messages";

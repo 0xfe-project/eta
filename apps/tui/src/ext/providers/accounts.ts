@@ -1,6 +1,4 @@
-// What the account screens say about an account or a connector. The key page and the states that
-// need a new sign-in follow apps/web/src/components/workspace/llm-state.ts and
-// apps/web/src/queries/llm.ts (`NEEDS_ACTION`).
+// What the account screens say about an account or a connector.
 
 import type { LlmConnectionState } from "@eta/client-contracts";
 import type { Translate } from "../../i18n/messages";

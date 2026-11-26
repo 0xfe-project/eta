@@ -67,7 +67,7 @@ The connection layer is the shared client in `@eta/client-contracts/wire`, the s
 
 The host's version number is only in the reply to `upgrade.check` (`version`). The TUI calls it once on the first connection after the process starts and compares it with the version recorded at its own build; when they differ, it shows a yellow hint in the status area without refusing. When either side is `dev` (run from source) there is no comparison, and when the TUI is `dev` it does not call at all. Reconnecting or switching hosts does not call it again: `upgrade.check` asks GitHub Releases every time, and unauthenticated requests are limited to 60 an hour.
 
-`/version` is not used: it returns the web bundle's build id (a timestamp from building `apps/web`), not the host's version number.
+`/version` is not used: it returns the web bundle's build id (a timestamp from building the web client), not the host's version number.
 
 When an op a feature needs is not in `hello.ops`, that feature reports "host too old" and the rest works as usual. Slash commands declare their ops in `requiredOps`, which is checked before running.
 

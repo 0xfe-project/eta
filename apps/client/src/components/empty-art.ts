@@ -1,6 +1,5 @@
 // Phosphor Duotone glyphs for empty states (#378), as `@phosphor-icons/core` draws them on a
 // 256-point view box: `line` is the Regular glyph, `fill` the shape the duotone weight shades.
-// Copied from the package apps/web already depends on; no new dependency.
 export const emptyArtPaths = {
   /** ListChecks */
   tasks: {

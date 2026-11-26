@@ -18,7 +18,7 @@ const size = 1024;
 const inset = 824;
 
 export async function writeClientIcons(root: string): Promise<void> {
-  const logo = join(root, "apps", "web", "public");
+  const logo = join(root, "apps", "client", "assets");
   const out = join(root, "apps", "client", ".nsh", "icons");
   await initWasm(
     await Bun.file(

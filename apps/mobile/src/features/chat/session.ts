@@ -1,5 +1,5 @@
 // Member sessions on the wire: `sessions.<id>` is where the things the timeline does not hold live
-// (a reply's words as it writes them, its tool calls). See apps/web/src/queries/sessions.ts.
+// (a reply's words as it writes them, its tool calls).
 
 import type {
   AgentMessage,

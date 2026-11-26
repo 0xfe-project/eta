@@ -33,7 +33,7 @@ Stays on the computer: models, MCP, approval, editing agents, managing machines.
 
 - Data only flows through the wire, same as Web: `useTarget` (subscribe) in `src/wire/target.ts`, `eager` (carried by `hello`),
   `call` (`target.action`). The list is in `src/app/lists.ts`. Types come from `@eta/client-contracts`,
-  **Before starting, read `docs/architecture/` and the implementation of the same feature in `apps/web/src`**: keep semantics identical to Web, don't invent ops.
+  **Before starting, read `docs/architecture/`**: don't invent ops.
 - All copy goes through `t("feature.key")`, with Chinese and English written as a pair in `src/features/<feature>/i18n.ts`.
 - Use only theme colors (`theme.json`): `text-foreground`, `text-muted-foreground`, `text-faint`, `bg-muted`,
   `bg-surface`, `border-border`, `border-border-strong`, `bg-primary`, `text-state-error`…, dark mode switches automatically.

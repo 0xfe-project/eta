@@ -1,5 +1,4 @@
-// Adapted from apps/web/src/queries/providers.ts (`modelsOf`, `gatewayModels`, `useModels`): the
-// same rules as pure functions over the `providers` and `llm` targets' sections.
+// Model rules (`modelsOf`, `gatewayModels`, `useModels`) as pure functions over the `providers` and `llm` targets' sections.
 
 import type {
   LlmAccounts,

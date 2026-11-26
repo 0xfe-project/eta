@@ -1,9 +1,9 @@
 # Overview
 
-eta is a workbench for one person to direct multiple agents. The server is **a single Bun process** (`apps/eta`, hereinafter the main node or host): it hosts the Web app, product data, model credentials, and the entry point to the memory sidecar. A slimmed-down daemon (`apps/daemon`) can also run on other machines so sessions run there.
+eta is a workbench for one person to direct multiple agents. The server is **a single Bun process** (`apps/eta`, hereinafter the main node or host): it hosts the web client, product data, model credentials, and the entry point to the memory sidecar. A slimmed-down daemon (`apps/daemon`) can also run on other machines so sessions run there.
 
 ```
-Browser (apps/web)
+Client (apps/client)
    │  One WebSocket: /ws (pipe protocol)          HTTP: static pages, /up, /version, /preview, /share
    ▼
 Main node  apps/eta                              ← the only process; SQLite + files in one data directory
@@ -19,13 +19,12 @@ Main node  apps/eta                              ← the only process; SQLite + 
 
 ## Processes
 
-| Processes      | Location      | Purpose                                                                                                                                                                                            |
-| -------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| host           | `apps/eta`    | The only required process. `bun apps/eta/src/main.ts`; for development, `bun run dev`                                                                                                              |
-| web dev server | `apps/web`    | Only needed in development (vite proxies `/ws` to host). In production, host serves the built static pages directly (included in the packaged host; `--web-dir` can specify a different directory) |
-| eta-daemon     | `apps/daemon` | Optional, one per additional machine. A single file produced by `bun build --compile`, without Web, database, product plugins, or model configuration                                              |
-| Memory sidecar | `apps/memory` | Optional. Python (mem0 + fastembed), its own PostgreSQL (pgvector). Without it, host does not mount memory and the UI hides the memory page                                                        |
-| eta (TUI)      | `apps/tui`    | Optional, the terminal interface. A single file produced by `bun build --compile`; connects to a host over `/ws`, or starts a temporary host that exits with it, see [TUI](tui.md)                 |
+| Processes      | Location      | Purpose                                                                                                                                                                            |
+| -------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| host           | `apps/eta`    | The only required process. `bun apps/eta/src/main.ts`; for development, `bun run dev`                                                                                              |
+| eta-daemon     | `apps/daemon` | Optional, one per additional machine. A single file produced by `bun build --compile`, without Web, database, product plugins, or model configuration                              |
+| Memory sidecar | `apps/memory` | Optional. Python (mem0 + fastembed), its own PostgreSQL (pgvector). Without it, host does not mount memory and the UI hides the memory page                                        |
+| eta (TUI)      | `apps/tui`    | Optional, the terminal interface. A single file produced by `bun build --compile`; connects to a host over `/ws`, or starts a temporary host that exits with it, see [TUI](tui.md) |
 
 There are no other services: no control plane, message queue, container orchestration, or primary database. The LLM gateway is not a standalone service: CLIProxyAPI is a child process started and supervised by host, and exits with host (see [LLM gateway](llm-gateway.md)). SearXNG for search is the same: when no external address is provided, it is a child process started by host on the first search and exits with host (see [Web reading and search](web.md)).
 
@@ -56,7 +55,7 @@ deploy/       Dockerfile、memory.Dockerfile、compose.yaml
 
 1. **Floor** (`@eta/server`'s `assembleServer`): WebSocket pipeline, target registry, state push, session manager, model and provider configuration, persona. It knows no product concepts; see [wire protocol](wire-protocol.md).
 2. **Product** (`apps/eta`): each feature is a cordis plugin that registers its own target and action with the floor; data lives in SQLite. Startup order is to build the product first (its hook is an option of the floor), then build the floor, and finally mount the plugins (`product.ts`'s `mount`); serving starts only once everything is in place.
-3. **UI** (`apps/web`): one connection, one store of sections keyed by target, and one set of hooks per target. No REST. Plugins not present in `hello.mounted` have their entry points hidden.
+3. **UI** (a client): one connection, one store of sections keyed by target, and one set of hooks per target. No REST. Plugins not present in `hello.mounted` have their entry points hidden.
 
 ## Why it is this way
 

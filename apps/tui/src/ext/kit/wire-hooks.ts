@@ -1,4 +1,4 @@
-// Adapted from apps/web/src/queries/wire.ts: the wire's state in React, on the shell's wire.
+// The wire's state in React, on the shell's wire.
 
 import type { TargetState, WireState } from "../../connection/types";
 import { useEffect } from "react";

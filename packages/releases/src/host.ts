@@ -1,7 +1,6 @@
 /**
  * A host release, from finding one to a checked file on disk. The host's own upgrade
- * (`apps/eta/src/upgrade/upgrade.ts`) and the desktop app's first download
- * (`apps/desktop/src/bun/download.ts`) both go through here.
+ * (`apps/eta/src/upgrade/upgrade.ts`) goes through here.
  *
  * Which release the app may take is the host's to say: each release since the contract carries
  * `eta-host.json` with the oldest desktop app its page works in (`@eta/client-contracts/desktop`),

@@ -440,7 +440,7 @@ The button only appears for a compiled host, and only when `io.eta.host` or the 
 
 ### The host machine in the desktop app
 
-The local launcher in `scripts/nsh-host-bootstrap.ts` supervises the host and keeps its original loopback port across upgrades. It uses the service implementation in `apps/desktop/src/bun/service.ts`.
+The local launcher in `scripts/nsh-host-bootstrap.ts` supervises the host and keeps its original loopback port across upgrades. It uses the service implementation in `scripts/host-launcher/service.ts`.
 
 The launcher provides the host with a token for a loopback service endpoint. It accepts only the host's own upgrade worker, which runs alongside the host. The worker verifies the new release, stops the host, backs up the database and starts the replacement on the previous port. If verification fails after restart, it restores the old executable and database.
 

@@ -1,7 +1,6 @@
 /**
  * The model list a picker shows: the configured providers' models and the gateway's, which of
- * them can be used, in the config's order. No model is marked as a default. The rules are the web page's
- * (`apps/web/src/queries/providers.ts`); `useModels` is checked against a real host.
+ * them can be used, in the config's order. No model is marked as a default. `useModels` is checked against a real host.
  */
 import type {
   LlmAccounts,

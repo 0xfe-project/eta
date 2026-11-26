@@ -10,7 +10,7 @@
  * draw (`captainOutcome`).
  *
  * A kind brings only what is its own: the check, the making, and what Captain is told it made. The
- * card a client draws for it is the client's (`apps/web/.../proposal-card.tsx`).
+ * card a client draws for it is the client's.
  */
 import type {
   CaptainIdentityView,

@@ -75,7 +75,7 @@ const protocolWidth = 224;
 const stateWidth = 96;
 const searchWidth = 240;
 
-// Adding a model source in three steps, as apps/web does: pick where the models come from,
+// Adding a model source in three steps: pick where the models come from,
 // connect to it (a key, a sign-in, an address), pick the models. Connecting lists the models
 // once (getting the list is what says the connection works); a subscription brings its models
 // with the sign-in, so its last step only shows them.
@@ -577,7 +577,7 @@ function SourceSteps(props: { step: number }) {
   );
 }
 
-/** Every source there is, grouped the way apps/web groups them: Eta first, then the groups. */
+/** Every source there is, grouped: Eta first, then the groups. */
 function PresetList(props: {
   phone: boolean;
   onPick: (preset: SourcePreset) => void;

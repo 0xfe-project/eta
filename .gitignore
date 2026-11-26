@@ -12,7 +12,6 @@ dist/
 .tanstack/
 .ruff_cache/
 .DS_Store
-apps/web/src/routeTree.gen.ts
 apps/tui/src/extensions.gen.ts
 var/
 out/

@@ -11,8 +11,7 @@ running host serves it at `/THIRD_PARTY_NOTICES.md`; `apps/eta/scripts/notices.t
 Three faces of one family, the default interface and monospace face of the client
 (`apps/client/src/components/theme.ts`): `apps/client/assets/AKRDWGSCNFM-Light.woff2` (weight 300),
 `apps/client/assets/AKRDWGSCNFM-Regular.woff2` (400) and `apps/client/assets/AKRDWGSCNFM-Bold.woff2` (700).
-The Regular file is also `apps/web/public/AKRDWGSCNFM-Regular.woff2`, declared as "Eta Sans" in
-`apps/web/index.html`. They are the WOFF2 files of the
+They are the WOFF2 files of the
 [AKR DWG SC NFM 1.1.0 release](https://github.com/AkaraChen/font/releases/tag/v1.1.0), unchanged, and are in
 the client builds (web, desktop, phone) and in every compiled host. They are **not** covered by eta's MIT
 License. The release's own notes and the texts of both sources are next to them in `apps/client/assets/`
@@ -81,7 +80,6 @@ below.
 | [Bun](https://github.com/oven-sh/bun)                       | MIT               | The runtime of every compiled file. Statically links JavaScriptCore and WebKit, see below |
 | [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) | MIT               | Embedded in `eta-host`, run as a child process (`@cpajs/*`)                               |
 | [SearXNG](https://github.com/searxng/searxng)               | AGPL-3.0-or-later | Embedded in `eta-host`, run as a child process (`@searxng-js/*`), see below               |
-| [Electrobun](https://github.com/blackboardsh/electrobun)    | MIT               | The desktop app's shell                                                                   |
 
 ### JavaScriptCore and WebKit
 

@@ -6,10 +6,10 @@
   "icon": {
     "macos": ".nsh/icons/macos.png",
     "ios": ".nsh/icons/ios.png",
-    "windows": "../web/public/Eta-Logo.png",
-    "linux": "../web/public/Eta-Logo.png",
-    "android": "../web/public/Eta-Logo.png",
-    "web": "../web/public/Eta-Logo.png"
+    "windows": "assets/Eta-Logo.png",
+    "linux": "assets/Eta-Logo.png",
+    "android": "assets/Eta-Logo.png",
+    "web": "assets/Eta-Logo.png"
   },
   "schemes": ["eta"],
   "web": {

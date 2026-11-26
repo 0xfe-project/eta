@@ -6,7 +6,7 @@ Guideline: **do not copy the desktop app**. Show one thing at a time; bring up a
 
 ## Conventions
 
-- Data goes only over the wire, like the web UI: the one WebSocket in `src/connection/wire.ts`, subscribing to targets and calling `target.action`. Types come from `@eta/client-contracts`. **Before starting, read `docs/architecture/` and the implementation of the same feature in `apps/web/src`**, keep the semantics the same, and do not invent ops. When the host lacks an interface, change the host instead of working around it in the TUI.
+- Data goes only over the wire, like the web UI: the one WebSocket in `src/connection/wire.ts`, subscribing to targets and calling `target.action`. Types come from `@eta/client-contracts`. **Before starting, read `docs/architecture/`**, and do not invent ops. When the host lacks an interface, change the host instead of working around it in the TUI.
 - Do not touch `~/.eta`. Finding a host, starting and stopping processes and writing settings all live in `src/connection/`, which hands over only structured results and produces no text for people; the UI only reads the controller's state and calls its actions.
 - Add a feature by adding files only: a module under `src/ext/` default-exports an `Extension`, and `scripts/gen-extensions.ts` generates the registry, with no changes to existing files.
 - Command and argument names are English only, with no aliases. After adding or changing a command, run `bun run --cwd apps/tui docs` to regenerate the command docs, or the tests fail.

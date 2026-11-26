@@ -68,7 +68,7 @@ The `transcript` segments of `sessions.<id>` only include the last 200 lines of 
 
 ## How the UI uses it
 
-The client side lives once, in `@eta/client-contracts/wire`: handling hello, reply, state, event, and reconnection with increasing intervals. Web, TUI and phone each add only their socket and where the state is kept. `apps/web/src/lib/wire.ts` is the page's only connection; `queries/wire.ts` wraps it into React hooks (`useTarget`, mutations for calls). Plugins not present in `hello.mounted` have their corresponding entries hidden (e.g., no memory page if the memory sidecar isn't configured). During development, vite proxies `/ws` to the host; in production, the page is same-origin with the host.
+The client side lives once, in `@eta/client-contracts/wire`: handling hello, reply, state, event, and reconnection with increasing intervals. Web, TUI and phone each add only their socket and where the state is kept. Plugins not present in `hello.mounted` have their corresponding entries hidden (e.g., no memory page if the memory sidecar isn't configured). In production, the page is same-origin with the host.
 
 ## HTTP not exposed online
 

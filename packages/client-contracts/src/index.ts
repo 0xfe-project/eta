@@ -17,7 +17,6 @@ export * from "./artifacts";
 export * from "./captain";
 export * from "./context-usage";
 export type * from "./data";
-export * from "./email";
 export * from "./host-launcher";
 export * from "./inbox";
 export * from "./link";

@@ -1,6 +1,4 @@
-// Adapted from apps/web/src/lib/llm-problem.ts and the failure branch of `wireErrorMessage` in
-// apps/web/src/queries/wire.ts. Unlike the web page, a gateway code this client does not know
-// shows the host's message alone.
+// A gateway code this client does not know shows the host's message alone.
 
 import type { LlmCode } from "@eta/client-contracts";
 import type { Locale } from "../../config/types";

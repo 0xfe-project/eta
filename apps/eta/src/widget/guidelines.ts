@@ -1,8 +1,7 @@
 /**
  * What `visualize_read_me` returns: how to write a widget that draws well in the web chat. One
  * core section, then a section per module the model asks for, so a chart does not pay for the
- * diagram rules. The variables and classes named here are the ones the page's frame defines
- * (`apps/web/src/components/workspace/widget-shell.ts`).
+ * diagram rules. The variables and classes named here are the ones the page's frame defines.
  */
 
 export const WIDGET_MODULES = [

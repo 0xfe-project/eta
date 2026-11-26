@@ -1,5 +1,4 @@
-// One conversation for the screen: its facts, its rows and what is at work in it. Same reading as
-// apps/web/src/queries/conversations.ts.
+// One conversation for the screen: its facts, its rows and what is at work in it.
 
 import type {
   ConversationInfo,

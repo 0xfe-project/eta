@@ -1,4 +1,4 @@
-// The models an agent can be given, read the way apps/web/src/queries/providers.ts reads them: the
+// The models an agent can be given: the
 // `providers` target's config, and the `llm` gateway's catalog on a host that has one.
 
 import type {

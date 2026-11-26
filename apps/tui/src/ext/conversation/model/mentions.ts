@@ -1,6 +1,4 @@
-// Copied from apps/web/src/lib/mentions.ts. The web and the TUI read the host's rows the same way;
-// keep the two in step until the logic moves to a shared package. Only the parts the TUI uses
-// are here.
+// Mention handling over the host's rows.
 interface Member {
   id: string;
   name: string;

@@ -43,7 +43,7 @@ const multilineHeight = 64;
 const machineMenuWidth = 488;
 
 // Settings › External agents: one form to add an agent to a machine's ~/.eta/acp.json or to change
-// one there, as apps/web's AgentDialog does. The fields are checked by the same rules
+// one there. The fields are checked by the same rules
 // (`checkAcpDraft` in @eta/client-contracts); the host still has the last word, and what it
 // refuses is shown in its own words. A draft can be tested before it is saved.
 

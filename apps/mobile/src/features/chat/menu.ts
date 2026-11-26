@@ -1,5 +1,4 @@
-// Ported from apps/web/src/lib/composer-menu.ts: keep the two in step. One addition: `@` also offers
-// Everyone in a group (03b), which the web has on its member picker instead.
+// `@` also offers Everyone in a group (03b).
 
 /**
  * What the composer's one menu offers, and why.

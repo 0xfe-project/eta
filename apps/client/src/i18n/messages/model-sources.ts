@@ -1,5 +1,4 @@
-// Adding a model source: the same words as apps/web's providers/llm locales, so the two clients
-// say the same thing at every step.
+// Adding a model source: the words of each step.
 export const modelSourcesMessages = {
   addSourceConnectHint: [
     "Connecting lists the models, which is the check. Next: Models.",

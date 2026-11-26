@@ -1,7 +1,6 @@
 /**
  * The desktop app as the host's service, from the host's side: what it is asked over the app's
- * port, and the host that already serves a data directory. The app's side of the port is
- * `apps/desktop/test/service.test.ts`.
+ * port, and the host that already serves a data directory.
  */
 import type { ServiceStatus } from "@eta/daemon";
 import { writeFile } from "node:fs/promises";

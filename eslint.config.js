@@ -21,8 +21,6 @@ export default antfu(
       "**/*.gen.ts",
       // `.eta` is the session's own directory (memory, scratch copies of packages), not source.
       ".eta/**",
-      // Generated from the shadcn registry.
-      "apps/web/src/components/ui/**",
       "**/.venv/**",
       "**/out/**",
       // Test fixtures: written as plain JS for runtime evaluation.
@@ -57,8 +55,6 @@ export default antfu(
     files: [
       "packages/eta-server/src/main.ts",
       "apps/eta/src/main.ts",
-      // The desktop shell: it starts the host, then opens the window.
-      "apps/desktop/src/bun/index.ts",
       "packages/*/test/*.smoke.mjs",
     ],
     rules: { "antfu/no-top-level-await": "off", "no-console": "off" },
@@ -74,28 +70,6 @@ export default antfu(
       "packages/eta-harness/src/testing/smoke-scenario.ts",
     ],
     rules: { "no-console": "off" },
-  },
-  {
-    files: ["apps/web/public/sw.js"],
-    languageOptions: { globals: globals.serviceworker },
-    rules: { "no-restricted-globals": "off" },
-  },
-  {
-    // `form.watch("x")` is a plain read of mutable state outside React. The React Compiler
-    // memoises a component on its props, and `form` is the same object on every render, so that
-    // read never invalidates the memo: the component keeps its old render and the field keeps its
-    // old label until something remounts it. useWatch is a hook, so the compiler can see it.
-    files: ["apps/web/src/**/*.ts", "apps/web/src/**/*.tsx"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector: "CallExpression[callee.property.name='watch']",
-          message:
-            "Use useWatch({ control: form.control, name }) — the React Compiler memoises form.watch reads away.",
-        },
-      ],
-    },
   },
   {
     // A vertical scroll area is a SmoothScroll: it glides on the mouse wheel on
@@ -134,13 +108,6 @@ export default antfu(
         },
       ],
     },
-  },
-  {
-    // The web tests name their cases in sentences that start with product names (Captain,
-    // Markdown, Windows); lowercasing them reads wrong. They came from rstest, which this rule did
-    // not see.
-    files: ["apps/web/src/**/*.test.ts", "apps/web/src/**/*.test.tsx"],
-    rules: { "test/prefer-lowercase-title": "off" },
   },
 )
   // nsh components run once and react through signals, so hooks order, the
