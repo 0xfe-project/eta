@@ -621,10 +621,17 @@ describe("composio wire notifications on plugins target", () => {
       w.client.section<PluginToolkitView[]>("plugins", "toolkits"),
     ).toEqual([]);
     // Reject adding an unready `@composio/*` toolkit over the wire with a granular reason.
+    // External runtimes must be pinned to a machine, so the raw call names the primary one.
+    const primaryId = w.host.db
+      .query<{ id: string }, []>(
+        "SELECT id FROM machine WHERE kind = 'primary'",
+      )
+      .get()?.id;
     await expect(
       w.client.call("agents", "create", {
         name: "ExtAgent",
         runtime: "claude",
+        machineId: primaryId,
         plugins: ["@composio/gmail"],
       }),
     ).rejects.toThrow(/not connected or ready/);
