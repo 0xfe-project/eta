@@ -1,5 +1,6 @@
 import type { BoardTaskView } from "@eta/client-contracts";
-import { mount, View } from "nsh";
+import { mount, signal, View } from "nsh";
+import { Label, Screen } from "../../src/components";
 import { TaskPlanBoard } from "../../src/pages/tasks/plan";
 import { createHost, Host } from "../../src/services/host";
 
@@ -56,6 +57,8 @@ function tasks(changes: Record<number, Change> = {}) {
 
 function Fixture() {
   const host = createHost();
+  const tablet = signal(false);
+  const opened = signal("");
   const push = (list: BoardTaskView[]) =>
     host.state.update((state) => ({
       ...state,
@@ -86,22 +89,92 @@ function Fixture() {
       style={{ width: 20, height: 20 }}
     />
   );
+  const completedChain = [
+    task(100, "Draft spec", { status: "done" }),
+    task(101, "Approve spec", {
+      status: "done",
+      dependsOn: [{ taskId: "t100" }],
+    } as unknown as Change),
+  ];
+  const twoTaskChain = (
+    firstStatus: BoardTaskView["status"] = "in_progress",
+  ) => [
+    task(20, "Prepare migration", { status: firstStatus }),
+    task(21, "Run migration", {
+      status: "todo",
+      dependsOn: [{ taskId: "t20" }],
+      waitingOn: [
+        {
+          taskId: "t20",
+          number: 20,
+          title: "Prepare migration",
+          state: firstStatus,
+        },
+      ],
+    } as unknown as Change),
+  ];
   return (
     <Host.Provider value={host}>
-      <View style={{ flexDirection: "row" }}>
-        {button("push again", () => push(tasks(renamed)))}
-        {button("rename", () => {
-          renamed = { 2: { title: "Build the sign-in API" } };
-          push(tasks(renamed));
-        })}
-        {button("wait", () =>
-          push(tasks({ ...renamed, 4: waitsFor(3, "Write the login tests") })),
-        )}
-        {button("cancel", () =>
-          push(tasks({ ...renamed, 3: { status: "cancelled" } })),
-        )}
-      </View>
-      <TaskPlanBoard items={host.tasks()} onOpen={() => {}} />
+      <Screen.Provider value={() => (tablet() ? "tablet" : "desktop")}>
+        <View style={{ flexDirection: "row" }}>
+          {button("push again", () => push(tasks(renamed)))}
+          {button("rename", () => {
+            renamed = { 2: { title: "Build the sign-in API" } };
+            push(tasks(renamed));
+          })}
+          {button("wait", () =>
+            push(
+              tasks({ ...renamed, 4: waitsFor(3, "Write the login tests") }),
+            ),
+          )}
+          {button("cancel", () =>
+            push(tasks({ ...renamed, 3: { status: "cancelled" } })),
+          )}
+          {button("chains", () =>
+            push([
+              task(435, "Fix sync", { status: "in_review" }),
+              task(437, "Ship CLI", { status: "in_progress" }),
+              task(440, "Cut release", {
+                status: "todo",
+                dependsOn: [{ taskId: "t435" }, { taskId: "t437" }],
+                waitingOn: [
+                  {
+                    taskId: "t435",
+                    number: 435,
+                    title: "Fix sync",
+                    state: "in_review",
+                  },
+                  {
+                    taskId: "t437",
+                    number: 437,
+                    title: "Ship CLI",
+                    state: "in_progress",
+                  },
+                ],
+              } as unknown as Change),
+              ...completedChain,
+              task(5, "Tidy the changelog"),
+            ]),
+          )}
+          {button("completed only", () =>
+            push([...completedChain, task(5, "Tidy the changelog")]),
+          )}
+          {button("two-task chain", () => push(twoTaskChain()))}
+          {button("cancel chain task", () => push(twoTaskChain("cancelled")))}
+          {button("empty", () =>
+            push([task(5, "Tidy the changelog"), task(6, "Update readme")]),
+          )}
+          {button("tablet", () => tablet.set(true))}
+        </View>
+        <If when={opened()}>
+          <Label>{`opened:${opened()}`}</Label>
+        </If>
+        <TaskPlanBoard
+          items={host.tasks()}
+          tablet={tablet()}
+          onOpen={(id) => opened.set(id)}
+        />
+      </Screen.Provider>
     </Host.Provider>
   );
 }

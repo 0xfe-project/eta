@@ -5,6 +5,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Accessor, JSX } from "nsh";
 import type { TextVariant } from "../../components";
+import type { StandalonePlanChain } from "./facts";
 import { computed, Image, Scroll, signal, View } from "nsh";
 import {
   ActionItem,
@@ -13,6 +14,7 @@ import {
   colors,
   dialogWidth,
   Field,
+  focusRing,
   grow,
   Icon,
   Label,
@@ -20,7 +22,9 @@ import {
   row,
   SmoothScroll,
 } from "../../components";
-import { icon, opacity, space, weight } from "../../components/tokens";
+import { EmptyState } from "../../components/empty-state";
+import { foldNext } from "../../components/motion";
+import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { taskDropZones } from "./drag";
@@ -29,6 +33,7 @@ import {
   isWaiting,
   planLevels,
   runningFor,
+  standaloneDependencyChains,
   taskDay,
   taskHint,
 } from "./facts";
@@ -670,6 +675,70 @@ function stepsCaption(number: number, plan: Plan) {
     : uiText("stepsAllDone", { number });
 }
 
+/** The steps still to go, for a standalone dependency chain. */
+function chainCaption(number: number, tasks: number, plan: Plan) {
+  const left = stepsToGo(plan);
+  if (!left) return uiText("chainAllDone", { number, tasks });
+  return uiText(left === 1 ? "chainStepToGo" : "chainStepsToGo", {
+    number,
+    tasks,
+    steps: left,
+  });
+}
+
+function ChainPlanFrame(props: {
+  chain: Accessor<StandalonePlanChain>;
+  tablet?: boolean;
+  onOpen: (id: string) => void;
+  onConnect: (from: string, to: string) => void;
+  onConnectFrom: (tasks: BoardTaskView[], id: string) => void;
+}) {
+  const c = colors();
+  const plan = createPlan(() => props.chain().tasks);
+  return (
+    <PlanFrame>
+      <View
+        style={{
+          ...row,
+          height: frameHeaderHeight,
+          paddingHorizontal: space[12],
+          gap: space[8],
+          borderBottomWidth: 1,
+          borderColor: c().border,
+        }}
+      >
+        <TaskGlyph status={props.chain().terminal.status} size={icon.sm} />
+        <View
+          role="button"
+          accessibilityLabel={uiText("taskCardOpenTask", {
+            number: props.chain().terminal.number,
+          })}
+          onPress={() => props.onOpen(props.chain().terminal.id)}
+          style={{ cursor: "pointer" }}
+        >
+          <Label weight={weight.strong}>{props.chain().terminal.title}</Label>
+        </View>
+        <Label variant="caption" tone="muted" style={{ flex: 1 }}>
+          {chainCaption(
+            props.chain().terminal.number,
+            props.chain().tasks.length,
+            plan(),
+          )}
+        </Label>
+      </View>
+      <PlanGraph
+        tasks={props.chain().tasks}
+        plan={plan()}
+        variant={props.tablet ? "tabletPage" : "page"}
+        desktop
+        onOpen={props.onOpen}
+        onConnect={props.onConnect}
+        onConnectFrom={(id) => props.onConnectFrom(props.chain().tasks, id)}
+      />
+    </PlanFrame>
+  );
+}
+
 /** A parent's own Plan tab. */
 export function TaskPlan(props: {
   task: () => BoardTaskDetail;
@@ -767,7 +836,7 @@ export function TaskPlan(props: {
   );
 }
 
-/** The Tasks page's Plan view: one frame per parent, and one for the tasks that are part of nothing. */
+/** The Tasks page's Plan view: parent frames, top-level dependency-chain frames, and an empty state when none exist. */
 export function TaskPlanBoard(props: {
   items: BoardTaskView[];
   tablet?: boolean;
@@ -776,7 +845,7 @@ export function TaskPlanBoard(props: {
   const c = colors();
   const host = useHost();
   const editing = createPlanEditing(() => host.people()[0]?.id);
-  /** The parents among the tasks, each with its children among them; in one pass. */
+  /** The parents among the tasks, each with its children among them, and standalone chains; in one pass. */
   const groups = computed(() => {
     const items = props.items;
     const children = new Map<string, BoardTaskView[]>();
@@ -789,100 +858,188 @@ export function TaskPlanBoard(props: {
     const parents = items.filter(
       (task) => task.subtasks?.total || children.has(task.id),
     );
-    return { children, parents };
+    const parentIds = new Set(parents.map((task) => task.id));
+    const { active: activeChains, completed: completedChains } =
+      standaloneDependencyChains(items, parentIds);
+    return { children, parents, activeChains, completedChains };
   });
   const childrenOf = (parent: BoardTaskView) =>
     groups().children.get(parent.id) ?? [];
+  const completedOverride = signal<boolean | undefined>(undefined);
+  const hasActive = () =>
+    groups().parents.length > 0 || groups().activeChains.length > 0;
+  const completedExpanded = () => completedOverride() ?? !hasActive();
+  const hasPlans = () => hasActive() || groups().completedChains.length > 0;
+  const completedLabel = () =>
+    uiText("completedPlans", { count: groups().completedChains.length });
   return (
-    <View
-      style={
-        props.tablet
-          ? {
-              paddingHorizontal: space[16],
-              paddingVertical: space[12],
-              gap: space[12],
-            }
-          : {
-              paddingHorizontal: space[24],
-              paddingVertical: space[16],
-              gap: space[16],
-            }
+    <If
+      when={hasPlans()}
+      else={
+        <EmptyState
+          size="page"
+          status="empty"
+          loading={null}
+          error={null}
+          empty={{
+            art: "tasks",
+            title: uiText("noPlansYet"),
+            description: uiText("noPlansYetDescription"),
+          }}
+        />
       }
     >
-      <Each of={groups().parents} key={(task) => task.id}>
-        {(parent) => {
-          const plan = createPlan(() => childrenOf(parent()));
-          return (
-            <PlanFrame>
-              <View
-                style={{
-                  ...row,
-                  height: frameHeaderHeight,
-                  paddingHorizontal: space[12],
-                  gap: space[8],
-                  borderBottomWidth: 1,
-                  borderColor: c().border,
-                }}
-              >
-                <TaskGlyph status={parent().status} size={icon.sm} />
+      <View
+        style={
+          props.tablet
+            ? {
+                paddingHorizontal: space[16],
+                paddingVertical: space[12],
+                gap: space[12],
+              }
+            : {
+                paddingHorizontal: space[24],
+                paddingVertical: space[16],
+                gap: space[16],
+              }
+        }
+      >
+        <Each of={groups().parents} key={(task) => task.id}>
+          {(parent) => {
+            const plan = createPlan(() => childrenOf(parent()));
+            return (
+              <PlanFrame>
                 <View
-                  role="button"
-                  accessibilityLabel={parent().title}
-                  onPress={() => props.onOpen(parent().id)}
-                  style={{ cursor: "pointer" }}
-                >
-                  <Label weight={weight.strong}>{parent().title}</Label>
-                </View>
-                <Label variant="caption" tone="muted" style={{ flex: 1 }}>
-                  {stepsCaption(parent().number, plan())}
-                </Label>
-                <View
-                  role="button"
-                  accessibilityLabel={uiText("addSubtask")}
-                  onPress={() =>
-                    editing.startAdding(parent().id, [], uiText("addSubtask"))
-                  }
-                  hoverStyle={{ backgroundColor: c().selected }}
                   style={{
                     ...row,
-                    gap: space[4],
-                    height: space[24],
-                    cursor: "pointer",
+                    height: frameHeaderHeight,
+                    paddingHorizontal: space[12],
+                    gap: space[8],
+                    borderBottomWidth: 1,
+                    borderColor: c().border,
                   }}
                 >
-                  <Icon name="plus" size={icon.sm} />
-                  <Label variant="caption">{uiText("subtask")}</Label>
+                  <TaskGlyph status={parent().status} size={icon.sm} />
+                  <View
+                    role="button"
+                    accessibilityLabel={parent().title}
+                    onPress={() => props.onOpen(parent().id)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <Label weight={weight.strong}>{parent().title}</Label>
+                  </View>
+                  <Label variant="caption" tone="muted" style={{ flex: 1 }}>
+                    {stepsCaption(parent().number, plan())}
+                  </Label>
+                  <View
+                    role="button"
+                    accessibilityLabel={uiText("addSubtask")}
+                    onPress={() =>
+                      editing.startAdding(parent().id, [], uiText("addSubtask"))
+                    }
+                    hoverStyle={{ backgroundColor: c().selected }}
+                    style={{
+                      ...row,
+                      gap: space[4],
+                      height: space[24],
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Icon name="plus" size={icon.sm} />
+                    <Label variant="caption">{uiText("subtask")}</Label>
+                  </View>
                 </View>
-              </View>
-              <PlanGraph
-                tasks={childrenOf(parent())}
-                plan={plan()}
-                variant={props.tablet ? "tabletPage" : "page"}
-                desktop
-                onOpen={props.onOpen}
-                onConnect={(from, to) => void editing.connect(from, to)}
-                onConnectFrom={(id) =>
-                  editing.startConnecting(childrenOf(parent()), id)
-                }
-                onAddStep={() =>
-                  editing.startAdding(
-                    parent().id,
-                    lastStep(plan()),
-                    uiText("addAStepAtTheEnd"),
-                  )
-                }
+                <PlanGraph
+                  tasks={childrenOf(parent())}
+                  plan={plan()}
+                  variant={props.tablet ? "tabletPage" : "page"}
+                  desktop
+                  onOpen={props.onOpen}
+                  onConnect={(from, to) => void editing.connect(from, to)}
+                  onConnectFrom={(id) =>
+                    editing.startConnecting(childrenOf(parent()), id)
+                  }
+                  onAddStep={() =>
+                    editing.startAdding(
+                      parent().id,
+                      lastStep(plan()),
+                      uiText("addAStepAtTheEnd"),
+                    )
+                  }
+                />
+              </PlanFrame>
+            );
+          }}
+        </Each>
+        <Each of={groups().activeChains} key={(chain) => chain.key}>
+          {(chain) => (
+            <ChainPlanFrame
+              chain={chain}
+              tablet={props.tablet}
+              onOpen={props.onOpen}
+              onConnect={(from, to) => void editing.connect(from, to)}
+              onConnectFrom={(tasks, id) => editing.startConnecting(tasks, id)}
+            />
+          )}
+        </Each>
+        <If when={groups().completedChains.length > 0}>
+          <View style={{ gap: props.tablet ? space[12] : space[16] }}>
+            <View
+              role="button"
+              accessibilityLabel={completedLabel()}
+              accessibilityState={{ expanded: completedExpanded() }}
+              onPress={() => {
+                foldNext();
+                completedOverride.set(!completedExpanded());
+              }}
+              hoverStyle={{ backgroundColor: c().selected }}
+              focusVisibleStyle={focusRing(c())}
+              style={{
+                ...row,
+                height: control.lg,
+                paddingHorizontal: space[12],
+                gap: space[8],
+                borderWidth: 1,
+                borderColor: c().border,
+                backgroundColor: c().surface,
+                cursor: "pointer",
+              }}
+            >
+              <Icon
+                name={completedExpanded() ? "down" : "right"}
+                size={icon.sm}
+                tone="muted"
               />
-            </PlanFrame>
-          );
-        }}
-      </Each>
-      <If when={props.tablet}>
-        <Label variant="caption" tone="muted">
-          {uiText("dragToMakeWait")}
-        </Label>
-      </If>
-      <editing.Dialogs />
-    </View>
+              <TaskGlyph status="done" size={icon.sm} />
+              <Label variant="small" tone="mutedInk" weight={weight.strong}>
+                {completedLabel()}
+              </Label>
+            </View>
+            <If when={completedExpanded()}>
+              <Each of={groups().completedChains} key={(chain) => chain.key}>
+                {(chain) => (
+                  <ChainPlanFrame
+                    chain={chain}
+                    tablet={props.tablet}
+                    onOpen={props.onOpen}
+                    onConnect={(from, to) => void editing.connect(from, to)}
+                    onConnectFrom={(tasks, id) =>
+                      editing.startConnecting(tasks, id)
+                    }
+                  />
+                )}
+              </Each>
+            </If>
+          </View>
+        </If>
+        <If when={props.tablet}>
+          <Label variant="caption" tone="muted">
+            {uiText("dragToMakeWait")}
+          </Label>
+        </If>
+        <editing.Dialogs />
+      </View>
+    </If>
   );
 }
 

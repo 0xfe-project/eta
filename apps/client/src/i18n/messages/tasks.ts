@@ -32,6 +32,24 @@ export const tasksMessages = {
     "#{{number}} · all steps done",
     "#{{number}} · 所有步骤已完成",
   ],
+  chainStepToGo: [
+    "#{{number}} · {{tasks}} tasks · 1 step to go",
+    "#{{number}} · {{tasks}} 个任务 · 还剩 1 步",
+  ],
+  chainStepsToGo: [
+    "#{{number}} · {{tasks}} tasks · {{steps}} steps to go",
+    "#{{number}} · {{tasks}} 个任务 · 还剩 {{steps}} 步",
+  ],
+  chainAllDone: [
+    "#{{number}} · {{tasks}} tasks · all done",
+    "#{{number}} · {{tasks}} 个任务 · 全部完成",
+  ],
+  completedPlans: ["Completed · {{count}}", "已完成 · {{count}}"],
+  noPlansYet: ["No plans yet", "还没有计划"],
+  noPlansYetDescription: [
+    "Tasks with subtasks or dependencies appear here as step-by-step plans.",
+    "带有子任务或依赖关系的任务会以分步计划的形式显示在这里。",
+  ],
   sideBySide: ["Side by side", "并行"],
   afterStep: ["After step {{step}}", "在第 {{step}} 步之后"],
   inReviewLetsNextGo: ["In review (lets the next go)", "待验收（放行下一步）"],
