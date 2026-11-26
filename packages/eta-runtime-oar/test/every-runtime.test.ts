@@ -8,7 +8,9 @@ import type { Runtime } from "@botiverse/oar";
 import type { ScriptedTurn } from "@botiverse/oar/testing";
 import type { AgentMessage, KernelTool } from "@eta/core";
 import type { ManagedSession } from "@eta/server";
+import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
 import process from "node:process";
 import {
   antigravityRuntime,
@@ -17,7 +19,12 @@ import {
   UnsupportedOptionError,
 } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
-import { HOST_MCP_TOKEN_ENV, HOST_MCP_URL_ENV } from "@eta/runtime-kit";
+import {
+  HOST_MCP_TOKEN_ENV,
+  HOST_MCP_URL_ENV,
+  MCP_HTTP_BRIDGE_PREFIX,
+  MCP_STDIO_BRIDGE_PREFIX,
+} from "@eta/runtime-kit";
 import { MemorySessionStore, SessionManager } from "@eta/server";
 import { describe, expect, it } from "vitest";
 import { createOarRuntimes, RUNTIME_IDS } from "../src/index";
@@ -426,9 +433,88 @@ describe("a runtime that refuses MCP credentials (Antigravity)", () => {
     await manager.closeAll();
   });
 
-  it("gets credential-free plugin servers and omits credentialed ones with a warning", async () => {
+  it("bridges credentialed HTTP and stdio plugin servers through mcp-bridge + SessionOptions.env without leaking credentials", async () => {
+    const httpRequests: Record<string, string | string[] | undefined>[] = [];
+    const httpPluginServer = createServer((req, res) => {
+      httpRequests.push({ ...req.headers });
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+          id?: number;
+          method?: string;
+        };
+        if (req.headers["x-plugin-api-key"] !== "http-plugin-secret-12345") {
+          res.writeHead(401, { "content-type": "text/plain" });
+          res.end("unauthorized");
+          return;
+        }
+        if (body.method === "notifications/initialized") {
+          res.writeHead(202);
+          res.end();
+          return;
+        }
+        const result =
+          body.method === "initialize"
+            ? {
+                protocolVersion: "2025-06-18",
+                capabilities: {},
+                serverInfo: { name: "authed-http", version: "1.0.0" },
+              }
+            : {
+                content: [
+                  {
+                    type: "text",
+                    text: `http-ok:${String(req.headers["x-plugin-api-key"])}:${String(req.headers.authorization ?? "none")}`,
+                  },
+                ],
+              };
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({ jsonrpc: "2.0", id: body.id ?? null, result }),
+        );
+      });
+    });
+    await new Promise<void>((resolve) =>
+      httpPluginServer.listen(0, "127.0.0.1", resolve),
+    );
+    const httpAddr = httpPluginServer.address();
+    if (httpAddr === null || typeof httpAddr === "string")
+      throw new Error("expected TCP address");
+
+    const stdioMcpScript = [
+      "let buf = '';",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (chunk) => {",
+      "  buf += chunk;",
+      "  for (let nl = buf.indexOf('\\n'); nl >= 0; nl = buf.indexOf('\\n')) {",
+      "    const line = buf.slice(0, nl).trim();",
+      "    buf = buf.slice(nl + 1);",
+      "    if (!line) continue;",
+      "    const msg = JSON.parse(line);",
+      "    if (msg.method === 'initialize') {",
+      "      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: '2025-06-18', capabilities: {}, serverInfo: { name: 'stdio-plugin', version: '1.0.0' } } }) + '\\n');",
+      "    } else if (msg.method === 'tools/call') {",
+      "      const bridgeKeys = Object.keys(process.env).filter((k) => {",
+      "        const u = k.toUpperCase();",
+      "        return u.startsWith('ETA_HOST_MCP_') || u.startsWith('ETA_MCP_');",
+      "      });",
+      "      const payload = {",
+      "        token: process.env.PLUGIN_TOKEN,",
+      "        emptyOpt: process.env.EMPTY_OPT,",
+      "        hasEmptyOpt: Object.prototype.hasOwnProperty.call(process.env, 'EMPTY_OPT'),",
+      "        bridgeKeys,",
+      "        argv: process.argv.slice(1),",
+      "      };",
+      "      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: JSON.stringify(payload) }] } }) + '\\n');",
+      "    }",
+      "  }",
+      "});",
+    ].join(" ");
+
     const turns: ScriptedTurn[] = [];
     const warnings: string[] = [];
+    const bridgeResults: Record<string, string> = {};
     const manager = new SessionManager({
       store: new MemorySessionStore(),
       modelsFor: () => {
@@ -440,12 +526,181 @@ describe("a runtime that refuses MCP credentials (Antigravity)", () => {
             "antigravity",
             scriptedRuntime({
               id: "antigravity",
-              turn: (turn) => {
+              turn: async (turn) => {
                 turns.push(turn);
+                await Promise.all(
+                  ["eta", "authed-http", "keyed-a", "keyed-b"].map(
+                    async (name) => {
+                      const entry = turn.options.mcpServers?.find(
+                        (server) => server.name === name,
+                      );
+                      if (entry === undefined || "type" in entry)
+                        throw new Error(
+                          `expected bridged stdio entry for ${name}`,
+                        );
+                      bridgeResults[name] = await callViaBridge(
+                        entry,
+                        turn.options.env,
+                        name === "eta" ? "echo" : "probe",
+                        {},
+                      );
+                    },
+                  ),
+                );
                 turn.say("ok");
               },
             }),
           ),
+        ]),
+        warn: (message) => warnings.push(message),
+      }),
+      sessionTools: () => [echo],
+      runtimeExtrasFor: async () => ({
+        mcpServers: [
+          { name: "plain", command: "plain-mcp" },
+          {
+            name: "open-http",
+            type: "http",
+            url: "http://127.0.0.1:9999/mcp",
+          },
+          {
+            name: "keyed-a",
+            command: process.execPath,
+            args: ["-e", stdioMcpScript, "--", "tag-a"],
+            env: {
+              PLUGIN_TOKEN: "stdio-secret-alpha-12345",
+              EMPTY_OPT: "",
+            } as Record<string, string>,
+          },
+          {
+            name: "keyed-b",
+            command: process.execPath,
+            args: ["-e", stdioMcpScript, "--", "tag-b"],
+            env: {
+              PLUGIN_TOKEN: "stdio-secret-beta-67890",
+            } as Record<string, string>,
+          },
+          {
+            name: "authed-http",
+            type: "http",
+            url: `http://127.0.0.1:${httpAddr.port}/mcp`,
+            headers: { "X-Plugin-Api-Key": "http-plugin-secret-12345" },
+          },
+        ],
+      }),
+    });
+
+    try {
+      const created = await manager.create({
+        cwd: "/work",
+        runtime: "antigravity",
+      });
+      expect((await run(created, "hello")).status).toBe("completed");
+      expect(warnings).toEqual([]);
+
+      const servers = turns[0]!.options.mcpServers ?? [];
+      expect(servers.map((server) => server.name)).toEqual([
+        "eta",
+        "plain",
+        "open-http",
+        "keyed-a",
+        "keyed-b",
+        "authed-http",
+      ]);
+
+      // Credential-free entries pass through unchanged.
+      expect(servers[1]).toEqual({ name: "plain", command: "plain-mcp" });
+      expect(servers[2]).toEqual({
+        name: "open-http",
+        type: "http",
+        url: "http://127.0.0.1:9999/mcp",
+      });
+
+      // Every entry handed to OAR carries no `env` or `headers` and no secret plaintext.
+      for (const server of servers) {
+        expect(server).not.toHaveProperty("env");
+        expect(server).not.toHaveProperty("headers");
+      }
+      const serializedServers = JSON.stringify(servers);
+      expect(serializedServers).not.toContain("stdio-secret-alpha-12345");
+      expect(serializedServers).not.toContain("stdio-secret-beta-67890");
+      expect(serializedServers).not.toContain("http-plugin-secret-12345");
+
+      // Bridged env splits secrets into individual *_SECRET variables and keeps raw plugin names out of SessionOptions.env.
+      const sessionEnv = turns[0]!.options.env ?? {};
+      expect(sessionEnv).not.toHaveProperty("PLUGIN_TOKEN");
+      expect(sessionEnv).not.toHaveProperty("X-Plugin-Api-Key");
+      expect(sessionEnv).toMatchObject({
+        [HOST_MCP_URL_ENV]: expect.stringMatching(/^http:\/\/127\.0\.0\.1:/),
+        [HOST_MCP_TOKEN_ENV]: expect.any(String),
+        [`${MCP_STDIO_BRIDGE_PREFIX}0_ENAME_0`]: "PLUGIN_TOKEN",
+        [`${MCP_STDIO_BRIDGE_PREFIX}0_EVAL_0_SECRET`]:
+          "stdio-secret-alpha-12345",
+        [`${MCP_STDIO_BRIDGE_PREFIX}0_ENAME_1`]: "EMPTY_OPT",
+        [`${MCP_STDIO_BRIDGE_PREFIX}0_EVAL_1_SECRET`]: "",
+        [`${MCP_STDIO_BRIDGE_PREFIX}1_ENAME_0`]: "PLUGIN_TOKEN",
+        [`${MCP_STDIO_BRIDGE_PREFIX}1_EVAL_0_SECRET`]:
+          "stdio-secret-beta-67890",
+        [`${MCP_HTTP_BRIDGE_PREFIX}0_URL`]: `http://127.0.0.1:${httpAddr.port}/mcp`,
+        [`${MCP_HTTP_BRIDGE_PREFIX}0_HNAME_0`]: "X-Plugin-Api-Key",
+        [`${MCP_HTTP_BRIDGE_PREFIX}0_HVAL_0_SECRET`]:
+          "http-plugin-secret-12345",
+      });
+
+      // End-to-end tool execution across host, HTTP plugin, and two conflicting-env stdio plugins.
+      expect(bridgeResults.eta).toBe("echoed");
+      expect(bridgeResults["authed-http"]).toBe(
+        "http-ok:http-plugin-secret-12345:none",
+      );
+      expect(JSON.parse(bridgeResults["keyed-a"]!)).toEqual({
+        token: "stdio-secret-alpha-12345",
+        emptyOpt: "",
+        hasEmptyOpt: true,
+        bridgeKeys: [],
+        argv: ["tag-a"],
+      });
+      expect(JSON.parse(bridgeResults["keyed-b"]!)).toEqual({
+        token: "stdio-secret-beta-67890",
+        hasEmptyOpt: false,
+        bridgeKeys: [],
+        argv: ["tag-b"],
+      });
+      expect(httpRequests[0]?.authorization).toBeUndefined();
+    } finally {
+      await manager.closeAll();
+      await new Promise<void>((resolve) =>
+        httpPluginServer.close(() => resolve()),
+      );
+    }
+  }, 15_000);
+
+  it("omits credentialed plugin servers and host tools with a warning when a runtime refuses both mcpServerCredentials and env", async () => {
+    const turns: ScriptedTurn[] = [];
+    const warnings: string[] = [];
+    const base = asReal(
+      "antigravity",
+      scriptedRuntime({
+        id: "antigravity",
+        turn: (turn) => {
+          turns.push(turn);
+          turn.say("ok");
+        },
+      }),
+    );
+    const manager = new SessionManager({
+      store: new MemorySessionStore(),
+      modelsFor: () => {
+        throw new Error("an eta model was asked for");
+      },
+      runtimes: createOarRuntimes({
+        registry: createRuntimeRegistry([
+          {
+            ...base,
+            refusedSessionOptions: {
+              ...base.refusedSessionOptions,
+              env: "refuses SessionOptions.env",
+            },
+          },
         ]),
         warn: (message) => warnings.push(message),
       }),
@@ -479,16 +734,11 @@ describe("a runtime that refuses MCP credentials (Antigravity)", () => {
     });
     expect((await run(created, "hello")).status).toBe("completed");
     expect(turns[0]!.options.mcpServers?.map((server) => server.name)).toEqual([
-      "eta",
       "plain",
       "open-http",
     ]);
-    expect(turns[0]!.options.env).not.toHaveProperty("PLUGIN_TOKEN");
-    expect(turns[0]!.options.env).not.toHaveProperty("Authorization");
-    expect(JSON.stringify(turns[0]!.options.env ?? {})).not.toContain("secret");
-    expect(JSON.stringify(turns[0]!.options.env ?? {})).not.toContain(
-      "PLUGIN_TOKEN",
-    );
+    expect(turns[0]!.options.env).toBeUndefined();
+    expect(warnings.join("\n")).toContain("host tools left out");
     expect(warnings.join("\n")).toContain("keyed");
     expect(warnings.join("\n")).toContain("authed-http");
     await manager.closeAll();

@@ -62,6 +62,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installedSessionCapabilities, ResumeCwdError } from "@botiverse/oar";
 import {
+  bridgeHttpMcpServer,
+  bridgeStdioMcpServer,
   defaultMcpBridge,
   HOST_MCP_TOKEN_ENV,
   HOST_MCP_URL_ENV,
@@ -755,32 +757,35 @@ export class OarDelegate implements RunDelegate {
     const installation = await catalog.installation(id);
     const refusals = this.#refused(installation);
     // A runtime that refuses credentials on `mcpServers` (Antigravity keeps an entry's env and
-    // headers in plain text in its conversation database) gets a credential-free stdio MCP bridge
-    // for the host's tools, with the ephemeral URL + bearer token passed in `SessionOptions.env`.
+    // headers in plain text in its conversation database) gets credential-free stdio MCP bridge
+    // entries for host tools and credentialed plugins, passing URLs/headers/env via
+    // `SessionOptions.env`.
     const noServers = refusals.mcpServers !== undefined;
     const noCredentials = refusals.mcpServerCredentials !== undefined;
+    const canBridge = noCredentials && refusals.env === undefined;
+    const bridgeLauncher = canBridge
+      ? (this.#options.mcpBridge ?? defaultMcpBridge())
+      : undefined;
+    const bridgeEnv: Record<string, string> = {};
     let hostServer: McpServer | undefined;
-    let env: Readonly<Record<string, string>> | undefined;
     if (!noServers) {
       if (!noCredentials) {
         hostServer = await this.#host.serve(context);
-      } else if (refusals.env === undefined) {
+      } else if (bridgeLauncher !== undefined) {
         const served = await this.#host.serve(context);
         if (served !== undefined) {
           const token = bearerTokenOf(served);
           if (token !== undefined) {
-            const launcher = this.#options.mcpBridge ?? defaultMcpBridge();
             hostServer = {
               name: HOST_SERVER,
-              command: launcher.command,
-              ...(launcher.args === undefined || launcher.args.length === 0
+              command: bridgeLauncher.command,
+              ...(bridgeLauncher.args === undefined ||
+              bridgeLauncher.args.length === 0
                 ? {}
-                : { args: [...launcher.args] }),
+                : { args: [...bridgeLauncher.args] }),
             };
-            env = {
-              [HOST_MCP_URL_ENV]: served.url,
-              [HOST_MCP_TOKEN_ENV]: token,
-            };
+            bridgeEnv[HOST_MCP_URL_ENV] = served.url;
+            bridgeEnv[HOST_MCP_TOKEN_ENV] = token;
           } else {
             hostServer = served;
           }
@@ -792,12 +797,33 @@ export class OarDelegate implements RunDelegate {
       }
     }
     const plugins = this.#options.mcpServers ?? [];
-    const taken = noServers
-      ? []
-      : noCredentials
-        ? plugins.filter((server) => !carriesCredentials(server))
-        : plugins;
-    const left = plugins.filter((server) => !taken.includes(server));
+    const taken: McpServer[] = [];
+    const left: McpServer[] = [];
+    if (noServers) {
+      left.push(...plugins);
+    } else if (!noCredentials) {
+      taken.push(...plugins);
+    } else if (bridgeLauncher !== undefined) {
+      let httpIndex = 0;
+      let stdioIndex = 0;
+      for (const server of plugins) {
+        if (!carriesCredentials(server)) {
+          taken.push(server);
+          continue;
+        }
+        const bridged =
+          "type" in server
+            ? bridgeHttpMcpServer(bridgeLauncher, server, httpIndex++)
+            : bridgeStdioMcpServer(bridgeLauncher, server, stdioIndex++);
+        taken.push(bridged.server);
+        Object.assign(bridgeEnv, bridged.env);
+      }
+    } else {
+      for (const server of plugins) {
+        if (carriesCredentials(server)) left.push(server);
+        else taken.push(server);
+      }
+    }
     if (left.length > 0)
       this.#options.warn(
         `[eta-runtime-oar] ${id} takes no MCP servers${noServers ? "" : " that carry credentials"}; ${left.map((server) => server.name).join(", ")} left out`,
@@ -806,6 +832,7 @@ export class OarDelegate implements RunDelegate {
       ...(hostServer === undefined ? [] : [hostServer]),
       ...taken,
     ];
+    const env = Object.keys(bridgeEnv).length === 0 ? undefined : bridgeEnv;
     const options = (resume: string | undefined): SessionOptions =>
       this.#sessionOptions(settings, resume, mcpServers, refusals, env);
     let session: Session;

@@ -9,8 +9,9 @@ import { runMcpBridge } from "./mcp-bridge";
 
 const controller = new AbortController();
 for (const signal of ["SIGINT", "SIGTERM"] as const)
-  process.on(signal, () => controller.abort());
+  process.on(signal, () => controller.abort(signal));
 
-void runMcpBridge({ signal: controller.signal }).then((code) =>
-  process.exit(code),
-);
+void runMcpBridge({
+  args: process.argv.slice(2),
+  signal: controller.signal,
+}).then((code) => process.exit(code));
