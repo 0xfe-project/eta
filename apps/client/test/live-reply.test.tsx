@@ -194,3 +194,56 @@ test("an insert leaves a trace in the window, and is not lost in the panel", asy
   // The run panel draws what the user inserted as it was written.
   expect(app.shows("Also check the key.")).toBe(true);
 });
+
+for (const width of [1440, 1024, 390]) {
+  test(`the process window keeps its height from before the first step so the answer does not jump (${width}px)`, async () => {
+    const app = await open("./fixtures/live-reply.tsx", {
+      width,
+      height: 900,
+    });
+    // Start right after send: 0 steps, header says "Working…".
+    await app.press("Start waiting");
+    expect(app.shows("Working…")).toBe(true);
+    const waitingWindow = app.layout("id:process-window")!;
+    const waitingBelow = app.layout("id:below-message")!;
+
+    // Streaming answer with 0 process steps yet.
+    await app.press("Write without tools");
+    expect(app.shows("Working…")).toBe(true);
+    const beforeWindow = app.layout("id:process-window")!;
+    const beforeAnswer = app.layout("id:reply-answer")!;
+
+    // First process step arrives while the answer is streaming.
+    await app.press("First step");
+    expect(app.shows("Process · 1 step")).toBe(true);
+    const afterWindow = app.layout("id:process-window")!;
+    const afterAnswer = app.layout("id:reply-answer")!;
+
+    // Nothing jumped vertically across the first step.
+    expect(waitingWindow.height).toBe(afterWindow.height);
+    expect(beforeWindow.height).toBe(afterWindow.height);
+    expect(afterAnswer.y).toBe(beforeAnswer.y);
+
+    // Collapsing still folds to just the header; expanding restores full height.
+    await app.press("label:Thinking process");
+    const collapsedWindow = app.layout("id:process-window")!;
+    expect(collapsedWindow.height).toBe(26);
+    await app.press("label:Thinking process");
+    expect(app.layout("id:process-window")!.height).toBe(afterWindow.height);
+
+    // Waiting with 0 steps -> 1 step without answer also keeps everything below put.
+    await app.press("Start waiting");
+    const belowBefore = app.layout("id:below-message")!;
+    expect(belowBefore.y).toBe(waitingBelow.y);
+    // Collapsing also works before the first step lands.
+    await app.press("label:Thinking process");
+    expect(app.layout("id:process-window")!.height).toBe(
+      collapsedWindow.height,
+    );
+    await app.press("label:Thinking process");
+    expect(app.layout("id:process-window")!.height).toBe(afterWindow.height);
+    await app.press("Running tool");
+    expect(app.layout("id:process-window")!.height).toBe(afterWindow.height);
+    expect(app.layout("id:below-message")!.y).toBe(belowBefore.y);
+  });
+}

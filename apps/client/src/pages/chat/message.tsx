@@ -747,7 +747,9 @@ export function Message(props: {
             </If>
           }
         >
-          {/* Collapsible live steps window above the streaming answer, preserving per-member Stop. */}
+          {/* Collapsible live steps window above the streaming answer, preserving per-member Stop.
+           * The 176px body is reserved from the start (unless collapsed) so the first step does
+           * not jump the streaming answer or composer below it. */}
           <View
             testID="process-window"
             style={{ borderWidth: 1, borderColor: c().border }}
@@ -759,39 +761,28 @@ export function Message(props: {
                 paddingLeft: space[12],
                 paddingRight: space[4],
                 justifyContent: "space-between",
-                borderBottomWidth:
-                  processSteps().length > 0 && !processCollapsed() ? 1 : 0,
+                borderBottomWidth: !processCollapsed() ? 1 : 0,
                 borderColor: c().border,
               }}
             >
               <View
-                role={processSteps().length > 0 ? "button" : undefined}
+                role="button"
                 accessibilityLabel={uiText("thinkingProcess")}
-                accessibilityState={
-                  processSteps().length > 0
-                    ? { expanded: !processCollapsed() }
-                    : undefined
-                }
-                onPress={
-                  processSteps().length > 0
-                    ? () => processCollapsed.set(!processCollapsed())
-                    : undefined
-                }
+                accessibilityState={{ expanded: !processCollapsed() }}
+                onPress={() => processCollapsed.set(!processCollapsed())}
                 style={{
                   ...row,
                   gap: space[4],
                   flex: 1,
                   minWidth: 0,
-                  cursor: processSteps().length > 0 ? "pointer" : "default",
+                  cursor: "pointer",
                 }}
               >
-                <If when={processSteps().length > 0}>
-                  <Icon
-                    name={processCollapsed() ? "right" : "down"}
-                    size={icon.sm}
-                    tone="muted"
-                  />
-                </If>
+                <Icon
+                  name={processCollapsed() ? "right" : "down"}
+                  size={icon.sm}
+                  tone="muted"
+                />
                 <Label variant="caption" tone="muted" lines={1}>
                   {stepCount()
                     ? stepCount() === 1
@@ -827,7 +818,7 @@ export function Message(props: {
                 }}
               />
             </View>
-            <If when={processSteps().length > 0 && !processCollapsed()}>
+            <If when={!processCollapsed()}>
               <ProcessWindow height={processWindowHeight}>
                 <Each of={processSteps()} key={(step) => step.id}>
                   {(step) => <ProcessStep value={step()} />}
