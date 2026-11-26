@@ -1,7 +1,9 @@
 import { expect, open, test } from "nsh/test";
 
 // 100 Composio toolkits, drawn in batches; the host is asked, before a batch is drawn, for the pictures it kept.
-const WIDE = { width: 1000, height: 800, clock: {} };
+// `reducedMotion: true` keeps the refresh button's finite spin animation from advancing the manual
+// clock past `LOGOS_CACHED_WAIT_MS` while `open()` settles.
+const WIDE = { width: 1000, height: 800, clock: {}, reducedMotion: true };
 type App = Awaited<ReturnType<typeof open>>;
 const cards = (app: App) => app.count("id:plugin-avatar");
 // A letter avatar holds the first letter of the toolkit's name; a picture replaces it.

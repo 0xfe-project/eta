@@ -133,7 +133,7 @@ test("the Composio switch is off and cannot be used until a key is set, and says
 test("before the host has answered, the page does not say there are no sources, nor show an empty proxy", async () => {
   const app = await open("./fixtures/plugin-settings-held.tsx", OPEN);
   expect(app.shows("Plugin sources")).toBe(true);
-  expect(app.shows("No plugin sources")).toBe(false);
+  expect(app.shows("No plugin sources yet")).toBe(false);
   expect(app.count(PROXY_FIELD)).toBe(0);
 });
 
@@ -141,14 +141,14 @@ test("once the host has answered with sources, they are listed and the proxy fie
   const app = await open("./fixtures/plugin-settings-held.tsx", OPEN);
   await app.press("label:answer with sources");
   await app.waitFor("text:Cursor");
-  expect(app.shows("No plugin sources")).toBe(false);
+  expect(app.shows("No plugin sources yet")).toBe(false);
   expect(app.count(PROXY_FIELD)).toBe(1);
 });
 
 test("once the host has answered with no sources, the page says so", async () => {
   const app = await open("./fixtures/plugin-settings-held.tsx", OPEN);
   await app.press("label:answer with none");
-  await app.waitFor("text:No plugin sources");
+  await app.waitFor("text:No plugin sources yet");
   expect(app.count(PROXY_FIELD)).toBe(1);
 });
 

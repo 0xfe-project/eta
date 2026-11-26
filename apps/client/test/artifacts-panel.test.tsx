@@ -177,7 +177,7 @@ test("the context tab's View all tasks opens the Tasks tab, closed tasks include
   });
   expect(app.texts()).not.toContain("Completed 1");
   await app.press("label:View all tasks");
-  expect(app.texts()).toContain("Sort: Needs you first");
+  expect(app.texts()).toContain("Needs you first");
   expect(app.texts()).toContain("Completed 1");
 });
 

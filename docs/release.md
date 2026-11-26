@@ -81,7 +81,7 @@ git tag desktop-v0.2.0 origin/main
 git push origin desktop-v0.2.0
 ```
 
-The `desktop-v*` workflow packages `apps/client` with the Native Shell build pinned in `.github/actions/setup-nsh/action.yml` — currently the `nightly` tag, because no stable release contains the Windows IME fix from longbridge/nsh#2497 yet. It strips `desktop-v` from the tag and passes the result as the app version. A suffix marks a prerelease. The host release keeps GitHub's Latest label.
+The `desktop-v*` workflow packages `apps/client` with the Native Shell release pinned in `.github/actions/setup-nsh/action.yml` (`v0.7.1`). It strips `desktop-v` from the tag and passes the result as the app version. A suffix marks a prerelease. The host release keeps GitHub's Latest label.
 
 The workflow opens a draft, runs CI and builds on each target's own runner. It checks that every desktop package includes the local host launcher, then publishes the draft with `SHA256SUMS`.
 
@@ -117,7 +117,7 @@ A signed IPA installs only on the devices its profile allows (development or ad 
 The desktop apps (macOS, Windows, Linux) and the Android app update themselves from Settings → Update, whichever host they are connected to, and check once at start: a newer release shows a strip at the bottom of the window with one button (download, then restart) and a close button that hides it for that version. iOS is left to the store or a manual install: its build has no update source.
 
 - **Desktop**: `nsh/updater` downloads the platform's archive (`Eta-<version>-<os>-<arch>.tar.gz|zip`), checks its size and SHA-256 against the signed manifest, and on restart swaps the app in place and opens it again. When the app runs this computer's host, the confirmation lists the work the restart would stop, as the host's own update does. The settings choose the channel: Full releases only (`stable`) or Pre-releases too (`rc`); a build starts on its own kind's channel.
-- **Android**: the release's code also ships as a signed OTA package (`dev.eta.client-<build>.nshpkg`, `nsh publish`). The app downloads and verifies it, and runs it from its next start: the button then closes the app, and opening it again runs the new version. When the code needs a newer native shell (a newer nsh runtime than the installed APK's), there is no package for it and the app offers the release's APK instead, which the system installs. That only works over an APK signed with the same key, so the manifest lists the APK only when `ETA_ANDROID_KEYSTORE` is configured; without it, a new shell still means uninstalling and installing by hand. Android follows its build's own channel (nsh 0.6 checks for packages on the default source only).
+- **Android**: the release's code also ships as a signed OTA package (`dev.eta.client-<build>.nshpkg`, `nsh publish`). The app downloads and verifies it, and runs it from its next start: the button then closes the app, and opening it again runs the new version. When the code needs a newer native shell (a newer nsh runtime than the installed APK's), there is no package for it and the app offers the release's APK instead, which the system installs. That only works over an APK signed with the same key, so the manifest lists the APK only when `ETA_ANDROID_KEYSTORE` is configured; without it, a new shell still means uninstalling and installing by hand. Android follows its build's own channel (nsh 0.7 checks for packages on the default source only).
 
 Where they look is fixed in each build: two releases that are never Latest and hold nothing but `latest.json` and `latest.json.sig`, `desktop-channel-stable` and `desktop-channel-rc` (`https://github.com/<repo>/releases/download/desktop-channel-<channel>/latest.json`, downloadable without a token as the repository is public). The archives, the package and the APK stay on the versioned `desktop-v*` release, which the manifest points at. The publish job writes the manifest from the published release (notes included) and puts it on `rc`, and for a full release on `stable` too; a channel only moves forward, so rerunning an older tag leaves it alone. Not GitHub Pages: two small files do not need a site and a deploy, and a release asset is replaced at once rather than after a CDN's cache.
 
@@ -136,7 +136,7 @@ macOS checks the new app's code signature before swapping it in (`codesign --ver
 
 ### Local packages and store uploads
 
-Install the Native Shell build that CI pins (the `nightly` tag for now; see the note on the desktop workflow above), then package for your desktop from the repository root.
+Install the Native Shell release that CI pins (`v0.7.1`, or point `ETA_NSH` at that binary — `scripts/nsh-client.ts` runs `ETA_NSH ?? "nsh"`), then package for your desktop from the repository root.
 
 ```sh
 bun run client:package --target macos --out dist/macos
