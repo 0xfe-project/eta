@@ -174,6 +174,18 @@ describe("captain assignment closing", () => {
       assignee: ada.id,
       workspace: "local",
     });
+    await until(() => w.row(group.id, one.messageId) !== undefined);
+    expect(w.row(group.id, one.messageId)).toMatchObject({
+      kind: "task_card",
+      data: {
+        taskId: one.task.id,
+        number: one.task.number,
+        status: "todo",
+        captainAssignmentId: one.assignment.id,
+        captainRound: 1,
+        taskNumber: one.task.number,
+      },
+    });
     expect(captain.store.assignment(one.assignment.id)).toMatchObject({
       status: "working",
       targets: [{ agentId: ada.id, taskCount: 1, status: "working" }],
@@ -183,6 +195,12 @@ describe("captain assignment closing", () => {
       taskId: one.task.id,
       status: "blocked",
     });
+    await until(
+      () => w.row(group.id, one.messageId)?.data.status === "blocked",
+    );
+    expect(w.row(group.id, one.messageId)?.data.captainAssignmentId).toBe(
+      one.assignment.id,
+    );
     expect(captain.store.assignment(one.assignment.id)).toMatchObject({
       status: "blocked",
       targets: [{ agentId: ada.id, taskCount: 1, status: "blocked" }],
@@ -192,6 +210,9 @@ describe("captain assignment closing", () => {
       taskId: one.task.id,
       status: "in_review",
     });
+    await until(
+      () => w.row(group.id, one.messageId)?.data.status === "in_review",
+    );
     expect(captain.store.assignment(one.assignment.id)).toMatchObject({
       status: "completed",
       targets: [{ agentId: ada.id, taskCount: 1, status: "completed" }],
@@ -201,6 +222,7 @@ describe("captain assignment closing", () => {
       taskId: one.task.id,
       status: "done",
     });
+    await until(() => w.row(group.id, one.messageId)?.data.status === "done");
     expect(captain.store.assignment(one.assignment.id)).toMatchObject({
       status: "completed",
       targets: [{ agentId: ada.id, taskCount: 1, status: "completed" }],
@@ -209,6 +231,18 @@ describe("captain assignment closing", () => {
     await w.client.call("tasks", "update", {
       taskId: one.task.id,
       status: "cancelled",
+    });
+    await until(
+      () => w.row(group.id, one.messageId)?.data.status === "cancelled",
+    );
+    expect(w.row(group.id, one.messageId)).toMatchObject({
+      kind: "task_card",
+      data: {
+        status: "cancelled",
+        captainAssignmentId: one.assignment.id,
+        captainRound: 1,
+        taskNumber: one.task.number,
+      },
     });
     expect(captain.store.assignment(one.assignment.id)).toMatchObject({
       status: "cancelled",
@@ -224,6 +258,17 @@ describe("captain assignment closing", () => {
       workspace: "local",
     });
     await w.client.call("tasks", "delete", { taskId: two.task.id });
+    await until(() => w.row(group.id, two.messageId)?.data.deleted === true);
+    expect(w.row(group.id, two.messageId)).toMatchObject({
+      kind: "task_card",
+      data: {
+        taskId: two.task.id,
+        deleted: true,
+        captainAssignmentId: two.assignment.id,
+        captainRound: 1,
+        taskNumber: two.task.number,
+      },
+    });
     expect(captain.store.assignment(two.assignment.id)).toMatchObject({
       status: "cancelled",
       targets: [{ agentId: ada.id, taskCount: 0, status: "cancelled" }],

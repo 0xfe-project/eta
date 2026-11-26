@@ -25,6 +25,7 @@ export const feedMessages = defineMessages({
       "Task draft: {title} (goes to the backlog when confirmed; does not run yet)",
     taskDraftDiscarded: "Task draft: {title} (discarded)",
     taskCard: "Task #{number}: {title}",
+    taskCardBare: "Task #{number}",
     nameSeparator: ", ",
   },
   zh: {
@@ -49,6 +50,7 @@ export const feedMessages = defineMessages({
     taskDraftBacklog: "任务草稿：{title}（确认后放入积压，不会立即执行）",
     taskDraftDiscarded: "任务草稿：{title}（已丢弃）",
     taskCard: "任务 #{number}：{title}",
+    taskCardBare: "任务 #{number}",
     nameSeparator: "、",
   },
 });

@@ -332,8 +332,27 @@ describe("captain assignment", () => {
 
     const captainMsg = groupRows.find((row) => row.author === "captain")!;
     const assignment = w.host.product.captain.store.assignments()[0]!;
-    expect(captainMsg.data.captainAssignmentId).toBe(assignment.id);
-    expect(captainMsg.data.taskNumber).toBe(1);
+    expect(captainMsg.kind).toBe("task_card");
+    expect(captainMsg.agentId).toBe(captain.agentId);
+    expect(captainMsg.mentions).toEqual([ada.id]);
+    expect(captainMsg.text).toBe(
+      'Dispatched task "Ship the Captain patch" to Ada.',
+    );
+    expect(captainMsg.data).toEqual({
+      taskId: expect.any(String),
+      number: 1,
+      title: "Ship the Captain patch",
+      status: "todo",
+      runStatus: null,
+      conversationId: group.id,
+      comments: 0,
+      summary: "",
+      artifacts: [],
+      captainAssignmentId: assignment.id,
+      captainRound: 1,
+      taskNumber: 1,
+    });
+    expect(captainMsg.data.captainNote).toBeUndefined();
 
     const task = w.host.db
       .query<
@@ -425,9 +444,23 @@ describe("captain assignment", () => {
       expect.objectContaining({ taskId: stepA.task.id, requireDone: true }),
     ]);
     await until(() => w.row(stewarded.id, stepB.messageId) !== undefined);
-    expect(w.row(stewarded.id, stepB.messageId)?.text).toBe(
-      "Bola takes Step B after Step A.",
-    );
+    expect(w.row(stewarded.id, parent.messageId)).toMatchObject({
+      kind: "task_card",
+    });
+    expect(
+      w.row(stewarded.id, parent.messageId)?.data.captainNote,
+    ).toBeUndefined();
+    expect(w.row(stewarded.id, stepB.messageId)).toMatchObject({
+      kind: "task_card",
+      text: "Bola takes Step B after Step A.",
+      data: {
+        taskId: stepB.task.id,
+        number: stepB.task.number,
+        captainAssignmentId: stepB.assignment.id,
+        captainNote: "Bola takes Step B after Step A.",
+        taskNumber: stepB.task.number,
+      },
+    });
 
     // Refuses non-member, Captain, multi-member with no steward, Captain's direct chat, and archived group.
     const beforeCount = w.host.db
@@ -559,6 +592,138 @@ describe("captain assignment", () => {
       status: "completed",
       targets: [{ agentId: ada.id, taskCount: 1, status: "completed" }],
     });
+  });
+
+  it("syncs a Captain-dispatched task_card on update, comment, and delete while preserving Captain provenance", async () => {
+    const { models } = scriptedModels(() => say("ok"));
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id], "sync-dispatch");
+    await w.watch(group.id);
+
+    const dispatched = await w.host.product.captain.dispatchTask({
+      conversationId: group.id,
+      title: "Initial title",
+      description: "Track lifecycle",
+      assignee: ada.id,
+      status: "backlog",
+      workspace: "local",
+      message: "Ada, prioritize this.",
+    });
+
+    const row = () => w.row(group.id, dispatched.messageId)!;
+    const rev = () =>
+      w.host.db
+        .query<{ revision: number }, [string]>(
+          "SELECT revision FROM message WHERE id = ?",
+        )
+        .get(dispatched.messageId)!.revision;
+
+    await until(() => row()?.kind === "task_card");
+    expect(row().data).toMatchObject({
+      taskId: dispatched.task.id,
+      number: dispatched.task.number,
+      title: "Initial title",
+      status: "backlog",
+      captainAssignmentId: dispatched.assignment.id,
+      captainRound: 1,
+      captainNote: "Ada, prioritize this.",
+      taskNumber: dispatched.task.number,
+    });
+    let lastRev = rev();
+
+    await w.client.call("tasks", "update", {
+      taskId: dispatched.task.id,
+      status: "in_progress",
+      title: "Updated title",
+    });
+    await until(() => row().data.status === "in_progress");
+    expect(row().data).toMatchObject({
+      taskId: dispatched.task.id,
+      number: dispatched.task.number,
+      title: "Updated title",
+      status: "in_progress",
+      captainAssignmentId: dispatched.assignment.id,
+      captainRound: 1,
+      captainNote: "Ada, prioritize this.",
+      taskNumber: dispatched.task.number,
+    });
+    expect(rev()).toBeGreaterThan(lastRev);
+    lastRev = rev();
+
+    // No-op update leaves revision unchanged because card data key order is deterministic.
+    await w.client.call("tasks", "update", {
+      taskId: dispatched.task.id,
+      status: "in_progress",
+    });
+    expect(rev()).toBe(lastRev);
+
+    await w.client.call("tasks", "comment", {
+      taskId: dispatched.task.id,
+      body: "Found the root cause",
+    });
+    await until(() => row().data.comments === 1);
+    expect(row().data).toMatchObject({
+      comments: 1,
+      summary: "Found the root cause",
+      captainAssignmentId: dispatched.assignment.id,
+      captainRound: 1,
+      captainNote: "Ada, prioritize this.",
+      taskNumber: dispatched.task.number,
+    });
+
+    await w.client.call("tasks", "delete", { taskId: dispatched.task.id });
+    await until(() => row().data.deleted === true);
+    expect(row()).toMatchObject({
+      kind: "task_card",
+      data: {
+        taskId: dispatched.task.id,
+        number: dispatched.task.number,
+        title: "Updated title",
+        deleted: true,
+        captainAssignmentId: dispatched.assignment.id,
+        captainRound: 1,
+        captainNote: "Ada, prioritize this.",
+        taskNumber: dispatched.task.number,
+      },
+    });
+  });
+
+  it("includes Captain's dispatch_task card text in the briefing of woken group agents", async () => {
+    const { models, requests } = scriptedModels(() => say("Got it."));
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id], "briefing-dispatch");
+    await w.watch(group.id);
+
+    await w.host.product.captain.dispatchTask({
+      conversationId: group.id,
+      title: "Ship briefing fix",
+      description: "Check briefing",
+      assignee: ada.id,
+      status: "backlog",
+      workspace: "local",
+    });
+    await w.host.product.captain.dispatchTask({
+      conversationId: group.id,
+      title: "Follow-up check",
+      description: "Check custom note",
+      assignee: ada.id,
+      status: "backlog",
+      workspace: "local",
+      message: "Custom Captain dispatch note for Ada.",
+    });
+
+    const sent = await w.send(group.id, "Status check?");
+    await w.settled(group.id, sent.replies[0]!.id);
+    const adaRequest = requests.find((req) => req.agent === "Ada")!;
+    expect(adaRequest).toBeDefined();
+    expect(adaRequest.last).toContain(
+      'Dispatched task "Ship briefing fix" to Ada.',
+    );
+    expect(adaRequest.last).toContain("Custom Captain dispatch note for Ada.");
   });
 });
 

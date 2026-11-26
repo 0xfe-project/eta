@@ -19,9 +19,9 @@ import type {
  *
  * One row, three states, and that is the point: the conversation keeps its history, the card is
  * where the proposal was, and there is no second copy of the task to drift. A task has at most one
- * card per conversation (only a confirmed draft makes one, and a draft is confirmed once). Making
- * or linking a task in any other way puts no card in a timeline, and deleting a task leaves its
- * cards behind, marked, because what a reader still has is the card.
+ * card per conversation (only a confirmed draft or Captain's `dispatch_task` makes one, and a draft
+ * is confirmed once). Making or linking a task in any other way puts no card in a timeline, and
+ * deleting a task leaves its cards behind, marked, because what a reader still has is the card.
  */
 import type { Database } from "bun:sqlite";
 import type { AgentStore } from "../agents/store";
@@ -93,12 +93,20 @@ export interface TaskCardsDeps {
   artifactsOf: (taskId: string) => TaskArtifactRef[];
 }
 
-/** What a card carries: the task's facts, and the turn the proposal came out of. */
-function cardData(
+interface TaskCardExtra {
+  turnMessageId?: string | undefined;
+  captainAssignmentId?: string | undefined;
+  captainRound?: number | undefined;
+  captainNote?: string | undefined;
+  taskNumber?: number | undefined;
+}
+
+/** What a card carries: the task's facts, plus the turn or Captain dispatch it came out of. */
+export function taskCardData(
   task: TaskRecord,
   summary: string,
   artifacts: TaskArtifactRef[],
-  turnMessageId?: string | undefined,
+  extra: TaskCardExtra = {},
 ): TaskCardData {
   return {
     taskId: task.id,
@@ -110,7 +118,36 @@ function cardData(
     comments: task.comments,
     summary,
     artifacts,
-    ...(turnMessageId === undefined ? {} : { turnMessageId }),
+    ...(extra.turnMessageId === undefined
+      ? {}
+      : { turnMessageId: extra.turnMessageId }),
+    ...(extra.captainAssignmentId === undefined
+      ? {}
+      : { captainAssignmentId: extra.captainAssignmentId }),
+    ...(extra.captainRound === undefined
+      ? {}
+      : { captainRound: extra.captainRound }),
+    ...(extra.captainNote === undefined
+      ? {}
+      : { captainNote: extra.captainNote }),
+    ...(extra.taskNumber === undefined ? {} : { taskNumber: extra.taskNumber }),
+  };
+}
+
+function preservedExtra(data: Record<string, unknown>): TaskCardExtra {
+  return {
+    turnMessageId:
+      typeof data.turnMessageId === "string" ? data.turnMessageId : undefined,
+    captainAssignmentId:
+      typeof data.captainAssignmentId === "string"
+        ? data.captainAssignmentId
+        : undefined,
+    captainRound:
+      typeof data.captainRound === "number" ? data.captainRound : undefined,
+    captainNote:
+      typeof data.captainNote === "string" ? data.captainNote : undefined,
+    taskNumber:
+      typeof data.taskNumber === "number" ? data.taskNumber : undefined,
   };
 }
 
@@ -284,12 +321,9 @@ export class TaskCards {
       });
       // The card keeps the draft's place in the conversation, including the turn it belongs to.
       const message = timeline.retype(row.id, "task_card", {
-        ...cardData(
-          task,
-          "",
-          this.#deps.artifactsOf(task.id),
-          draft.turnMessageId,
-        ),
+        ...taskCardData(task, "", this.#deps.artifactsOf(task.id), {
+          turnMessageId: draft.turnMessageId,
+        }),
       })!;
       this.#told(
         row,
@@ -408,15 +442,14 @@ export class TaskCards {
     const task = tasks.get(taskId);
     const touched = new Set<string>();
     for (const card of cards) {
-      const turnMessageId = card.data.turnMessageId as string | undefined;
       const fresh =
         task === undefined
           ? undefined
-          : cardData(
+          : taskCardData(
               task,
               tasks.lastComment(taskId),
               this.#deps.artifactsOf(taskId),
-              turnMessageId,
+              preservedExtra(card.data),
             );
       // A deleted task: the card stays as the record of what was proposed, and says so rather
       // than pointing at nothing.

@@ -154,6 +154,14 @@ function insertedItems(context: Context, row: MessageView): TranscriptItem[] {
   ];
 }
 
+function isLegacyCaptainDispatch(row: MessageView): boolean {
+  return (
+    row.kind === "message" &&
+    row.author === "captain" &&
+    typeof row.data.taskId === "string"
+  );
+}
+
 function rowItems(context: Context, row: MessageView): TranscriptItem[] {
   switch (row.kind) {
     case "system":
@@ -166,6 +174,8 @@ function rowItems(context: Context, row: MessageView): TranscriptItem[] {
     case "mention":
       if (row.author === "user") return userItems(context, row);
       if (row.author === "agent") return replyItems(context, row);
+      if (isLegacyCaptainDispatch(row))
+        return [notice(row.id, taskCardText(context, row))];
       // A message the host or Captain wrote into the conversation, among them what Captain is told
       // about its proposals and its review prompt: Captain's context, not drawn here.
       return [];
@@ -436,8 +446,25 @@ function taskDraftText(context: Context, row: MessageView): string {
   );
 }
 
+const LEGACY_DISPATCH_TEXT = /^Dispatched task "(.+)" to .+\.$/;
+
 function taskCardText(context: Context, row: MessageView): string {
-  const title = typeof row.data.title === "string" ? row.data.title : "";
-  const number = typeof row.data.number === "number" ? row.data.number : "";
+  const number =
+    typeof row.data.number === "number"
+      ? row.data.number
+      : typeof row.data.taskNumber === "number"
+        ? row.data.taskNumber
+        : "";
+  let title =
+    typeof row.data.title === "string" && row.data.title !== ""
+      ? row.data.title
+      : "";
+  if (title === "" && isLegacyCaptainDispatch(row)) {
+    const trimmed = row.text.trim();
+    const matched = LEGACY_DISPATCH_TEXT.exec(trimmed);
+    title = matched?.[1] ?? trimmed;
+  }
+  if (title === "" && number !== "")
+    return context.t("taskCardBare", { number });
   return context.t("taskCard", { number, title });
 }

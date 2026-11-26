@@ -135,6 +135,16 @@ const failureReasons: Record<string, Parameters<typeof uiText>[0]> = {
   gone: "replyGone",
 };
 
+/** Historical Captain `dispatch_task` rows stored as `kind: "message"` before `task_card` emission. */
+function isCaptainDispatchMessage(message: MessageView): boolean {
+  return (
+    message.kind === "message" &&
+    message.author === "captain" &&
+    typeof message.data.taskId === "string" &&
+    typeof message.data.captainAssignmentId === "string"
+  );
+}
+
 export function Message(props: {
   item: MessageView;
   additions: MessageView[];
@@ -186,7 +196,11 @@ export function Message(props: {
   let reply: ViewRef | undefined;
   effect(() => {
     const message = item();
-    if (message.kind === "task_draft" || message.kind === "task_card")
+    if (
+      message.kind === "task_draft" ||
+      message.kind === "task_card" ||
+      isCaptainDispatchMessage(message)
+    )
       return props.registerAction(message.id, () => action?.focus());
   });
   const review = () => {
@@ -352,11 +366,22 @@ export function Message(props: {
     );
     busy.set(false);
   }
-  const card = () =>
-    item().kind === "task_card" || item().kind === "task_draft";
+  const isTaskCard = () =>
+    item().kind === "task_card" || isCaptainDispatchMessage(item());
+  const cardTask = () => (isTaskCard() ? task() : undefined);
+  const captainName = () => host.agent(item().agentId)?.name ?? "Captain";
+  const dispatchedAssigneeName = () => {
+    const id = task()?.assigneeAgentId ?? item().mentions[0] ?? null;
+    return id ? host.agent(id)?.name : undefined;
+  };
+  const captainNote = () => {
+    const note = item().data.captainNote;
+    return typeof note === "string" ? note.trim() : "";
+  };
+  const card = () => isTaskCard() || item().kind === "task_draft";
   // A draft is one folded line from the moment it exists; a card, which is here because the reader
   // confirmed it, is open. Either way the reader's own choice stands, through a reload.
-  const cardIsOpen = () => cardOpen(item().id, item().kind === "task_card");
+  const cardIsOpen = () => cardOpen(item().id, isTaskCard());
   const toggleCard = () => setCardOpen(item().id, !cardIsOpen());
   return (
     <View
@@ -511,14 +536,48 @@ export function Message(props: {
           </If>
         </View>
       </If>
-      <If when={item().kind === "task_card" || item().kind === "task_draft"}>
-        <If
-          when={
-            item().kind === "task_card" &&
-            !task() &&
-            !!host.state().targets.tasks
-          }
-        >
+      <If when={isTaskCard() || item().kind === "task_draft"}>
+        <If when={isTaskCard() && item().author === "captain"}>
+          <View
+            testID="captain-task-header"
+            style={{
+              ...row,
+              gap: props.phone ? space[4] : space[8],
+            }}
+          >
+            <AgentFace
+              id={item().agentId ?? host.captain()?.id ?? "Captain"}
+              size={avatar.sm}
+            />
+            <Label variant="small" weight={weight.strong}>
+              {captainName()}
+            </Label>
+            <If when={dispatchedAssigneeName()}>
+              {(name) => (
+                <Label
+                  variant="caption"
+                  tone="muted"
+                  lines={1}
+                  style={{ flexShrink: 1, minWidth: 0 }}
+                >
+                  {uiText("captainDispatchedTo", { name: name() })}
+                </Label>
+              )}
+            </If>
+          </View>
+          <If when={captainNote()}>
+            {(note) => (
+              <View style={{ paddingHorizontal: space[2] }}>
+                <chatText.View
+                  text={{ text: note(), mentions: mentionRefs() }}
+                  plugins={shown}
+                  label={uiText("replyOf", { name: captainName() })}
+                />
+              </View>
+            )}
+          </If>
+        </If>
+        <If when={isTaskCard() && !task() && !!host.state().targets.tasks}>
           <EmptyState
             size="row"
             status="empty"
@@ -532,7 +591,7 @@ export function Message(props: {
             }}
           />
         </If>
-        <If when={task()}>
+        <If when={cardTask()}>
           {(value) => (
             <TaskSummary
               controlRef={(node) => {
@@ -675,7 +734,7 @@ export function Message(props: {
       <If
         when={
           item().author !== "user" &&
-          item().kind !== "task_card" &&
+          !isTaskCard() &&
           item().kind !== "task_draft" &&
           !operation()
         }

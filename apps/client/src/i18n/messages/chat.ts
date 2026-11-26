@@ -508,4 +508,5 @@ export const chatMessages = {
     "Routine “{{name}}” sent a report",
     "定时任务「{{name}}」发来汇报",
   ],
+  captainDispatchedTo: ["assigned to {{name}}", "指派给 {{name}}"],
 } as const;

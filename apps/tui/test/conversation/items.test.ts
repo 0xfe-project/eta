@@ -926,6 +926,112 @@ describe("a task row", () => {
       text: "Task #12: Ship it",
     });
   });
+
+  it("renders Captain task_card and legacy dispatch rows cleanly and ignores non-dispatch Captain messages", () => {
+    const captainCard = row({
+      kind: "task_card",
+      author: "captain",
+      agentId: "captain-1",
+      text: 'Dispatched task "Ship it" to Ada.',
+      data: {
+        taskId: "t1",
+        number: 12,
+        title: "Ship it",
+        captainAssignmentId: "a1",
+        captainRound: 1,
+        taskNumber: 12,
+      },
+    });
+    const legacyDefault = row({
+      kind: "message",
+      author: "captain",
+      agentId: "captain-1",
+      text: 'Dispatched task "Ship it" to Ada.',
+      data: {
+        taskId: "t2",
+        taskNumber: 12,
+        captainAssignmentId: "a2",
+        captainRound: 1,
+      },
+    });
+    const legacyCustom = row({
+      kind: "message",
+      author: "captain",
+      agentId: "captain-1",
+      text: "Bola takes Step B.",
+      data: {
+        taskId: "t3",
+        taskNumber: 13,
+        captainAssignmentId: "a3",
+      },
+    });
+    const legacyBare = row({
+      kind: "message",
+      author: "captain",
+      agentId: "captain-1",
+      text: "",
+      data: {
+        taskId: "t4",
+        taskNumber: 14,
+        captainAssignmentId: "a4",
+      },
+    });
+    const nonDispatch = row({
+      kind: "message",
+      author: "captain",
+      agentId: "captain-1",
+      text: "Please discuss the release.",
+      data: { captainAssignmentId: "a5" },
+    });
+
+    expect(
+      items({
+        rows: [
+          captainCard,
+          legacyDefault,
+          legacyCustom,
+          legacyBare,
+          nonDispatch,
+        ],
+        locale: "en",
+      }),
+    ).toEqual([
+      {
+        kind: "notice",
+        key: captainCard.id,
+        tone: "muted",
+        text: "Task #12: Ship it",
+      },
+      {
+        kind: "notice",
+        key: legacyDefault.id,
+        tone: "muted",
+        text: "Task #12: Ship it",
+      },
+      {
+        kind: "notice",
+        key: legacyCustom.id,
+        tone: "muted",
+        text: "Task #13: Bola takes Step B.",
+      },
+      {
+        kind: "notice",
+        key: legacyBare.id,
+        tone: "muted",
+        text: "Task #14",
+      },
+    ]);
+    expect(
+      items({
+        rows: [captainCard, legacyDefault, legacyBare],
+        locale: "zh",
+      }),
+    ).toMatchObject([
+      { text: "任务 #12：Ship it" },
+      { text: "任务 #12：Ship it" },
+      { text: "任务 #14" },
+    ]);
+  });
 });
 
 describe("a backlog task draft", () => {
