@@ -8,6 +8,7 @@ import type { Layout } from "../components";
 import type { MotionFrom } from "../components/motion";
 import type { Flavor, PaletteId } from "../components/palettes";
 import type { Page } from "../navigation/routes";
+import type { PluginsTab } from "../pages/plugins/plugins";
 import type { ChatWidth, Theme } from "../pages/settings/appearance";
 import type { SettingsSection } from "../pages/settings/overview";
 import {
@@ -169,6 +170,10 @@ export function Workspace(props: {
     mobileOpen.set(shown);
   }
   const newGroup = signal(false);
+  /** Where the Plugins page should open (tab and/or specific plugin). */
+  const pluginsIntent = signal<
+    { tab?: PluginsTab; plugin?: string } | undefined
+  >(undefined);
   /** The template gallery, open on a template id ("" for none in particular). */
   const templateGallery = signal<string | undefined>(undefined);
   // A template link (`eta://template?id=…`, `?template=…`) opens the gallery on it.
@@ -294,6 +299,10 @@ export function Workspace(props: {
     const id = await openAgentChat(host, agent);
     if (id) open(id);
   }
+  function openPlugins(intent?: { tab?: PluginsTab; plugin?: string }) {
+    navigate("plugins");
+    pluginsIntent.set(intent);
+  }
   let openingCaptain = false;
   /** Why Captain's conversation did not open: shown in its pane, with Retry. */
   const captainProblem = signal<unknown>(undefined);
@@ -320,6 +329,7 @@ export function Workspace(props: {
       showSettings();
       return;
     }
+    pluginsIntent.set(undefined);
     settings.set(undefined);
     settingsPush.settle();
     chatPush.settle();
@@ -618,6 +628,8 @@ export function Workspace(props: {
           <If when={page() === "plugins"}>
             <Plugins
               layout={props.layout}
+              initialTab={pluginsIntent()?.tab}
+              initialPlugin={pluginsIntent()?.plugin}
               onSettings={() => showSettings("Plugins")}
               onBack={
                 phone()
@@ -707,6 +719,14 @@ export function Workspace(props: {
                   closeSettings(section());
                   templateGallery.set("");
                 }}
+                onOpenMarket={() => {
+                  closeSettings(section());
+                  openPlugins({ tab: "Market" });
+                }}
+                onOpenPlugins={(plugin) => {
+                  closeSettings(section());
+                  openPlugins({ tab: "Plugins", plugin });
+                }}
               />
             </View>
           );
@@ -722,6 +742,7 @@ export function Workspace(props: {
       <If when={templateGallery() !== undefined}>
         <TemplateGallery
           phone={phone()}
+          tablet={props.layout === "tablet"}
           initialId={templateGallery() || undefined}
           onClose={() => templateGallery.set(undefined)}
           onCreated={(agent) => {
@@ -731,6 +752,14 @@ export function Workspace(props: {
           onModelServices={() => {
             templateGallery.set(undefined);
             showSettings("Model services");
+          }}
+          onOpenMarket={() => {
+            templateGallery.set(undefined);
+            openPlugins({ tab: "Market" });
+          }}
+          onOpenPlugins={(plugin) => {
+            templateGallery.set(undefined);
+            openPlugins({ tab: "Plugins", plugin });
           }}
         />
       </If>
