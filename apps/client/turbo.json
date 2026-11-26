@@ -6,19 +6,23 @@
   // ETA_NSH is named here because turbo hands a task only the variables it declares: without
   // this the override a developer sets is dropped and the run silently uses whatever nsh is
   // on PATH. Naming it also puts it in the hash, so a run with another binary misses the cache.
+  // The wrapper decides what either task runs — which nsh call, and for test how many files at
+  // once — so its own file is an input too: a change there has to run them, not replay a pass.
   "tasks": {
     "typecheck": {
       "env": ["ETA_NSH"],
       "inputs": [
         "$TURBO_EXTENDS$",
-        "$TURBO_ROOT$/.github/actions/setup-nsh/action.yml"
+        "$TURBO_ROOT$/.github/actions/setup-nsh/action.yml",
+        "$TURBO_ROOT$/scripts/nsh-client.ts"
       ]
     },
     "test": {
       "env": ["ETA_NSH"],
       "inputs": [
         "$TURBO_EXTENDS$",
-        "$TURBO_ROOT$/.github/actions/setup-nsh/action.yml"
+        "$TURBO_ROOT$/.github/actions/setup-nsh/action.yml",
+        "$TURBO_ROOT$/scripts/nsh-client.ts"
       ]
     }
   }
