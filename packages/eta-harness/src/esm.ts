@@ -14,8 +14,9 @@
  * - `eta.ask`, a nested turn of this same agent, with tools and the history;
  * - `search` / `view` / `edit` / `$` and `node:*`, resolved in the session cwd.
  *
- * Every script a run evaluates is written to disk first (`runs/`), so the code
- * the model ran is a file, not something that only lived in memory.
+ * A script is evaluated from memory under a virtual name in `runs/`; nothing is written there
+ * for it, because the session's history already holds the code the model ran. Only a result too
+ * long for the model's context goes to a file in `runs/`.
  */
 import type {
   AgentMessage,
@@ -310,7 +311,7 @@ function askHistory(transcript: readonly AgentMessage[]): Message[] {
 }
 
 const ESMRUN_DESCRIPTION = [
-  "Run JavaScript in this session's ESM realm. The script is a module (imports, top-level await); its last expression is the result, or `export default` it. Relative paths, `$` and `search` resolve in the session cwd. Every script is saved under the session's runs/ directory.",
+  "Run JavaScript in this session's ESM realm. The script is a module (imports, top-level await); its last expression is the result, or `export default` it. Relative paths, `$` and `search` resolve in the session cwd.",
   'Prefer search/view/edit over `$` for files. Bare imports (`import pg from "pg"`) are installed from npm on first use.',
   "Default to esmrun; use esmrunandkeep only for something you will call again.",
 ].join(" ");
@@ -542,8 +543,6 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     },
     timeoutMs: number | undefined,
   ): Promise<ToolResult> => {
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, source, "utf8");
     const frame: Frame = {
       toolCallId: call.toolCallId,
       turn: call.turn,
@@ -586,6 +585,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     let text = parts.join("\n");
     if (text.length > RESULT_CHARS) {
       const full = `${file.replace(/\.js$/, "")}.out.txt`;
+      mkdirSync(dirname(full), { recursive: true });
       writeFileSync(full, text, "utf8");
       text = `${text.slice(0, RESULT_CHARS)}\n… (${text.length} chars; full output: ${full})`;
     }
@@ -601,7 +601,6 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       sections.push(
         `images: the tools answered with ${frame.images.length}; the first ${images.length} are attached, ${frame.images.length - images.length} left out. Fetch fewer per script to see the rest.`,
       );
-    sections.push(`script: ${file}`);
     return {
       content: [
         { type: "text", text: sections.join("\n\n") },
