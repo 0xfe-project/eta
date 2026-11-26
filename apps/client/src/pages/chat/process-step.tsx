@@ -1,6 +1,5 @@
 import type { RunBlock } from "@eta/client-contracts";
 import type { JSX, ScrollRef } from "nsh";
-import { commandOf } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import {
   Caption,
@@ -15,6 +14,7 @@ import { Spinner } from "../../components/spinner";
 import { icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { ToolOutput } from "./run/tool-code";
+import { toolTitle } from "./run/transcript-line";
 
 /** A step's row in a reply's process. */
 const stepRowHeight = 32;
@@ -30,16 +30,8 @@ export function ProcessStep(props: { value: RunBlock }) {
   const title = () => {
     const step = tool();
     if (!step) return "";
-    const input = step.input;
-    const path =
-      input &&
-      typeof input === "object" &&
-      "path" in input &&
-      typeof input.path === "string"
-        ? input.path
-        : undefined;
-    const detail = commandOf(input) ?? path;
-    return step.name + (detail ? ` · ${detail}` : "");
+    const { name, detail } = toolTitle(step);
+    return name + (detail ? ` · ${detail}` : "");
   };
   return (
     <If
