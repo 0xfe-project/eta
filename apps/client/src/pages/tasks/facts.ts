@@ -135,6 +135,102 @@ export function stepOf(task: BoardTaskView, tasks: BoardTaskView[]) {
   return stepsByParent(tasks).get(task.id) ?? 1;
 }
 
+export interface StandalonePlanChain {
+  key: string;
+  terminal: BoardTaskView;
+  tasks: BoardTaskView[];
+  active: boolean;
+}
+
+/**
+ * Top-level (non-parent, non-subtask-of-present-parent) non-cancelled tasks connected via
+ * `dependsOn` edges, grouped into connected components of size >= 2 and split into active vs.
+ * all-done chains (each sorted newest-first by highest task number).
+ */
+export function standaloneDependencyChains(
+  items: BoardTaskView[],
+  parentIds: ReadonlySet<string> = new Set(),
+): {
+  active: StandalonePlanChain[];
+  completed: StandalonePlanChain[];
+} {
+  const itemIds = new Set(items.map((task) => task.id));
+  const standalone = items.filter(
+    (task) =>
+      task.status !== "cancelled" &&
+      !parentIds.has(task.id) &&
+      !(task.parentId && itemIds.has(task.parentId)),
+  );
+  const byId = new Map(standalone.map((task) => [task.id, task]));
+  const neighbors = new Map<string, Set<string>>();
+  for (const task of standalone) neighbors.set(task.id, new Set());
+  for (const task of standalone) {
+    for (const edge of task.dependsOn ?? []) {
+      if (edge.taskId === task.id || !byId.has(edge.taskId)) continue;
+      neighbors.get(task.id)!.add(edge.taskId);
+      neighbors.get(edge.taskId)!.add(task.id);
+    }
+  }
+
+  const visited = new Set<string>();
+  const active: StandalonePlanChain[] = [];
+  const completed: StandalonePlanChain[] = [];
+
+  for (const root of standalone) {
+    if (visited.has(root.id)) continue;
+    const queue = [root.id];
+    visited.add(root.id);
+    const component: BoardTaskView[] = [];
+    for (let i = 0; i < queue.length; i++) {
+      const id = queue[i]!;
+      const task = byId.get(id);
+      if (task) component.push(task);
+      for (const next of neighbors.get(id) ?? []) {
+        if (!visited.has(next)) {
+          visited.add(next);
+          queue.push(next);
+        }
+      }
+    }
+    if (component.length < 2) continue;
+
+    component.sort((a, b) => a.number - b.number || a.id.localeCompare(b.id));
+    const { levels } = planLevels(component);
+    let terminal = component[0]!;
+    let bestLevel = -1;
+    for (const task of component) {
+      const level = levels.get(task.id) ?? 0;
+      if (
+        level > bestLevel ||
+        (level === bestLevel && task.number >= terminal.number)
+      ) {
+        bestLevel = level;
+        terminal = task;
+      }
+    }
+    const isActive = component.some(
+      (task) => task.status !== "done" && task.status !== "cancelled",
+    );
+    const chain: StandalonePlanChain = {
+      key: terminal.id,
+      terminal,
+      tasks: component,
+      active: isActive,
+    };
+    if (isActive) active.push(chain);
+    else completed.push(chain);
+  }
+
+  const byNewest = (a: StandalonePlanChain, b: StandalonePlanChain) => {
+    const maxA = Math.max(...a.tasks.map((task) => task.number));
+    const maxB = Math.max(...b.tasks.map((task) => task.number));
+    return maxB - maxA || a.key.localeCompare(b.key);
+  };
+  active.sort(byNewest);
+  completed.sort(byNewest);
+  return { active, completed };
+}
+
 /** What a list row or a plan card says of a task after its number. */
 export function taskHint(task: BoardTaskView, tasks: BoardTaskView[]) {
   const cancelled = task.waitingOn?.find((edge) => edge.state === "cancelled");
