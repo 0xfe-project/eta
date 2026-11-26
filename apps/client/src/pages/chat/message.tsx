@@ -633,7 +633,7 @@ export function Message(props: {
                     {uiText("draftNeedsConfirming")}
                   </Label>
                 </View>
-                {/* The draft's actions, as in the design and apps/web: one
+                {/* The draft's actions, as in the design: one
                  * opens the form, and only the form's own confirm creates the
                  * task; the other discards the draft, as the proposals' does. */}
                 <Button

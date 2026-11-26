@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
  * forge it, so a handshake from a page that is not ours is a random website trying to drive the
  * host through the user's browser. A handshake with no `Origin` is not a browser (a script, a
  * daemon) and passes this check. A page is ours when its origin is the origin it asked, or one
- * the host was told about (`--allow-origin`: in development the page is served by vite on
+ * the host was told about (`--allow-origin`: in development the page is served by the client's dev server on
  * another port). "The origin it asked" is only trusted when the host is not guessable by a
  * rebound DNS name: an attacker's domain pointed at 127.0.0.1 would otherwise be "its own
  * origin", so on a loopback host without the token gate the name asked for has to be loopback too.

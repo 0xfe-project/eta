@@ -4,8 +4,7 @@ import { signal, Storage } from "nsh";
  * Which transcript cards the reader opened or folded, kept by the row they were drawn from.
  *
  * A card's default is a guess: a task draft is one folded line, a task card is open. Once the reader
- * opens or folds one themselves, that choice stands, by the row's id and through a reload, as it
- * does in the web app (`apps/web/src/lib/fold.ts`, the same key and format). It is kept on this
+ * opens or folds one themselves, that choice stands, by the row's id and through a reload, It is kept on this
  * device rather than on the host, because how much of a conversation was open is a habit of a
  * screen, not of the conversation.
  */

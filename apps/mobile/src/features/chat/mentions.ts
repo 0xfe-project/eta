@@ -1,5 +1,3 @@
-// Ported from apps/web/src/lib/mentions.ts: keep the two in step.
-
 interface Member {
   id: string;
   name: string;

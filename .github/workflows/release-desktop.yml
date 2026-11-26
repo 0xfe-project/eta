@@ -252,7 +252,7 @@ jobs:
               mkdir -p "$dmg"
               ditto "$out/Eta.app" "$dmg/Eta.app"
               cp apps/client/dmg.json apps/client/dmg/background.png "$dmg/"
-              iconutil -c icns apps/desktop/icon.iconset -o "$dmg/Eta.icns"
+              iconutil -c icns apps/client/icon.iconset -o "$dmg/Eta.icns"
               bunx appdmg@0.6.6 "$dmg/dmg.json" "$RUNNER_TEMP/try/$DESKTOP"
               ;;
             linux)

@@ -1,6 +1,4 @@
-// Copied from apps/web/src/lib/timeline.ts. The web and the TUI read the host's rows the same way;
-// keep the two in step until the logic moves to a shared package. Only the parts the TUI uses
-// are here.
+// The host's timeline rows, merged.
 import type { MessageStatus, MessageView } from "@eta/client-contracts";
 
 // A conversation's timeline, as rows the page has seen: the newest window the host publishes,

@@ -472,7 +472,7 @@ export const chatMessages = {
   fileSaveFailed: ["Couldn't save {{name}}", "无法保存 {{name}}"],
   pictureUnnamed: ["image", "图片"],
   screenshotNamed: ["Screenshot {{index}}", "截图 {{index}}"],
-  // A system row, in the reader's language: the same sentences as apps/web, apps/mobile and the TUI.
+  // A system row, in the reader's language: the same sentences as apps/mobile and the TUI.
   systemStewardChanged: [
     "{{to}} is now the steward, taking over from {{from}}.",
     "{{to}} 成为主理人，接替 {{from}}。",

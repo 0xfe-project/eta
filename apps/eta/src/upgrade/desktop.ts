@@ -4,7 +4,7 @@
  *
  * The app runs its host from a file in the user's directory (`~/.eta/desktop/host/eta-host`) and
  * keeps it up as long as it is open. It says so in the host's environment: the address of a
- * loopback port of its own and a token for it (`apps/desktop/src/bun/service.ts`). Through that
+ * loopback port of its own and a token for it. Through that
  * port the host is what a service manager is to anything else here: something that says whether
  * the host runs and from which file, stops it, starts it again on the same port, and runs a job
  * outside it (`eta-host upgrade --worker`), which outlives the host's stop because it is the app's

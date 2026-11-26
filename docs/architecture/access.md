@@ -7,7 +7,7 @@ The WebSocket channel executes commands and reads and writes files on this machi
 Applies only to `/ws`. The browser attaches the page's origin during the WebSocket handshake, and a page cannot forge it, so a handshake from another page means some random website is trying to use the user's browser to operate the host — always 403.
 
 - A handshake **without an `Origin`** is not a browser (scripts, daemons), and passes this check.
-- The page's origin equals the origin it requested (`Host` header, plus `X-Forwarded-Proto` from a reverse proxy), or is in `--allow-origin` (repeatable). During development the page is served by vite on another port, so `bun run dev` passes vite's address to the host.
+- The page's origin equals the origin it requested (`Host` header, plus `X-Forwarded-Proto` from a reverse proxy), or is in `--allow-origin` (repeatable). During development the page is served by the client's dev server on another port, so `bun run dev` passes its address to the host.
 - "The origin it requested" is only trusted when it cannot be spoofed by DNS rebinding: an attacker's domain resolving to 127.0.0.1 would turn the attacker's page into "its own origin". So when **on a loopback address and without a token gate**, the requested hostname must also be a loopback address.
 
 ## Token gate

@@ -1,5 +1,5 @@
 // What the user has written and not yet seen arrive: a draft per conversation, the group's chosen
-// target, files on their way and the messages on theirs. As apps/web/src/queries/outbox.ts: a
+// target, files on their way and the messages on theirs. A
 // message has its id from the moment it is sent, every try carries it as `clientId`, so trying
 // again is the same message and never a second one.
 

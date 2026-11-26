@@ -41,7 +41,7 @@ export function ReconnectingBanner(props: {
           : uiText("connectionLostReconnecting")}
       </Label>
       <If when={!props.phone}>
-        {/* Not in the design (apps/web had no button); kept so the host
+        {/* Not in the design; kept so the host
             can be changed without waiting for the Lost dialog. Drawn over
             the 16px text line so the strip keeps the design's height. */}
         <Button

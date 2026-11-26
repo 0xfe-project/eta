@@ -1,5 +1,4 @@
-// Copied from `pasteBlocksOf` in apps/web/src/lib/composer.ts. The web and the TUI read a user
-// row's folded pastes the same way; keep the two in step until the logic moves to a shared package.
+// A user row's folded pastes.
 import type { PasteRange } from "../contract";
 
 /**

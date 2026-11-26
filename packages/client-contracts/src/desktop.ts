@@ -1,64 +1,18 @@
 /**
- * What the desktop app and the host promise each other.
+ * What the desktop app and the host promise each other: the oldest app a host's page works in.
  *
  * The two are released apart (`v*` and `desktop-v*` tags, `docs/release.md`), and the page a
  * window shows is the host's: a host upgraded from Settings brings a newer page into an older app,
  * and an app connected to a remote host shows whatever page that host has. So:
  *
- * - The app's bridge only grows. A capability, once shipped, keeps its name and its answer; a new
- *   one gets a new name. The app lists what it has (`capabilities` in `window.__ETA_HOST__`), and a
- *   page asks for a capability by name (`hasCapability` in `apps/web/src/lib/native.ts`), never by
- *   the app's version. An app from before the list has `BASELINE_CAPABILITIES`.
  * - When a host cannot work with an older app at all, it raises `MIN_DESKTOP` and the page tells
  *   the user to update the app. That is the only place a version is compared, and it should stay
- *   rare: a capability check is nearly always enough. Every release carries it in `eta-host.json`
+ *   rare. Every release carries it in `eta-host.json`
  *   (`eta-host --version --json`), so the app can pick a host it can run without downloading one.
  */
 
 /** The oldest desktop app this host's page works in. */
 export const MIN_DESKTOP = "0.1.0";
-
-/** What the bridge answered before the app listed its capabilities: the 0.1.0 app. */
-export const BASELINE_CAPABILITIES = [
-  "open-external",
-  "save-file",
-  "context-menu",
-  "window-action",
-  "connection",
-] as const;
-
-/**
- * A capability a page may ask the app for. New ones are added here and never renamed:
- * - `shell-update`: the app updates itself, by hand (`ShellUpdateView`). Only an app built with an
- *   update address has it.
- * - `pick-directory`: the system's folder dialog, one folder, on this computer
- *   (`POST /api/native/pick-directory` answers `{ path }`, null when nothing was chosen). Only
- *   worth asking for the host's own machine: a remote one's folders are not on this computer.
- */
-export type DesktopCapability =
-  | (typeof BASELINE_CAPABILITIES)[number]
-  | "shell-update"
-  | "pick-directory";
-
-/** Where the app's own update has got to. Nothing here happens unless the user asks. */
-export type ShellUpdateState =
-  | { state: "idle" }
-  | { state: "checking" }
-  /** Asked, and there is nothing newer. */
-  | { state: "current" }
-  | { state: "available"; version: string }
-  /** `progress` is 0–100 when the server says the size. */
-  | { state: "downloading"; version: string; progress?: number }
-  /** Downloaded and checked; applying it restarts the app. */
-  | { state: "ready"; version: string }
-  | { state: "applying"; version: string }
-  | { state: "failed"; during: "check" | "download" | "apply"; error: string };
-
-/** The app's own version and update, as `GET /api/native/shell-update` answers. */
-export type ShellUpdateView = ShellUpdateState & {
-  /** This app's version. */
-  current: string;
-};
 
 const VERSION = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9a-z.-]+))?$/i;
 

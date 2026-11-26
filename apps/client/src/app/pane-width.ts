@@ -3,9 +3,8 @@ import { sizes } from "../components/tokens";
 
 /**
  * The widths the reader dragged the desktop sidebar, conversation panel and task page's rail to,
- * kept on this device. The sidebar's and panel's range and keys follow the web app
- * (`apps/web/src/lib/pane.ts`), so one habit holds on both; the rail is this client's own;
- * the defaults are the fixed widths the panes had before they could be dragged.
+ * kept on this device.
+ * The defaults are the fixed widths the panes had before they could be dragged.
  */
 export type Pane = "sidebar" | "panel" | "task";
 

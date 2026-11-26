@@ -202,7 +202,7 @@ export function toolDescription(input: unknown) {
 }
 
 /**
- * A reply's own rows in its member's session, as apps/web finds them: after where its run starts
+ * A reply's own rows in its member's session: after where its run starts
  * (`runFrom` on the row, or, once the host dropped it, before the briefing of the run that made
  * `callId`, one of the calls the reply kept). A run in flight is everything after its start, the
  * words the user inserted into it included; a finished one stops at the next run's briefing, the

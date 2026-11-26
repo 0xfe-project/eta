@@ -3,7 +3,6 @@ import { ACP_AGENT_ID } from "./acp";
 
 // The external-agent form as text, and back: what the user types (args and env one per line) and
 // the config the host stores. Checked here as the host checks it; the host still has the last word.
-// Shared by apps/web and the NSH client so both check a draft the same way.
 
 export interface AcpDraft {
   label: string;

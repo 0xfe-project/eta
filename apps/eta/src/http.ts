@@ -74,8 +74,7 @@ export function createWebRoutes(
 
     if (pathname === "/version") {
       // The id of the bundle on disk, read per request: a rebuild under a running host is
-      // what a tab's "an update is waiting" check has to see. The web serves the same id from
-      // its own dev server, so a tab compares like with like (apps/web/src/lib/update.ts).
+      // what a tab's "an update is waiting" check has to see.
       const id = await (await web.file(join(root, "BUILD")))
         ?.text()
         .catch(() => undefined);

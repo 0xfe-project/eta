@@ -77,7 +77,7 @@ function toastTitle(title: string) {
 }
 
 /**
- * The form behind a draft's "Edit and confirm", as apps/web's: the agent's
+ * The form behind a draft's "Edit and confirm": the agent's
  * title, description and status, editable, and where it will run. Closing it in
  * any way leaves the draft as it was; only its confirm button creates the task.
  * Once the task is made the form closes and a toast names it; a confirmation

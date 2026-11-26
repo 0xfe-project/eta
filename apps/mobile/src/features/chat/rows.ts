@@ -1,6 +1,5 @@
 // A conversation's timeline as rows the phone has seen: the newest window the host publishes, older
-// pages fetched on demand, and what our own `send` and `stop` calls answered with. Same rules as
-// apps/web/src/lib/timeline.ts and queries/conversations.ts.
+// pages fetched on demand, and what our own `send` and `stop` calls answered with.
 
 import type { MessageStatus, MessageView } from "@eta/client-contracts";
 import type { Signal } from "nsh";

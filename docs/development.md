@@ -33,7 +33,7 @@ Architecture notes:
 - [Tasks, artifacts and routines](architecture/tasks-artifacts-routines.md)
 - [TUI](architecture/tui.md): the terminal interface `eta`, its connection, settings files and how to add a command or a screen; [commands](tui/commands.md)
 
-UI conventions live in [DESIGN.md](../DESIGN.md) and [apps/web/AGENTS.md](../apps/web/AGENTS.md).
+UI conventions live in [DESIGN.md](../DESIGN.md).
 
 ## Environment and setup
 
@@ -43,7 +43,7 @@ Nothing else to install and no service to stand up.
 
 ### Node
 
-The host runs on Bun, but ESLint, knip, `vite build` and some of the vitest runs start under the `node`
+The host runs on Bun, but ESLint, knip and some of the vitest runs start under the `node`
 on your PATH. Use Node 24. The lowest our tools support is 22.22.2, or 24.15 on Node 24 (`engines` in
 `package.json`), because ESLint plugins from `@antfu/eslint-config` (jsdoc, command) declare that.
 On 22.11 and older, knip fails with `ERR_REQUIRE_ESM`.
@@ -91,17 +91,17 @@ does the same with `eval "$(fnm env --use-on-cd)"`.
 
 ```sh
 bun run setup     # bun install + uv sync
-bun run dev       # host and web dev server
+bun run dev       # host and client dev server
 bun run check     # everything CI runs
 ```
 
-`bun run dev` starts the host and vite together:
+`bun run dev` starts the host and the client's dev server together:
 
-- Web: http://127.0.0.1:3000 (`ETA_WEB_PORT` changes the port)
+- Client: http://127.0.0.1:3000 (`ETA_WEB_PORT` changes the port)
 - host: http://127.0.0.1:8787 (`ETA_PORT` changes the port), data in `~/.eta/` — the same directory an
-  installed instance uses; vite proxies `/ws` to it and the host allow-lists vite's origin
+  installed instance uses; the host allow-lists the dev server's origin
 
-In the web UI, add a model service under Settings → Model services first (an API key, or a device-code
+In the client, add a model service under Settings → Model services first (an API key, or a device-code
 link for a Codex or Grok subscription, or a Google AI Studio key), then create agents and conversations.
 
 `bun run check` is `dprint check`, `bun run lint:repo` (root eslint) and
@@ -127,8 +127,8 @@ On a headless Linux box, `loginctl enable-linger` keeps user services up without
 Or run the host by hand:
 
 ```sh
-bun run --cwd apps/web build
-HOME=/var/lib/eta bun apps/eta/src/main.ts --web-dir apps/web/dist --host 0.0.0.0 --port 8787
+bun run --cwd apps/client package:web
+HOME=/var/lib/eta bun apps/eta/src/main.ts --web-dir apps/client/dist/Eta --host 0.0.0.0 --port 8787
 ```
 
 To build the daemon on its own:

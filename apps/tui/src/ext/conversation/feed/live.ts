@@ -1,4 +1,4 @@
-// The session half of apps/web/src/queries/sessions.ts: open a member's session, subscribe to it,
+// The session half of a feed: open a member's session, subscribe to it,
 // and keep what its events say about the run in flight.
 import type { AgentMessage } from "@eta/client-contracts";
 import type { WireClient, WireEvent } from "../../../connection/types";

@@ -7,7 +7,7 @@ Start a host on the local machine, then use a Cloudflare temporary tunnel to giv
 ```sh
 bun install
 bun run setup                 # Compile LLM gateway (requires Go)
-bun run --cwd apps/web build  # Web page, artifacts in apps/web/dist
+bun run --cwd apps/client package:web  # Web page, artifacts in apps/client/dist/Eta
 ```
 
 ## 2. Start host
@@ -16,7 +16,7 @@ bun run --cwd apps/web build  # Web page, artifacts in apps/web/dist
 bun apps/eta/src/main.ts \
   --data-dir ~/eta-demo \
   --port 18800 \
-  --web-dir apps/web/dist \
+  --web-dir apps/client/dist/Eta \
   --token-file ~/eta-demo/access-token
 ```
 

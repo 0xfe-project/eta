@@ -212,7 +212,7 @@ function sentenceAround(
 
 // --- the thread -------------------------------------------------------------------------
 //
-// A task's history reads as a thread, as on the web (apps/web `Timeline`): what was said is a
+// A task's history reads as a thread: what was said is a
 // message under its sender's face, open; what was delivered, what failed and what happened to a
 // dependency each keep a line of their own; everything else between two of those folds into one
 // "N updates" line, closed until pressed. Nothing is said twice: the first message (the

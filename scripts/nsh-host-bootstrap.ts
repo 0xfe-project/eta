@@ -4,10 +4,10 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
-import { hostEnvironment } from "../apps/desktop/src/bun/host-env";
-import { hostHome, recordedHost } from "../apps/desktop/src/bun/installed";
-import { LocalHost, startServiceServer } from "../apps/desktop/src/bun/service";
 import { DownloadError, downloadHost } from "../packages/releases/src/install";
+import { hostEnvironment } from "./host-launcher/host-env";
+import { hostHome, recordedHost } from "./host-launcher/installed";
+import { LocalHost, startServiceServer } from "./host-launcher/service";
 
 const executable = process.platform === "win32" ? "eta-host.exe" : "eta-host";
 const home = homedir();

@@ -1,4 +1,4 @@
-// The row handling of apps/web/src/queries/conversations.ts, as plain functions over the rows a
+// The row handling, as plain functions over the rows a
 // feed holds.
 import type { MessageView } from "@eta/client-contracts";
 import { mergeRows } from "../model/timeline";

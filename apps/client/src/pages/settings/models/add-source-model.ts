@@ -9,8 +9,7 @@ import { WireError } from "@eta/client-contracts/wire";
 import { uiText } from "../../../i18n";
 import { problemText } from "../../../services/problem-text";
 
-// What adding a model source is made of, apart from how it is drawn: the presets (the same list
-// and order as apps/web's add-source dialog), what a new source is called and which of its models
+// What adding a model source is made of, apart from how it is drawn: the presets (the list and its order), what a new source is called and which of its models
 // start ticked, and the failures in the user's words.
 
 /** One choice of the first step: a gateway connector, or a kind the config holds. */
