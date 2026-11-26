@@ -291,6 +291,12 @@ export function conversationsPlugin(
           };
         }),
 
+        wire.handle("conversations", "resetContext", (call) => {
+          const id = new Args(call).string("conversationId");
+          existing(id);
+          return { result: { cleared: engine.resetContext(id) } };
+        }),
+
         wire.handle("conversations", "stop", (call) => {
           const args = new Args(call);
           const stopped = engine.stop(

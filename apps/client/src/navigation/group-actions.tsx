@@ -33,6 +33,7 @@ export function GroupMenu(props: {
   onClose: () => void;
   onRename: () => void;
   onArchive: () => void;
+  onResetContext: () => void;
 }) {
   const c = colors();
   const editable = useGroupsEditable();
@@ -79,6 +80,11 @@ export function GroupMenu(props: {
           label={uiText("renameGroupMenu")}
           disabled={!editable()}
           onSelect={props.onRename}
+        />
+        <ActionItem
+          label={uiText("resetContextMenu")}
+          disabled={!editable()}
+          onSelect={props.onResetContext}
         />
         <ActionItem
           label={uiText("archiveGroupMenu")}
@@ -284,6 +290,86 @@ export function ArchiveGroup(props: {
           />
         </View>
       </If>
+    </Modal>
+  );
+}
+
+/** Asks before every member of a group starts over with an empty context. */
+export function ResetGroupContext(props: {
+  group: ConversationSummary;
+  phone?: boolean;
+  onClose: () => void;
+}) {
+  const host = useHost();
+  const busy = signal(false);
+  const running = () => runningReplies(props.group);
+  async function reset() {
+    if (busy() || running() > 0) return;
+    busy.set(true);
+    const result = await host.action(() =>
+      host.call("conversations", "resetContext", {
+        conversationId: props.group.id,
+      }),
+    );
+    busy.set(false);
+    if (result !== undefined) props.onClose();
+  }
+  const body = () => (
+    <>
+      <Label variant="small" tone="muted">
+        {uiText("resetContextBody")}
+      </Label>
+      <If when={running() > 0}>
+        <Label variant="small" tone="warning">
+          {uiText("resetContextRunning")}
+        </Label>
+      </If>
+    </>
+  );
+  const actions = (size: number) => (
+    <>
+      <Button
+        label={uiText("cancel")}
+        size={size}
+        disabled={busy()}
+        onPress={props.onClose}
+      />
+      <Button
+        label={uiText("resetContextConfirm")}
+        tone="danger"
+        size={size}
+        busy={busy()}
+        disabled={running() > 0}
+        onPress={() => void reset()}
+      />
+    </>
+  );
+  return (
+    <Modal
+      title={uiText("resetContextTitle", { name: props.group.name })}
+      phone={props.phone}
+      sheet={props.phone}
+      plainSheetHeader={props.phone}
+      overPhoneNavigation
+      hideHeader={props.phone}
+      compact={!props.phone}
+      titleWeight={weight.regular}
+      dismissible={!busy()}
+      onClose={props.onClose}
+    >
+      <View style={{ paddingTop: space[8], gap: space[8] }}>
+        {body()}
+        <View
+          style={{
+            ...row,
+            gap: space[8],
+            justifyContent: "flex-end",
+            paddingTop: space[12],
+          }}
+        >
+          {actions(props.phone ? control.touch : control.md)}
+        </View>
+      </View>
     </Modal>
   );
 }

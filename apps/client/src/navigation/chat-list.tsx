@@ -19,7 +19,12 @@ import { uiText, useText } from "../i18n";
 import { useHost } from "../services/host";
 import { useLoadState } from "../services/load-status";
 import { GroupRow } from "./chat-list-rows";
-import { ArchiveGroup, GroupMenu, RenameGroup } from "./group-actions";
+import {
+  ArchiveGroup,
+  GroupMenu,
+  RenameGroup,
+  ResetGroupContext,
+} from "./group-actions";
 import { RailButton } from "./rail-controls";
 
 /** A phone's section heading over the list ("Groups"). */
@@ -53,6 +58,7 @@ export function ChatList(
   const menu = signal<{ id: string; at: Point } | undefined>(undefined);
   const renaming = signal("");
   const archiving = signal("");
+  const resetting = signal("");
   const named = (id: string) =>
     host.conversations().find((group) => group.id === id);
   const phone = () => props.layout === "phone";
@@ -210,6 +216,7 @@ export function ChatList(
                       onClose={() => menu.set(undefined)}
                       onRename={() => renaming.set(group().id)}
                       onArchive={() => archiving.set(group().id)}
+                      onResetContext={() => resetting.set(group().id)}
                     />
                   )}
                 </If>
@@ -258,6 +265,15 @@ export function ChatList(
               group={group()}
               phone={phone()}
               onClose={() => renaming.set("")}
+            />
+          )}
+        </If>
+        <If when={named(resetting())}>
+          {(group) => (
+            <ResetGroupContext
+              group={group()}
+              phone={phone()}
+              onClose={() => resetting.set("")}
             />
           )}
         </If>

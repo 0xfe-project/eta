@@ -20,6 +20,20 @@ export const conversationsMessages = {
     "这个连接不能修改群组。",
   ],
   renameGroupMenu: ["Rename…", "重命名…"],
+  resetContextMenu: ["Clear context…", "清理上下文…"],
+  resetContextTitle: [
+    "Clear the context of “{{name}}”?",
+    "清理「{{name}}」的上下文？",
+  ],
+  resetContextBody: [
+    "Every member starts over with an empty context and only sees what is said from now on. The messages stay in the conversation. Use it when the context has decayed after many compactions.",
+    "所有成员会以空上下文重新开始，只能看到之后的发言。对话里的消息都保留。适合多次压缩后上下文变差的时候使用。",
+  ],
+  resetContextRunning: [
+    "A reply is still running. Stop it first.",
+    "还有回复在进行，请先停止。",
+  ],
+  resetContextConfirm: ["Clear context", "清理上下文"],
   renameGroupTitle: ["Rename group", "重命名群组"],
   browseDirectories: ["Browse directories", "浏览目录"],
   createAnAgentFirstInSettings: [
