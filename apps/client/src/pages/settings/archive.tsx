@@ -21,10 +21,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { EmptyState } from "../../components/empty-state";
-import {
-  createOptimisticStatus,
-  OptimisticStatus,
-} from "../../components/optimistic-status";
+import { showToast } from "../../components/toast";
 import { control, icon, space } from "../../components/tokens";
 import { formatLocale, uiText, useText } from "../../i18n";
 import { useHost } from "../../services/host";
@@ -61,8 +58,6 @@ export function ArchiveSettings(props: { phone?: boolean }) {
   }
   const restoredConversations = signal<string[]>([]);
   const restoredTasks = signal<string[]>([]);
-  const restoreStatus = createOptimisticStatus();
-  let lastRestore: (() => void) | undefined;
   const conversations = () =>
     host
       .conversations()
@@ -76,11 +71,9 @@ export function ArchiveSettings(props: { phone?: boolean }) {
   const tasksLoad = useLoadState({ targets: () => ["tasks"] });
   const conversationsLoad = useLoadState({ targets: () => ["conversations"] });
   const restoreConversation = (id: string) => {
-    lastRestore = () => restoreConversation(id);
     restoredConversations.update((all) =>
       all.includes(id) ? all : [...all, id],
     );
-    restoreStatus.saving();
     void host
       .optimistic(id, { archived: false }, () =>
         host.call("conversations", "update", {
@@ -89,7 +82,6 @@ export function ArchiveSettings(props: { phone?: boolean }) {
         }),
       )
       .then(() => {
-        restoreStatus.saved();
         setTimeout(() => {
           restoredConversations.update((all) =>
             all.filter((item) => item !== id),
@@ -100,30 +92,39 @@ export function ArchiveSettings(props: { phone?: boolean }) {
         restoredConversations.update((all) =>
           all.filter((item) => item !== id),
         );
-        restoreStatus.fail(
-          problem instanceof Error ? problem.message : String(problem),
-        );
+        showToast({
+          title: uiText("saveFailed"),
+          body: problem instanceof Error ? problem.message : String(problem),
+          tone: "red",
+          action: {
+            label: uiText("retry"),
+            onPress: () => restoreConversation(id),
+          },
+        });
       });
   };
   const restoreTask = (id: string) => {
-    lastRestore = () => restoreTask(id);
     restoredTasks.update((all) => (all.includes(id) ? all : [...all, id]));
-    restoreStatus.saving();
     void host
       .optimistic(id, { archivedAt: null }, () =>
         host.call("tasks", "unarchive", { taskId: id }),
       )
       .then(() => {
-        restoreStatus.saved();
         setTimeout(() => {
           restoredTasks.update((all) => all.filter((item) => item !== id));
         }, 1500);
       })
       .catch((problem: unknown) => {
         restoredTasks.update((all) => all.filter((item) => item !== id));
-        restoreStatus.fail(
-          problem instanceof Error ? problem.message : String(problem),
-        );
+        showToast({
+          title: uiText("saveFailed"),
+          body: problem instanceof Error ? problem.message : String(problem),
+          tone: "red",
+          action: {
+            label: uiText("retry"),
+            onPress: () => restoreTask(id),
+          },
+        });
       });
   };
   const quietPeriod = (style: ViewStyle) => (
@@ -194,21 +195,6 @@ export function ArchiveSettings(props: { phone?: boolean }) {
         </If>
       </If>
       <SmoothScroll style={grow} scrollbar={false}>
-        <If when={restoreStatus.state().status !== "idle"}>
-          <View
-            style={{
-              paddingHorizontal: space[16],
-              paddingVertical: space[4],
-              borderBottomWidth: 1,
-              borderColor: c().border,
-            }}
-          >
-            <OptimisticStatus
-              state={restoreStatus.state()}
-              onRetry={() => lastRestore?.()}
-            />
-          </View>
-        </If>
         <SectionHeader
           title={text("archived")}
           count={conversations().length || undefined}

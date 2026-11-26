@@ -6,10 +6,7 @@ import type {
 import { effect, signal, untracked, View } from "nsh";
 import { colors, Label, row } from "../../components";
 import { hint } from "../../components/controls";
-import {
-  createOptimisticStatus,
-  OptimisticStatus,
-} from "../../components/optimistic-status";
+import { showToast } from "../../components/toast";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -70,8 +67,6 @@ export function ComposioPluginSwitch(props: {
   const host = useHost();
   const c = colors();
   const pending = signal<boolean | undefined>(undefined);
-  const status = createOptimisticStatus();
-  let lastTarget: boolean | undefined;
   let turn = 0;
   effect(() => {
     if (pending() !== undefined && props.view.enabled === pending())
@@ -82,9 +77,7 @@ export function ComposioPluginSwitch(props: {
     checked() ? uiText("pluginSwitch") : uiText("pluginOffForAll");
   function apply(enabled: boolean) {
     const currentTurn = ++turn;
-    lastTarget = enabled;
     pending.set(enabled);
-    status.saving();
     void host
       .call("plugins", "setEnabled", {
         name: props.view.name,
@@ -92,7 +85,6 @@ export function ComposioPluginSwitch(props: {
       })
       .then(() => {
         if (turn !== currentTurn) return;
-        status.saved();
         props.onChanged();
         setTimeout(() => {
           if (turn === currentTurn) pending.set(undefined);
@@ -101,9 +93,15 @@ export function ComposioPluginSwitch(props: {
       .catch((problem: unknown) => {
         if (turn !== currentTurn) return;
         pending.set(undefined);
-        status.fail(
-          problem instanceof Error ? problem.message : String(problem),
-        );
+        showToast({
+          title: uiText("saveFailed"),
+          body: problem instanceof Error ? problem.message : String(problem),
+          tone: "red",
+          action: {
+            label: uiText("retry"),
+            onPress: () => apply(enabled),
+          },
+        });
       });
   }
   return (
@@ -121,32 +119,20 @@ export function ComposioPluginSwitch(props: {
           />
         </View>
         <If
-          when={status.state().status === "idle"}
+          when={checked()}
           else={
-            <OptimisticStatus
-              state={status.state()}
-              onRetry={
-                lastTarget !== undefined ? () => apply(lastTarget!) : undefined
-              }
-            />
-          }
-        >
-          <If
-            when={checked()}
-            else={
-              <View testID="composio-plugin-off" style={WORDS}>
-                <Label variant="caption" tone="muted" lines={1}>
-                  {words()}
-                </Label>
-              </View>
-            }
-          >
-            <View style={WORDS}>
+            <View testID="composio-plugin-off" style={WORDS}>
               <Label variant="caption" tone="muted" lines={1}>
                 {words()}
               </Label>
             </View>
-          </If>
+          }
+        >
+          <View style={WORDS}>
+            <Label variant="caption" tone="muted" lines={1}>
+              {words()}
+            </Label>
+          </View>
         </If>
       </View>
     </If>

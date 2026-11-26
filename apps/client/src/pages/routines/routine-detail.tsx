@@ -1,6 +1,5 @@
 import type { BriefView, RoutineInfo, RunView } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import type { OptimisticState } from "../../components/optimistic-status";
 import { View } from "nsh";
 import {
   ActionItem,
@@ -14,7 +13,6 @@ import {
   SmoothScroll,
 } from "../../components";
 import { EmptyState } from "../../components/empty-state";
-import { OptimisticStatus } from "../../components/optimistic-status";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
@@ -46,8 +44,6 @@ export function RoutineDetail(props: {
   canDelete: boolean;
   onDelete: () => void;
   onToggle: () => void;
-  toggleState?: OptimisticState;
-  onRetryToggle?: () => void;
 }) {
   const c = colors();
   const phone = () => props.layout === "phone";
@@ -84,20 +80,6 @@ export function RoutineDetail(props: {
               {props.routine.name}
             </Label>
             <View style={{ ...row, gap: space[8] }}>
-              <If
-                when={
-                  props.toggleState && props.toggleState.status !== "idle"
-                    ? props.toggleState
-                    : undefined
-                }
-              >
-                {(state) => (
-                  <OptimisticStatus
-                    state={state()}
-                    onRetry={props.onRetryToggle}
-                  />
-                )}
-              </If>
               <ToggleSwitch
                 label={
                   props.routine.enabled ? uiText("pause") : uiText("resume")

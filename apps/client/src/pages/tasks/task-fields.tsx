@@ -3,7 +3,7 @@ import type { JSX, TextStyle } from "nsh";
 import type { TaskDetailState } from "./task-detail-state";
 import { MAX_ATTACHMENTS } from "@eta/client-contracts";
 import { mentionLabel } from "@eta/client-contracts/composer-target";
-import { effect, signal, View } from "nsh";
+import { cleanup, effect, signal, View } from "nsh";
 import {
   Button,
   colors,
@@ -27,7 +27,6 @@ import {
   submitKeys,
 } from "../../components/eta-editor";
 import { touchScreen } from "../../components/menu";
-import { OptimisticStatus } from "../../components/optimistic-status";
 import { Spinner } from "../../components/spinner";
 import { StatusDot } from "../../components/status-dot";
 import { densityDefaults } from "../../components/theme";
@@ -126,17 +125,28 @@ function useCommentEditor(state: TaskDetailState, origin: string | undefined) {
       limits.tooLong()
     );
   };
+  let alive = true;
+  cleanup(() => {
+    alive = false;
+  });
   async function submit() {
     if (disabled()) return;
     const sent = out.read();
-    if (await post(sent.text, sent.mentions, sent.attachments)) {
-      files.sent(
-        host,
-        state.id,
-        sent.attachments.map((file) => file.id),
-      );
-      editor.clear();
-    }
+    const sentIds = sent.attachments.map((file) => file.id);
+    const sentText = sent.text.trim();
+    await post(sent.text, sent.mentions, sent.attachments, () => {
+      if (!alive) return;
+      const current = out.read();
+      const currentIds = current.attachments.map((file) => file.id);
+      if (
+        current.text.trim() === sentText &&
+        currentIds.length === sentIds.length &&
+        currentIds.every((id, index) => id === sentIds[index])
+      ) {
+        files.sent(host, state.id, sentIds);
+        editor.clear();
+      }
+    });
   }
   /** ＋: pick files from the device. */
   const pick = () => void host.action(() => files$.pick(editor));
@@ -287,12 +297,6 @@ function CommentBox(props: {
           />
         </View>
       </View>
-      <If when={props.state.commentStatus.state().status !== "idle"}>
-        <OptimisticStatus
-          state={props.state.commentStatus.state()}
-          onRetry={() => void submit()}
-        />
-      </If>
     </>
   );
 }

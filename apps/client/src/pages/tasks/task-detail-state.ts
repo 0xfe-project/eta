@@ -9,7 +9,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { effect, signal } from "nsh";
-import { createOptimisticStatus } from "../../components/optimistic-status";
+import { showToast } from "../../components/toast";
 import { uiText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { useLoadState } from "../../services/load-status";
@@ -62,9 +62,6 @@ export function createTaskDetailState(props: {
     return [...hostItems, ...pending];
   };
   const posting = signal(false);
-  const commentStatus = createOptimisticStatus();
-  const editStatus = createOptimisticStatus();
-  let lastEditAction: (() => void) | undefined;
   let lastStatusTarget: BoardTaskStatus | undefined;
   const archive = signal(false);
   const editing = signal(false);
@@ -131,11 +128,11 @@ export function createTaskDetailState(props: {
     text: string,
     mentions: string[] = [],
     attachments: readonly AttachmentView[] = [],
+    onSuccess?: () => void,
   ): Promise<boolean> {
     const body = text.trim();
     if ((!body && !attachments.length) || posting()) return false;
     posting.set(true);
-    commentStatus.saving();
     // The same words with the same files: a retry of the same comment.
     const key = JSON.stringify([body, attachments.map((file) => file.id)]);
     if (attempt?.key !== key) attempt = { key, id: crypto.randomUUID() };
@@ -164,12 +161,18 @@ export function createTaskDetailState(props: {
           : undefined,
       });
       attempt = undefined;
-      commentStatus.saved();
+      onSuccess?.();
       return true;
     } catch (problem) {
-      commentStatus.fail(
-        problem instanceof Error ? problem.message : String(problem),
-      );
+      showToast({
+        title: uiText("saveFailed"),
+        body: problem instanceof Error ? problem.message : String(problem),
+        tone: "red",
+        action: {
+          label: uiText("retry"),
+          onPress: () => void post(text, mentions, attachments, onSuccess),
+        },
+      });
       return false;
     } finally {
       pendingComments.update((all) =>
@@ -185,20 +188,21 @@ export function createTaskDetailState(props: {
     submitting.set(false);
   }
   function applyTitle(title: string) {
-    lastEditAction = () => applyTitle(title);
-    editStatus.saving();
     void host
       .optimistic(props.id, { title }, () =>
         host.call("tasks", "update", { taskId: props.id, title }),
       )
-      .then(() => {
-        editStatus.saved();
-      })
       .catch((problem: unknown) => {
         editTitle.set(title);
-        editStatus.fail(
-          problem instanceof Error ? problem.message : String(problem),
-        );
+        showToast({
+          title: uiText("saveFailed"),
+          body: problem instanceof Error ? problem.message : String(problem),
+          tone: "red",
+          action: {
+            label: uiText("retry"),
+            onPress: () => applyTitle(title),
+          },
+        });
       });
   }
   /** Saves the title being edited in place optimistically; an empty or unchanged one is dropped. */
@@ -210,8 +214,6 @@ export function createTaskDetailState(props: {
     applyTitle(title);
   }
   function applyDescription(text: string) {
-    lastEditAction = () => applyDescription(text);
-    editStatus.saving();
     void host
       .optimistic(props.id, { description: text }, () =>
         host.call("tasks", "update", {
@@ -219,14 +221,17 @@ export function createTaskDetailState(props: {
           description: text,
         }),
       )
-      .then(() => {
-        editStatus.saved();
-      })
       .catch((problem: unknown) => {
         editDescription.set(text);
-        editStatus.fail(
-          problem instanceof Error ? problem.message : String(problem),
-        );
+        showToast({
+          title: uiText("saveFailed"),
+          body: problem instanceof Error ? problem.message : String(problem),
+          tone: "red",
+          action: {
+            label: uiText("retry"),
+            onPress: () => applyDescription(text),
+          },
+        });
       });
   }
   /** Saves `text` (the description editor's Markdown) optimistically; rolls back and preserves text on error. */
@@ -234,9 +239,6 @@ export function createTaskDetailState(props: {
     editDescription.set(text);
     describing.set(false);
     applyDescription(text);
-  }
-  function retryEdit() {
-    lastEditAction?.();
   }
   function retryStatus() {
     if (lastStatusTarget) change(lastStatusTarget);
@@ -333,9 +335,6 @@ export function createTaskDetailState(props: {
     load,
     gone,
     posting,
-    commentStatus,
-    editStatus,
-    retryEdit,
     retryStatus,
     archive,
     editing,

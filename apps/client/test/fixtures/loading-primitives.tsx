@@ -9,10 +9,6 @@ import {
   Screen,
 } from "../../src/components";
 import { NotificationHost } from "../../src/components/notifications";
-import {
-  createOptimisticStatus,
-  OptimisticStatus,
-} from "../../src/components/optimistic-status";
 import { settled, shownWhile } from "../../src/components/pending";
 import { startProgress } from "../../src/components/progress-notification";
 import { SpinningIcon } from "../../src/components/spinner";
@@ -27,7 +23,6 @@ function Fixture() {
   const events = signal<string[]>([]);
   const waiting = shownWhile(busy);
   const isSettled = settled(ready);
-  const optimistic = createOptimisticStatus();
   let activeProgress: ProgressHandle | undefined;
 
   const log = (entry: string) => events.update((all) => [...all, entry]);
@@ -139,27 +134,6 @@ function Fixture() {
                   onRetry: () => log("export:retried"),
                 });
               }}
-            />
-
-            {/* OptimisticStatus */}
-            <OptimisticStatus
-              state={optimistic.state()}
-              onRetry={() => {
-                log("optimistic:retried");
-                optimistic.saving();
-              }}
-            />
-            <Button
-              label="Optimistic saving"
-              onPress={() => optimistic.saving()}
-            />
-            <Button
-              label="Optimistic saved"
-              onPress={() => optimistic.saved()}
-            />
-            <Button
-              label="Optimistic fail"
-              onPress={() => optimistic.fail("Network error")}
             />
 
             <View testID="event-log">

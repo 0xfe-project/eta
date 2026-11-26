@@ -13,10 +13,7 @@ import type { DisplayedSourceSummary } from "./source-summaries";
 import { keyMissing, providerLabel } from "@eta/client-contracts";
 import { signal, View, windowSize } from "nsh";
 import { ActionItem, colors, Label, row } from "../../../components";
-import {
-  createOptimisticStatus,
-  OptimisticStatus,
-} from "../../../components/optimistic-status";
+import { showToast } from "../../../components/toast";
 import { opacity, space } from "../../../components/tokens";
 import { formatLocale, uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
@@ -53,8 +50,6 @@ export function ModelSourceList(props: {
   const c = colors();
   const { providers, accounts: rawAccounts } = useModelSources();
   const pendingEnabled = signal<Record<string, boolean>>({});
-  const toggleStatus = createOptimisticStatus();
-  let lastAccountToggle: { id: string; enabled: boolean } | undefined;
   const accounts = () => {
     const overrides = pendingEnabled();
     if (!Object.keys(overrides).length) return rawAccounts();
@@ -72,13 +67,10 @@ export function ModelSourceList(props: {
     });
   };
   function toggleAccount(id: string, enabled: boolean) {
-    lastAccountToggle = { id, enabled };
     pendingEnabled.update((all) => ({ ...all, [id]: enabled }));
-    toggleStatus.saving();
     void host
       .call("llm", "setEnabled", { id, enabled })
       .then(() => {
-        toggleStatus.saved();
         setTimeout(() => {
           pendingEnabled.update((all) => {
             if (all[id] !== enabled) return all;
@@ -89,12 +81,19 @@ export function ModelSourceList(props: {
       })
       .catch((problem: unknown) => {
         pendingEnabled.update((all) => {
+          if (all[id] !== enabled) return all;
           const { [id]: _, ...rest } = all;
           return rest;
         });
-        toggleStatus.fail(
-          problem instanceof Error ? problem.message : String(problem),
-        );
+        showToast({
+          title: uiText("saveFailed"),
+          body: problem instanceof Error ? problem.message : String(problem),
+          tone: "red",
+          action: {
+            label: uiText("retry"),
+            onPress: () => toggleAccount(id, enabled),
+          },
+        });
       });
   }
   const logo = useSourceLogos();
@@ -186,22 +185,6 @@ export function ModelSourceList(props: {
   };
   return (
     <>
-      <If when={toggleStatus.state().status !== "idle"}>
-        <View style={{ paddingHorizontal: space[16], paddingTop: space[4] }}>
-          <OptimisticStatus
-            state={toggleStatus.state()}
-            onRetry={
-              lastAccountToggle
-                ? () =>
-                    toggleAccount(
-                      lastAccountToggle!.id,
-                      lastAccountToggle!.enabled,
-                    )
-                : undefined
-            }
-          />
-        </View>
-      </If>
       <Each of={accounts()} key={(item) => item.id}>
         {(item) => (
           <EntityRow

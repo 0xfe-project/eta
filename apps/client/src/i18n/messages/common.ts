@@ -177,7 +177,6 @@ export const commonMessages = {
   restarting: ["Restarting…", "正在重启…"],
   save: ["Save", "保存"],
   saving: ["Saving…", "正在保存…"],
-  saved: ["Saved", "已保存"],
   saveFailed: ["Couldn’t save", "保存失败"],
   undo: ["Undo", "撤销"],
   progressEstimating: ["Estimating…", "正在估算剩余时间…"],

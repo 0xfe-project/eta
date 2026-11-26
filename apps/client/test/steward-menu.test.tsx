@@ -46,7 +46,7 @@ for (const paletteId of [
       );
     });
 
-test("steward picker opens, switches steward, stays visible with no steward, and keeps optimistic status", async () => {
+test("steward picker opens, switches steward, stays visible with no steward, and omits saving/saved indicators", async () => {
   const c = palette("light", "default");
   const app = await open(fixture, {
     platform: "macos",
@@ -63,7 +63,8 @@ test("steward picker opens, switches steward, stays visible with no steward, and
 
   await app.press("label:Ben >> nth=1");
   await app.waitFor("label:Steward >> text:Ben");
-  await app.waitFor("text:Saved");
+  expect(app.texts()).not.toContain("Saved");
+  expect(app.texts()).not.toContain("Saving…");
 
   await app.press("label:Steward");
   await app.waitFor("label:No steward");
@@ -102,5 +103,6 @@ test("steward picker rolls back and offers retry when setSteward fails", async (
   await app.waitFor("label:No steward");
   await app.press("label:Ben >> nth=1");
   await app.waitFor("label:Retry");
+  expect(app.shows("id:toast")).toBe(true);
   expect(app.shows("label:Steward >> text:Ada")).toBe(true);
 });
