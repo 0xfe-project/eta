@@ -236,4 +236,34 @@ describe("sources read on their own", () => {
     expect(old.entries?.map((entry) => entry.name)).toEqual(["demo"]);
     expect(old.updatedAt).toBe(1);
   });
+
+  it("reads from cache on preview and install without forcing a network re-download", async () => {
+    const { db } = open();
+    const url = address();
+    const market = new Market({
+      settings: new SettingStore(db),
+      plugins: {} as never,
+      dataDir: "unused",
+      schemes: ["https:", "file:"],
+      cache: new CatalogCache(db, { maxRowBytes: 1024 * 1024 }),
+    });
+    for (const source of market.sources()) market.removeSource(source.url);
+    market.addSource(url, "");
+
+    // First catalog refresh hits the server once and populates the cache.
+    await market.catalog();
+    expect(requests).toHaveLength(1);
+
+    // Previewing an entry present in the cached catalog uses the cache without hitting the catalog server again.
+    await expect(market.preview("demo", url)).rejects.toThrow(
+      /format not supported/,
+    );
+    expect(requests).toHaveLength(1);
+
+    // Looking up an entry absent from the cached catalog falls back to network refresh.
+    await expect(market.preview("missing", url)).rejects.toThrow(
+      /not in the catalog/,
+    );
+    expect(requests).toHaveLength(2);
+  });
 });
