@@ -485,4 +485,12 @@ export const pluginsMessages = {
     "已保存，但此插件运行前仍需完成配置。",
   ],
   openServerSettings: ["Open server settings", "打开服务器设置"],
+  pluginBundledAgents: ["Bundled agents", "内置 Bot"],
+  pluginBundledAgentsCount: ["Agents ({{count}})", "内置 Bot ({{count}})"],
+  pluginBundledAgentsTitle: [
+    "Bundled agents · {{name}}",
+    "内置 Bot · {{name}}",
+  ],
+  pluginImportAgent: ["Import", "导入"],
+  pluginImportAgentNamed: ["Import {{name}}", "导入 {{name}}"],
 } as const;
