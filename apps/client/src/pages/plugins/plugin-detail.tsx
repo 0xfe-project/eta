@@ -50,6 +50,7 @@ interface DetailProps {
   phone?: boolean;
   onBack?: () => void;
   onConfigure: () => void;
+  onServers?: () => void;
   onUpdate: () => Promise<boolean>;
   onRemove: () => void;
   onRefresh: () => Promise<void>;
@@ -86,13 +87,22 @@ export function PluginDetail(props: DetailProps) {
       .filter((entry) => entry.plugin === props.item.name)
       .slice()
       .sort((a, b) => b.at - a.at);
-  const configure = () => props.item.fields.length > 0;
+  const hasFields = () => props.item.fields.length > 0;
+  const hasMissingEnv = () =>
+    props.item.servers.some((server) => (server.missingEnv?.length ?? 0) > 0);
+  const needsConfig = () => props.item.state === "needs_config";
+  const configure = () =>
+    hasFields() ||
+    (props.onServers !== undefined && (needsConfig() || hasMissingEnv()));
+  const openConfigure = () => {
+    if (hasFields()) props.onConfigure();
+    else props.onServers?.();
+  };
   // On a phone each block carries the design's own top spacing.
   const section = (top: number) =>
     props.phone
       ? { gap: space[4], paddingHorizontal: space[16], paddingTop: top }
       : { gap: space[4] };
-  const needsConfig = () => props.item.state === "needs_config";
   const enabledSwitch = () => <PluginEnabled item={props.item} />;
   function update() {
     if (updating()) return;
@@ -151,9 +161,9 @@ export function PluginDetail(props: DetailProps) {
             <If when={configure()}>
               <Button
                 label={uiText("configure")}
-                tone={needsConfig() ? "primary" : "plain"}
+                tone={needsConfig() || hasMissingEnv() ? "primary" : "plain"}
                 labelVariant="caption"
-                onPress={props.onConfigure}
+                onPress={openConfigure}
               />
             </If>
           </View>
@@ -253,11 +263,11 @@ export function PluginDetail(props: DetailProps) {
               <If when={props.phone && configure()}>
                 <Button
                   label={uiText("configure")}
-                  tone={needsConfig() ? "primary" : "plain"}
+                  tone={needsConfig() || hasMissingEnv() ? "primary" : "plain"}
                   size={control.touch}
                   labelVariant="body"
                   style={{ marginHorizontal: space[16] }}
-                  onPress={props.onConfigure}
+                  onPress={openConfigure}
                 />
               </If>
               <If when={pluginWarnings(props.item).length}>

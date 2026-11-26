@@ -702,7 +702,10 @@ export function ServerRows(props: { item: PluginView; phone?: boolean }) {
         </Label>
       </If>
       <MissingValues item={props.item} />
-      <Each of={props.item.servers} key={(server) => server.name}>
+      <Each
+        of={props.item.servers}
+        key={(server) => `${props.item.name}\n${server.name}`}
+      >
         {(server) => {
           const test = createTest({ item: props.item, server: server().name });
           return (
