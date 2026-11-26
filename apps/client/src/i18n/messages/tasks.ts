@@ -472,7 +472,11 @@ export const tasksMessages = {
     "{{join}} 已取消。在你作出决定前，此任务会保持阻塞。",
   ],
   whatNeedsToChange: ["What needs to change?", "需要修改什么？"],
-  taskWaitingForTitle: ["Waiting for “{{title}}”", "等待“{{title}}”"],
+  taskWaitingForNumber: ["Waiting for #{{number}}", "等待 #{{number}}"],
+  taskWaitingForMore: [
+    "Waiting for #{{number}} +{{more}}",
+    "等待 #{{number}} +{{more}}",
+  ],
   taskBlockedNeedsDecision: [
     "Blocked · needs your decision",
     "已阻塞 · 等待你的决定",

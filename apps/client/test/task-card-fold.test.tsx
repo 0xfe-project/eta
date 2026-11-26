@@ -72,3 +72,38 @@ test("cards nobody folded open as their defaults after a reload", async () => {
   expect(app.texts()).toContain("Done");
   expect(app.texts()).not.toContain("Wrap the footer links under 360px.");
 });
+
+for (const width of [1440, 390] as const) {
+  test(`waiting task card pill shows prerequisite #number instead of title at ${width}px`, async () => {
+    const app = await open(fixture, { width, height: 844, locale: "en-US" });
+    const texts = app.texts();
+    expect(texts).toContain("Waiting for #424");
+    expect(texts).toContain("Waiting for #424 +2");
+    expect(
+      texts.some((text) =>
+        text.includes("Add Antigravity as a built-in OAR runtime"),
+      ),
+    ).toBe(false);
+    if (width === 390) {
+      const link = app.layout("label:Open task #427");
+      expect(link).not.toBeNull();
+      expect(link!.width).toBeGreaterThan(100);
+    }
+  });
+}
+
+test("waiting task card pill renders Chinese prerequisite #number copy", async () => {
+  const app = await open(fixture, {
+    width: 1440,
+    height: 844,
+    locale: "zh-CN",
+  });
+  const texts = app.texts();
+  expect(texts).toContain("等待 #424");
+  expect(texts).toContain("等待 #424 +2");
+  expect(
+    texts.some((text) =>
+      text.includes("Add Antigravity as a built-in OAR runtime"),
+    ),
+  ).toBe(false);
+});
