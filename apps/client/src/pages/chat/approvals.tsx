@@ -24,7 +24,6 @@ import { StatusDot } from "../../components/status-dot";
 import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
-import { problemText } from "../../services/problem-text";
 
 /** A free answer's field; a proposal card's header and its fields' label column. */
 const answerWidth = 400;
@@ -295,8 +294,13 @@ function SheetProposal(props: {
           <If
             when={pending()}
             else={
-              <Label variant="small" tone="muted">
-                {op().error ? problemText(op().error) : op().status}
+              <Label
+                variant="small"
+                tone={op().status === "failed" ? "red" : "muted"}
+              >
+                {op().status === "failed"
+                  ? op().error?.trim() || uiText("proposalFailed")
+                  : uiText(proposalStatusBadge(op().status)[0])}
               </Label>
             }
           >
@@ -362,6 +366,25 @@ function kindName(kind: string) {
   return proposalKinds[kind]
     ? uiText(proposalKinds[kind]!)
     : kind.replaceAll("_", " ");
+}
+
+function proposalStatusBadge(
+  status: CaptainOperationView["status"],
+): [Parameters<typeof uiText>[0], "ink" | "green" | "muted" | "red"] {
+  switch (status) {
+    case "pending":
+      return ["proposalAwaiting", "ink"];
+    case "applied":
+      return ["proposalCreated", "green"];
+    case "rejected":
+      return ["proposalRejected", "muted"];
+    case "failed":
+      return ["proposalFailed", "red"];
+    case "expired":
+      return ["proposalExpired", "muted"];
+    default:
+      return ["proposalApproved", "muted"];
+  }
 }
 
 /** What a proposal of each kind will make, as label and value pairs. */
@@ -730,39 +753,25 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
   const working = signal<false | "approve" | "reject">(false);
   const op = () => props.operation;
   const pending = () => op().requiresApproval && op().status === "pending";
+  const failed = () => op().status === "failed";
   const open = signal<boolean | undefined>(undefined);
-  const expanded = () => open() ?? pending();
+  const expanded = () => open() ?? (pending() || failed());
   const payload = () => op().payload;
   const text = (key: string) =>
     typeof payload()[key] === "string" ? (payload()[key] as string) : "";
   const title = () =>
     text("name") || text("title") || op().kind.replaceAll("_", " ");
   const fields = () => proposalFields(op(), host);
-  const badge = (): [
-    Parameters<typeof uiText>[0],
-    "ink" | "green" | "muted",
-  ] => {
-    switch (op().status) {
-      case "pending":
-        return ["proposalAwaiting", "ink"];
-      case "applied":
-        return ["proposalCreated", "green"];
-      case "rejected":
-        return ["proposalRejected", "muted"];
-      case "failed":
-        return ["proposalFailed", "ink"];
-      case "expired":
-        return ["proposalExpired", "muted"];
-      default:
-        return ["proposalApproved", "muted"];
-    }
-  };
+  const shownFields = () => fields().filter(([, value]) => value);
+  const badge = () => proposalStatusBadge(op().status);
   const result = () =>
-    op().status === "failed"
-      ? problemText(op().error ?? "")
+    failed()
+      ? (op().error?.trim() ?? "")
       : op().status === "applied" && op().kind === "create_agent"
         ? uiText("proposalAgentReady", { name: title() })
         : "";
+  const hasBody = () =>
+    shownFields().length > 0 || pending() || Boolean(result());
   async function decide(decision: "approve" | "reject") {
     if (working()) return;
     working.set(decision);
@@ -823,7 +832,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
           </Label>
         </View>
       </View>
-      <If when={expanded() && pending()}>
+      <If when={expanded() && hasBody()}>
         <View
           style={{
             padding: space[12],
@@ -832,7 +841,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
             borderColor: c().border,
           }}
         >
-          <Each of={fields().filter(([, value]) => value)}>
+          <Each of={shownFields()}>
             {(field) => (
               <View style={{ ...row, alignItems: "flex-start", gap: space[8] }}>
                 <Label
@@ -853,51 +862,57 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
               </View>
             )}
           </Each>
-          <View style={{ ...row, gap: space[8], paddingTop: space[4] }}>
-            <Button
-              label={uiText("proposalCreate")}
-              tone="primary"
-              size={control.sm}
-              labelVariant="caption"
-              style={{ paddingHorizontal: space[12] }}
-              disabled={working() === "reject"}
-              busy={working() === "approve"}
-              onPress={() => void decide("approve")}
-            />
+          <If when={pending()}>
+            <View style={{ ...row, gap: space[8], paddingTop: space[4] }}>
+              <Button
+                label={uiText("proposalCreate")}
+                tone="primary"
+                size={control.sm}
+                labelVariant="caption"
+                style={{ paddingHorizontal: space[12] }}
+                disabled={working() === "reject"}
+                busy={working() === "approve"}
+                onPress={() => void decide("approve")}
+              />
+              <View
+                role="button"
+                accessibilityLabel={uiText("reject")}
+                onPress={() => {
+                  if (!working()) void decide("reject");
+                }}
+                hoverStyle={{ backgroundColor: c().selected }}
+                style={{
+                  ...row,
+                  height: control.sm,
+                  paddingHorizontal: space[12],
+                  cursor: "pointer",
+                }}
+              >
+                <Label variant="caption" tone="muted">
+                  {uiText("reject")}
+                </Label>
+              </View>
+            </View>
+          </If>
+          <If when={!pending() && result()}>
             <View
-              role="button"
-              accessibilityLabel={uiText("reject")}
-              onPress={() => {
-                if (!working()) void decide("reject");
-              }}
-              hoverStyle={{ backgroundColor: c().selected }}
-              style={{
-                ...row,
-                height: control.sm,
-                paddingHorizontal: space[12],
-                cursor: "pointer",
-              }}
+              role={failed() ? "alert" : undefined}
+              style={
+                shownFields().length
+                  ? {
+                      paddingTop: space[8],
+                      borderTopWidth: 1,
+                      borderColor: c().border,
+                    }
+                  : undefined
+              }
             >
-              <Label variant="caption" tone="muted">
-                {uiText("reject")}
+              <Label variant="small" tone={failed() ? "red" : "ink"}>
+                {result()}
               </Label>
             </View>
-          </View>
+          </If>
         </View>
-      </If>
-      <If when={expanded() && !pending() && result()}>
-        <Label
-          variant="small"
-          tone={op().status === "failed" ? "mutedInk" : "ink"}
-          style={{
-            paddingVertical: space[8],
-            paddingHorizontal: space[12],
-            borderTopWidth: 1,
-            borderColor: c().border,
-          }}
-        >
-          {result()}
-        </Label>
       </If>
     </View>
   );
