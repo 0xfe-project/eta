@@ -19,6 +19,7 @@ async function openOn(surface: string, width: number) {
     locale: "en-US",
     platform: "web",
     storage: { surface },
+    clock: {},
   });
   await app.waitFor(trigger);
   return app;
@@ -28,6 +29,30 @@ for (const [surface, width] of surfaces) {
   test(`${surface} at ${width}px: a choice is sent, the trigger waits for the host, then shows it`, async () => {
     const app = await openOn(surface, width);
     expect(app.texts()).toContain("In progress");
+    const before = app.layout(trigger)!;
+    expect(before).not.toBeNull();
+    const beforeExecutor =
+      surface === "page" && width === 1440 ? app.layout("text:Executor") : null;
+    const beforeDescription =
+      surface === "page" && width === 1024
+        ? app.layout("text:Add POST /api/login.")
+        : null;
+    const checkStable = () => {
+      const current = app.layout(trigger)!;
+      expect(current.y).toBe(before.y);
+      expect(current.height).toBe(before.height);
+      expect(app.shows("id:optimistic-status")).toBe(false);
+      expect(app.texts()).not.toContain("Saving…");
+      expect(app.texts()).not.toContain("Saved");
+      if (beforeExecutor) {
+        expect(app.layout("text:Executor")?.y).toBe(beforeExecutor.y);
+      }
+      if (beforeDescription) {
+        expect(app.layout("text:Add POST /api/login.")?.y).toBe(
+          beforeDescription.y,
+        );
+      }
+    };
 
     await app.press(trigger);
     // The detail page's menu: its caption, every status with what it does.
@@ -43,10 +68,15 @@ for (const [surface, width] of surfaces) {
     // the host answers.
     await app.waitUntil(() => !app.texts().includes("Parked; it won't start"));
     expect(app.enabled(trigger)).toBe(false);
+    expect(app.texts()).toContain("In review");
+    checkStable();
+    await app.clock!.runFor(350);
+    checkStable();
 
     await app.press("text:Answer");
     await app.waitUntil(() => app.enabled(trigger));
     expect(app.texts()).toContain("In review");
+    checkStable();
   });
 
   test(`${surface} at ${width}px: a change the host refuses says why and keeps the status`, async () => {
@@ -55,6 +85,7 @@ for (const [surface, width] of surfaces) {
     await app.press("label:Blocked");
     await app.press("text:Fail");
     await app.waitFor("text:Status not changed: the host is busy");
+    expect(app.shows("label:Retry")).toBe(true);
     expect(app.enabled(trigger)).toBe(true);
     expect(app.texts()).toContain("In progress");
 
@@ -66,6 +97,18 @@ for (const [surface, width] of surfaces) {
     expect(app.texts()).not.toContain(
       "Sent: tasks.update blocked, tasks.update in_progress",
     );
+
+    await app.press(trigger);
+    await app.press("label:Blocked");
+    await app.press("text:Fail");
+    await app.waitFor("text:Status not changed: the host is busy");
+    await app.press("label:Retry");
+    expect(app.enabled(trigger)).toBe(false);
+    expect(app.texts()).toContain("Blocked");
+    await app.press("text:Answer");
+    await app.waitUntil(() => app.enabled(trigger));
+    expect(app.texts()).toContain("Blocked");
+    expect(app.shows("id:optimistic-status")).toBe(false);
   });
 
   test(`${surface} at ${width}px: the keyboard moves through the menu and chooses`, async () => {
@@ -89,6 +132,12 @@ for (const [surface, width] of surfaces) {
 
 test("panel at 390px: the status opens the phone's sheet, the same seven, and a choice is sent", async () => {
   const app = await openOn("panel", 390);
+  const actionsSelector = "label:Task actions";
+  const before = app.layout(trigger)!;
+  const beforeActions = app.layout(actionsSelector)!;
+  expect(before).not.toBeNull();
+  expect(beforeActions).not.toBeNull();
+  const beforeOffset = before.y - beforeActions.y;
   await app.press(trigger);
   // The task page's phone sheet, titled, not a second menu over it.
   expect(app.texts().filter((text) => text === "Change status")).toHaveLength(
@@ -108,9 +157,26 @@ test("panel at 390px: the status opens the phone's sheet, the same seven, and a 
   // The sheet closed as the change was made; the refused change put the old status back.
   expect(app.texts()).toContain("In progress");
 
+  const checkPhoneStable = () => {
+    const current = app.layout(trigger)!;
+    const currentActions = app.layout(actionsSelector)!;
+    // Measure offset within TaskTopBar because the fixture's "Sent:" line wraps at 390px.
+    expect(current.y - currentActions.y).toBe(beforeOffset);
+    expect(current.height).toBe(before.height);
+    expect(app.shows("id:optimistic-status")).toBe(false);
+    expect(app.texts()).not.toContain("Saving…");
+    expect(app.texts()).not.toContain("Saved");
+  };
   await app.press(trigger);
   await app.press("label:In review");
-  await app.press("text:Answer");
   await app.waitUntil(() => !app.texts().includes("Parked; it won't start"));
+  expect(app.enabled(trigger)).toBe(false);
   expect(app.texts()).toContain("In review");
+  checkPhoneStable();
+  await app.clock!.runFor(350);
+  checkPhoneStable();
+  await app.press("text:Answer");
+  await app.waitUntil(() => app.enabled(trigger));
+  expect(app.texts()).toContain("In review");
+  checkPhoneStable();
 });

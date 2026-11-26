@@ -64,7 +64,6 @@ export function createTaskDetailState(props: {
   const posting = signal(false);
   const commentStatus = createOptimisticStatus();
   const editStatus = createOptimisticStatus();
-  const statusStatus = createOptimisticStatus();
   let lastEditAction: (() => void) | undefined;
   let lastStatusTarget: BoardTaskStatus | undefined;
   const archive = signal(false);
@@ -257,7 +256,6 @@ export function createTaskDetailState(props: {
     }
     lastStatusTarget = next;
     statusError.set("");
-    statusStatus.saving();
     changing.set(next);
     status.set(false);
     cancelling.set(false);
@@ -266,11 +264,7 @@ export function createTaskDetailState(props: {
       .optimistic(props.id, { status: next }, () =>
         host.call("tasks", "update", { taskId: props.id, status: next }),
       )
-      .then(() => {
-        statusStatus.saved();
-      })
       .catch((problem: unknown) => {
-        statusStatus.reset();
         statusError.set(
           uiText("statusChangeFailed", {
             message: problemText(problem),
@@ -342,7 +336,6 @@ export function createTaskDetailState(props: {
     commentStatus,
     editStatus,
     retryEdit,
-    statusStatus,
     retryStatus,
     archive,
     editing,
