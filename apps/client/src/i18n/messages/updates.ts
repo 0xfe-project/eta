@@ -189,8 +189,8 @@ export const updatesMessages = {
     "修改更新来源",
   ],
   channel: ["Channel", "更新通道"],
-  checkAppUpdate: ["Check for app update", "检查应用更新"],
-  androidApp: ["Android app", "Android 应用"],
+  channelHost: ["Host", "host"],
+  androidAppHere: ["Android app · this device", "Android 应用 · 本机"],
   appUpdateNotOpened: [
     "The download didn't open. Try again, or download it from the Eta site.",
     "下载页没打开。再试一次，或者到 Eta 网站下载。",
@@ -215,6 +215,7 @@ export const updatesMessages = {
   checkForUpdates: ["Check for updates", "检查更新"],
   checkingForUpdates: ["Checking for updates…", "正在检查更新…"],
   desktopApp: ["Desktop app", "桌面应用"],
+  desktopAppHere: ["Desktop app · this computer", "桌面应用 · 本机"],
   downloadingWithCount: [
     "Downloading {{percentage}}%",
     "正在下载 {{percentage}}%",
@@ -232,7 +233,6 @@ export const updatesMessages = {
     "Eta quits, swaps in the new version and opens again. The remote Host keeps running.",
     "Eta 会退出、替换为新版本并重新打开。远程主机会继续运行。",
   ],
-  noAppUpdateAvailable: ["No app update available.", "应用已是最新版本。"],
   preReleasesRcBetaGetNew: [
     "Pre-releases (-rc, -beta...) get new features earlier and can be unstable. Switching back never goes to an older version.",
     "预发布版（-rc、-beta 等）可以更早体验新功能，也可能不稳定。切换回正式版时不会降级。",

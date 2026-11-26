@@ -3,7 +3,7 @@ import { View } from "nsh";
 import { Button, grow, Label, row, SmoothScroll } from "../../../components";
 import { control, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
-import { clientUpdatable } from "../../../services/client-update";
+import { clientUpdatable, clientUpdate } from "../../../services/client-update";
 import { useHost } from "../../../services/host";
 import { ClientAppUpdate } from "./client-app";
 import { ConfirmHostUpdate } from "./confirm-update";
@@ -31,6 +31,16 @@ export function UpdateSettings(props: {
     connected,
     error,
   } = update;
+  const app = clientUpdate;
+  const hostCanCheck = () =>
+    canRead() && (!pending() || pending() === "check") && !active();
+  const appCanCheck = () =>
+    clientUpdatable && !app.downloading() && !app.restarting() && !app.ready();
+  /** One press checks the Host and, where it updates itself, this app. */
+  const checkBoth = () => {
+    if (hostCanCheck()) void refresh();
+    if (appCanCheck()) void app.check();
+  };
   return (
     <View style={grow}>
       <GroupHeading title={uiText("update")} phone={phone()}>
@@ -42,14 +52,14 @@ export function UpdateSettings(props: {
           </If>
           <Button
             label={
-              checkedAt() ? uiText("checkAgain") : uiText("checkForUpdates")
+              checkedAt() || app.checked()
+                ? uiText("checkAgain")
+                : uiText("checkForUpdates")
             }
             size={phone() ? control.md : control.sm}
-            disabled={
-              !canRead() || (!!pending() && pending() !== "check") || active()
-            }
-            busy={pending() === "check"}
-            onPress={() => void refresh()}
+            disabled={!hostCanCheck() && !appCanCheck()}
+            busy={pending() === "check" || app.checking()}
+            onPress={checkBoth}
           />
         </View>
       </GroupHeading>
@@ -82,12 +92,12 @@ export function UpdateSettings(props: {
           }
         >
           <HostRelease update={update} phone={phone()} />
-          <ReleaseSettings update={update} phone={phone()} />
         </If>
         {/* The app updates itself whichever Host it is connected to. */}
         <If when={clientUpdatable}>
           <ClientAppUpdate phone={phone()} />
         </If>
+        <ReleaseSettings update={update} phone={phone()} />
       </SmoothScroll>
       <UpdateSourceEditor update={update} phone={phone()} />
       <ConfirmHostUpdate update={update} phone={phone()} />

@@ -20,8 +20,8 @@ import {
 } from "./progress";
 
 /** A release row (its name, notes and action), and its status column off phones. */
-const releaseRow = 72;
-const statusWidth = 148;
+export const releaseRow = 72;
+export const statusWidth = 148;
 
 const phaseName = {
   starting: "updatePreparing",
@@ -128,6 +128,13 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
     return undefined;
   };
   const note = () => check()?.notes;
+  /** The status would only say an update is available: its button says it instead. */
+  const offered = () =>
+    offer() &&
+    !active() &&
+    !starting() &&
+    !check()?.error &&
+    (result()?.state ?? "done") === "done";
   const updateAction = () => (
     <If
       when={active() || starting()}
@@ -208,7 +215,7 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
           <View testID="host-version">
             <Label weight={weight.regular}>{version()}</Label>
           </View>
-          <If when={props.phone}>
+          <If when={props.phone && !offered()}>
             <View style={{ ...row, gap: space[4] }}>
               <StatusDot color={c()[statusTone()]} />
               <Label variant="small" tone="mutedInk">
@@ -252,12 +259,14 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
                 gap: space[8],
               }}
             >
-              <View style={{ ...row, gap: space[4] }}>
-                <StatusDot color={c()[statusTone()]} />
-                <Label variant="small" tone="mutedInk">
-                  {statusLabel()}
-                </Label>
-              </View>
+              <If when={!offered()}>
+                <View style={{ ...row, gap: space[4] }}>
+                  <StatusDot color={c()[statusTone()]} />
+                  <Label variant="small" tone="mutedInk">
+                    {statusLabel()}
+                  </Label>
+                </View>
+              </If>
               {updateAction()}
             </View>
           }

@@ -15,12 +15,13 @@ import {
 import { LayoutSelect } from "../../../components/select";
 import { control, icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
+import { clientPlatform } from "../../../services/client-update";
 import { useHost } from "../../../services/host";
+import { ClientChannelSelect } from "./client-app";
 import { GroupHeading } from "./group-heading";
 
-/** A setting, the channel row with its two lines, and the channel menu with one of its items. */
+/** A setting row, and the channel menu with one of its items. */
 const settingRow = 56;
-const channelRow = 72;
 const channelWidth = 160;
 const itemRow = 28;
 
@@ -50,6 +51,37 @@ function SettingBand(props: {
         </Label>
       </View>
       {props.children}
+    </View>
+  );
+}
+
+/** One product's channel: its name, and the menu beside it or, on phones, under it. */
+function ChannelRow(props: {
+  title: string;
+  phone: boolean;
+  children: JSX.Element;
+}) {
+  const c = colors();
+  return (
+    <View
+      style={{
+        ...(props.phone ? {} : row),
+        minHeight: props.phone ? undefined : settingRow,
+        gap: props.phone ? space[4] : space[12],
+        paddingHorizontal: space[16],
+        paddingVertical: space[8],
+        borderBottomWidth: 1,
+        borderColor: c().border,
+      }}
+    >
+      <Label style={props.phone ? undefined : { flex: 1, minWidth: 0 }}>
+        {props.title}
+      </Label>
+      <View
+        style={{ width: props.phone ? "100%" : channelWidth, flexShrink: 0 }}
+      >
+        {props.children}
+      </View>
     </View>
   );
 }
@@ -92,145 +124,138 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
 
   return (
     <>
-      <GroupHeading title={uiText("whichVersions")} phone={props.phone} />
-      <View
-        style={{
-          ...(props.phone ? {} : row),
-          minHeight: channelRow,
-          gap: props.phone ? space[4] : space[12],
-          paddingHorizontal: space[16],
-          paddingVertical: space[8],
-          borderBottomWidth: 1,
-          borderColor: c().border,
-        }}
-      >
+      <If when={check() || clientPlatform === "desktop"}>
+        <GroupHeading title={uiText("whichVersions")} phone={props.phone} />
+        <If when={check()}>
+          <ChannelRow title={uiText("channelHost")} phone={props.phone}>
+            <LayoutSelect
+              accessibilityLabel={uiText("channel")}
+              items={[
+                { value: "full", title: uiText("updateFullReleases") },
+                { value: "pre", title: uiText("updatePreReleases") },
+              ]}
+              value={check()?.prerelease ? "pre" : "full"}
+              cover={false}
+              offset={2}
+              disabled={!editable() || !host.can("upgrade.setPrerelease")}
+              popupStyle={{
+                borderWidth: 1,
+                borderColor: c().strong,
+                backgroundColor: c().canvas,
+              }}
+              itemStyle={{
+                fontFamily: fontFamily(fonts().interface),
+                color: c().ink,
+                fontSize: type("small").size,
+                minHeight: itemRow,
+                paddingHorizontal: space[12],
+              }}
+              trigger={
+                <View
+                  style={{
+                    ...row,
+                    height: props.phone ? space[32] : space[24],
+                    gap: space[4],
+                    paddingHorizontal: space[12],
+                    borderWidth: 1,
+                    borderColor: c().strong,
+                    backgroundColor: c().canvas,
+                  }}
+                >
+                  <Label variant="small" lines={1} style={{ flex: 1 }}>
+                    {channelName()}
+                  </Label>
+                  <Icon name="down" size={icon.sm} tone="muted" />
+                </View>
+              }
+              onChange={({ value }) => {
+                if (value && (value === "pre") !== check()?.prerelease)
+                  void save("setPrerelease", { prerelease: value === "pre" });
+              }}
+            />
+          </ChannelRow>
+        </If>
+        <If when={clientPlatform === "desktop"}>
+          <ChannelRow title={uiText("desktopApp")} phone={props.phone}>
+            <ClientChannelSelect phone={props.phone} />
+          </ChannelRow>
+        </If>
         <View
           style={{
-            flex: props.phone ? undefined : 1,
-            minWidth: 0,
-            gap: space[2],
+            paddingHorizontal: space[16],
+            paddingVertical: space[8],
+            borderBottomWidth: 1,
+            borderColor: c().border,
           }}
         >
-          <Label>{uiText("channel")}</Label>
-          <If when={!props.phone}>
-            <Label variant="small" tone="muted">
-              {uiText("preReleasesRcBetaGetNew")}
-            </Label>
-          </If>
-        </View>
-        <View
-          style={{ width: props.phone ? "100%" : channelWidth, flexShrink: 0 }}
-        >
-          <LayoutSelect
-            accessibilityLabel={uiText("channel")}
-            items={[
-              { value: "full", title: uiText("updateFullReleases") },
-              { value: "pre", title: uiText("updatePreReleases") },
-            ]}
-            value={check()?.prerelease ? "pre" : "full"}
-            cover={false}
-            offset={2}
-            disabled={!editable() || !host.can("upgrade.setPrerelease")}
-            popupStyle={{
-              borderWidth: 1,
-              borderColor: c().strong,
-              backgroundColor: c().canvas,
-            }}
-            itemStyle={{
-              fontFamily: fontFamily(fonts().interface),
-              color: c().ink,
-              fontSize: type("small").size,
-              minHeight: itemRow,
-              paddingHorizontal: space[12],
-            }}
-            trigger={
-              <View
-                style={{
-                  ...row,
-                  height: props.phone ? space[32] : space[24],
-                  gap: space[4],
-                  paddingHorizontal: space[12],
-                  borderWidth: 1,
-                  borderColor: c().strong,
-                  backgroundColor: c().canvas,
-                }}
-              >
-                <Label variant="small" lines={1} style={{ flex: 1 }}>
-                  {channelName()}
-                </Label>
-                <Icon name="down" size={icon.sm} tone="muted" />
-              </View>
-            }
-            onChange={({ value }) => {
-              if (value && (value === "pre") !== check()?.prerelease)
-                void save("setPrerelease", { prerelease: value === "pre" });
-            }}
-          />
-        </View>
-        <If when={props.phone}>
           <Label variant="small" tone="muted">
             {uiText("preReleasesRcBetaGetNew")}
           </Label>
-        </If>
-      </View>
-      <GroupHeading title={uiText("whereUpdatesComeFrom")} phone={props.phone}>
-        <View
-          role="button"
-          accessibilityLabel={uiText("advanced")}
-          accessibilityState={{ expanded: advancedOpen() }}
-          onPress={() => advanced.set(!advancedOpen())}
-          hoverStyle={{ backgroundColor: c().selected }}
-          focusVisibleStyle={focusRing(c(), "inset")}
-          style={{
-            ...row,
-            height: props.phone ? control.md : space[24],
-            width: space[24],
-            justifyContent: "center",
-            cursor: "pointer",
-          }}
+        </View>
+      </If>
+      <If when={check()}>
+        <GroupHeading
+          title={uiText("whereUpdatesComeFrom")}
+          phone={props.phone}
         >
           <View
+            role="button"
+            accessibilityLabel={uiText("advanced")}
+            accessibilityState={{ expanded: advancedOpen() }}
+            onPress={() => advanced.set(!advancedOpen())}
+            hoverStyle={{ backgroundColor: c().selected }}
+            focusVisibleStyle={focusRing(c(), "inset")}
             style={{
-              transform: advancedOpen() ? [{ rotate: "180deg" }] : undefined,
+              ...row,
+              height: props.phone ? control.md : space[24],
+              width: space[24],
+              justifyContent: "center",
+              cursor: "pointer",
             }}
           >
-            <Icon name="down" size={icon.sm} tone="muted" />
-          </View>
-        </View>
-      </GroupHeading>
-      <If when={advancedOpen() ? source() : undefined}>
-        {(upstream) => (
-          <SettingBand
-            title={uiText("updatesFrom")}
-            detail={`${upstream().label} · ${sourceKind()}`}
-          >
-            <If
-              when={
-                upstream().source !== "env" && host.can("upgrade.setUpstream")
-              }
+            <View
+              style={{
+                transform: advancedOpen() ? [{ rotate: "180deg" }] : undefined,
+              }}
             >
+              <Icon name="down" size={icon.sm} tone="muted" />
+            </View>
+          </View>
+        </GroupHeading>
+        <If when={advancedOpen() ? source() : undefined}>
+          {(upstream) => (
+            <SettingBand
+              title={uiText("updatesFrom")}
+              detail={`${upstream().label} · ${sourceKind()}`}
+            >
+              <If
+                when={
+                  upstream().source !== "env" && host.can("upgrade.setUpstream")
+                }
+              >
+                <Button
+                  label={uiText("change")}
+                  disabled={!editable()}
+                  onPress={() => edit("upstream")}
+                />
+              </If>
+            </SettingBand>
+          )}
+        </If>
+        <If when={advancedOpen() && token()?.host}>
+          <SettingBand
+            title={uiText("accessToken")}
+            detail={`${tokenKind()} · ${tokenHint()}`}
+          >
+            <If when={host.can("upgrade.setToken")}>
               <Button
-                label={uiText("change")}
+                label={token()?.saved ? uiText("change") : uiText("set")}
                 disabled={!editable()}
-                onPress={() => edit("upstream")}
+                onPress={() => edit("token")}
               />
             </If>
           </SettingBand>
-        )}
-      </If>
-      <If when={advancedOpen() && token()?.host}>
-        <SettingBand
-          title={uiText("accessToken")}
-          detail={`${tokenKind()} · ${tokenHint()}`}
-        >
-          <If when={host.can("upgrade.setToken")}>
-            <Button
-              label={token()?.saved ? uiText("change") : uiText("set")}
-              disabled={!editable()}
-              onPress={() => edit("token")}
-            />
-          </If>
-        </SettingBand>
+        </If>
       </If>
     </>
   );
