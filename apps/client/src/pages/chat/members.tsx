@@ -7,6 +7,7 @@ import {
   colors,
   dialogWidth,
   fill,
+  focusRing,
   grow,
   Icon,
   Label,
@@ -105,10 +106,13 @@ export function StewardMenu(props: {
         ? touchRow
         : menuRowHeight.desktop,
   });
-  const hover = canHover ? { backgroundColor: c().selected } : undefined;
+  const hovered = signal(false);
+  const open = signal(false);
+  const tone = () => (hovered() || open() ? "ink" : "muted");
   return (
     <View style={{ ...row, gap: space[8] }}>
       <MenuFrame
+        onOpenChange={open.set}
         popupStyle={{
           width: menuWidth,
           borderWidth: 1,
@@ -119,24 +123,28 @@ export function StewardMenu(props: {
           <View
             accessibilityLabel={uiText("steward2")}
             hitSlop={touchScreen ? (control.touch - control.sm) / 2 : undefined}
-            hoverStyle={hover}
+            onMouseEnter={() => hovered.set(canHover)}
+            onMouseLeave={() => hovered.set(false)}
+            hoverStyle={canHover ? { borderColor: c().strong } : undefined}
+            expandedStyle={{ borderColor: c().strong }}
+            focusVisibleStyle={focusRing(c())}
             style={{
               ...row,
               height: control.sm,
               gap: space[4],
               paddingHorizontal: space[8],
               borderWidth: 1,
-              borderColor: c().border,
+              borderColor: open() ? c().strong : c().border,
               cursor: "pointer",
             }}
           >
             <If when={activeSteward()}>
               <AgentFace id={activeSteward()} size={avatar.sm} />
             </If>
-            <Label variant="small" tone="muted">
+            <Label variant="small" tone={tone()}>
               {host.agent(activeSteward())?.name ?? uiText("steward2")}
             </Label>
-            <Icon name="down" size={icon.sm} tone="muted" />
+            <Icon name="down" size={icon.sm} tone={tone()} />
           </View>
         }
       >
