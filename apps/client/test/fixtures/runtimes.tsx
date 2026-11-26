@@ -13,7 +13,8 @@ import { createHost, Host } from "../../src/services/host";
 // Settings › Runtimes and the agent editor's Runtime field, over a scripted host. Nothing here is
 // a real runtime or account: every probe answer is written below.
 // - The primary "studio" has Claude Code (signed in), Codex (not signed in), OpenCode (its probe
-//   timed out), Pi (not installed) and an external agent whose probe failed.
+//   timed out), Pi (not installed), Antigravity (not signed in), and an external agent whose
+//   probe failed.
 // - The daemon "gpu-box" is online with Claude Code and Codex; "attic" is offline.
 // - `agents.runtimes { fresh: true }` answers OpenCode as available, as a retry after a slow probe.
 // - `agents.runtimeAccount`: Claude Code is signed in with two plan windows, Codex is signed out.
@@ -60,10 +61,7 @@ const sonnet = {
   efforts: ["low", "medium", "high"],
 };
 
-function primary(
-  fresh: boolean,
-  includeAntigravity = false,
-): AgentRuntimeInfo[] {
+function primary(fresh: boolean): AgentRuntimeInfo[] {
   return [
     {
       id: "claude",
@@ -106,18 +104,14 @@ function primary(
       detail: "pi: command not found on PATH",
       models: [],
     },
-    ...(includeAntigravity
-      ? [
-          {
-            id: "antigravity" as const,
-            label: "Antigravity",
-            status: "unauthenticated" as const,
-            version: "1.5.16",
-            detail: "Please sign in to view available models",
-            models: [],
-          },
-        ]
-      : []),
+    {
+      id: "antigravity",
+      label: "Antigravity",
+      status: "unauthenticated",
+      version: "1.5.16",
+      detail: "Please sign in to view available models",
+      models: [],
+    },
     {
       id: "acp.gemini",
       label: "Gemini CLI",
@@ -258,8 +252,6 @@ function Fixture() {
   const calls = signal<string[]>([]);
   const log: string[] = [];
   const page = UrlScheme.url()?.split("/").at(-1);
-  const includeAntigravity =
-    page === "antigravity" || page === "antigravity-runtimes";
   host.state.update((prev) => ({
     ...prev,
     status: "open",
@@ -285,10 +277,7 @@ function Fixture() {
     };
     if (action === "runtimes")
       return {
-        runtimes:
-          given.machineId === "m-gpu"
-            ? gpu
-            : primary(!!given.fresh, includeAntigravity),
+        runtimes: given.machineId === "m-gpu" ? gpu : primary(!!given.fresh),
       } as T;
     if (action === "runtimeAccount")
       return { account: accounts[given.runtime ?? ""] ?? {} } as T;

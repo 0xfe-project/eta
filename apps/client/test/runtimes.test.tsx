@@ -25,6 +25,7 @@ for (const [width, height] of sizes) {
       ["Codex", "Not signed in"],
       ["OpenCode", "Probe timed out (30s)"],
       ["Pi", "Not installed"],
+      ["Antigravity", "Not signed in"],
       ["Gemini CLI", "Probe failed"],
     ]) {
       expect(texts[texts.indexOf(runtime) + 1]).toBe(reason);
@@ -104,13 +105,14 @@ for (const [width, height] of sizes) {
     const after = (heading: string) => texts.slice(texts.indexOf(heading));
     expect(texts.indexOf("studio")).toBeLessThan(texts.indexOf("gpu-box"));
     expect(texts.indexOf("gpu-box")).toBeLessThan(texts.indexOf("attic"));
-    expect(after("studio")).toContain("primary · 5 runtimes");
+    expect(after("studio")).toContain("primary · 6 runtimes");
     expect(after("gpu-box")).toContain("2 runtimes");
     for (const runtime of [
       "Claude Code, Available",
       "Codex, Not signed in",
       "OpenCode, Probe timed out (30s)",
       "Pi, Not installed",
+      "Antigravity, Not signed in",
       "Gemini CLI, Probe failed",
     ])
       expect(app.count(`label:${runtime}`)).toBeGreaterThan(0);
@@ -179,7 +181,6 @@ test("a runtime that cannot run here is offered after the ones that can", async 
   expect(texts.slice(texts.lastIndexOf("eta (built-in)"))).toEqual([
     "eta (built-in)",
     "Claude Code",
-    "Antigravity",
     "Grok Build",
     "Qwen Code",
     "Codex",
@@ -188,6 +189,8 @@ test("a runtime that cannot run here is offered after the ones that can", async 
     "Probe timed out (30s)",
     "Pi",
     "Not installed",
+    "Antigravity",
+    "Not signed in",
     "Gemini CLI",
     "Probe failed",
   ]);
@@ -239,7 +242,6 @@ test("Antigravity uses agy acp --login and its data-URI brand mark", async () =>
     width: 1440,
     height: 900,
     locale: "en-US",
-    urlScheme: "eta://fixture/antigravity-runtimes",
   });
   await settings.press("label:Antigravity, Not signed in");
   await settings.waitFor(
