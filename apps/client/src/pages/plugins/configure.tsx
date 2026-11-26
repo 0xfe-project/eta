@@ -35,7 +35,11 @@ import {
 } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { pluginConfigText, PluginSelect } from "./config-fields";
+import {
+  fieldIssueText,
+  pluginConfigText,
+  PluginSelect,
+} from "./config-fields";
 
 /** How much of the window the configure dialog may take. */
 const dialogMaxWidth = "90%";
@@ -179,6 +183,8 @@ export function ConfigurePlugin(props: {
   phone: boolean;
   tablet: boolean;
   onClose: () => void;
+  /** Opens the plugin's servers/env dialog when stdio env vars still need setup. */
+  onServers?: () => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -186,6 +192,7 @@ export function ConfigurePlugin(props: {
   const values = signal<Record<string, PluginValue | null>>({});
   const numberInput = signal<Record<string, string>>({});
   const issues = signal<PluginResults["configure"]["issues"]>([]);
+  const submitNote = signal("");
   const busy = signal(false);
   const accessBusy = signal(false);
   async function setLevel(field: PluginFieldView, level: PluginAgentLevel) {
@@ -212,12 +219,43 @@ export function ConfigurePlugin(props: {
     issues.update((previous) =>
       previous.filter((issue) => issue.field !== key),
     );
+    submitNote.set("");
   };
+  const clearDraft = (key: string) => {
+    values.update((previous) => {
+      if (!Object.hasOwn(previous, key)) return previous;
+      const { [key]: _, ...rest } = previous;
+      return rest;
+    });
+    issues.update((previous) =>
+      previous.filter((issue) => issue.field !== key),
+    );
+    submitNote.set("");
+  };
+  const unsavedRequiredBooleans = () =>
+    props.item.fields.filter(
+      (field) =>
+        field.type === "boolean" &&
+        field.required &&
+        !field.set &&
+        field.value === null &&
+        field.default === undefined &&
+        !Object.hasOwn(values(), field.name),
+    );
+  const missingServerEnvs = () =>
+    props.item.servers.flatMap((server) =>
+      (server.missingEnv ?? []).map((name) => ({
+        server: server.name,
+        name,
+      })),
+    );
+  const hasSelectValue = (val: PluginValue | null) =>
+    Array.isArray(val) ? val.length > 0 : val !== null && val !== "";
   function numericIssue(field: PluginFieldView) {
     if (field.type !== "number" || !Object.hasOwn(numberInput(), field.name))
       return "";
     const text = numberInput()[field.name]?.trim();
-    if (!text) return field.required ? "Enter a value." : "";
+    if (!text) return field.required ? uiText("pluginFieldRequired") : "";
     const value = Number(text);
     if (!Number.isFinite(value)) return uiText("pluginNumberRequired");
     if (field.int && !Number.isInteger(value))
@@ -228,12 +266,29 @@ export function ConfigurePlugin(props: {
       return uiText("pluginAboveMaximum", { value: field.max });
     return "";
   }
+  function fieldError(field: PluginFieldView) {
+    const numeric = numericIssue(field);
+    if (numeric) return numeric;
+    const submitted = issues().find((issue) => issue.field === field.name);
+    if (submitted) return fieldIssueText(field, submitted);
+    if (
+      field.issue &&
+      field.issue.code !== "required" &&
+      !Object.hasOwn(values(), field.name) &&
+      !Object.hasOwn(numberInput(), field.name)
+    )
+      return fieldIssueText(field, field.issue);
+    return "";
+  }
   async function submit() {
     if (busy() || accessBusy() || props.item.fields.some(numericIssue)) return;
     busy.set(true);
-    const payload = { ...values() };
+    submitNote.set("");
+    const payload: Record<string, PluginValue | null> = { ...values() };
     for (const [key, text] of Object.entries(numberInput()))
       payload[key] = text.trim() ? Number(text) : null;
+    // A required boolean rendered visually OFF (false) can be saved directly without toggling ON->OFF.
+    for (const field of unsavedRequiredBooleans()) payload[field.name] = false;
     const result = await host.action(() =>
       host.call<PluginResults["configure"]>("plugins", "configure", {
         name: props.item.name,
@@ -243,7 +298,25 @@ export function ConfigurePlugin(props: {
     busy.set(false);
     if (!result) return;
     issues.set(result.issues);
-    if (result.state === "ready") props.onClose();
+    if (result.state === "ready") {
+      props.onClose();
+      return;
+    }
+    if (result.issues.length === 0) {
+      const missing = missingServerEnvs();
+      if (missing.length > 0) {
+        const names = missing
+          .map((entry) =>
+            props.item.servers.length > 1
+              ? `${entry.server}: ${entry.name}`
+              : entry.name,
+          )
+          .join(", ");
+        submitNote.set(uiText("configureMissingEnv", { names }));
+      } else {
+        submitNote.set(uiText("configureStillNeedsSetup"));
+      }
+    }
   }
   const title = () => uiText("configureWithCount", { name: props.item.name });
   const compactField = () => ({
@@ -346,6 +419,11 @@ export function ConfigurePlugin(props: {
                                     (issue) => issue.field !== item().name,
                                   ),
                                 );
+                                submitNote.set("");
+                              } else if (item().secret && text === "") {
+                                // Backspacing a secret input keeps the saved secret unchanged;
+                                // only the explicit Clear action sends null.
+                                clearDraft(item().name);
                               } else
                                 set(item().name, text === "" ? null : text);
                             }}
@@ -449,8 +527,8 @@ export function ConfigurePlugin(props: {
                     <If
                       when={
                         !item().required &&
-                        Boolean(value()) &&
-                        Object.hasOwn(values(), item().name)
+                        hasSelectValue(value()) &&
+                        (item().set || Object.hasOwn(values(), item().name))
                       }
                     >
                       <Button
@@ -512,21 +590,31 @@ export function ConfigurePlugin(props: {
                       onPress={() => set(item().name, null)}
                     />
                   </If>
-                  <If
-                    when={
-                      numericIssue(item()) ||
-                      issues().some((issue) => issue.field === item().name)
-                    }
-                  >
+                  <If when={fieldError(item())}>
                     <Label variant="caption" tone="red">
-                      {numericIssue(item()) ||
-                        uiText("checkThisValueAgainstThePlugins")}
+                      {fieldError(item())}
                     </Label>
                   </If>
                 </View>
               );
             }}
           </Each>
+          <If when={submitNote()}>
+            <View testID="configure-submit-note" style={{ gap: space[8] }}>
+              <Label variant="small" tone="red">
+                {submitNote()}
+              </Label>
+              <If when={props.onServers && missingServerEnvs().length > 0}>
+                <Button
+                  label={uiText("openServerSettings")}
+                  tone="plain"
+                  labelVariant="small"
+                  style={{ alignSelf: "flex-start" }}
+                  onPress={() => props.onServers?.()}
+                />
+              </If>
+            </View>
+          </If>
           <Label variant="caption" tone="muted">
             {pluginConfigText("encrypted")}
           </Label>
@@ -557,7 +645,11 @@ export function ConfigurePlugin(props: {
           disabled={
             accessBusy() ||
             props.item.fields.some(numericIssue) ||
-            !(Object.keys(values()).length || Object.keys(numberInput()).length)
+            !(
+              Object.keys(values()).length ||
+              Object.keys(numberInput()).length ||
+              unsavedRequiredBooleans().length
+            )
           }
           busy={busy()}
           onPress={() => void submit()}

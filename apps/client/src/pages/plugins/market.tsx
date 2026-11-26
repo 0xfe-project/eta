@@ -45,7 +45,12 @@ import { follow, useHost } from "../../services/host";
 import { problemText } from "../../services/problem-text";
 import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
 import { sheetEdge } from "./configure";
-import { pendingLogos, PluginLogo, primeLogos } from "./plugin-logo";
+import {
+  clearLogoCache,
+  pendingLogos,
+  PluginLogo,
+  primeLogos,
+} from "./plugin-logo";
 import { PluginName } from "./plugin-name";
 import { PluginSettingsButton } from "./settings-button";
 
@@ -62,8 +67,13 @@ const cardWidth = 264;
 const searchWidth = 480;
 const detailHeight = 440;
 
-/** The last list shown, kept for the session: the market opened again draws it on its first frame. */
-let lastCatalog: MarketCatalog | undefined;
+/** The last list shown per host, kept for as long as the host lives: the market opened again draws it on its first frame. */
+const lastCatalogs = new WeakMap<object, MarketCatalog>();
+
+/** Clears the kept market catalog for a host (e.g. after changing market sources or Composio key). */
+export function clearMarketCache(host: object): void {
+  lastCatalogs.delete(host);
+}
 
 /** How often, and how many times, the market asks Composio whether a toolkit got connected (about three minutes). */
 const POLL_MS = 3000;
@@ -95,6 +105,7 @@ export function Market(props: {
   layout: Layout;
   tabs: () => JSX.Element;
   onBack?: () => void;
+  /** Opens Settings on the plugin sources and Composio API key. */
   onSettings: () => void;
   /** Opens an address in the browser; the system's by default. */
   open?: (url: string) => Promise<void>;
@@ -102,9 +113,9 @@ export function Market(props: {
   const host = useHost();
   const c = colors();
   const type = textFaces();
-  const catalog = signal<MarketCatalog | undefined>(lastCatalog);
+  const catalog = signal<MarketCatalog | undefined>(lastCatalogs.get(host));
   const show = (next: MarketCatalog) => {
-    lastCatalog = next;
+    lastCatalogs.set(host, next);
     catalog.set(next);
   };
   const loading = signal(false);
@@ -197,7 +208,7 @@ export function Market(props: {
    */
   const reach = (to: number) => {
     const token = ++reaching;
-    const need = pendingLogos(asksFor(to * columns()));
+    const need = pendingLogos(host, asksFor(to * columns()));
     if (need.length === 0) rows.set(to);
     else
       void primeLogos(host, need).then(() => {
@@ -417,12 +428,18 @@ export function Market(props: {
   }
   async function clearCache() {
     await host.action(() => host.call("plugins", "marketClearCache", {}));
-    await load();
+    lastCatalogs.delete(host);
+    clearLogoCache(host);
+    catalog.set(undefined);
+    rows.set(0);
+    drawnAt = 0;
+    await load({ preserveBefore: false });
   }
   follow(() => "plugins");
 
-  async function load() {
+  async function load(options?: { preserveBefore?: boolean }) {
     if (loading()) return;
+    const preserveBefore = options?.preserveBefore !== false;
     loading.set(true);
     // What the host kept shows at once (a list already on screen stays); it also says which sources
     // there are now. Then each source is read on its own and replaces only its own part, so a slow
@@ -431,17 +448,26 @@ export function Market(props: {
       host.call<MarketCatalog>("plugins", "marketCatalog", { mode: "cached" }),
     );
     if (kept) {
-      const before = catalog();
+      const before = preserveBefore ? catalog() : undefined;
       const merged: MarketCatalog = {
         ...kept,
         sources: kept.sources.map((item) => {
           const shown = before?.sources.find(
             (one) => one.source.url === item.source.url,
           );
-          return shown?.entries != null && item.entries === null ? shown : item;
+          return shown &&
+            (shown.entries !== null || shown.toolkits != null) &&
+            item.entries === null &&
+            item.toolkits == null
+            ? shown
+            : item;
         }),
       };
-      if (merged.sources.some((item) => item.entries !== null)) {
+      if (
+        merged.sources.some(
+          (item) => item.entries !== null || item.toolkits != null,
+        )
+      ) {
         show(merged);
       } else catalog.set(merged);
     }
@@ -589,6 +615,9 @@ export function Market(props: {
   /** What the plugin would run, read from its pinned commit. Plain text; nothing here installs anything. */
   const previewBlock = (shown: MarketPreview) => (
     <View testID="market-info" style={{ gap: space[8] }}>
+      <If when={shown.manifestName && shown.manifestName !== shown.name}>
+        {line(uiText("marketManifestName"), shown.manifestName)}
+      </If>
       <If when={shown.proxy}>
         {line(uiText("marketProxy"), shown.proxy ?? "")}
       </If>
@@ -651,6 +680,15 @@ export function Market(props: {
                 {`${uiText("marketEnv")}: ${server().env.join(", ")}`}
               </Label>
             </If>
+            <If when={(server().missingEnv ?? []).length}>
+              <Label
+                variant="caption"
+                tone="warningInk"
+                style={{ userSelect: "text" }}
+              >
+                {`${uiText("marketMissingEnv")}: ${(server().missingEnv ?? []).join(", ")}`}
+              </Label>
+            </If>
             <If when={server().headers.length}>
               <Label
                 variant="caption"
@@ -692,6 +730,33 @@ export function Market(props: {
     titleWeight: weight.regular,
   });
   const inset = () => (phone() ? { paddingHorizontal: space[16] } : {});
+
+  const hasMarketContent = () =>
+    all().length > 0 ||
+    allToolkits().length > 0 ||
+    failed().length > 0 ||
+    composioNotes().length > 0;
+  const pendingSources = () =>
+    loading() &&
+    (catalog()?.sources.some(
+      (item) =>
+        item.entries === null &&
+        item.toolkits == null &&
+        item.error === null &&
+        item.status === undefined,
+    ) ??
+      false);
+  const pageStatus = (): "loading" | "error" | "empty" => {
+    if (!catalog()) return loading() ? "loading" : "error";
+    if (pendingSources()) return "loading";
+    return "empty";
+  };
+  const settingsActions = () => [
+    {
+      label: uiText("openPluginSettings"),
+      onPress: props.onSettings,
+    },
+  ];
 
   return (
     <View style={grow}>
@@ -736,14 +801,12 @@ export function Market(props: {
         >
           <If
             when={
-              !catalog() ||
-              !catalog()!.sources.length ||
-              (!all().length && !failed().length)
+              !catalog() || !catalog()!.sources.length || !hasMarketContent()
             }
           >
             <EmptyState
               size="page"
-              status={catalog() ? "empty" : loading() ? "loading" : "error"}
+              status={pageStatus()}
               loading={<ListSkeleton label={uiText("marketLoading")} />}
               error={{
                 title: uiText("marketDidNotLoad"),
@@ -756,11 +819,13 @@ export function Market(props: {
                       art: "plugins",
                       title: uiText("marketEmpty"),
                       description: uiText("marketEmptyHint"),
+                      actions: settingsActions(),
                     }
                   : {
                       art: "plugins",
                       title: uiText("marketNoSources"),
                       description: uiText("marketNoSourcesHint"),
+                      actions: settingsActions(),
                     }
               }
               style={{ paddingHorizontal: 0, paddingVertical: space[24] }}
@@ -836,6 +901,14 @@ export function Market(props: {
                     ? uiText("composioNeedsKeyHint")
                     : uiText("composioKeyRejectedHint")}
                 </Label>
+                <View style={{ ...row, paddingTop: space[4] }}>
+                  <Button
+                    label={uiText("openPluginSettings")}
+                    tone="plain"
+                    labelVariant="small"
+                    onPress={props.onSettings}
+                  />
+                </View>
               </View>
             )}
           </Each>

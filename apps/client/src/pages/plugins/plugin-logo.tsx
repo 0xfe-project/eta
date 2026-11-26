@@ -9,7 +9,31 @@ import { avatar, weight } from "../../components/tokens";
 import { useHost } from "../../services/host";
 import { avatarFill, avatarInitial, avatarInk } from "./avatar-color";
 
-const found = new Map<string, Signal<string | null | undefined>>();
+interface LogoCache {
+  found: Map<string, Signal<string | null | undefined>>;
+  /** Entries the host was already asked about (whatever it answered): each is asked once. */
+  asked: Set<string>;
+  /** The calls still waiting for an answer, by the key of each entry in them. */
+  flying: Map<string, Promise<void>>;
+  /** Bumped on cache clear so mounted cards refetch and in-flight answers from before are ignored. */
+  generation: Signal<number>;
+}
+
+const caches = new WeakMap<object, LogoCache>();
+
+function cacheOf(host: object): LogoCache {
+  let cache = caches.get(host);
+  if (!cache) {
+    cache = {
+      found: new Map(),
+      asked: new Set(),
+      flying: new Map(),
+      generation: signal(0),
+    };
+    caches.set(host, cache);
+  }
+  return cache;
+}
 
 /** The key a market entry's picture is kept under. */
 const repoKey = (
@@ -18,13 +42,24 @@ const repoKey = (
 ): string =>
   ["repo", repo.repo, repo.ref, repo.path, homepage ?? ""].join("\n");
 
-function slot(key: string): Signal<string | null | undefined> {
-  let one = found.get(key);
+function slot(host: object, key: string): Signal<string | null | undefined> {
+  const cache = cacheOf(host);
+  let one = cache.found.get(key);
   if (!one) {
     one = signal<string | null | undefined>(undefined);
-    found.set(key, one);
+    cache.found.set(key, one);
   }
   return one;
+}
+
+/** Drops every kept logo for this host so future primes and mounted cards refetch cleanly. */
+export function clearLogoCache(host: object): void {
+  const cache = caches.get(host);
+  if (!cache) return;
+  cache.found.clear();
+  cache.asked.clear();
+  cache.flying.clear();
+  cache.generation.update((n) => n + 1);
 }
 
 /** How long a batch of cards waits for the host's kept pictures before it is drawn with letters. */
@@ -43,17 +78,17 @@ export type LogoAsk =
 const askKey = (ask: LogoAsk): string =>
   "composio" in ask ? `composio:${ask.composio}` : repoKey(ask, ask.homepage);
 
-/** Entries the host was already asked about (whatever it answered): each is asked once. */
-const asked = new Set<string>();
-/** The calls still waiting for an answer, by the key of each entry in them. */
-const flying = new Map<string, Promise<void>>();
-
 /** The entries a card would be drawn without a picture for, unless `primeLogos` is waited for. */
-export const pendingLogos = (asks: LogoAsk[]): LogoAsk[] =>
-  asks.filter((ask) => {
+export const pendingLogos = (host: object, asks: LogoAsk[]): LogoAsk[] => {
+  const cache = cacheOf(host);
+  return asks.filter((ask) => {
     const key = askKey(ask);
-    return slot(key)() === undefined && (!asked.has(key) || flying.has(key));
+    return (
+      slot(host, key)() === undefined &&
+      (!cache.asked.has(key) || cache.flying.has(key))
+    );
   });
+};
 
 /**
  * Before a batch of cards is drawn: ask the host for the pictures it already has for them, each entry
@@ -68,14 +103,16 @@ export async function primeLogos(
   asks: LogoAsk[],
   waitMs = LOGOS_CACHED_WAIT_MS,
 ): Promise<void> {
+  const cache = cacheOf(host);
+  const gen = untracked(() => cache.generation());
   const fresh = new Map<string, LogoAsk>();
   const waits = new Set<Promise<void>>();
   for (const ask of asks) {
     const key = askKey(ask);
-    if (slot(key)() !== undefined) continue;
-    const going = flying.get(key);
+    if (slot(host, key)() !== undefined) continue;
+    const going = cache.flying.get(key);
     if (going) waits.add(going);
-    else if (!asked.has(key) && !fresh.has(key)) fresh.set(key, ask);
+    else if (!cache.asked.has(key) && !fresh.has(key)) fresh.set(key, ask);
   }
   const entries = [...fresh.values()];
   const batchOf = async (batch: LogoAsk[]): Promise<void> => {
@@ -84,11 +121,16 @@ export async function primeLogos(
         entries: batch,
       })
       .catch(() => undefined);
-    if (!answer || !Array.isArray(answer.logos)) return;
+    if (
+      !answer ||
+      !Array.isArray(answer.logos) ||
+      untracked(() => cache.generation()) !== gen
+    )
+      return;
     answer.logos.forEach((one, index) => {
       const ask = batch[index];
       if (!ask || !one) return;
-      const one_ = slot(askKey(ask));
+      const one_ = slot(host, askKey(ask));
       if (one_() !== undefined) return;
       if (one.status === "hit") one_.set(`data:${one.type};base64,${one.data}`);
       else if (one.status === "miss") one_.set(null);
@@ -97,11 +139,12 @@ export async function primeLogos(
   for (let at = 0; at < entries.length; at += LOGOS_CACHED_BATCH) {
     const batch = entries.slice(at, at + LOGOS_CACHED_BATCH);
     const keys = batch.map(askKey);
-    for (const key of keys) asked.add(key);
+    for (const key of keys) cache.asked.add(key);
     const done: Promise<void> = batchOf(batch).finally(() => {
-      for (const key of keys) if (flying.get(key) === done) flying.delete(key);
+      for (const key of keys)
+        if (cache.flying.get(key) === done) cache.flying.delete(key);
     });
-    for (const key of keys) flying.set(key, done);
+    for (const key of keys) cache.flying.set(key, done);
     waits.add(done);
   }
   if (waits.size === 0) return;
@@ -154,10 +197,15 @@ export function PluginLogo(props: {
         : props.repo
           ? repoKey(props.repo, props.homepage)
           : (props.homepage ?? "");
-  const state = () => slot(key());
+  const state = () => {
+    cacheOf(host).generation();
+    return slot(host, key());
+  };
   effect(() => {
     const at = key();
-    const one = state();
+    const cache = cacheOf(host);
+    const gen = cache.generation();
+    const one = slot(host, at);
     if (!at || untracked(() => one()) !== undefined) return;
     untracked(() => {
       one.set(null);
@@ -176,7 +224,8 @@ export function PluginLogo(props: {
         );
       (repo || props.composio ? turn(ask) : ask())
         .then((logo) => {
-          if (logo) one.set(`data:${logo.type};base64,${logo.data}`);
+          if (logo && untracked(() => cache.generation()) === gen)
+            one.set(`data:${logo.type};base64,${logo.data}`);
         })
         .catch(() => undefined);
     });

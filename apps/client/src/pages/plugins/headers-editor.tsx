@@ -1,5 +1,5 @@
 import type { PluginHeaderView, PluginView } from "@eta/client-contracts";
-import { signal, View } from "nsh";
+import { effect, signal, untracked, View } from "nsh";
 import { Button, colors, Field, Label, row, textFaces } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { opacity, space, weight } from "../../components/tokens";
@@ -52,18 +52,57 @@ export function HeadersEditor(props: {
     (props.item.headers ?? []).filter(
       (header) => header.server === props.server,
     );
+  const snapshot = () =>
+    JSON.stringify(
+      mine().map((header) => [
+        header.name,
+        header.secret,
+        header.value,
+        header.plainOk,
+      ]),
+    );
+  const identity = () => `${props.item.name}\n${props.server}`;
   const drafts = signal<Draft[]>(mine().map(draftOf));
+  const dirty = signal(false);
   const problem = signal("");
   const off = () => !props.item.enabled;
-  const patch = (id: number, change: Partial<Draft>) =>
+  let seenIdentity = identity();
+  let seenSnapshot = snapshot();
+  effect(() => {
+    const nextIdentity = identity();
+    const nextSnapshot = snapshot();
+    if (nextIdentity !== seenIdentity) {
+      seenIdentity = nextIdentity;
+      seenSnapshot = nextSnapshot;
+      untracked(() => {
+        drafts.set(mine().map(draftOf));
+        dirty.set(false);
+        problem.set("");
+      });
+      return;
+    }
+    if (nextSnapshot !== seenSnapshot) {
+      seenSnapshot = nextSnapshot;
+      if (!untracked(dirty)) {
+        untracked(() => {
+          drafts.set(mine().map(draftOf));
+        });
+      }
+    }
+  });
+  const patch = (id: number, change: Partial<Draft>) => {
+    dirty.set(true);
     drafts.update((all) =>
       all.map((draft) => (draft.id === id ? { ...draft, ...change } : draft)),
     );
-  const add = (row: { name: string; secret: boolean; bearer: boolean }) =>
+  };
+  const add = (row: { name: string; secret: boolean; bearer: boolean }) => {
+    dirty.set(true);
     drafts.update((all) => [
       ...all,
       { ...row, id: next++, value: "", saved: false, plainOk: false },
     ]);
+  };
   // The plugin file may already carry an auth header; then no second Authorization row is offered.
   const declared = () =>
     props.item.servers.find((one) => one.name === props.server)?.headers ?? [];
@@ -94,10 +133,15 @@ export function HeadersEditor(props: {
         headers,
       });
       // What was typed is not kept: a secret reads as saved, a new value replaces it.
+      // Preserve the "Bearer " prefix on non-secret Bearer rows so subsequent saves keep it.
+      dirty.set(false);
       drafts.update((all) =>
         all.map((draft) => ({
           ...draft,
-          value: draft.secret ? "" : draft.value,
+          name: draft.name.trim(),
+          value: draft.secret
+            ? ""
+            : (headerValue(draft.value, draft.bearer) ?? draft.value),
           saved: true,
           bearer: false,
         })),
@@ -126,12 +170,17 @@ export function HeadersEditor(props: {
                 label={uiText("headerName")}
                 value={draft().name}
                 placeholder={uiText("headerName")}
-                onChange={(name) =>
-                  patch(draft().id, {
+                onChange={(name) => {
+                  const current = draft();
+                  const renamed = current.saved && name !== current.name;
+                  patch(current.id, {
                     name,
-                    ...(draft().saved ? {} : { secret: looksSecret(name) }),
-                  })
-                }
+                    ...(renamed ? { saved: false } : {}),
+                    ...(!current.saved || renamed
+                      ? { secret: looksSecret(name) }
+                      : {}),
+                  });
+                }}
               />
             </View>
             <View style={{ flex: 3, minWidth: 0 }}>
@@ -166,11 +215,12 @@ export function HeadersEditor(props: {
               tone="ghost"
               labelVariant="small"
               disabled={off()}
-              onPress={() =>
+              onPress={() => {
+                dirty.set(true);
                 drafts.update((all) =>
                   all.filter((other) => other.id !== draft().id),
-                )
-              }
+                );
+              }}
             />
           </View>
         )}
