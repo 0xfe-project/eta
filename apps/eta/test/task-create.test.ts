@@ -196,6 +196,54 @@ describe("the user makes a task", () => {
       ),
     ).toThrow(/only the user makes tasks this way/);
   });
+
+  it("refuses assignees outside the group or Captain (including when inheriting conversation from parent)", async () => {
+    const { models } = scriptedModels(() => say("ok"));
+    const w = await world({ captain: true, models, tasks: { runs: false } });
+    const ada = await w.agent("Ada");
+    const outsider = await w.agent("Outsider");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id], "create-scope");
+    const captainId = w.host.product.captain.identity()!.agentId;
+
+    const [stage] = (
+      (await w.client.call("tasks", "create", {
+        conversationId: group.id,
+        workspace: "local",
+        status: "backlog",
+        tasks: [{ title: "Stage", assignee: ada.id }],
+      })) as { tasks: BoardTaskDetail[] }
+    ).tasks;
+
+    for (const target of [outsider.id, "Outsider"]) {
+      await expect(
+        w.client.call("tasks", "create", {
+          conversationId: group.id,
+          workspace: "local",
+          tasks: [{ title: "Outside", assignee: target }],
+        }),
+      ).rejects.toThrow(/not a member of group "create-scope"/);
+
+      // Inherited conversationId via parent (no explicit conversationId):
+      await expect(
+        w.client.call("tasks", "create", {
+          parent: stage!.id,
+          workspace: "local",
+          tasks: [{ title: "Outside child", assignee: target }],
+        }),
+      ).rejects.toThrow(/not a member of group "create-scope"/);
+    }
+
+    for (const target of [captainId, "Captain", "captain"]) {
+      await expect(
+        w.client.call("tasks", "create", {
+          conversationId: group.id,
+          workspace: "local",
+          tasks: [{ title: "Captain task", assignee: target }],
+        }),
+      ).rejects.toThrow(/Captain cannot be assigned/);
+    }
+  });
 });
 
 describe("where a task the user makes starts", () => {

@@ -195,7 +195,7 @@ export function groupProposals(
     created: (proposal, result) => [
       `conversationId: ${result.conversationId}`,
       `projectId: ${result.projectId}${result.projectCreated ? ` (${proposal.path} was added as a new project)` : ""}`,
-      "Assign work there with assign_in_group.",
+      "Dispatch tasks there with dispatch_task or coordinate in chat with assign_in_group.",
     ],
   };
 }

@@ -10,6 +10,7 @@ import type {
 } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
+import { call, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
 
 type World = Awaited<ReturnType<typeof world>>;
@@ -135,5 +136,117 @@ describe("captain's conversation", () => {
     expect(identity()!.conversation!.lastMessageAt).toBe(
       last.messages.at(-1)!.createdAt,
     );
+  });
+});
+
+describe("tasks in captain's direct conversation", () => {
+  it("allows tasks created in Captain's chat for ordinary agents (and subtasks), while refusing Captain as assignee and refusing dispatch_task into direct chat", async () => {
+    const toolsSeen: string[][] = [];
+    const { models } = scriptedModels((request) => {
+      if (request.agent === "Captain") {
+        toolsSeen.push(request.tools);
+        if (request.lastRole === "toolResult") return say(request.last);
+        if (request.last.includes("check subtask"))
+          return call("captain_read_task", { taskId: "1" });
+        if (request.last.includes("list board"))
+          return call("captain_list_tasks", {});
+        return say("Captain ready.");
+      }
+      if (request.system.includes("In this task you are Ada")) {
+        if (request.lastRole === "toolResult") return say("Subtask split.");
+        return call("create_subtask", {
+          title: "Subtask for Bola",
+          description: "Run as Bola",
+          assignee: "Bola",
+        });
+      }
+      if (request.system.includes("In this task you are Bola")) {
+        if (request.lastRole === "toolResult") return say("Done.");
+        return call("finish_task", { summary: "Bola completed subtask." });
+      }
+      return say("ok");
+    });
+
+    const w = await world({ captain: true, models });
+    const ada = await w.agent("Ada");
+    const bola = await w.agent("Bola");
+    const captain = (await w.client.call("captain", "direct", {})) as {
+      agentId: string;
+      conversationId: string;
+    };
+    const directId = captain.conversationId;
+    await w.watch(directId);
+
+    // Confirm Captain's direct-chat toolset exposes dispatch_task and excludes draft_task/create_task.
+    const hi = await w.send(directId, "hello");
+    await w.settled(directId, hi.replies[0]!.id);
+    expect(toolsSeen[0]).toContain("dispatch_task");
+    expect(toolsSeen[0]).not.toContain("draft_task");
+    expect(toolsSeen[0]).not.toContain("create_task");
+
+    // Refuses assigning a task to Captain inside Captain's direct chat (by id or reserved name).
+    for (const target of [captain.agentId, "Captain", "captain"])
+      await expect(
+        w.client.call("tasks", "create", {
+          conversationId: directId,
+          workspace: "local",
+          tasks: [{ title: "For Captain", assignee: target }],
+        }),
+      ).rejects.toThrow(/Captain cannot be assigned/);
+
+    // dispatch_task cannot target Captain's direct conversation.
+    await expect(
+      w.host.product.captain.dispatchTask({
+        conversationId: directId,
+        title: "Not a group",
+        description: "Should fail",
+        assignee: ada.id,
+      }),
+    ).rejects.toThrow(/group conversations/);
+
+    // User creates a task from Captain's direct chat assigned to Ada (not a participant of directId).
+    // Ada runs it and creates a subtask for Bola; Bola completes and posts back to directId.
+    const { tasks } = (await w.client.call("tasks", "create", {
+      conversationId: directId,
+      workspace: "local",
+      tasks: [{ title: "Direct-chat task", assignee: ada.id }],
+    })) as { tasks: { id: string; number: number; conversationId: string }[] };
+    expect(tasks[0]!.conversationId).toBe(directId);
+
+    await until(() => w.host.product.board.find("2")?.status === "in_review");
+    expect(
+      w
+        .rows(directId)
+        .some(
+          (row) =>
+            row.author === "agent" &&
+            row.agentId === bola.id &&
+            row.text.includes("Bola completed subtask."),
+        ),
+    ).toBe(true);
+
+    // Assigning a subtask to Captain is also refused even from a direct-chat task.
+    expect(() =>
+      w.host.product.board.create(
+        {
+          title: "Sub for Captain",
+          description: "Refused",
+          conversationId: directId,
+          workspace: "local",
+          assignee: captain.agentId,
+        },
+        { kind: "agent", agentId: ada.id },
+      ),
+    ).toThrow(/Captain cannot be assigned/);
+
+    // Captain can inspect and update/control tasks originating from its direct conversation.
+    const listed = await w.send(directId, "list board");
+    const listReply = await w.settled(directId, listed.replies[0]!.id);
+    expect(listReply.text).toContain("Direct-chat task");
+    expect(listReply.text).toContain("Subtask for Bola");
+
+    const checked = await w.send(directId, "check subtask");
+    const checkReply = await w.settled(directId, checked.replies[0]!.id);
+    expect(checkReply.text).toContain("Direct-chat task");
   });
 });

@@ -34,7 +34,11 @@ import type { TaskRunStore } from "./runs";
 import type { TaskRecord, TaskStore } from "./store";
 import { TASK_STATUSES } from "@eta/client-contracts";
 import { viewOf as attachmentView } from "../conversations/attachments";
-import { resolveAssignee } from "./assignee";
+import {
+  assigneeScopeFor,
+  CAPTAIN_ASSIGNEE_ERROR,
+  resolveAssignee,
+} from "./assignee";
 import { nameOf, TaskGraph } from "./graph";
 import { finished, workable } from "./status";
 
@@ -348,6 +352,15 @@ export class TaskBoard {
       dependsOn?: readonly DependencyInput[] | undefined;
       /** The task it is a subtask of (`#N` or id). */
       parent?: string | undefined;
+      /** Atomic pre-insert hook inside the create transaction (e.g. Captain dispatch provenance). */
+      beforeCreate?:
+        | (() => {
+            captainAssignmentId?: string | null | undefined;
+            captainMessageId?: string | null | undefined;
+          })
+        | undefined;
+      /** Atomic post-insert hook inside the create transaction once the task row has its id and number. */
+      afterCreate?: ((task: TaskRecord) => void) | undefined;
     },
     actor: TaskActor,
   ): BoardTaskDetail {
@@ -356,8 +369,14 @@ export class TaskBoard {
     const { title, ...fields } = this.#fieldsOf(input);
     const { base, assignee } = input;
     if (title === undefined) throw new Error("a task needs a title");
-    const assigneeAgent = resolveAssignee(assignee, this.#deps.agents);
     const conversationId = this.#conversation(input.conversationId)!;
+    const scope = assigneeScopeFor(conversationId, this.#deps.conversations);
+    const assigneeAgent = resolveAssignee(assignee, this.#deps.agents, scope);
+    if (
+      assigneeAgent === undefined &&
+      this.#deps.agents.get(actor.agentId)?.systemRole === "captain"
+    )
+      throw new Error(CAPTAIN_ASSIGNEE_ERROR);
     const dependsOn = this.#dependenciesOf(input.dependsOn);
     const parent =
       input.parent === undefined || input.parent.trim() === ""
@@ -368,14 +387,17 @@ export class TaskBoard {
     // dependencies are in place is the thing they are there to prevent.
     let moved: Moved[] = [];
     const task = this.#deps.db.transaction(() => {
+      const provenance = input.beforeCreate?.();
       const made = this.#deps.tasks.create({
         ...fields,
         title,
         conversationId,
         createdByAgent: maker,
         assigneeAgent,
-        captainAssignmentId: input.captainAssignmentId,
-        captainMessageId: input.captainMessageId,
+        captainAssignmentId:
+          provenance?.captainAssignmentId ?? input.captainAssignmentId,
+        captainMessageId:
+          provenance?.captainMessageId ?? input.captainMessageId,
         baseBranch: base === undefined ? undefined : this.#baseOf(base),
         projectId: this.#deps.conversations.get(conversationId)?.projectId,
         workspaceMode: input.workspace,
@@ -385,6 +407,7 @@ export class TaskBoard {
       for (const edge of dependsOn)
         this.#addEdge(made.id, edge.taskId, edge.requireDone, actor);
       if (parent !== undefined) moved = this.#deriveIn(parent.id);
+      input.afterCreate?.(made);
       return made;
     })();
     this.#announce(task.id, "created", []);
@@ -447,12 +470,17 @@ export class TaskBoard {
         "a task needs a project to work in: give it a parent, or a conversation in a project",
       );
     const workspace = input.workspace ?? parent?.workspaceMode ?? "local";
+    const scope = assigneeScopeFor(conversationId, this.#deps.conversations);
     // Everything named is checked before anything is written.
     const planned = input.tasks.map((entry, index) => {
       const { title, description } = this.#fieldsOf(entry);
       if (title === undefined)
         throw new Error(`task ${index + 1} needs a title`);
-      const assigneeAgent = resolveAssignee(entry.assignee, this.#deps.agents);
+      const assigneeAgent = resolveAssignee(
+        entry.assignee,
+        this.#deps.agents,
+        scope,
+      );
       if (assigneeAgent === undefined)
         throw new Error(`task ${index + 1} needs an executor`);
       for (const at of [

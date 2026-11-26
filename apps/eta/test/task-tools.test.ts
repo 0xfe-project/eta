@@ -674,4 +674,130 @@ describe("the task tools", () => {
     });
     expect(w.host.product.board.detail(task.id)!.title).toBe("Run updated");
   });
+
+  it("lets group agents assign create_task, draft_task, and create_subtask to group members while refusing non-members and Captain", async () => {
+    const { models } = scriptedModels(() => say("ok"));
+    const w = await world({ captain: true, models, tasks: { runs: false } });
+    const ada = await w.agent("Ada");
+    const bola = await w.agent("Bola");
+    const outsider = await w.agent("Outsider");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id, bola.id]);
+    const captainId = w.host.product.captain.identity()!.agentId;
+
+    const tools = new Map(
+      w.host.product.sessionHooks
+        .sessionTools({
+          meta: {
+            id: "conv-session",
+            createdAt: 0,
+            cwd: project.path,
+            agentId: ada.id,
+            conversationId: group.id,
+          },
+          session: undefined as never,
+        })
+        .map((tool) => [tool.name, tool] as const),
+    );
+    const callTool = async (
+      map: Map<string, KernelTool>,
+      name: string,
+      args: Record<string, unknown>,
+    ) => {
+      const result = (await map.get(name)!.execute(args, {
+        turn: 1,
+        toolCallId: `${name}-1`,
+        signal: new AbortController().signal,
+        toolContext: {},
+      })) as { content: { text: string }[]; isError?: boolean };
+      return {
+        text: result.content.map((block) => block.text).join(""),
+        isError: result.isError === true,
+      };
+    };
+
+    const okCreate = await callTool(tools, "create_task", {
+      title: "Member task",
+      workspace: "local",
+      assignee: "Bola",
+    });
+    expect(okCreate).toEqual({
+      isError: false,
+      text: 'Created task #1 "Member task", executed by Bola.',
+    });
+
+    const okDraft = await callTool(tools, "draft_task", {
+      title: "Member draft",
+      goal: "Check group draft",
+      acceptance: "Works",
+      workspace: "local",
+      assignee: bola.id,
+    });
+    expect(okDraft.isError).toBe(false);
+    expect(okDraft.text).toContain("executed by Bola");
+
+    for (const target of [outsider.id, "Outsider", captainId, "Captain"]) {
+      const badCreate = await callTool(tools, "create_task", {
+        title: "Refused create",
+        workspace: "local",
+        assignee: target,
+      });
+      expect(badCreate.isError).toBe(true);
+      const badDraft = await callTool(tools, "draft_task", {
+        title: "Refused draft",
+        goal: "Should fail",
+        acceptance: "Never",
+        workspace: "local",
+        assignee: target,
+      });
+      expect(badDraft.isError).toBe(true);
+    }
+
+    const parentTask = w.host.product.board.find("1")!;
+    w.host.db
+      .query(
+        `INSERT INTO task_run (id, task_id, status, session_key, created_at)
+         VALUES ('run-sub', ?, 'running', ?, 0)`,
+      )
+      .run(parentTask.id, taskKey(parentTask.id));
+    const runToolMap = new Map(
+      w.host.product.sessionHooks
+        .sessionTools({
+          meta: {
+            id: "run-sub",
+            createdAt: 0,
+            cwd: project.path,
+            agentId: bola.id,
+            conversationId: taskKey(parentTask.id),
+          },
+          session: undefined as never,
+        })
+        .map((tool) => [tool.name, tool] as const),
+    );
+    const badSubOut = await callTool(runToolMap, "create_subtask", {
+      title: "Bad sub",
+      description: "Outside",
+      assignee: outsider.id,
+    });
+    expect(badSubOut.isError).toBe(true);
+    expect(badSubOut.text).toMatch(/not a member/);
+
+    const badSubCap = await callTool(runToolMap, "create_subtask", {
+      title: "Bad sub cap",
+      description: "Captain",
+      assignee: "Captain",
+    });
+    expect(badSubCap.isError).toBe(true);
+    expect(badSubCap.text).toMatch(/Captain cannot be assigned/);
+
+    const okSub = await callTool(runToolMap, "create_subtask", {
+      title: "For Ada",
+      description: "Inside group",
+      assignee: ada.id,
+    });
+    expect(okSub).toEqual({
+      isError: false,
+      text: 'Created subtask #2 "For Ada" of #1, executed by Ada; it starts now.',
+    });
+  });
 });

@@ -105,10 +105,10 @@ export function renderPlatformBlock(info: PlatformPromptInfo): string {
   );
   lines.push(`- ${draftRule(true)}`);
   lines.push(
-    "- A task runs in a fresh session that cannot see this conversation. Write its goal and acceptance for a reader who knows nothing else, put what is already settled in `decided`, and always give `base`: the branch, commit or `#N` its worktree starts from. Give `assignee` when the work is for another agent; then that agent runs it, not you.",
+    "- A task runs in a fresh session that cannot see this conversation. Write its goal and acceptance for a reader who knows nothing else, put what is already settled in `decided`, and always give `base`: the branch, commit or `#N` its worktree starts from. Give `assignee` when the work is for another member of this group (never Captain); then that agent runs it, not you.",
   );
   lines.push(
-    "- A visible Captain message in a group is explicit work authorization. When it assigns implementation work to you, create the task yourself with `create_task`; if the instruction is still missing a choice only the user can make, use `draft_task`. Do not pass `assignee` for work Captain assigned to you: you remain its creator and executor.",
+    "- In a group, you may draft or create tasks for yourself or assign them to another member of the same group (never Captain). Captain dispatches tracked board tasks through its own tool; when Captain speaks in a group chat, respond or coordinate as asked.",
   );
   lines.push("");
   lines.push("Working with others in a conversation:");

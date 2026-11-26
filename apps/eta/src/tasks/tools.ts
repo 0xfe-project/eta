@@ -53,9 +53,6 @@ function failure(error: unknown): ToolResult {
   return toolError(error instanceof Error ? error.message : String(error));
 }
 
-const DISPATCH_ASSIGNEE_ERROR =
-  "cannot set assignee during a turn bound to an active dispatch assignment; omit assignee so you remain both creator and executor";
-
 function normalizeAssignee(assignee: string | undefined): string | undefined {
   const trimmed = assignee?.trim() ?? "";
   return trimmed === "" ? undefined : trimmed;
@@ -82,25 +79,7 @@ export interface TaskToolDeps {
   asks?: Pick<TaskAsks, "answer" | "escalate">;
   workspaceFor: WorkspaceChoice;
   captain?: {
-    assignmentFor: (
-      conversationId: string,
-      agentId: string,
-    ) =>
-      | {
-          assignmentId: string;
-          messageId: string;
-          targetId: string;
-          /** The turn asking is the one the assignment started. */
-          forThisTurn: boolean;
-        }
-      | undefined;
     isCaptain: (agentId: string) => boolean;
-    taskCreated: (input: {
-      taskId: string;
-      assignmentId: string;
-      messageId: string;
-      agentId: string;
-    }) => void;
   };
 }
 
@@ -423,8 +402,6 @@ function conversationTools(
 ): KernelTool[] {
   const { board, workspaceFor } = deps;
   const actor: TaskActor = { kind: "agent", agentId: who.agentId };
-  const assignment = () =>
-    deps.captain?.assignmentFor(who.conversationId, who.agentId);
   const { taskOf, nameOf, list, get, note } = reading(deps);
   const archivedNotice = note();
 
@@ -492,10 +469,9 @@ function conversationTools(
       assignee: Type.Optional(
         Type.String({
           description:
-            "The agent this work is for, when it is not you: its name or its id. It is resolved " +
-            "to the agent's registry id when written (an id first, then a name only one agent " +
-            "has); a name nobody has, or several agents share, is refused with the agents there are. " +
-            "Absent is you, the proposer, which executes it itself.",
+            "The agent this work is for, when it is not you: its name or its id. In a group, it " +
+            "must name a member of that group (never Captain), and is resolved to the agent's " +
+            "registry id when written; absent is you, the proposer, which executes it itself.",
         }),
       ),
       dependsOn: dependsOnParameter,
@@ -509,15 +485,6 @@ function conversationTools(
         );
         const { base, assignee: rawAssignee, ...rest } = args;
         const assignee = normalizeAssignee(rawAssignee);
-        const open = assignment();
-        if (open?.forThisTurn === true && assignee !== undefined)
-          throw new Error(DISPATCH_ASSIGNEE_ERROR);
-        // The assignment binds the turn it started, not the agent for as long as it stays open:
-        // a task a later turn makes, for itself or for another agent, is not the assignment's.
-        const captain =
-          assignee === undefined && open?.forThisTurn === true
-            ? open
-            : undefined;
         const row = board.draft({
           conversationId: who.conversationId,
           agentId: who.agentId,
@@ -526,17 +493,15 @@ function conversationTools(
             workspace,
             base,
             assignee,
-            ...(captain === undefined
-              ? {}
-              : {
-                  captainAssignmentId: captain.assignmentId,
-                  captainMessageId: captain.messageId,
-                }),
           },
         });
         const later = args.status === "backlog";
+        const resolvedAssignee =
+          typeof row.data.assignee === "string"
+            ? nameOf(row.data.assignee)
+            : assignee;
         return text(
-          `Drafted "${args.title}" for the user to confirm${later ? "; once confirmed it waits in the backlog until the user starts it, and" : ";"} it will run in ${workspace === "worktree" ? "a git worktree" : "the project directory"}${base === undefined ? "" : ` based on ${base}`}${assignee === undefined ? "" : `, executed by ${assignee}`}.`,
+          `Drafted "${args.title}" for the user to confirm${later ? "; once confirmed it waits in the backlog until the user starts it, and" : ";"} it will run in ${workspace === "worktree" ? "a git worktree" : "the project directory"}${base === undefined ? "" : ` based on ${base}`}${resolvedAssignee === undefined ? "" : `, executed by ${resolvedAssignee}`}.`,
           { messageId: row.id },
         );
       } catch (error) {
@@ -580,10 +545,9 @@ function conversationTools(
       assignee: Type.Optional(
         Type.String({
           description:
-            "The agent this work is for, when it is not you: its name or its id. It is resolved " +
-            "to the agent's registry id when written (an id first, then a name only one agent " +
-            "has); a name nobody has, or several agents share, is refused with the agents there are. " +
-            "Absent is you, the maker, which executes it itself.",
+            "The agent this work is for, when it is not you: its name or its id. In a group, it " +
+            "must name a member of that group (never Captain), and is resolved to the agent's " +
+            "registry id when written; absent is you, the maker, which executes it itself.",
         }),
       ),
       dependsOn: dependsOnParameter,
@@ -597,13 +561,6 @@ function conversationTools(
         );
         const { base, assignee: rawAssignee, ...rest } = args;
         const assignee = normalizeAssignee(rawAssignee);
-        const open = assignment();
-        if (open?.forThisTurn === true && assignee !== undefined)
-          throw new Error(DISPATCH_ASSIGNEE_ERROR);
-        const captain =
-          assignee === undefined && open?.forThisTurn === true
-            ? open
-            : undefined;
         const task = board.create(
           {
             ...rest,
@@ -611,22 +568,9 @@ function conversationTools(
             base,
             assignee,
             conversationId: who.conversationId,
-            ...(captain === undefined
-              ? {}
-              : {
-                  captainAssignmentId: captain.assignmentId,
-                  captainMessageId: captain.messageId,
-                }),
           },
           actor,
         );
-        if (captain !== undefined)
-          deps.captain?.taskCreated({
-            taskId: task.id,
-            assignmentId: captain.assignmentId,
-            messageId: captain.messageId,
-            agentId: who.agentId,
-          });
         return text(
           `Created task #${task.number} "${task.title}"${
             task.assigneeAgentId === null
@@ -859,7 +803,7 @@ function runTools(
 ): KernelTool[] {
   const { board, runner } = deps;
   const actor: TaskActor = { kind: "agent", agentId: who.agentId };
-  const { taskOf, list, get, note } = reading(deps);
+  const { taskOf, nameOf, list, get, note } = reading(deps);
   const archivedNotice = note();
 
   const task = (): TaskRecord => taskOf(who.taskId);
@@ -942,7 +886,8 @@ function runTools(
       assignee: Type.Optional(
         Type.String({
           description:
-            "The agent that executes it, by name or id; absent is you, the executor of this task",
+            "The agent that executes it, by name or id (never Captain; when this task belongs to " +
+            "a group, it must be a member of that group). Absent is you, the executor of this task",
         }),
       ),
       base: Type.Optional(
@@ -962,6 +907,7 @@ function runTools(
           throw new Error(
             "this task is in no conversation, so it has nowhere to make subtasks",
           );
+        const assignee = normalizeAssignee(args.assignee);
         const made = board.create(
           {
             title: args.title,
@@ -970,15 +916,25 @@ function runTools(
             conversationId,
             workspace: parent.workspaceMode,
             base: args.base,
-            assignee: args.assignee,
+            assignee,
             dependsOn: args.dependsOn,
             parent: parent.id,
+            ...(parent.captainAssignmentId === null
+              ? {}
+              : {
+                  captainAssignmentId: parent.captainAssignmentId,
+                  captainMessageId: parent.captainMessageId,
+                }),
           },
           actor,
         );
         const waits = made.waitingOn ?? [];
         return text(
           `Created subtask #${made.number} "${made.title}" of #${parent.number}${
+            made.assigneeAgentId === null
+              ? ""
+              : `, executed by ${nameOf(made.assigneeAgentId)}`
+          }${
             waits.length === 0
               ? "; it starts now"
               : `; it waits for ${waits.map((w) => `#${w.number}`).join(", ")}`

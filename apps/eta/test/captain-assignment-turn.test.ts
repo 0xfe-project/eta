@@ -1,38 +1,49 @@
 /**
- * An open Captain assignment binds the turn it woke the agent with, not the agent for as long as it
- * stays open. In any other turn the agent is an ordinary member of the group: it may hand a task to
- * another agent with "assignee", and a question it asks is the user's to see in the Inbox.
+ * `assign_in_group` is pure group communication/coordination: it does not block `assignee` on or
+ * attach `captainAssignmentId` to `create_task` or `draft_task`.
+ *
+ * Meanwhile, Inbox relay stays strictly scoped: questions asked inside a turn woken by
+ * `assign_in_group`, or inside a task run created via `dispatch_task`, relay through Captain,
+ * whereas questions from user-started turns or non-Captain tasks go directly to the user's Inbox.
  */
 import type { InteractionView } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
-import { call, say, scriptedModels } from "./support/models";
+import { call, gate, HANG, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
 
 const options = { captain: true, tasks: { runs: false } } as const;
 
-describe("captain assignment turn", () => {
-  it("lets an assigned agent hand a task to another agent in a turn the assignment did not start", async () => {
+describe("captain assignment turn decoupling", () => {
+  it("allows create_task and draft_task with or without assignee during an assign_in_group turn without linking captainAssignmentId", async () => {
     let bea = "";
-    let told = "";
+    const results: string[] = [];
     const { models } = scriptedModels((request) => {
       if (request.agent !== "Ada") return say("ok");
       if (request.lastRole === "toolResult") {
-        if (request.transcript.join("\n").includes("hand the review"))
-          told = request.last;
+        results.push(request.last);
+        if (results.length === 1)
+          return call("draft_task", {
+            title: "Delegated draft",
+            goal: "Confirm ordinary drafting works with assignee",
+            acceptance: "Drafted cleanly",
+            workspace: "local",
+            assignee: bea,
+          });
+        if (results.length === 2)
+          return call("create_task", {
+            title: "Self task",
+            description: "Creator executes",
+            workspace: "local",
+            assignee: "   ",
+          });
         return say("done");
       }
-      if (request.last.includes("hand the review"))
-        return call("create_task", {
-          title: "Review the patch",
-          description: "Read the diff",
-          workspace: "local",
-          assignee: bea,
-        });
       return call("create_task", {
-        title: "Ship the patch",
-        description: "Do the implementation",
+        title: "Delegated task",
+        description: "Read the diff",
         workspace: "local",
+        assignee: bea,
       });
     });
     const w = await world({ ...options, models });
@@ -44,189 +55,45 @@ describe("captain assignment turn", () => {
     await w.watch(group.id);
     const captain = w.host.product.captain;
 
-    // The assignment's own turn makes a task, so the assignment stays open (working).
     const assigned = await captain.assign({
       conversationId: group.id,
-      text: "Ada, implement it.",
-      agentIds: [ada.id],
-    });
-    await w.settled(group.id, assigned.replyIds[0]!);
-    await until(
-      () =>
-        captain.store.assignment(assigned.assignment.id)!.targets[0]!.status ===
-        "working",
-    );
-    expect(captain.store.openAssignmentFor(group.id, ada.id)).toBeDefined();
-
-    // The user then asks Ada for something else: a turn the assignment did not start.
-    await w.send(group.id, "Ada, hand the review to Bea.");
-    const handed = () =>
-      w.host.db
-        .query<
-          { assignee_agent: string; captain_assignment_id: string | null },
-          [string]
-        >(
-          "SELECT assignee_agent, captain_assignment_id FROM task WHERE assignee_agent = ?",
-        )
-        .get(bea);
-    await until(() => handed() !== null && told !== "");
-    expect(told).not.toMatch(
-      /cannot set assignee during a turn bound to an active dispatch assignment/,
-    );
-    expect(told).toBe('Created task #2 "Review the patch", executed by Bea.');
-
-    // It is Bea's task, not the assignment's.
-    expect(handed()).toEqual({
-      assignee_agent: bea,
-      captain_assignment_id: null,
-    });
-  });
-
-  it("still refuses task.assignee in the turn the assignment started", async () => {
-    let heard = "";
-    let bea = "";
-    const { models } = scriptedModels((request) => {
-      if (request.agent !== "Ada") return say("ok");
-      if (request.lastRole === "toolResult") {
-        heard = request.last;
-        return say("done");
-      }
-      return call("create_task", {
-        title: "Wrong handoff",
-        description: "Must stay with the assigned agent",
-        workspace: "local",
-        assignee: bea,
-      });
-    });
-    const w = await world({ ...options, models });
-    const ada = await w.agent("Ada");
-    const other = await w.agent("Bea");
-    bea = other.id;
-    const project = await w.project();
-    const group = await w.group(project.id, [ada.id, other.id], "refused");
-    await w.watch(group.id);
-
-    const assigned = await w.host.product.captain.assign({
-      conversationId: group.id,
-      text: "Ada, make the fix.",
+      text: "Ada, coordinate with Bea and propose/create what is needed.",
       agentIds: [ada.id],
     });
     await w.settled(group.id, assigned.replyIds[0]!);
 
-    expect(heard).toBe(
-      "cannot set assignee during a turn bound to an active dispatch assignment; omit assignee so you remain both creator and executor",
+    expect(results).toHaveLength(3);
+    expect(results[0]).toBe(
+      'Created task #1 "Delegated task", executed by Bea.',
     );
-    expect(
-      w.host.db
-        .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM task")
-        .get()!.n,
-    ).toBe(0);
-  });
+    expect(results[1]).toContain("executed by Bea");
+    expect(results[2]).toBe('Created task #2 "Self task".');
 
-  it("refuses non-blank assignee on draft_task in the turn the assignment started", async () => {
-    let heard = "";
-    let bea = "";
-    const { models } = scriptedModels((request) => {
-      if (request.agent !== "Ada") return say("ok");
-      if (request.lastRole === "toolResult") {
-        heard = request.last;
-        return say("done");
-      }
-      return call("draft_task", {
-        title: "Wrong draft handoff",
-        goal: "Must stay with the assigned agent",
-        acceptance: "Never drafted",
-        workspace: "local",
-        assignee: bea,
-      });
-    });
-    const w = await world({ ...options, models });
-    const ada = await w.agent("Ada");
-    const other = await w.agent("Bea");
-    bea = other.id;
-    const project = await w.project();
-    const group = await w.group(
-      project.id,
-      [ada.id, other.id],
-      "draft-refused",
-    );
-    await w.watch(group.id);
-
-    const assigned = await w.host.product.captain.assign({
-      conversationId: group.id,
-      text: "Ada, draft the fix.",
-      agentIds: [ada.id],
-    });
-    await w.settled(group.id, assigned.replyIds[0]!);
-
-    expect(heard).toBe(
-      "cannot set assignee during a turn bound to an active dispatch assignment; omit assignee so you remain both creator and executor",
-    );
-    expect(w.rows(group.id).some((row) => row.kind === "task_draft")).toBe(
-      false,
-    );
-  });
-
-  it("normalizes blank and whitespace assignee on create_task and draft_task during an active dispatch turn", async () => {
-    const results: string[] = [];
-    const { models } = scriptedModels((request) => {
-      if (request.agent !== "Ada") return say("ok");
-      if (request.lastRole === "toolResult") {
-        results.push(request.last);
-        return results.length >= 2
-          ? say("done")
-          : call("draft_task", {
-              title: "Blank assignee draft",
-              goal: "Keep assignment provenance",
-              acceptance: "Drafted cleanly",
-              workspace: "local",
-              assignee: "   ",
-            });
-      }
-      return call("create_task", {
-        title: "Blank assignee task",
-        description: "Keep assignment provenance",
-        workspace: "local",
-        assignee: "",
-      });
-    });
-    const w = await world({ ...options, models });
-    const ada = await w.agent("Ada");
-    const project = await w.project();
-    const group = await w.group(project.id, [ada.id], "blank-assignee");
-    await w.watch(group.id);
-
-    const assigned = await w.host.product.captain.assign({
-      conversationId: group.id,
-      text: "Ada, handle both.",
-      agentIds: [ada.id],
-    });
-    await w.settled(group.id, assigned.replyIds[0]!);
-
-    expect(results).toHaveLength(2);
-    expect(results[0]).toBe('Created task #1 "Blank assignee task".');
-    expect(results[1]).not.toContain("executed by");
-
-    const taskRow = w.host.db
+    const rows = w.host.db
       .query<
-        { assignee_agent: string | null; captain_assignment_id: string | null },
+        {
+          number: number;
+          assignee_agent: string | null;
+          captain_assignment_id: string | null;
+        },
         []
       >(
-        "SELECT assignee_agent, captain_assignment_id FROM task WHERE number = 1",
+        "SELECT number, assignee_agent, captain_assignment_id FROM task ORDER BY number",
       )
-      .get();
-    expect(taskRow).toEqual({
-      assignee_agent: null,
-      captain_assignment_id: assigned.assignment.id,
-    });
+      .all();
+    expect(rows).toEqual([
+      { number: 1, assignee_agent: bea, captain_assignment_id: null },
+      { number: 2, assignee_agent: null, captain_assignment_id: null },
+    ]);
 
     const draft = w.rows(group.id).find((row) => row.kind === "task_draft")!;
-    expect(draft.data.assignee).toBeUndefined();
-    expect(draft.data.captainAssignmentId).toBe(assigned.assignment.id);
+    expect(draft.data.assignee).toBe(bea);
+    expect(draft.data.captainAssignmentId).toBeUndefined();
   });
 
-  it("shows the user a question asked in a turn the assignment did not start", async () => {
-    const { models } = scriptedModels((request) => {
+  it("shows the user a question asked in a turn an assign_in_group did not start", async () => {
+    const hold = gate();
+    const { models } = scriptedModels(async (request) => {
       if (request.agent !== "Ada") return say("ok");
       if (request.lastRole === "toolResult") return say("done");
       if (request.last.includes("which route"))
@@ -238,11 +105,8 @@ describe("captain assignment turn", () => {
           },
           "ada-question",
         );
-      return call("create_task", {
-        title: "Ship the patch",
-        description: "Do the implementation",
-        workspace: "local",
-      });
+      await hold.opened;
+      return say("Investigated.");
     });
     const w = await world({ ...options, models });
     const ada = await w.agent("Ada");
@@ -254,16 +118,16 @@ describe("captain assignment turn", () => {
 
     const assigned = await captain.assign({
       conversationId: group.id,
-      text: "Ada, implement it.",
+      text: "Ada, investigate.",
       agentIds: [ada.id],
     });
+    expect(
+      captain.store.openAssignmentFor(group.id, ada.id, assigned.replyIds[0]!),
+    ).toBeDefined();
+
+    // Release Captain's turn so Ada answers a separate user turn in the group.
+    hold.open();
     await w.settled(group.id, assigned.replyIds[0]!);
-    await until(
-      () =>
-        captain.store.assignment(assigned.assignment.id)!.targets[0]!.status ===
-        "working",
-    );
-    expect(captain.store.openAssignmentFor(group.id, ada.id)).toBeDefined();
 
     await w.send(group.id, "Ada, which route do you prefer?");
     const asked = () =>
@@ -278,84 +142,107 @@ describe("captain assignment turn", () => {
     // The user's Inbox lists it: the assignment did not start this turn.
     await until(() => inbox().some((item) => item.id === asked()!.id));
   });
-  it("keeps an assignment off the tasks a later turn makes without an assignee", async () => {
-    const told: string[] = [];
-    const { models } = scriptedModels((request) => {
-      if (request.agent !== "Ada") return say("ok");
-      if (request.lastRole === "toolResult") {
-        told.push(request.last);
-        if (request.last.includes("Unrelated own task"))
-          return call("draft_task", {
-            title: "Unrelated own draft",
-            goal: "Ada's own work",
-            acceptance: "Never the assignment's",
-            workspace: "local",
-          });
-        return say("done");
-      }
-      if (request.last.includes("for yourself"))
-        return call("create_task", {
-          title: "Unrelated own task",
-          description: "Ada's own work",
-          workspace: "local",
-        });
-      return call("create_task", {
-        title: "Ship the patch",
-        description: "Do the implementation",
-        workspace: "local",
-      });
-    });
-    const w = await world({ ...options, models });
-    const ada = await w.agent("Ada");
-    const project = await w.project();
-    const group = await w.group(project.id, [ada.id], "unbound-turn");
-    await w.watch(group.id);
-    const captain = w.host.product.captain;
 
-    const assigned = await captain.assign({
-      conversationId: group.id,
-      text: "Ada, implement it.",
-      agentIds: [ada.id],
+  it("relays ask_user from a dispatch_task run through Captain while keeping non-Captain task runs in the user's Inbox", async () => {
+    let dispatchedTitle = "";
+    const { models } = scriptedModels((request) => {
+      if (request.agent === "Captain") {
+        const field = (key: string) =>
+          new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`).exec(
+            request.transcript.join("\n"),
+          )?.[1];
+        if (request.lastRole === "toolResult") return say("Relayed.");
+        const id = field("interactionId");
+        return id === undefined
+          ? say("ok")
+          : call("relay_inbox_to_user", { interactionId: id });
+      }
+      if (request.system.includes("In this task you are")) {
+        if (request.lastRole === "toolResult") return say("waiting");
+        if (request.transcript[0]?.includes(dispatchedTitle))
+          return call(
+            "ask_user",
+            { question: "Captain question?" },
+            "cap-task-q",
+          );
+        return call("ask_user", { question: "User question?" }, "user-task-q");
+      }
+      return say("ok");
     });
-    await w.settled(group.id, assigned.replyIds[0]!);
-    await until(
-      () =>
-        captain.store.assignment(assigned.assignment.id)!.targets[0]!.status ===
-        "working",
+
+    const w = await world({ captain: true, models });
+    const ada = await w.agent("Ada");
+    const bea = await w.agent("Bea");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id, bea.id], "inbox-scope");
+    await w.watch(group.id);
+    w.client.subscribe("inbox");
+    const direct = await w.host.product.captain.direct();
+    await w.watch(direct.conversationId);
+
+    dispatchedTitle = "Captain work";
+    const dispatched = await w.host.product.captain.dispatchTask({
+      conversationId: group.id,
+      title: dispatchedTitle,
+      description: "Needs clarification",
+      assignee: ada.id,
+      workspace: "local",
+    });
+
+    // Unrelated ordinary task in the SAME group executed by Bea.
+    w.host.product.board.create(
+      {
+        title: "Ordinary work",
+        description: "Direct user ask",
+        conversationId: group.id,
+        workspace: "local",
+        assignee: bea.id,
+      },
+      { kind: "agent", agentId: ada.id },
     );
 
-    // The assignment's own turn: the task it makes is the assignment's.
-    const own = () =>
-      w.host.db
-        .query<{ captain_assignment_id: string | null }, []>(
-          "SELECT captain_assignment_id FROM task WHERE title = 'Ship the patch'",
-        )
-        .get();
-    await until(() => own() !== null);
-    expect(own()!.captain_assignment_id).toBe(assigned.assignment.id);
+    const inbox = (): InteractionView[] =>
+      w.client.section<InteractionView[]>("inbox", "list") ?? [];
 
-    // A later turn the assignment did not start: naming nobody means the agent itself,
-    // not the assignment that is still open.
-    await w.send(group.id, "Ada, also do something else for yourself.");
-    const later = () =>
-      w.host.db
-        .query<{ captain_assignment_id: string | null }, []>(
-          "SELECT captain_assignment_id FROM task WHERE title = 'Unrelated own task'",
-        )
-        .get();
-    await until(() => later() !== null);
-    await until(() => told.length >= 3);
-    expect(later()!.captain_assignment_id).toBeNull();
-    const draft = w.rows(group.id).find((row) => row.kind === "task_draft")!;
-    expect(draft.data.captainAssignmentId).toBeUndefined();
-
-    // Nor does the assignment count a task it never asked for.
+    // Bea's ordinary task question goes directly to the user's Inbox.
+    await until(() =>
+      inbox().some(
+        (item) =>
+          item.status === "pending" &&
+          item.agentId === bea.id &&
+          item.prompt === "User question?",
+      ),
+    );
+    // Ada's dispatch_task question is relayed by Captain and hidden directly as Ada's pending ask.
+    await until(() =>
+      inbox().some(
+        (item) =>
+          item.status === "pending" &&
+          item.agentId === direct.agentId &&
+          item.prompt === "Captain question?",
+      ),
+    );
     expect(
-      w.host.db
-        .query<{ task_count: number }, [string]>(
-          "SELECT task_count FROM captain_assignment_target WHERE assignment_id = ?",
-        )
-        .get(assigned.assignment.id)!.task_count,
-    ).toBe(1);
+      inbox().some(
+        (item) =>
+          item.agentId === ada.id && item.prompt === "Captain question?",
+      ),
+    ).toBe(false);
+
+    const capAsk = w.host.db
+      .query<{ id: string; session_id: string }, [string]>(
+        "SELECT id, session_id FROM interaction WHERE agent_id = ? AND prompt = 'Captain question?'",
+      )
+      .get(ada.id)!;
+    expect(
+      w.host.product.captain.assignmentForInbox({
+        id: capAsk.id,
+        sessionId: capAsk.session_id,
+        agentId: ada.id,
+        conversationId: group.id,
+      } as InteractionView),
+    ).toMatchObject({ assignmentId: dispatched.assignment.id });
+
+    void HANG;
   });
 });
