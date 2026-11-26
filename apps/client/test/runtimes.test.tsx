@@ -162,3 +162,30 @@ test("Check again asks that machine with fresh: true", async () => {
   await app.waitFor("label:OpenCode, Available");
   expect(app.texts()[0]).toContain('agents.runtimes {"fresh":true}');
 });
+
+test("a runtime that cannot run here is offered after the ones that can", async () => {
+  const app = await open("./fixtures/runtimes.tsx", {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+    urlScheme: "eta://fixture/new",
+  });
+  await app.press("label:Runtime");
+  const texts = app.texts();
+  // Each group keeps its own order: the ones that can run here (eta's own, then those the
+  // machine answers for), and under them the ones that cannot, each with its reason.
+  expect(texts.slice(texts.lastIndexOf("eta (built-in)"))).toEqual([
+    "eta (built-in)",
+    "Claude Code",
+    "Grok Build",
+    "Qwen Code",
+    "Codex",
+    "Not signed in",
+    "OpenCode",
+    "Probe timed out (30s)",
+    "Pi",
+    "Not installed",
+    "Gemini CLI",
+    "Probe failed",
+  ]);
+});
