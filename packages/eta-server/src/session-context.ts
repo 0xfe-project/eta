@@ -437,15 +437,16 @@ export async function attachSessionContext(
     project: () => spend,
     revision: () => JSON.stringify(spend),
   });
-  // The last settled generation's rate, and the one in flight timed from its first output.
-  let settled: GenerationRate | null = null;
+  // The rate of the generation in flight, timed from its first output; null until its first
+  // estimate, and the last generation's measured rate between two generations of a turn.
   let rate: GenerationRate | null = null;
   let firstOutputAt: number | undefined;
   let lastOutputAt = 0;
   let estimatedAt = 0;
   const restart = () => {
     firstOutputAt = undefined;
-    rate = settled;
+    estimatedAt = 0;
+    rate = null;
   };
   on("message:start", restart);
   on("generation:interrupted", restart);
@@ -477,14 +478,13 @@ export async function attachSessionContext(
     if (elapsed > 0) {
       // A provider that reported no output leaves the generation counted from its text.
       const output = reportedField(message.usage, "output");
-      settled = output
+      rate = output
         ? { tokensPerSec: (output * 1000) / elapsed, basis: "measured" }
         : {
             tokensPerSec: (estimateTokens(message) * 1000) / elapsed,
             basis: "estimate",
           };
     }
-    rate = settled;
   });
   session.view.contribute({
     name: "rate",
