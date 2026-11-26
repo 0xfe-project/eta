@@ -5,17 +5,29 @@ import type {
   AgentRuntimeInfo,
   AgentView,
   MachineView,
+  PluginBundledAgentView,
   PluginView,
+  ThinkingLevel,
 } from "@eta/client-contracts";
 import type { ScrollRef } from "nsh";
+import type { ImportedBotDraft, LocalBotSourceKind } from "./local-import";
 import type { AgentTemplate } from "./template";
-import { AGENT_RUNTIMES } from "@eta/client-contracts";
-import { cleanup, computed, effect, signal, untracked, View } from "nsh";
+import { AGENT_RUNTIMES, THINKING_LEVELS } from "@eta/client-contracts";
+import {
+  cleanup,
+  computed,
+  effect,
+  Picker,
+  signal,
+  untracked,
+  View,
+} from "nsh";
 import {
   ActionItem,
   ActionMenu,
   Button,
   colors,
+  dialogWidth,
   Field,
   grow,
   Label,
@@ -51,6 +63,7 @@ import {
 } from "../settings/runtimes/status";
 import { StatusLine, WarningLine } from "../settings/section";
 import { templates, templateSource } from "./catalog";
+import { LOCAL_BOT_MAX_BYTES, parseLocalBot } from "./local-import";
 import {
   fillTemplate,
   findTemplates,
@@ -71,6 +84,8 @@ const galleryListWidth = 300;
 const phoneBarHeight = 48;
 /** The editable instructions box height when customizing before import. */
 const instructionsEditorHeight = 200;
+/** Multiline paste input height in the local import dialog. */
+const pasteInputHeight = 200;
 /** Agent name length cap matching AgentGeneral. */
 const agentNameLimit = 100;
 /** Instructions length cap matching AgentInstructions. */
@@ -78,11 +93,46 @@ const agentInstructionsLimit = 10_000;
 /** Width of the runtime picker menu, matching AgentGeneral. */
 const runtimeMenuWidth = 260;
 
+const PLUGIN_AGENTS_CATEGORY = "From plugins";
+const LOCAL_CATEGORY = "Local";
+
+interface GalleryEntry {
+  template: AgentTemplate;
+  kind: "catalog" | "plugin" | "local";
+  pluginName?: string;
+  draft?: ImportedBotDraft;
+}
+
+/** Convert a plugin-bundled agent definition into an `ImportedBotDraft` for `TemplateGallery`. */
+export function pluginBundledAgentDraft(
+  pluginName: string,
+  agent: PluginBundledAgentView,
+): ImportedBotDraft {
+  return {
+    sourceKind: "markdown-agent",
+    filename: agent.path,
+    template: {
+      id: `plugin:${pluginName}:${agent.id}`,
+      name: agent.name,
+      category: PLUGIN_AGENTS_CATEGORY,
+      summary: agent.description,
+      owns: [],
+      doesNotOwn: [],
+      needsApproval: [],
+      instructions: agent.instructions,
+      recommendedPlugins: [pluginName],
+    },
+    plugins: [pluginName],
+  };
+}
+
 export interface TemplateGalleryProps {
   phone: boolean;
   tablet?: boolean;
   /** The template to open on, instead of the first in the list. */
   initialId?: string;
+  /** A pre-loaded local or plugin-bundled bot draft to open directly on. */
+  initialDraft?: ImportedBotDraft;
   onClose: () => void;
   /** The agent made from a template. */
   onCreated: (agent: AgentView) => void;
@@ -93,8 +143,62 @@ export interface TemplateGalleryProps {
   onOpenPlugins?: (plugin?: string) => void;
 }
 
-const categoryName = (category: string) =>
-  localizedText(category, templateCategories[category] ?? category);
+const categoryName = (category: string) => {
+  if (category === PLUGIN_AGENTS_CATEGORY)
+    return localizedText("From plugins", "来自插件");
+  if (category === LOCAL_CATEGORY)
+    return localizedText("Local import", "本地导入");
+  return localizedText(category, templateCategories[category] ?? category);
+};
+
+const sourceKindLabel = (kind: LocalBotSourceKind) => {
+  switch (kind) {
+    case "json":
+      return "JSON";
+    case "yaml":
+      return "YAML";
+    case "markdown-agent":
+      return "Markdown";
+    case "role-card":
+      return localizedText("Role card", "角色卡");
+  }
+};
+
+function entryFromDraft(draft: ImportedBotDraft): GalleryEntry {
+  const pluginName =
+    draft.template.category === PLUGIN_AGENTS_CATEGORY
+      ? draft.plugins?.[0]
+      : undefined;
+  return pluginName
+    ? { template: draft.template, kind: "plugin", pluginName, draft }
+    : { template: draft.template, kind: "local", draft };
+}
+
+function usesTemplatePlaceholders(entry: GalleryEntry): boolean {
+  return entry.kind === "catalog" || entry.draft?.sourceKind === "role-card";
+}
+
+function matchesEntry(
+  entry: GalleryEntry,
+  q: string,
+  cat: string | undefined,
+): boolean {
+  if (cat && entry.template.category !== cat) return false;
+  if (!q.trim()) return true;
+  if (findTemplates([entry.template], q, cat).length > 0) return true;
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const haystack = [
+    entry.template.name,
+    entry.template.summary,
+    entry.template.category,
+    categoryName(entry.template.category),
+    entry.pluginName ?? "",
+    entry.draft?.filename ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+  return words.every((word) => haystack.includes(word));
+}
 
 const builtinRuntimeLabels: Record<string, string> = {
   claude: "Claude Code",
@@ -106,11 +210,12 @@ const builtinRuntimeLabels: Record<string, string> = {
 };
 
 /**
- * Agents to start from: the role cards of the bundled catalog, searched and filtered by category.
- * One opens to what it owns, what it leaves alone, what it asks first and the instructions it
- * gives, which the reader reads (and may edit) before anything is made; Import makes the agent
- * with those instructions, its name in place of `{NAME}`, the other placeholders filled in,
- * atomic `avatarSeed`, runtime/model selection, and any chosen plugins.
+ * Agents to start from: the role cards of the bundled catalog, plugin-bundled agents, and local
+ * bot definitions (file or paste), searched and filtered by category. One opens to what it owns,
+ * what it leaves alone, what it asks first and the instructions it gives, which the reader reads
+ * (and may edit) before anything is made; Import makes the agent with those instructions, its name
+ * in place of `{NAME}`, the other placeholders filled in, atomic `avatarSeed`, runtime/model
+ * selection, and any chosen plugins.
  */
 export function TemplateGallery(props: TemplateGalleryProps) {
   const c = colors();
@@ -127,10 +232,19 @@ export function TemplateGallery(props: TemplateGalleryProps) {
 
   const query = signal("");
   const category = signal<string | undefined>(undefined);
-  const known = templates.some((template) => template.id === props.initialId);
-  const chosenId = signal<string | undefined>(
-    known ? props.initialId : undefined,
+  const importedDrafts = signal<ImportedBotDraft[]>(
+    props.initialDraft ? [props.initialDraft] : [],
   );
+  const initialSelectedId = () => {
+    if (props.initialDraft) return props.initialDraft.template.id;
+    if (
+      props.initialId &&
+      templates.some((template) => template.id === props.initialId)
+    )
+      return props.initialId;
+    return undefined;
+  };
+  const chosenId = signal<string | undefined>(initialSelectedId());
   const name = signal("");
   const values = signal<Record<string, string>>({});
   const instructionsOverride = signal<string | undefined>(undefined);
@@ -138,7 +252,11 @@ export function TemplateGallery(props: TemplateGalleryProps) {
   const runtime = signal<AgentRuntime>("eta");
   const machineId = signal<string | null>(null);
   const model = signal("");
+  const thinkingLevel = signal<ThinkingLevel | null>(null);
+  const persona = signal("");
   const selectedPlugins = signal<string[]>([]);
+  /** Requested plugins from a draft not yet seen in `installedPlugins`; auto-ticked if ready on arrival. */
+  const pendingPlugins = signal<string[]>([]);
   const installedRuntimes = signal<AgentRuntimeInfo[] | null | undefined>(
     undefined,
   );
@@ -148,23 +266,73 @@ export function TemplateGallery(props: TemplateGalleryProps) {
   const autoSelectPlugin = signal<string | undefined>(undefined);
   const busy = signal(false);
   const error = signal("");
-
-  const shown = computed(() => findTemplates(templates, query(), category()));
-  const chosen = computed(() => {
-    const id = chosenId();
-    const list = shown();
-    // Resolve within the filtered list so searching/switching category never strands a hidden card.
-    return (
-      list.find((template) => template.id === id) ??
-      (props.phone ? undefined : list[0])
-    );
-  });
+  const importError = signal("");
+  const pasteOpen = signal(false);
+  const pasteFilename = signal("");
+  const pasteText = signal("");
+  const pasteError = signal("");
 
   const installedPlugins = () => host.list<PluginView>("plugins");
   const configuringItem = () =>
     installedPlugins().find((item) => item.name === configuringPlugin());
   const serversItem = () =>
     installedPlugins().find((item) => item.name === serversPlugin());
+
+  const pluginEntries = computed<GalleryEntry[]>(() =>
+    installedPlugins().flatMap((plugin) =>
+      (plugin.bundledAgents ?? []).map((agent) => {
+        const draft = pluginBundledAgentDraft(plugin.name, agent);
+        return {
+          template: draft.template,
+          kind: "plugin" as const,
+          pluginName: plugin.name,
+          draft,
+        };
+      }),
+    ),
+  );
+
+  const allEntries = computed<GalleryEntry[]>(() => {
+    const seen = new Set<string>();
+    const out: GalleryEntry[] = [];
+    const pushUnique = (entry: GalleryEntry) => {
+      if (seen.has(entry.template.id)) return;
+      seen.add(entry.template.id);
+      out.push(entry);
+    };
+    for (const draft of importedDrafts()) pushUnique(entryFromDraft(draft));
+    for (const entry of pluginEntries()) pushUnique(entry);
+    for (const template of templates) pushUnique({ template, kind: "catalog" });
+    return out;
+  });
+
+  const filterCategories = computed(() => {
+    const entries = allEntries();
+    const hasLocal = entries.some(
+      (entry) => entry.template.category === LOCAL_CATEGORY,
+    );
+    const hasPlugin = entries.some(
+      (entry) => entry.template.category === PLUGIN_AGENTS_CATEGORY,
+    );
+    return [
+      ...(hasLocal ? [LOCAL_CATEGORY] : []),
+      ...(hasPlugin ? [PLUGIN_AGENTS_CATEGORY] : []),
+      ...Object.keys(templateCategories),
+    ];
+  });
+
+  const shown = computed(() =>
+    allEntries().filter((entry) => matchesEntry(entry, query(), category())),
+  );
+  const chosen = computed(() => {
+    const id = chosenId();
+    const list = shown();
+    // Resolve within the filtered list so searching/switching category never strands a hidden card.
+    return (
+      list.find((entry) => entry.template.id === id) ??
+      (props.phone ? undefined : list[0])
+    );
+  });
 
   const machines = () =>
     host
@@ -242,24 +410,89 @@ export function TemplateGallery(props: TemplateGalleryProps) {
     return Boolean(typed) && existingNames().has(typed.toLowerCase());
   }
 
-  function renderedInstructions(template: AgentTemplate): string {
-    return (
-      instructionsOverride() ??
-      fillTemplate(template.instructions, effectiveName(template), values())
+  function renderedInstructions(entry: GalleryEntry): string {
+    const override = instructionsOverride();
+    if (override !== undefined) return override;
+    if (!usesTemplatePlaceholders(entry)) return entry.template.instructions;
+    return fillTemplate(
+      entry.template.instructions,
+      effectiveName(entry.template),
+      values(),
     );
   }
 
-  function resetDraft(id: string | undefined) {
-    chosenId.set(id);
-    name.set("");
+  function readyPluginNames(): Set<string> {
+    const ready = new Set<string>();
+    for (const item of installedPlugins()) {
+      if (item.enabled && item.state === "ready") ready.add(item.name);
+    }
+    for (const item of composio.list()) {
+      if (item.enabled && item.state === "ready") ready.add(item.name);
+    }
+    return ready;
+  }
+
+  function requestedPluginsOf(entry: GalleryEntry): string[] {
+    if (entry.draft?.plugins?.length) return entry.draft.plugins;
+    if (entry.pluginName) return [entry.pluginName];
+    return [];
+  }
+
+  let appliedId: string | undefined;
+
+  function applyEntry(entry: GalleryEntry) {
+    const draft = entry.draft;
+    const nextRuntime: AgentRuntime = draft?.runtime ?? "eta";
+    const rawModel = draft?.model ?? "";
+    const nextModel =
+      nextRuntime !== "eta" && rawModel && !rawModel.includes(":")
+        ? `${nextRuntime}:${rawModel}`
+        : rawModel;
+    const requested = requestedPluginsOf(entry);
+    const ready = readyPluginNames();
+    const preselected = requested.filter((item) => ready.has(item));
+    const installedNames = new Set([
+      ...installedPlugins().map((item) => item.name),
+      ...composio.list().map((item) => item.name),
+    ]);
+    const waiting = requested.filter(
+      (item) => !ready.has(item) && !installedNames.has(item),
+    );
+
+    appliedId = entry.template.id;
+    chosenId.set(entry.template.id);
+    name.set(entry.kind === "catalog" ? "" : entry.template.name);
     values.set({});
     instructionsOverride.set(undefined);
     editingInstructions.set(false);
+    runtime.set(nextRuntime);
+    model.set(nextModel);
+    thinkingLevel.set(draft?.thinkingLevel ?? null);
+    machineId.set(draft?.machineId ?? null);
+    persona.set(draft?.persona ?? "");
+    selectedPlugins.set([...new Set(preselected)]);
+    pendingPlugins.set([...new Set(waiting)]);
+    autoSelectPlugin.set(undefined);
     error.set("");
   }
 
-  function choose(template: AgentTemplate) {
-    resetDraft(template.id);
+  function choose(entry: GalleryEntry) {
+    applyEntry(entry);
+  }
+
+  function loadDraft(draft: ImportedBotDraft) {
+    importedDrafts.update((list) => [
+      draft,
+      ...list.filter((item) => item.template.id !== draft.template.id),
+    ]);
+    const entry = entryFromDraft(draft);
+    if (!matchesEntry(entry, untracked(query), untracked(category))) {
+      query.set("");
+      category.set(undefined);
+    }
+    importError.set("");
+    applyEntry(entry);
+    reveal(entry.template.id);
   }
 
   function chooseRuntime(next: AgentRuntime) {
@@ -274,6 +507,73 @@ export function TemplateGallery(props: TemplateGalleryProps) {
       configuringPlugin.set(item.name);
     else serversPlugin.set(item.name);
   }
+
+  async function pickLocalBotFile() {
+    importError.set("");
+    try {
+      const chosenFiles = await Picker.pickFiles({
+        multiple: false,
+        filters: [
+          {
+            name: localizedText("Bot files", "智能体文件"),
+            extensions: ["md", "markdown", "yaml", "yml", "json"],
+          },
+        ],
+        maxSize: LOCAL_BOT_MAX_BYTES,
+      });
+      const item = chosenFiles[0];
+      if (!item) return;
+      if (item.status === "tooLarge" || !item.file) {
+        importError.set(
+          localizedText(
+            `File "${item.name}" exceeds the ${LOCAL_BOT_MAX_BYTES / 1024} KiB limit.`,
+            `文件“${item.name}”超过 ${LOCAL_BOT_MAX_BYTES / 1024} KiB 限制。`,
+          ),
+        );
+        return;
+      }
+      const text = await item.file.text();
+      const parsed = parseLocalBot(text, item.name);
+      if (!parsed.ok) {
+        importError.set(parsed.error);
+        return;
+      }
+      loadDraft(parsed.draft);
+    } catch (cause) {
+      importError.set(problemText(cause));
+    }
+  }
+
+  function closePaste() {
+    pasteOpen.set(false);
+    pasteFilename.set("");
+    pasteText.set("");
+    pasteError.set("");
+  }
+
+  function submitPaste() {
+    const parsed = parseLocalBot(
+      pasteText(),
+      pasteFilename().trim() || undefined,
+    );
+    if (!parsed.ok) {
+      pasteError.set(parsed.error);
+      return;
+    }
+    closePaste();
+    loadDraft(parsed.draft);
+  }
+
+  // Keep form fields synced whenever the active chosen entry changes (e.g. initial open or filter change).
+  effect(() => {
+    const current = chosen();
+    if (!current) {
+      appliedId = undefined;
+      return;
+    }
+    if (current.template.id === appliedId) return;
+    untracked(() => applyEntry(current));
+  });
 
   // Probe external runtimes when the host supports it.
   effect(() => {
@@ -297,6 +597,35 @@ export function TemplateGallery(props: TemplateGalleryProps) {
     );
   });
 
+  // Auto-select pending requested plugins once the host's plugins list arrives and they are ready.
+  effect(() => {
+    const waiting = pendingPlugins();
+    if (!waiting.length) return;
+    const list = installedPlugins();
+    const comp = runtime() === "eta" ? composio.list() : [];
+    if (!list.length && !comp.length) return;
+    const remaining: string[] = [];
+    const toSelect: string[] = [];
+    for (const pluginName of waiting) {
+      const found =
+        list.find((item) => item.name === pluginName) ??
+        comp.find((item) => item.name === pluginName);
+      if (!found) {
+        remaining.push(pluginName);
+      } else if (found.enabled && found.state === "ready") {
+        toSelect.push(pluginName);
+      }
+    }
+    if (toSelect.length) {
+      selectedPlugins.update((current) => [
+        ...new Set([...current, ...toSelect]),
+      ]);
+    }
+    if (remaining.length !== waiting.length) {
+      pendingPlugins.set(remaining);
+    }
+  });
+
   // Auto-select a plugin once the user finishes configuring it inline and it becomes ready.
   effect(() => {
     const pending = autoSelectPlugin();
@@ -314,7 +643,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
   /** Bring `id` into the list's view (rows are `rowHeight` tall). */
   function reveal(id: string | undefined) {
     if (!id) return;
-    const index = shown().findIndex((template) => template.id === id);
+    const index = shown().findIndex((entry) => entry.template.id === id);
     if (index > 2)
       listScroll?.scrollTo({ y: (index - 2) * rowHeight, animated: false });
     else if (index >= 0) listScroll?.scrollTo({ y: 0, animated: false });
@@ -326,21 +655,31 @@ export function TemplateGallery(props: TemplateGalleryProps) {
     const next = props.initialId;
     if (next === lastInitial) return;
     lastInitial = next;
-    if (!next || !templates.some((template) => template.id === next)) return;
-    const visible = findTemplates(
-      templates,
-      untracked(query),
-      untracked(category),
-    ).some((template) => template.id === next);
-    if (!visible) {
+    if (!next) return;
+    const match = untracked(allEntries).find(
+      (entry) => entry.template.id === next,
+    );
+    if (!match) return;
+    if (!matchesEntry(match, untracked(query), untracked(category))) {
       query.set("");
       category.set(undefined);
     }
-    resetDraft(next);
+    applyEntry(match);
     reveal(next);
   });
 
-  async function create(template: AgentTemplate) {
+  // Reactively load when a new `initialDraft` prop arrives while the gallery is open.
+  let lastInitialDraft = props.initialDraft;
+  effect(() => {
+    const next = props.initialDraft;
+    if (next === lastInitialDraft) return;
+    lastInitialDraft = next;
+    if (!next) return;
+    untracked(() => loadDraft(next));
+  });
+
+  async function create(entry: GalleryEntry) {
+    const template = entry.template;
     const agentName = effectiveName(template);
     if (!canCreate()) return;
     busy.set(true);
@@ -356,12 +695,18 @@ export function TemplateGallery(props: TemplateGalleryProps) {
               ? rawModel
               : `${chosenRuntime}:${rawModel}`
             : null;
-      const plugins = selectedPlugins();
+      const ready = readyPluginNames();
+      const plugins = selectedPlugins().filter((pluginName) =>
+        ready.has(pluginName),
+      );
+      const trimmedPersona = persona().trim();
       const args: AgentArgs["create"] = {
         name: agentName,
-        instructions: renderedInstructions(template),
+        instructions: renderedInstructions(entry),
         model: finalModel,
         ...(chosenRuntime !== "eta" ? { runtime: chosenRuntime } : {}),
+        ...(trimmedPersona ? { persona: trimmedPersona } : {}),
+        ...(thinkingLevel() ? { thinkingLevel: thinkingLevel() } : {}),
         ...(machineId() ? { machineId: machineId() } : {}),
         ...(plugins.length ? { plugins } : {}),
         avatarSeed: template.id,
@@ -403,6 +748,32 @@ export function TemplateGallery(props: TemplateGalleryProps) {
           onChange={(value) => query.set(value)}
           style={fieldStyle()}
         />
+        <View style={{ ...row, gap: space[4] }}>
+          <Button
+            label={localizedText("Import file", "导入文件")}
+            icon="file"
+            tone="ghost"
+            size={control.sm}
+            style={{ gap: space[4], paddingHorizontal: space[8] }}
+            onPress={() => void pickLocalBotFile()}
+          />
+          <Button
+            label={localizedText("Paste", "粘贴")}
+            icon="copy"
+            tone="ghost"
+            size={control.sm}
+            style={{ gap: space[4], paddingHorizontal: space[8] }}
+            onPress={() => {
+              pasteError.set("");
+              pasteOpen.set(true);
+            }}
+          />
+        </View>
+        <If when={importError()}>
+          <Label variant="caption" tone="red">
+            {importError()}
+          </Label>
+        </If>
         <View style={{ ...row, flexWrap: "wrap", gap: space[4] }}>
           <Button
             label={localizedText("All", "全部")}
@@ -412,7 +783,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
             style={{ paddingHorizontal: space[8] }}
             onPress={() => category.set(undefined)}
           />
-          <Each of={Object.keys(templateCategories)} key={(item) => item}>
+          <Each of={filterCategories()} key={(item) => item}>
             {(item) => (
               <Button
                 label={categoryName(item())}
@@ -431,12 +802,25 @@ export function TemplateGallery(props: TemplateGalleryProps) {
     );
   }
 
+  function listRowSubtitle(entry: GalleryEntry): string {
+    if (entry.kind === "plugin" && entry.pluginName) {
+      return `${localizedText("Plugin", "插件")} · ${entry.pluginName}`;
+    }
+    if (entry.kind === "local" && entry.draft) {
+      const badge = sourceKindLabel(entry.draft.sourceKind);
+      return entry.draft.filename
+        ? `${badge} · ${entry.draft.filename}`
+        : badge;
+    }
+    return categoryName(entry.template.category);
+  }
+
   function list() {
     return (
       <SmoothScroll
         ref={(node) => {
           listScroll = node;
-          reveal(props.initialId);
+          reveal(props.initialDraft?.template.id ?? props.initialId);
         }}
         style={grow}
         contentStyle={{ paddingVertical: space[4] }}
@@ -449,16 +833,16 @@ export function TemplateGallery(props: TemplateGalleryProps) {
             </Label>
           }
         >
-          <Each of={shown()} key={(template) => template.id}>
-            {(template) => (
+          <Each of={shown()} key={(entry) => entry.template.id}>
+            {(entry) => (
               <View
                 role="button"
-                testID={`template:${template().id}`}
-                accessibilityLabel={template().name}
+                testID={`template:${entry().template.id}`}
+                accessibilityLabel={entry().template.name}
                 accessibilityState={{
-                  selected: chosen()?.id === template().id,
+                  selected: chosen()?.template.id === entry().template.id,
                 }}
-                onPress={() => choose(template())}
+                onPress={() => choose(entry())}
                 hoverStyle={{ backgroundColor: c().surface }}
                 style={{
                   ...row,
@@ -466,17 +850,19 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                   gap: space[12],
                   paddingHorizontal: space[12],
                   backgroundColor:
-                    chosen()?.id === template().id ? c().selected : undefined,
+                    chosen()?.template.id === entry().template.id
+                      ? c().selected
+                      : undefined,
                   cursor: "pointer",
                 }}
               >
-                <AgentFace id={template().id} size={avatar.md} />
+                <AgentFace id={entry().template.id} size={avatar.md} />
                 <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                   <Label variant="small" weight={500} lines={1}>
-                    {template().name}
+                    {entry().template.name}
                   </Label>
                   <Label variant="caption" tone="muted" lines={1}>
-                    {categoryName(template().category)}
+                    {listRowSubtitle(entry())}
                   </Label>
                 </View>
               </View>
@@ -508,16 +894,33 @@ export function TemplateGallery(props: TemplateGalleryProps) {
     );
   }
 
-  function pluginsSection(template: AgentTemplate) {
+  function pluginsSection(entry: GalleryEntry) {
+    const template = entry.template;
+    const requested = requestedPluginsOf(entry);
+    const requestedSet = new Set(requested);
     const integrations = inferredIntegrations(template);
     const composioVisible = () => composio.list();
     const totalAvailable = () =>
       installedPlugins().length + composioVisible().length;
+    const isRequested = (pluginName: string) => requestedSet.has(pluginName);
     const isRecommended = (pluginName: string) =>
+      isRequested(pluginName) ||
       integrations.some((slug) => pluginMatchesIntegration(pluginName, slug));
-    const missingIntegrations = () =>
-      integrations.filter(
+    const rankOf = (pluginName: string) =>
+      isRequested(pluginName) ? 2 : isRecommended(pluginName) ? 1 : 0;
+    const missingRequested = () =>
+      requested.filter(
+        (pluginName) =>
+          !installedPlugins().some((item) => item.name === pluginName) &&
+          !composioVisible().some((item) => item.name === pluginName),
+      );
+    const missingIntegrations = () => {
+      const missingReqLower = new Set(
+        missingRequested().map((item) => item.toLowerCase()),
+      );
+      return integrations.filter(
         (slug) =>
+          !missingReqLower.has(slug.toLowerCase()) &&
           !installedPlugins().some((item) =>
             pluginMatchesIntegration(item.name, slug),
           ) &&
@@ -525,17 +928,15 @@ export function TemplateGallery(props: TemplateGalleryProps) {
             pluginMatchesIntegration(item.name, slug),
           ),
       );
+    };
     const sortedInstalled = () =>
-      [...installedPlugins()].sort(
-        (a, b) => Number(isRecommended(b.name)) - Number(isRecommended(a.name)),
-      );
+      [...installedPlugins()].sort((a, b) => rankOf(b.name) - rankOf(a.name));
     const sortedComposio = () =>
-      [...composioVisible()].sort(
-        (a, b) => Number(isRecommended(b.name)) - Number(isRecommended(a.name)),
-      );
+      [...composioVisible()].sort((a, b) => rankOf(b.name) - rankOf(a.name));
     const showSection = () =>
       totalAvailable() > 0 ||
       integrations.length > 0 ||
+      requested.length > 0 ||
       Boolean(props.onOpenMarket);
 
     return (
@@ -555,6 +956,14 @@ export function TemplateGallery(props: TemplateGalleryProps) {
               />
             </If>
           </View>
+          <If when={missingRequested().length}>
+            <WarningLine
+              text={localizedText(
+                `Not installed: ${missingRequested().join(", ")}`,
+                `未安装插件：${missingRequested().join("、")}`,
+              )}
+            />
+          </If>
           <If when={missingIntegrations().length}>
             <Label variant="caption" tone="muted">
               {localizedText(
@@ -578,7 +987,14 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                     item().enabled && item().state === "ready";
                   const needsSetup = () =>
                     item().enabled && item().state === "needs_config";
-                  const recommended = () => isRecommended(item().name);
+                  const badge = () =>
+                    entry.pluginName === item().name
+                      ? localizedText("Parent plugin", "所属插件")
+                      : isRequested(item().name)
+                        ? localizedText("From config", "配置指定")
+                        : isRecommended(item().name)
+                          ? localizedText("Recommended", "推荐")
+                          : "";
                   return (
                     <View
                       style={{
@@ -601,7 +1017,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                             enabled
                               ? [...new Set([...current, item().name])]
                               : current.filter(
-                                  (entry) => entry !== item().name,
+                                  (existing) => existing !== item().name,
                                 ),
                           )
                         }
@@ -621,9 +1037,9 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                             <Label variant="small" lines={1}>
                               {item().name}
                             </Label>
-                            <If when={recommended()}>
+                            <If when={badge()}>
                               <Label variant="caption" tone="muted">
-                                {localizedText("Recommended", "推荐")}
+                                {badge()}
                               </Label>
                             </If>
                           </View>
@@ -664,7 +1080,12 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                     item().enabled &&
                     item().state === "ready" &&
                     runtime() === "eta";
-                  const recommended = () => isRecommended(item().name);
+                  const badge = () =>
+                    isRequested(item().name)
+                      ? localizedText("From config", "配置指定")
+                      : isRecommended(item().name)
+                        ? localizedText("Recommended", "推荐")
+                        : "";
                   return (
                     <CheckControl
                       label={item().name}
@@ -674,7 +1095,9 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                         selectedPlugins.update((current) =>
                           enabled
                             ? [...new Set([...current, item().name])]
-                            : current.filter((entry) => entry !== item().name),
+                            : current.filter(
+                                (existing) => existing !== item().name,
+                              ),
                         )
                       }
                       size={icon.md}
@@ -696,9 +1119,9 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                           <Label variant="small" lines={1}>
                             {item().name}
                           </Label>
-                          <If when={recommended()}>
+                          <If when={badge()}>
                             <Label variant="caption" tone="muted">
-                              {localizedText("Recommended", "推荐")}
+                              {badge()}
                             </Label>
                           </If>
                         </View>
@@ -717,8 +1140,60 @@ export function TemplateGallery(props: TemplateGalleryProps) {
     );
   }
 
-  function detail(template: AgentTemplate) {
-    const placeholders = placeholdersOf(template.instructions);
+  function detailBadge(entry: GalleryEntry): string | undefined {
+    if (entry.kind === "plugin" && entry.pluginName) return entry.pluginName;
+    if (entry.kind === "local" && entry.draft)
+      return sourceKindLabel(entry.draft.sourceKind);
+    return undefined;
+  }
+
+  function detailSubtitle(entry: GalleryEntry): string {
+    const template = entry.template;
+    if (entry.kind === "plugin" && entry.pluginName) {
+      return entry.draft?.filename
+        ? `${localizedText("From plugin", "来自插件")} ${entry.pluginName} · ${entry.draft.filename}`
+        : `${localizedText("From plugin", "来自插件")} ${entry.pluginName}`;
+    }
+    if (entry.kind === "local" && entry.draft) {
+      return entry.draft.filename
+        ? `${categoryName(template.category)} · ${entry.draft.filename}`
+        : categoryName(template.category);
+    }
+    return template.note
+      ? `${categoryName(template.category)} · ${template.note}`
+      : categoryName(template.category);
+  }
+
+  function footerAttribution(entry: GalleryEntry): string {
+    if (entry.kind === "plugin" && entry.pluginName) {
+      return localizedText(
+        `Bundled with plugin ${entry.pluginName}`,
+        `随插件 ${entry.pluginName} 提供`,
+      );
+    }
+    if (entry.kind === "local" && entry.draft) {
+      return entry.draft.filename
+        ? localizedText(
+            `Local file · ${entry.draft.filename}`,
+            `本地文件 · ${entry.draft.filename}`,
+          )
+        : localizedText(
+            `Imported locally · ${sourceKindLabel(entry.draft.sourceKind)}`,
+            `本地导入 · ${sourceKindLabel(entry.draft.sourceKind)}`,
+          );
+    }
+    return localizedText(
+      `From ${templateSource.repo} · ${templateSource.license}`,
+      `来自 ${templateSource.repo} · ${templateSource.license}`,
+    );
+  }
+
+  function detail(entry: GalleryEntry) {
+    const template = entry.template;
+    const placeholders = usesTemplatePlaceholders(entry)
+      ? placeholdersOf(template.instructions)
+      : [];
+    const badge = detailBadge(entry);
     return (
       <SmoothScroll
         style={grow}
@@ -727,17 +1202,34 @@ export function TemplateGallery(props: TemplateGalleryProps) {
         <View style={{ ...row, gap: space[12] }}>
           <AgentFace id={template.id} size={avatar.xl} />
           <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-            <Label variant="subtitle" weight={weight.strong}>
-              {template.name}
-            </Label>
+            <View style={{ ...row, flexWrap: "wrap", gap: space[8] }}>
+              <Label variant="subtitle" weight={weight.strong}>
+                {template.name}
+              </Label>
+              <If when={badge}>
+                <View
+                  style={{
+                    paddingHorizontal: space[8],
+                    paddingVertical: space[2],
+                    borderWidth: 1,
+                    borderColor: c().border,
+                    backgroundColor: c().surface,
+                  }}
+                >
+                  <Label variant="caption" tone="muted">
+                    {badge}
+                  </Label>
+                </View>
+              </If>
+            </View>
             <Label variant="small" tone="muted">
-              {template.note
-                ? `${categoryName(template.category)} · ${template.note}`
-                : categoryName(template.category)}
+              {detailSubtitle(entry)}
             </Label>
           </View>
         </View>
-        <Label variant="small">{template.summary}</Label>
+        <If when={template.summary}>
+          <Label variant="small">{template.summary}</Label>
+        </If>
         {points(localizedText("Owns", "负责"), template.owns, template)}
         {points(
           localizedText("Leaves alone", "不负责"),
@@ -787,7 +1279,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                   backgroundColor: c().surface,
                 }}
               >
-                <Markdown dense value={renderedInstructions(template)} />
+                <Markdown dense value={renderedInstructions(entry)} />
               </View>
             }
           >
@@ -795,7 +1287,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
               label={localizedText("Instructions it gets", "它会拿到的指令")}
               multiline
               maxLength={agentInstructionsLimit}
-              value={renderedInstructions(template)}
+              value={renderedInstructions(entry)}
               onChange={(value) => instructionsOverride.set(value)}
               style={{
                 height: instructionsEditorHeight,
@@ -865,7 +1357,18 @@ export function TemplateGallery(props: TemplateGalleryProps) {
               )}
             </Each>
           </If>
-          <If when={machines().length > 1}>
+          <If when={Boolean(entry.draft?.persona || persona())}>
+            <Label variant="small" weight={weight.strong}>
+              {localizedText("Persona", "人设")}
+            </Label>
+            <Field
+              label={localizedText("Persona", "人设")}
+              value={persona()}
+              onChange={(value) => persona.set(value)}
+              style={fieldStyle()}
+            />
+          </If>
+          <If when={machines().length > 1 || Boolean(machineId())}>
             <Label variant="small" weight={weight.strong}>
               {uiText("runsOn")}
             </Label>
@@ -873,6 +1376,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
               label={uiText("runsOn")}
               value={
                 machines().find((item) => item.id === machineId())?.name ??
+                machineId() ??
                 uiText("followProject")
               }
               triggerStyle={fieldStyle()}
@@ -940,7 +1444,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                   label={uiText("model")}
                   value={
                     externalRuntime()?.models.find(
-                      (entry) => `${runtime()}:${entry.id}` === model(),
+                      (item) => `${runtime()}:${item.id}` === model(),
                     )?.name ||
                     model() ||
                     uiText("runtimeDefault")
@@ -954,13 +1458,13 @@ export function TemplateGallery(props: TemplateGalleryProps) {
                   />
                   <Each
                     of={externalRuntime()?.models ?? []}
-                    key={(entry) => entry.id}
+                    key={(item) => item.id}
                   >
-                    {(entry) => (
+                    {(item) => (
                       <ActionItem
-                        label={entry().name}
-                        checked={`${runtime()}:${entry().id}` === model()}
-                        onSelect={() => model.set(`${runtime()}:${entry().id}`)}
+                        label={item().name}
+                        checked={`${runtime()}:${item().id}` === model()}
+                        onSelect={() => model.set(`${runtime()}:${item().id}`)}
                       />
                     )}
                   </Each>
@@ -999,7 +1503,32 @@ export function TemplateGallery(props: TemplateGalleryProps) {
               <ModelSelect value={chosenModel()} onChange={model.set} />
             </If>
           </If>
-          {pluginsSection(template)}
+          <If when={Boolean(entry.draft?.thinkingLevel || thinkingLevel())}>
+            <Label variant="small" weight={weight.strong}>
+              {localizedText("Thinking level", "思考深度")}
+            </Label>
+            <ActionMenu
+              label={localizedText("Thinking level", "思考深度")}
+              value={thinkingLevel() ?? localizedText("Default", "默认")}
+              triggerStyle={fieldStyle()}
+            >
+              <ActionItem
+                label={localizedText("Default", "默认")}
+                checked={!thinkingLevel()}
+                onSelect={() => thinkingLevel.set(null)}
+              />
+              <Each of={THINKING_LEVELS}>
+                {(level) => (
+                  <ActionItem
+                    label={level()}
+                    checked={thinkingLevel() === level()}
+                    onSelect={() => thinkingLevel.set(level())}
+                  />
+                )}
+              </Each>
+            </ActionMenu>
+          </If>
+          {pluginsSection(entry)}
           <If when={error()}>
             <Label variant="small" tone="red">
               {error()}
@@ -1007,10 +1536,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
           </If>
           <View style={{ ...row, gap: space[8] }}>
             <Label variant="caption" tone="muted" style={{ flex: 1 }}>
-              {localizedText(
-                `From ${templateSource.repo} · ${templateSource.license}`,
-                `来自 ${templateSource.repo} · ${templateSource.license}`,
-              )}
+              {footerAttribution(entry)}
             </Label>
             <Button
               label={
@@ -1022,7 +1548,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
               size={props.phone ? control.touch : control.md}
               disabled={!canCreate()}
               style={{ paddingHorizontal: space[12] }}
-              onPress={() => void create(template)}
+              onPress={() => void create(entry)}
             />
           </View>
         </View>
@@ -1041,8 +1567,11 @@ export function TemplateGallery(props: TemplateGalleryProps) {
           </Label>
         }
       >
-        <Each of={chosen() ? [chosen()!] : []} key={(template) => template.id}>
-          {(template) => detail(template())}
+        <Each
+          of={chosen() ? [chosen()!] : []}
+          key={(entry) => entry.template.id}
+        >
+          {(entry) => detail(entry())}
         </Each>
       </If>
     );
@@ -1100,7 +1629,8 @@ export function TemplateGallery(props: TemplateGalleryProps) {
               }
             />
             <Label weight={weight.strong} lines={1} style={{ flex: 1 }}>
-              {chosen()?.name ?? localizedText("Agent templates", "智能体模版")}
+              {chosen()?.template.name ??
+                localizedText("Agent templates", "智能体模版")}
             </Label>
           </View>
           <If
@@ -1115,6 +1645,83 @@ export function TemplateGallery(props: TemplateGalleryProps) {
             {chosenDetail()}
           </If>
         </View>
+      </If>
+      <If when={pasteOpen()}>
+        <Modal
+          title={localizedText("Paste bot config", "粘贴智能体配置")}
+          phone={props.phone}
+          width={dialogWidth.md}
+          modalFocus
+          onClose={closePaste}
+        >
+          <View style={{ padding: space[16], gap: space[12] }}>
+            <Label variant="caption" tone="muted">
+              {localizedText(
+                "Paste Markdown, YAML, JSON, or a role card.",
+                "粘贴 Markdown、YAML、JSON 或角色卡内容。",
+              )}
+            </Label>
+            <View style={{ gap: space[4] }}>
+              <Label variant="small" weight={weight.strong}>
+                {localizedText("Filename (optional)", "文件名（可选）")}
+              </Label>
+              <Field
+                label={localizedText("Filename (optional)", "文件名（可选）")}
+                placeholder="reviewer.md / bot.yaml / bot.json"
+                value={pasteFilename()}
+                onChange={(value) => pasteFilename.set(value)}
+                style={fieldStyle()}
+              />
+            </View>
+            <View style={{ gap: space[4] }}>
+              <Label variant="small" weight={weight.strong}>
+                {localizedText("Bot definition", "智能体定义")}
+              </Label>
+              <Field
+                label={localizedText("Bot definition", "智能体定义")}
+                placeholder={localizedText(
+                  "Paste bot file contents here…",
+                  "在此粘贴智能体文件内容…",
+                )}
+                multiline
+                value={pasteText()}
+                onChange={(value) => {
+                  pasteText.set(value);
+                  if (pasteError()) pasteError.set("");
+                }}
+                style={{
+                  height: pasteInputHeight,
+                  ...textStyle(type("small"), "prose"),
+                  padding: space[12],
+                  borderColor: c().border,
+                }}
+              />
+            </View>
+            <If when={pasteError()}>
+              <View testID="paste-error">
+                <Label variant="small" tone="red">
+                  {pasteError()}
+                </Label>
+              </View>
+            </If>
+            <View style={{ ...row, justifyContent: "flex-end", gap: space[8] }}>
+              <Button
+                label={localizedText("Cancel", "取消")}
+                tone="ghost"
+                size={props.phone ? control.touch : control.md}
+                style={{ paddingHorizontal: space[12] }}
+                onPress={closePaste}
+              />
+              <Button
+                label={localizedText("Parse & load", "解析并加载")}
+                tone="primary"
+                size={props.phone ? control.touch : control.md}
+                style={{ paddingHorizontal: space[12] }}
+                onPress={submitPaste}
+              />
+            </View>
+          </View>
+        </Modal>
       </If>
       <If when={configuringItem()}>
         {(item) => (

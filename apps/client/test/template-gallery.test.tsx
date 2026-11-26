@@ -9,6 +9,7 @@ function gallery(
   options: {
     phone?: boolean;
     initial?: string;
+    draft?: string;
     models?: boolean;
     fail?: boolean;
     chatFail?: boolean;
@@ -25,6 +26,7 @@ function gallery(
     storage: {
       phone: options.phone ? "1" : "0",
       initial: options.initial ?? "",
+      draft: options.draft ?? "",
       models: options.models === false ? "0" : "1",
       create: options.fail ? "fail" : "ok",
       chat: options.chatFail ? "fail" : "ok",
@@ -184,4 +186,147 @@ test("on a phone the list comes first, a template opens over it, and Back goes b
   await app.press("label:Back");
   await app.waitFor("id:template:triage");
   expect(screen(app)).not.toContain("Instructions it gets");
+});
+
+test("pasting invalid bot config shows an inline error, and valid YAML populates all fields on import", async () => {
+  const app = await gallery({ plugins: true, external: true });
+  await app.waitFor("label:Paste");
+  await app.press("label:Paste");
+  await app.waitFor("label:Parse & load");
+
+  // Invalid JSON shows an inline error without closing the gallery.
+  await app.type("label:Filename (optional)", "broken.json");
+  await app.type("label:Bot definition", "{not valid json");
+  await app.press("label:Parse & load");
+  await app.waitFor("id:paste-error");
+  expect(screen(app)).toContain("Invalid JSON");
+  expect(app.count("label:Parse & load")).toBe(1);
+
+  // Close and reopen Paste to load a valid YAML config with runtime, thinkingLevel, persona, and plugins.
+  await app.press("label:Cancel");
+  await app.press("label:Paste");
+  await app.waitFor("label:Parse & load");
+  await app.type("label:Filename (optional)", "ops-bot.yaml");
+  await app.type(
+    "label:Bot definition",
+    [
+      "name: Ops Bot",
+      "runtime: claude",
+      "model: sonnet",
+      "thinkingLevel: high",
+      "persona: Direct SRE",
+      "plugins:",
+      "  - slack-tools",
+      "  - missing-plugin",
+      "instructions: |",
+      "  Monitor incidents and escalate critical alerts.",
+    ].join("\n"),
+  );
+  await app.press("label:Parse & load");
+  await app.waitFor("id:template:local-ops-bot");
+  const details = screen(app);
+  expect(details).toContain("YAML");
+  expect(details).toContain("ops-bot.yaml");
+  expect(details).toContain("Not installed: missing-plugin");
+  expect(details).toContain("Monitor incidents and escalate critical alerts.");
+
+  await app.press("label:Import");
+  await app.waitFor("text:Created: new-agent@home-new-agent");
+  const sentLine = app.texts().find((line) => line.startsWith("Sent:")) ?? "";
+  expect(sentLine).toContain('"name":"Ops Bot"');
+  expect(sentLine).toContain(
+    '"instructions":"Monitor incidents and escalate critical alerts.\\n"',
+  );
+  expect(sentLine).toContain('"runtime":"claude"');
+  expect(sentLine).toContain('"model":"claude:sonnet"');
+  expect(sentLine).toContain('"persona":"Direct SRE"');
+  expect(sentLine).toContain('"thinkingLevel":"high"');
+  expect(sentLine).toContain('"plugins":["slack-tools"]');
+  expect(sentLine).not.toContain("missing-plugin");
+});
+
+test("importing a local file via file picker loads frontmatter Markdown and imports cleanly", async () => {
+  const app = await gallery();
+  const encoder = new TextEncoder();
+  app.onPick(() => [
+    {
+      name: "code-auditor.md",
+      type: "text/markdown",
+      data: encoder.encode(
+        [
+          "---",
+          "name: Code Auditor",
+          "description: Audits security-sensitive changes.",
+          "---",
+          "Inspect authentication, permissions, and input validation.",
+        ].join("\n"),
+      ),
+    },
+  ]);
+
+  await app.waitFor("label:Import file");
+  await app.press("label:Import file");
+  await app.waitFor("id:template:local-code-auditor");
+  expect(screen(app)).toContain("Markdown");
+  expect(screen(app)).toContain("code-auditor.md");
+  expect(screen(app)).toContain("Audits security-sensitive changes.");
+
+  await app.press("label:Import");
+  await app.waitFor("text:Created: new-agent@home-new-agent");
+  const sent = screen(app);
+  expect(sent).toContain('"name":"Code Auditor"');
+  expect(sent).toContain(
+    '"instructions":"Inspect authentication, permissions, and input validation."',
+  );
+});
+
+test("plugin-bundled agents appear under From plugins, auto-select ready parent plugin, and offer Configure when needs_config", async () => {
+  const app = await gallery({ plugins: true });
+  await app.waitFor("label:From plugins");
+  await app.press("label:From plugins");
+  await app.waitFor("id:template:plugin:slack-tools:standup-bot");
+  await app.waitFor("id:template:plugin:github-tools:pr-guard");
+
+  // Select ready plugin's bundled agent -> parent plugin auto-selected on import.
+  await app.press("id:template:plugin:slack-tools:standup-bot");
+  expect(screen(app)).toContain("Parent plugin");
+  expect(screen(app)).toContain("Collects daily team standup notes in Slack.");
+  await app.press("label:Import");
+  await app.waitFor("text:Created: new-agent@home-new-agent");
+  const firstSent = screen(app);
+  expect(firstSent).toContain('"name":"Standup Bot"');
+  expect(firstSent).toContain('"plugins":["slack-tools"]');
+
+  // Select needs_config plugin's bundled agent -> inline Configure offered, unconfigured plugin NOT sent.
+  await app.press("id:template:plugin:github-tools:pr-guard");
+  await app.waitFor("text:Checks pull requests against repo policies.");
+  expect(app.count("label:Configure")).toBe(1);
+  await app.press("label:Import");
+  await app.waitFor("text:Count: 2");
+  const secondSent = screen(app);
+  expect(secondSent).toContain('"name":"PR Guard"');
+  expect(secondSent).toContain('"avatarSeed":"plugin:github-tools:pr-guard"');
+  expect(secondSent).not.toContain('"plugins":["github-tools"]');
+});
+
+test("opening TemplateGallery with initialDraft (and switching drafts reactively) preloads fields and plugins", async () => {
+  const app = await gallery({ draft: "local-json", plugins: true });
+  await app.waitFor("id:template:local-release-bot");
+  expect(screen(app)).toContain("JSON");
+  expect(screen(app)).toContain("release-bot.json");
+  expect(screen(app)).toContain("Automates release checklists.");
+
+  await app.press("label:Import");
+  await app.waitFor("text:Created: new-agent@home-new-agent");
+  const sent = screen(app);
+  expect(sent).toContain('"name":"Release Bot"');
+  expect(sent).toContain('"persona":"Calm release coordinator"');
+  expect(sent).toContain('"thinkingLevel":"high"');
+  expect(sent).toContain('"plugins":["slack-tools"]');
+
+  // Reactive initialDraft switches the open gallery to the plugin-bundled agent draft.
+  await app.press("label:Switch draft");
+  await app.waitFor("text:Collects daily team standup notes in Slack.");
+  expect(screen(app)).toContain("Standup Bot");
+  expect(screen(app)).toContain("Parent plugin");
 });
