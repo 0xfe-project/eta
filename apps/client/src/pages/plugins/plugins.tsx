@@ -1,4 +1,8 @@
-import type { PluginResults, PluginView } from "@eta/client-contracts";
+import type {
+  PluginBundledAgentView,
+  PluginResults,
+  PluginView,
+} from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { effect, signal, untracked, View } from "nsh";
 import {
@@ -29,7 +33,7 @@ import { ComposioConnected } from "./composio-connected";
 import { AddPlugin, ConfigurePlugin, sheetEdge } from "./configure";
 import { pluginText } from "./labels";
 import { Market } from "./market";
-import { PluginDetail } from "./plugin-detail";
+import { BundledAgentRows, PluginDetail } from "./plugin-detail";
 import { PluginLogo } from "./plugin-logo";
 import { PluginEnabled, PluginName } from "./plugin-name";
 import {
@@ -49,6 +53,8 @@ const cardWidth = 268;
 /** The card's two lines of description, and its footer of actions. */
 const descriptionHeight = 36;
 const footerHeight = 36;
+/** Maximum scrolling height for the desktop bundled-agents modal. */
+const bundledAgentsHeight = 420;
 /** A phone row: taller when it has a line asking for configuration. */
 const phoneRowHeight = { needsConfig: 64, other: 60 } as const;
 
@@ -62,6 +68,7 @@ export function Plugins(props: {
   initialTab?: PluginsTab;
   initialPlugin?: string;
   onPluginSettings?: () => void;
+  onImportAgent?: (pluginName: string, agent: PluginBundledAgentView) => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -78,6 +85,7 @@ export function Plugins(props: {
   const source = signal("");
   const remove = signal("");
   const servers = signal("");
+  const bundledAgents = signal("");
   const list = () => host.list<PluginView>("plugins");
   effect(() => {
     const nextTab = props.initialTab;
@@ -127,6 +135,8 @@ export function Plugins(props: {
   const installed = () =>
     list().filter((item) => item.state !== "needs_config");
   const serversPlugin = () => list().find((item) => item.name === servers());
+  const bundledAgentsPlugin = () =>
+    list().find((item) => item.name === bundledAgents());
   const warningPlugin = () => list().find((item) => item.name === warnings());
   const sourcePlugin = () => list().find((item) => item.name === source());
   /** A recheck under way: the refresh icons turn meanwhile. */
@@ -259,6 +269,7 @@ export function Plugins(props: {
           onUpdate={() => update(item().name)}
           onRemove={() => remove.set(item().name)}
           onRefresh={refreshPlugins}
+          onImportAgent={props.onImportAgent}
         />
       )}
     </Each>
@@ -298,6 +309,7 @@ export function Plugins(props: {
                 onRemove={() => remove.set(item().name)}
                 onConfigure={() => config.set(item().name)}
                 onServers={() => servers.set(item().name)}
+                onAgents={() => bundledAgents.set(item().name)}
               />
             )}
           </Each>
@@ -475,6 +487,23 @@ export function Plugins(props: {
           />
         )}
       </Each>
+      <If when={bundledAgentsPlugin()}>
+        {(item) => (
+          <BundledAgentsDialog
+            item={item()}
+            phone={phone()}
+            onImportAgent={
+              props.onImportAgent
+                ? (pluginName, agent) => {
+                    bundledAgents.set("");
+                    props.onImportAgent?.(pluginName, agent);
+                  }
+                : undefined
+            }
+            onClose={() => bundledAgents.set("")}
+          />
+        )}
+      </If>
       <If when={sourcePlugin()}>
         {(item) => (
           <PluginSourceDialog item={item()} onClose={() => source.set("")} />
@@ -577,6 +606,7 @@ function PluginCard(props: {
   onRemove: () => void;
   onConfigure: () => void;
   onServers: () => void;
+  onAgents: () => void;
 }) {
   const c = colors();
   const git = () =>
@@ -692,6 +722,17 @@ function PluginCard(props: {
               value2: props.item.servers.length,
             })}
           </Label>
+          <If when={props.item.bundledAgents?.length}>
+            <Button
+              label={uiText("pluginBundledAgentsCount", {
+                count: props.item.bundledAgents?.length ?? 0,
+              })}
+              tone="ghost"
+              labelVariant="small"
+              style={{ flexShrink: 0 }}
+              onPress={props.onAgents}
+            />
+          </If>
           <If when={props.item.servers.length}>
             <Button
               label={uiText("serversButton")}
@@ -767,6 +808,66 @@ function PluginCard(props: {
         </If>
       </View>
     </View>
+  );
+}
+
+function BundledAgentsDialog(props: {
+  item: PluginView;
+  phone: boolean;
+  onImportAgent?: (pluginName: string, agent: PluginBundledAgentView) => void;
+  onClose: () => void;
+}) {
+  const c = colors();
+  return (
+    <Modal
+      title={uiText("pluginBundledAgentsTitle", { name: props.item.name })}
+      phone={props.phone}
+      sheet={props.phone}
+      plainSheetHeader={props.phone}
+      compact={!props.phone}
+      titleWeight={weight.regular}
+      width={dialogWidth.md}
+      overPhoneNavigation={props.phone}
+      onClose={props.onClose}
+    >
+      <SmoothScroll
+        style={{ maxHeight: bundledAgentsHeight }}
+        scrollbar={false}
+      >
+        <View
+          style={{
+            paddingVertical: space[12],
+            paddingHorizontal: props.phone ? space[16] : 0,
+          }}
+        >
+          <BundledAgentRows
+            pluginName={props.item.name}
+            agents={props.item.bundledAgents ?? []}
+            phone={props.phone}
+            onImportAgent={props.onImportAgent}
+          />
+        </View>
+      </SmoothScroll>
+      <View
+        style={{
+          ...row,
+          justifyContent: "flex-end",
+          paddingHorizontal: props.phone ? space[16] : 0,
+          paddingTop: space[12],
+          paddingBottom: props.phone ? space[24] : 0,
+          borderTopWidth: 1,
+          borderColor: c().border,
+        }}
+      >
+        <Button
+          label={pluginText("ok")}
+          tone="primary"
+          size={props.phone ? control.touch : control.md}
+          style={{ paddingHorizontal: space[16] }}
+          onPress={props.onClose}
+        />
+      </View>
+    </Modal>
   );
 }
 

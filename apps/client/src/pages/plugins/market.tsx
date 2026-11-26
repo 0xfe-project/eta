@@ -700,6 +700,42 @@ export function Market(props: {
           </View>
         )}
       </Each>
+      <If when={shown.bundledAgents?.length}>
+        <View testID="market-bundled-agents" style={{ gap: space[8] }}>
+          <Label variant="caption" tone="muted">
+            {uiText("pluginBundledAgents")}
+          </Label>
+          <Each of={shown.bundledAgents ?? []} key={(agent) => agent.id}>
+            {(agent) => (
+              <View
+                style={{
+                  gap: space[4],
+                  padding: space[8],
+                  borderWidth: 1,
+                  borderColor: c().border,
+                }}
+              >
+                <Label
+                  variant="small"
+                  weight={weight.regular}
+                  style={{ userSelect: "text" }}
+                >
+                  {agent().name}
+                </Label>
+                <If when={agent().description}>
+                  <Label
+                    variant="caption"
+                    tone="muted"
+                    style={{ userSelect: "text" }}
+                  >
+                    {agent().description}
+                  </Label>
+                </If>
+              </View>
+            )}
+          </Each>
+        </View>
+      </If>
       <If when={shown.fields.length}>
         {line(
           uiText("marketFields"),
