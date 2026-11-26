@@ -162,3 +162,55 @@ test("Check again asks that machine with fresh: true", async () => {
   await app.waitFor("label:OpenCode, Available");
   expect(app.texts()[0]).toContain('agents.runtimes {"fresh":true}');
 });
+
+test("a runtime that cannot run here is offered after the ones that can", async () => {
+  const app = await open("./fixtures/runtimes.tsx", {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+    urlScheme: "eta://fixture/new",
+  });
+  await app.press("label:Runtime");
+  const texts = app.texts();
+  // Each group keeps its own order: the ones that can run here (eta's own, then those the
+  // machine answers for), and under them the ones that cannot, each with its reason.
+  expect(texts.slice(texts.lastIndexOf("eta (built-in)"))).toEqual([
+    "eta (built-in)",
+    "Claude Code",
+    "Grok Build",
+    "Qwen Code",
+    "Codex",
+    "Not signed in",
+    "OpenCode",
+    "Probe timed out (30s)",
+    "Pi",
+    "Not installed",
+    "Gemini CLI",
+    "Probe failed",
+  ]);
+});
+
+test("an agent's own runtime stays in the field and in the menu when it cannot run here", async () => {
+  const app = await open("./fixtures/runtimes.tsx", {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+    urlScheme: "eta://fixture/pi",
+  });
+  // The field still names the runtime the agent is on, and says why it cannot run here.
+  const texts = app.texts();
+  const field = texts.slice(texts.indexOf("Runtime"));
+  expect(field).toContain("Pi isn't installed on this machine.");
+  expect(field.indexOf("Pi")).toBeLessThan(field.indexOf("Model"));
+  // Sorting by availability does not drop it: it is still offered, at the end with its reason,
+  // and readable as the agent's own choice rather than disabled.
+  await app.press("label:Runtime");
+  const menu = app.texts().slice(app.texts().lastIndexOf("eta (built-in)"));
+  expect(menu.indexOf("Pi")).toBeGreaterThan(menu.indexOf("Qwen Code"));
+  expect(menu[menu.indexOf("Pi") + 1]).toBe("Not installed");
+  // The item is the innermost view called "Pi": the dialog itself carries the agent's name too.
+  expect(app.enabled("label:Pi >> nth=2")).toBe(true);
+  // Every other one that cannot run here stays out of reach.
+  expect(app.enabled("label:Codex")).toBe(false);
+  expect(app.enabled("label:Gemini CLI")).toBe(false);
+});

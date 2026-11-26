@@ -96,3 +96,19 @@ test("a new model that does not take the level clears it and says so", async () 
     'text:agents.update {"agentId":"hy","model":"proxy:plain","thinkingLevel":null}',
   );
 });
+
+test("the model field is the form's own width, as the thinking level's is", async () => {
+  const app = await editor("flash");
+  // The model row is an ordinary row of the form: the same column the runtime and the thinking
+  // level get, not one longer of its own (it used to be 256 next to their 160).
+  const runtime = app.layout("label:Runtime")!;
+  const model = app.layout("label:Model")!;
+  const thinking = app.layout("label:Thinking level")!;
+  expect(model.width).toBe(runtime.width);
+  expect(model.width).toBe(thinking.width);
+  expect(model.x).toBe(thinking.x);
+  // The menu the field opens is not held to the field's width: a long model name and id read
+  // in full there.
+  await app.press("label:Model");
+  expect(app.layout("label:Flash")!.width).toBeGreaterThan(model.width);
+});

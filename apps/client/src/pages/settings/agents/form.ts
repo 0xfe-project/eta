@@ -19,7 +19,7 @@ import { space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { problemText } from "../../../services/problem-text";
-import { askRuntimes } from "../runtimes/status";
+import { askRuntimes, runtimeReason } from "../runtimes/status";
 import { createAvatarDraw } from "./avatar";
 
 export interface AgentEditorProps {
@@ -120,13 +120,28 @@ export function createAgentForm(props: AgentEditorProps) {
     runtime() === "eta" ||
     Boolean(machineId()) ||
     machines().length > 1;
-  const runtimeList = () => [
-    ...new Set<AgentRuntime>([
-      ...AGENT_RUNTIMES,
-      ...(installed()?.map((item) => item.id) ?? []),
-      runtime(),
-    ]),
-  ];
+  /** Why a runtime cannot run here, or undefined when it can (or is not known yet). */
+  const runtimeReasonOf = (id: AgentRuntime) => {
+    const info = installed()?.find((item) => item.id === id);
+    return info ? runtimeReason(info) : undefined;
+  };
+  /**
+   * Every runtime to offer, the ones that can run here first and the rest after them: a runtime
+   * that cannot run stays in the list (the agent's own one is still readable there) but last.
+   */
+  const runtimeList = () => {
+    const all = [
+      ...new Set<AgentRuntime>([
+        ...AGENT_RUNTIMES,
+        ...(installed()?.map((item) => item.id) ?? []),
+        runtime(),
+      ]),
+    ];
+    return [
+      ...all.filter((id) => !runtimeReasonOf(id)),
+      ...all.filter((id) => runtimeReasonOf(id)),
+    ];
+  };
   const external = () => installed()?.find((item) => item.id === runtime());
   const runtimeLabel = (id: AgentRuntime) =>
     id === "eta"
