@@ -61,7 +61,7 @@ import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
 import { PictureModes } from "../../services/picture-mode";
 import { problemReason } from "../../services/problem-text";
-import { Popover } from "../../ui";
+import { Card, Popover } from "../../ui";
 import { subtasksOf, TaskSummary } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
 import { ArtifactRow } from "./artifacts/row";
@@ -371,8 +371,7 @@ export function Message(props: {
             : props.phone
               ? 0
               : space[16],
-        paddingHorizontal:
-          props.phone || props.compact || card() ? 0 : space[16],
+        paddingHorizontal: props.phone || props.compact ? 0 : space[16],
       }}
     >
       <If when={item().author === "user"}>
@@ -555,13 +554,7 @@ export function Message(props: {
         <If when={item().kind === "task_draft"}>
           {/* Folded to one line, as a turn's process is: what it is, its
            * title, that it waits for you and the way to the form. */}
-          <View
-            style={{
-              alignSelf: "stretch",
-              borderWidth: 1,
-              borderColor: c().border,
-            }}
-          >
+          <Card style={{ alignSelf: "stretch" }}>
             <View
               role={draftDescription() ? "button" : undefined}
               accessibilityLabel={uiText("taskDraft")}
@@ -675,7 +668,7 @@ export function Message(props: {
                 />
               </View>
             </If>
-          </View>
+          </Card>
         </If>
       </If>
       <If when={operation()}>{(op) => <Proposal operation={op()} />}</If>

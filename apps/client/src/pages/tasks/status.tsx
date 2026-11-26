@@ -286,7 +286,7 @@ export function TaskSummary(props: {
   const openTask = () =>
     uiText("taskCardOpenTask", { number: props.task.number });
   return (
-    <Card>
+    <Card style={{ alignSelf: "stretch" }}>
       <View
         ref={(node) => props.controlRef?.(node)}
         role="button"
