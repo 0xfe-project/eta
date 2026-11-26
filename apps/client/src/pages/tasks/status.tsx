@@ -189,12 +189,21 @@ export function SubtaskSegments(props: {
 /** The status pill of a task card in the transcript: glyph, then what it waits on. */
 function TaskCardStatus(props: { task: BoardTaskView }) {
   const task = () => props.task;
-  const waitingFor = () =>
-    task().status === "todo" ? task().waitingOn?.[0] : undefined;
+  const waitingOn = () =>
+    task().status === "todo" ? (task().waitingOn ?? []) : [];
+  const waiting = () => waitingOn().length > 0;
   const blocked = () => task().status === "blocked";
   const label = () => {
-    const wait = waitingFor();
-    if (wait) return uiText("taskWaitingForTitle", { title: wait.title });
+    const waits = waitingOn();
+    if (waits.length > 0) {
+      const first = waits[0]!;
+      return waits.length > 1
+        ? uiText("taskWaitingForMore", {
+            number: first.number,
+            more: waits.length - 1,
+          })
+        : uiText("taskWaitingForNumber", { number: first.number });
+    }
     if (blocked()) return uiText("taskBlockedNeedsDecision");
     const total = task().subtasks?.total;
     return total
@@ -204,13 +213,13 @@ function TaskCardStatus(props: { task: BoardTaskView }) {
   return (
     <Badge
       label={label()}
-      tone={waitingFor() || blocked() ? "neutral" : badgeTones[task().status]}
+      tone={waiting() || blocked() ? "neutral" : badgeTones[task().status]}
       textTone={
-        waitingFor() ? "mutedInk" : blocked() ? "ink" : tones[task().status]
+        waiting() ? "mutedInk" : blocked() ? "ink" : tones[task().status]
       }
-      variant={waitingFor() ? "outline" : "soft"}
+      variant={waiting() ? "outline" : "soft"}
       leading={
-        !waitingFor() ? (
+        !waiting() ? (
           <TaskGlyph status={task().status} size={icon.sm} />
         ) : undefined
       }

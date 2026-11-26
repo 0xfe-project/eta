@@ -1,4 +1,8 @@
-import type { BoardTaskView, MessageView } from "@eta/client-contracts";
+import type {
+  BoardTaskView,
+  MessageView,
+  TaskWaitView,
+} from "@eta/client-contracts";
 import { mount, signal, Text, View, windowSize } from "nsh";
 import { ConversationTimeline } from "../../src/pages/chat/conversation-timeline";
 import { createHost, Host } from "../../src/services/host";
@@ -16,6 +20,21 @@ const base = {
   createdAt: 0,
   updatedAt: 0,
 } satisfies Partial<MessageView>;
+
+const longPrereqTitle =
+  "Add Antigravity as a built-in OAR runtime with host MCP and streaming support";
+
+const wait = (
+  number: number,
+  title = `Prerequisite #${number}`,
+): TaskWaitView => ({
+  taskId: `task-${number}`,
+  number,
+  title,
+  status: "in_progress",
+  state: "waiting",
+  via: null,
+});
 
 const card: MessageView = {
   ...base,
@@ -39,6 +58,32 @@ const draft: MessageView = {
   },
 };
 
+const waitingCard: MessageView = {
+  ...base,
+  id: "card-2",
+  seq: 3,
+  kind: "task_card",
+  text: "Show prerequisite number in task card pill",
+  data: {
+    taskId: "task-427",
+    number: 427,
+    title: "Show prerequisite number in task card pill",
+  },
+};
+
+const waitingManyCard: MessageView = {
+  ...base,
+  id: "card-3",
+  seq: 4,
+  kind: "task_card",
+  text: "Wait for multiple prerequisites",
+  data: {
+    taskId: "task-428",
+    number: 428,
+    title: "Wait for multiple prerequisites",
+  },
+};
+
 const task: BoardTaskView = {
   id: "task-5",
   number: 5,
@@ -53,6 +98,36 @@ const task: BoardTaskView = {
   updatedAt: 0,
 };
 
+const waitingTask: BoardTaskView = {
+  id: "task-427",
+  number: 427,
+  title: "Show prerequisite number in task card pill",
+  status: "todo",
+  createdBy: { kind: "agent", agentId: "Ada" },
+  assigneeAgentId: null,
+  conversationId: "group",
+  runStatus: null,
+  waitingOn: [wait(424, longPrereqTitle)],
+  comments: 0,
+  createdAt: 0,
+  updatedAt: 0,
+};
+
+const waitingManyTask: BoardTaskView = {
+  id: "task-428",
+  number: 428,
+  title: "Wait for multiple prerequisites",
+  status: "todo",
+  createdBy: { kind: "agent", agentId: "Ada" },
+  assigneeAgentId: null,
+  conversationId: "group",
+  runStatus: null,
+  waitingOn: [wait(424, longPrereqTitle), wait(425), wait(426)],
+  comments: 0,
+  createdAt: 0,
+  updatedAt: 0,
+};
+
 function Fixture() {
   const host = createHost();
   host.state.update((s) => ({
@@ -60,7 +135,11 @@ function Fixture() {
     status: "open",
     targets: {
       ...s.targets,
-      tasks: { sections: { list: [task] }, revisions: {}, version: 0 },
+      tasks: {
+        sections: { list: [task, waitingTask, waitingManyTask] },
+        revisions: {},
+        version: 0,
+      },
     },
   }));
   host.call = async <T,>() => undefined as T;
@@ -72,7 +151,7 @@ function Fixture() {
         <ConversationTimeline
           title="Group"
           accessible
-          rows={[card, draft]}
+          rows={[card, draft, waitingCard, waitingManyCard]}
           additions={new Map()}
           recipients={new Map()}
           members={[]}
