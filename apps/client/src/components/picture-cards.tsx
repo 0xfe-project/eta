@@ -1,8 +1,11 @@
+import type { ViewRef } from "nsh";
 import type { ViewedPicture } from "./picture-viewer";
 import { effect, Image, signal, View } from "nsh";
 import { uiText } from "../i18n";
 import { Chip } from "./eta-editor/chip";
 import { SkeletonBar } from "./loading-skeleton";
+import { canHover } from "./menu";
+import { outlineMotion } from "./motion";
 import { picturePreview } from "./picture-viewer";
 import { Label } from "./text";
 import { colors, focusRing, row } from "./theme";
@@ -12,6 +15,16 @@ import { space } from "./tokens";
 // Images in messages says: compact, a chip with the picture's name where it was put, its thumbnail
 // when the pointer rests on it (desktops) and the picture on a press; expanded, cards under the
 // text (Paper "Eta · Text", Display & flows).
+
+/** A card tied to the place in the text where its picture stood. */
+export interface Tie {
+  /** The card's box: where the line to that place starts. */
+  ref: (node: ViewRef) => void;
+  /** The line is drawn: the card takes the accent. */
+  active: () => boolean;
+  /** The pointer or the focus came to the card, or left it. */
+  onRest: (on: boolean) => void;
+}
 
 /** A picture of shown text: what the chip and the card say, and how to ask for its bytes. */
 export interface ShownPicture extends ViewedPicture {
@@ -60,6 +73,8 @@ export function PictureChip(props: {
  * not fit, each half). */
 export function PictureCards(props: {
   pictures: readonly ShownPicture[];
+  /** A picture's tie to the mark of where it stood in the text, if it stood anywhere. */
+  tie?: (key: string) => Tie | undefined;
   onOpen: (key: string) => void;
 }) {
   const c = colors();
@@ -76,19 +91,28 @@ export function PictureCards(props: {
       <Each of={props.pictures} key={(picture) => picture.key}>
         {(picture) => {
           effect(() => picture().load());
+          const tie = () => props.tie?.(picture().key);
           return (
             <View
+              ref={(node) => tie()?.ref(node)}
               role="button"
               testID="picture-card"
               accessibilityLabel={openLabel(picture())}
               onPress={() => props.onOpen(picture().key)}
+              onMouseEnter={() => canHover && tie()?.onRest(true)}
+              onMouseLeave={() => canHover && tie()?.onRest(false)}
+              onFocus={() => tie()?.onRest(true)}
+              onBlur={() => tie()?.onRest(false)}
               focusVisibleStyle={focusRing(c())}
-              hoverStyle={{ borderColor: c().strong }}
+              hoverStyle={
+                tie()?.active() ? undefined : { borderColor: c().strong }
+              }
               style={{
                 width: width(),
                 flexShrink: 0,
                 borderWidth: 1,
-                borderColor: c().border,
+                borderColor: tie()?.active() ? c().blue : c().border,
+                ...outlineMotion,
                 backgroundColor: c().canvas,
                 cursor: "zoom-in",
               }}

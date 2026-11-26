@@ -99,6 +99,7 @@ export function outgoingRow(
         ? { attachments: message.attachments }
         : {}),
       ...(message.blocks?.length ? { blocks: message.blocks } : {}),
+      ...(message.anchors?.length ? { anchors: message.anchors } : {}),
     },
     createdAt: at,
     updatedAt: at,

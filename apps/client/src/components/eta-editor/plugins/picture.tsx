@@ -11,7 +11,8 @@ import { PictureModes } from "../../../services/picture-mode";
 import { useAttachmentPictures } from "../../../services/pictures";
 import { PictureCards, PictureChip } from "../../picture-cards";
 import { Lightbox } from "../../picture-viewer";
-import { someInline, swapInline } from "../view-source";
+import { PICTURE_MARK, someInline, standIn, swapInline } from "../view-source";
+import { pictureLinks } from "./picture-link";
 
 /** The custom node a picture is drawn as, where it was put (compact). */
 const PICTURE = "etaPicture";
@@ -23,9 +24,16 @@ const PICTURE = "etaPicture";
  * thumbnail when the pointer rests on it (desktops) and opening large on a press; expanded, the
  * text keeps no names and 180-wide cards go under it. A press opens the viewer, which walks
  * through all of the text's pictures. Only shown text follows the setting: an editor shows chips.
+ *
+ * A message that says where its pictures stood in its words (`anchors`) has a zero-width mark at
+ * each place; resting the pointer or the focus on a picture card draws a line from the card up to
+ * a caret at its place. Chips stand at their place already: they draw no line.
  */
 export function pictures(): TextPlugin {
-  return { name: "pictures", view: { shown: shownPictures } };
+  return {
+    name: "pictures",
+    view: { extensions: [standIn(PICTURE_MARK)], shown: shownPictures },
+  };
 }
 
 function shownPictures(): ShownPart {
@@ -36,6 +44,7 @@ function shownPictures(): ShownPart {
   const opened = signal<number>();
   // One picture per key, so a chip, a card and the viewer read the same one.
   const known = new Map<string, ShownPicture>();
+  const links = pictureLinks();
   function pictureOf(node: TextViewInline): ShownPicture | undefined {
     if (node.type === "image") {
       const key = `image:${node.src}`;
@@ -121,6 +130,9 @@ function shownPictures(): ShownPart {
           <Text>{node.text ?? ""}</Text>
         );
       },
+      [PICTURE_MARK]: (node) => {
+        return <links.Mark id={node.attributes?.id ?? ""} />;
+      },
     },
     after(read) {
       const list = computed(() => {
@@ -136,8 +148,9 @@ function shownPictures(): ShownPart {
       return (
         <If when={list().length > 0}>
           <If when={expanded()}>
-            <PictureCards pictures={list()} onOpen={open} />
+            <PictureCards pictures={list()} tie={links.tie} onOpen={open} />
           </If>
+          <links.Line />
           <Lightbox pictures={list} index={opened} onIndex={opened.set} />
         </If>
       );

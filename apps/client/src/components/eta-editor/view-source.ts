@@ -7,6 +7,7 @@ import type {
   TextViewInline,
 } from "nsh/base";
 import type { StoredText } from "./markdown";
+import { isPictureType } from "@eta/client-contracts";
 import { DOC_NODES } from "@eta/client-contracts/composer-doc";
 import {
   markdownSource,
@@ -26,18 +27,11 @@ import {
 // Where the parser reads text as code (a code block, inline code, a link's address), whatever
 // stands in is put back as its text.
 
-/** A file sent with the text: shown after it, as the editor shows it among its words. */
-interface ShownFile {
-  id: string;
-  name: string;
-  contentType: string;
-  size: number;
-}
+/** Text to show: as kept, and the files that went with it (shown after it). */
+export type ShownText = StoredText;
 
-/** Text to show: as kept, and the files that went with it. */
-export interface ShownText extends StoredText {
-  files?: readonly ShownFile[];
-}
+/** The block that marks, in the text, where a picture stood (`anchors`): its `id` is the file's. */
+export const PICTURE_MARK = "etaPictureMark";
 
 /** The marks of the kinds of block, in the private use plane (one each, as the kinds are named). */
 const KIND_BASE = 0xf0000;
@@ -144,6 +138,17 @@ function markLineEnds(source: string, stands: readonly Stand[]): string {
   return lines.join("\n");
 }
 
+/** A mark at each place a picture of `text` stood. */
+function pictureMarks(text: ShownText) {
+  return (text.anchors ?? []).flatMap(({ attachmentId, at }) =>
+    text.files?.some(
+      (file) => file.id === attachmentId && isPictureType(file.contentType),
+    )
+      ? [{ at, node: { type: PICTURE_MARK, attrs: { id: attachmentId } } }]
+      : [],
+  );
+}
+
 /** `text` as the Markdown the view reads, and what its blocks stand for. */
 export function viewSource(text: ShownText): {
   markdown: string;
@@ -153,11 +158,15 @@ export function viewSource(text: ShownText): {
   if (
     !text.files?.length &&
     !text.blocks?.length &&
+    !text.anchors?.length &&
     !(text.mentions?.length && text.text.includes("@")) &&
     !PLAIN_NOT.test(text.text)
   )
     return { markdown: text.text, stands: [] };
-  const { source, stands } = markdownSource(text);
+  const { source, stands } = markdownSource({
+    ...text,
+    inserts: pictureMarks(text),
+  });
   const tokens: string[] = [];
   for (const file of text.files ?? []) {
     if (TOKEN_BASE + stands.length > TOKEN_END) break;

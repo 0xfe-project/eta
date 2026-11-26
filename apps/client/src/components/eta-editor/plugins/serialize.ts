@@ -14,8 +14,8 @@ export interface Outgoing extends Omit<SerializedDraft, "files"> {
 
 /**
  * The document as the host takes it — `conversations.send`'s `{ text, mentions, attachments,
- * blocks }` — with each folded paste's place as a `PasteRange`, so the sent message folds it the
- * same way. `files` tells whether every attachment block has finished uploading (a message
+ * blocks, anchors }` — with each folded paste's place as a `PasteRange`, so the sent message folds
+ * it the same way, and each file's place as an anchor, so it can show where the file stood. `files` tells whether every attachment block has finished uploading (a message
  * waits for them; a failed one has to be retried or taken out first). Formatted text goes as
  * Markdown (`docToStoredMarkdown`, read back to check it); plain text as its lines.
  */
@@ -72,13 +72,21 @@ export function serialize(uploads?: Uploads): TextPlugin & {
         ? docToStoredMarkdown(editor!.doc())
         : serializeDoc(editor!.doc());
       const attachments: AttachmentView[] = [];
+      // The sent files' ids, by the id of their block (an upload may name the file anew).
+      const sentIds = new Map<string, string>();
       for (const id of sent.files) {
         const upload = uploads?.state(id);
-        if (upload?.state === "done") attachments.push(upload.attachment);
+        if (upload?.state !== "done") continue;
+        attachments.push(upload.attachment);
+        sentIds.set(id, upload.attachment.id);
       }
       return {
         text: sent.text,
         blocks: sent.blocks,
+        anchors: sent.anchors.flatMap(({ attachmentId, at }) => {
+          const id = sentIds.get(attachmentId);
+          return id ? [{ attachmentId: id, at }] : [];
+        }),
         mentions: sent.mentions,
         attachments,
       };

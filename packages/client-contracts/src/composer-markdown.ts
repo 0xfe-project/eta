@@ -11,7 +11,7 @@
 // text would read back as something else is it escaped (the client decides, per block).
 
 import type { DocNode, SerializedDraft } from "./composer-doc";
-import type { PasteRange } from "./composer-draft";
+import type { AttachmentAnchor, PasteRange } from "./composer-draft";
 import { DOC_NODES, normalizeNewlines } from "./composer-doc";
 
 /** The rich document's node and mark names (nsh's StarterKit, Tiptap's names). */
@@ -111,8 +111,9 @@ function linkEnd(mark: Mark): string {
 }
 
 class Writer {
-  /** What each token stands for: a paste's text (its place a range), or a character as is. */
-  pastes: { text: string; range: boolean }[] = [];
+  /** What each token stands for: a paste's text (its place a range), a character as is, or a
+   * file's place (`file`: its id; no text). */
+  pastes: { text: string; range: boolean; file?: string }[] = [];
   mentions: string[] = [];
   files: string[] = [];
   readonly escaping: Escaping;
@@ -186,8 +187,8 @@ class Writer {
     return heading ? out.replace(/\n/g, " ") : out;
   }
 
-  token(text: string, range: boolean): string {
-    this.pastes.push({ text, range });
+  token(text: string, range: boolean, file?: string): string {
+    this.pastes.push({ text, range, ...(file === undefined ? {} : { file }) });
     return String.fromCharCode(TOKEN_BASE + this.pastes.length - 1);
   }
 
@@ -206,9 +207,11 @@ class Writer {
       case DOC_NODES.paste: {
         return this.token(String(node.attrs?.text ?? ""), true);
       }
-      case DOC_NODES.file:
-        this.files.push(String(node.attrs?.id ?? ""));
-        return "";
+      case DOC_NODES.file: {
+        const id = String(node.attrs?.id ?? "");
+        this.files.push(id);
+        return this.token("", false, id);
+      }
       case RICH_NODES.hardBreak:
         return heading ? " " : "\n";
       default:
@@ -371,7 +374,7 @@ export function docToMarkdown(
   const blocks = doc.content ?? [];
   const writers = blocks.map((_, index) => new Writer(escaping(index)));
   const lines: string[] = [];
-  const pastes: { text: string; range: boolean }[] = [];
+  const pastes: { text: string; range: boolean; file?: string }[] = [];
   const mentions: string[] = [];
   const files: string[] = [];
   const table = tableRows(blocks);
@@ -404,12 +407,27 @@ export function docToMarkdown(
     lines.push(...own);
   });
   const joined = lines.join("\n");
-  // Blank lines and spaces around the message are not part of it.
-  const start = joined.search(/\S/);
-  const body = start < 0 ? "" : joined.slice(start).trimEnd();
+  const fileAt = (char: string) => {
+    const code = char.charCodeAt(0);
+    return isToken(code) ? pastes[code - TOKEN_BASE]?.file : undefined;
+  };
+  // Blank lines and spaces around the message are not part of it, and neither are the files
+  // standing there: they take the edge of the text.
+  const inert = (char: string) => /\s/.test(char) || fileAt(char) !== undefined;
+  let start = 0;
+  while (start < joined.length && inert(joined[start]!)) start++;
+  let stop = joined.length;
+  while (stop > start && inert(joined[stop - 1]!)) stop--;
   let text = "";
   const ranges: PasteRange[] = [];
-  for (const char of body) {
+  const anchors: AttachmentAnchor[] = [];
+  const anchor = (char: string) => {
+    const attachmentId = fileAt(char);
+    if (attachmentId !== undefined)
+      anchors.push({ attachmentId, at: text.length });
+  };
+  for (const char of joined.slice(0, start)) anchor(char);
+  for (const char of joined.slice(start, stop)) {
     const code = char.charCodeAt(0);
     const paste =
       char.length === 1 && isToken(code)
@@ -419,11 +437,16 @@ export function docToMarkdown(
       text += char;
       continue;
     }
+    if (paste.file !== undefined) {
+      anchor(char);
+      continue;
+    }
     if (paste.range)
       ranges.push([text.length, text.length + paste.text.length]);
     text += paste.text;
   }
-  return { text, blocks: ranges, mentions, files };
+  for (const char of joined.slice(stop)) anchor(char);
+  return { text, blocks: ranges, anchors, mentions, files };
 }
 
 /** A member a message mentions, as its text names them (`@label`). */
@@ -437,16 +460,40 @@ export type Stand = DocNode;
 
 const PREFIX = /[\s,.!?;:，。！？、；：（(]/;
 
+/** A line Markdown reads as a block by how it starts: a list item, a heading, a quote, a fence, a
+ * table row, a rule, indented code. */
+const BLOCK_LINE =
+  /^(?: {4}|\t| {0,3}(?:>|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$)|#{1,6}(?:\s|$)|`{3,}|~{3,}|\||(?:[-*_] *){3,}$))/;
+const FENCE_LINE = /^ {0,3}(?:`{3,}|~{3,})/;
+
+/**
+ * An insert's `token` for the offset `at` of `text`: as it is, except where it would turn the line
+ * it stands on into something else (a mark before `- x` is no list, one after a closing fence is
+ * no fence): there it has a line of its own.
+ */
+function standing(text: string, at: number, token: string): string {
+  const lineStart = at === 0 ? 0 : text.lastIndexOf("\n", at - 1) + 1;
+  const found = text.indexOf("\n", at);
+  const lineEnd = found < 0 ? text.length : found;
+  const line = text.slice(lineStart, lineEnd);
+  if (at === lineStart && BLOCK_LINE.test(line)) return `${token}\n\n`;
+  if (at === lineEnd && FENCE_LINE.test(line)) return `\n\n${token}`;
+  return token;
+}
+
 /**
  * Markdown ready for the parser: each folded paste (`blocks`) and each mention of `mentions`
  * replaced by one character that stands for it, so the parser reads neither (a paste is never
  * Markdown, a name is not emphasis). Characters of the private use area already in the text are
- * stood in for as well, so they come back as they were.
+ * stood in for as well, so they come back as they were. Each of `inserts` is a block of its own
+ * standing at an offset of the text (never inside a paste: after it).
  */
 export function markdownSource(input: {
   text: string;
   blocks?: readonly PasteRange[];
   mentions?: readonly MentionRef[];
+  /** Blocks to stand in the text, each at an offset of it (an attachment's place). */
+  inserts?: readonly { at: number; node: Stand }[];
 }): { source: string; stands: Stand[] } {
   const stands: Stand[] = [];
   const stand = (node: Stand) => {
@@ -491,20 +538,38 @@ export function markdownSource(input: {
   };
   let source = "";
   let end = 0;
+  const inserts = (input.inserts ?? [])
+    .filter(({ at }) => at >= 0 && at <= text.length)
+    .sort((a, b) => a.at - b.at);
+  let inserted = 0;
+  /** The text up to `to`, the inserts on the way stood in. */
+  const writeTo = (to: number) => {
+    for (
+      ;
+      inserted < inserts.length && inserts[inserted]!.at <= to;
+      inserted++
+    ) {
+      const at = Math.max(end, inserts[inserted]!.at);
+      source += words(text.slice(end, at));
+      end = at;
+      const token = stand(inserts[inserted]!.node);
+      if (token) source += standing(text, at, token);
+    }
+    source += words(text.slice(end, to));
+    end = to;
+  };
   for (const [start, stop] of input.blocks ?? []) {
     if (start < end || stop > text.length || start >= stop) continue;
-    const before = words(text.slice(end, start));
+    writeTo(start);
     const token = stand({
       type: DOC_NODES.paste,
       attrs: { id: `paste-${start}`, text: text.slice(start, stop) },
     });
-    source += before;
-    end = start;
     if (!token) continue;
     source += token;
     end = stop;
   }
-  source += words(text.slice(end));
+  writeTo(text.length);
   return { source: literals(source, stand), stands };
 }
 

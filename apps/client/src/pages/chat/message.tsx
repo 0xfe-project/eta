@@ -18,17 +18,9 @@ import {
   runFromOf,
   savedSteps,
 } from "@eta/client-contracts";
-import { pasteBlocksOf } from "@eta/client-contracts/composer-draft";
+import { anchorsOf, pasteBlocksOf } from "@eta/client-contracts/composer-draft";
 import { mentionLabel } from "@eta/client-contracts/composer-target";
-import {
-  cleanup,
-  Clipboard,
-  createMotion,
-  effect,
-  reduceMotion,
-  signal,
-  View,
-} from "nsh";
+import { Clipboard, effect, signal, View } from "nsh";
 import {
   Button,
   Caption,
@@ -40,6 +32,7 @@ import {
   row,
 } from "../../components";
 import { AgentFace } from "../../components/agent-face";
+import { Caret } from "../../components/caret";
 import { EmptyState } from "../../components/empty-state";
 import {
   chatText,
@@ -82,39 +75,9 @@ const replyBlockGap = 8;
 
 /** A reply at work keeps this height, however much it writes. */
 const processWindowHeight = 176;
-/** Streaming caret blink period. */
-const CARET_BLINK_MS = 900;
-
-/** 2px accent caret shown at the end of a streaming AI answer (steady under reduced motion). */
+/** The caret shown at the end of a streaming AI answer. */
 function StreamingCaret() {
-  const c = colors();
-  const blink = createMotion();
-  effect(() => {
-    if (reduceMotion()) {
-      blink.stop();
-      blink.reset();
-      return;
-    }
-    void blink.play({
-      keyframes: { opacity: [1, 0.2, 1] },
-      duration: CARET_BLINK_MS,
-      easing: "easeInOut",
-      iterations: "infinite",
-    });
-  });
-  cleanup(() => blink.stop());
-  return (
-    <View
-      testID="streaming-caret"
-      style={{
-        width: space[2],
-        height: space[16],
-        backgroundColor: c().blue,
-        marginTop: space[2],
-        ...(reduceMotion() ? {} : blink.style),
-      }}
-    />
-  );
+  return <Caret testID="streaming-caret" style={{ marginTop: space[2] }} />;
 }
 
 /** How wide your message's bubble runs, and on phones the least room a task draft's title keeps. A
@@ -394,6 +357,7 @@ export function Message(props: {
   const stored = (message: MessageView) => ({
     text: message.text,
     blocks: pasteBlocksOf(message.data, message.text),
+    anchors: anchorsOf(message.data, message.text),
     mentions: mentionRefs(),
   });
   // A mention opens its member; a file saves, a picture opens.

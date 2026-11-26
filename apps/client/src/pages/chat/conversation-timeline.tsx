@@ -18,6 +18,7 @@ import {
   row,
 } from "../../components";
 import { EmptyState } from "../../components/empty-state";
+import { MessageViewport } from "../../components/eta-editor/plugins/picture-link";
 import { settled, shownWhile } from "../../components/pending";
 import { wheelScroll } from "../../components/scroll-follow";
 import { Spinner } from "../../components/spinner";
@@ -268,134 +269,140 @@ export function ConversationTimeline(props: {
         }}
         style={{ ...grow, position: "relative" }}
       >
-        <List
-          style={grow}
-          ref={(node) => {
-            transcriptList = node;
-          }}
-          each={rows()}
-          keyExtractor={(message) => message.id}
-          initialScrollAtEnd
-          // design-value: a virtual list's first guess at a row's height, not a drawn size
-          estimatedItemSize={134}
-          scrollEventThrottle={onWindows ? 16 : undefined}
-          onScroll={(event) => {
-            // The button was placed against the selection where it was.
-            quoteSelection.dismiss();
-            if (onWindows) glide.onScroll(event);
-          }}
-          onViewableItemsChange={({ viewableItems }) => {
-            firstVisibleId.set(viewableItems[0]?.item.id);
-            props.onVisibleRows?.(
-              new Set(viewableItems.map((token) => token.item.id)),
-            );
-          }}
-          contentStyle={{
-            paddingLeft: space[16],
-            paddingRight: props.rail ? space[64] : space[16],
-            // The header's slot stays, empty, with a gap after it: take that
-            // gap back while there is nothing older to load.
-            paddingTop: (phone() ? 16 : 12) - (props.hasOlder ? 0 : 12),
-            paddingBottom: space[12],
-            gap: space[12],
-          }}
-          header={() => (
-            <If when={props.hasOlder}>
-              <View style={{ alignItems: "center" }}>
-                <View
-                  role="button"
-                  accessibilityLabel={uiText("loadEarlierMessages")}
-                  accessibilityState={{ busy: props.paging }}
-                  onPress={() => {
-                    if (!props.paging) props.onPageOlder();
-                  }}
-                  hoverStyle={{ opacity: opacity.muted }}
-                  focusVisibleStyle={focusRing(c())}
-                  style={{
-                    ...row,
-                    gap: space[8],
-                    paddingVertical: space[4],
-                    cursor: props.paging ? "default" : "pointer",
-                  }}
-                >
-                  <If when={pagingShown()}>
-                    <Spinner size={icon.sm} tone="muted" />
-                  </If>
-                  <Label variant="small" tone="muted">
-                    {uiText("loadEarlierMessages")}
-                  </Label>
+        <MessageViewport.Provider value={() => timelineFocus}>
+          <List
+            style={grow}
+            ref={(node) => {
+              transcriptList = node;
+            }}
+            each={rows()}
+            keyExtractor={(message) => message.id}
+            initialScrollAtEnd
+            // design-value: a virtual list's first guess at a row's height, not a drawn size
+            estimatedItemSize={134}
+            scrollEventThrottle={onWindows ? 16 : undefined}
+            onScroll={(event) => {
+              // The button was placed against the selection where it was.
+              quoteSelection.dismiss();
+              if (onWindows) glide.onScroll(event);
+            }}
+            onViewableItemsChange={({ viewableItems }) => {
+              firstVisibleId.set(viewableItems[0]?.item.id);
+              props.onVisibleRows?.(
+                new Set(viewableItems.map((token) => token.item.id)),
+              );
+            }}
+            contentStyle={{
+              paddingLeft: space[16],
+              paddingRight: props.rail ? space[64] : space[16],
+              // The header's slot stays, empty, with a gap after it: take that
+              // gap back while there is nothing older to load.
+              paddingTop: (phone() ? 16 : 12) - (props.hasOlder ? 0 : 12),
+              paddingBottom: space[12],
+              gap: space[12],
+            }}
+            header={() => (
+              <If when={props.hasOlder}>
+                <View style={{ alignItems: "center" }}>
+                  <View
+                    role="button"
+                    accessibilityLabel={uiText("loadEarlierMessages")}
+                    accessibilityState={{ busy: props.paging }}
+                    onPress={() => {
+                      if (!props.paging) props.onPageOlder();
+                    }}
+                    hoverStyle={{ opacity: opacity.muted }}
+                    focusVisibleStyle={focusRing(c())}
+                    style={{
+                      ...row,
+                      gap: space[8],
+                      paddingVertical: space[4],
+                      cursor: props.paging ? "default" : "pointer",
+                    }}
+                  >
+                    <If when={pagingShown()}>
+                      <Spinner size={icon.sm} tone="muted" />
+                    </If>
+                    <Label variant="small" tone="muted">
+                      {uiText("loadEarlierMessages")}
+                    </Label>
+                  </View>
                 </View>
-              </View>
-            </If>
-          )}
-          empty={() => (
-            <EmptyState
-              size="page"
-              status="empty"
-              loading={null}
-              error={null}
-              empty={
-                props.captain
-                  ? {
-                      art: "captain",
-                      title: uiText("noCaptainMessagesYet"),
-                      description: uiText("noCaptainMessagesYetHint"),
-                    }
-                  : {
-                      art: "chats",
-                      title: uiText("noMessagesYet"),
-                      description: uiText("noMessagesYetHint"),
-                    }
-              }
-            />
-          )}
-        >
-          {(message) => {
-            const row = (
-              <If
-                when={!isSystemNotice(message())}
-                else={<SystemNotice item={message()} phone={phone()} />}
-              >
-                <Message
-                  item={message()}
-                  onReadDraft={readDraft}
-                  registerAction={registerAction}
-                  additions={props.additions.get(message().id) ?? []}
-                  canInsert={
-                    host.state().status === "open" &&
-                    props.recipients.has(message().id)
-                  }
-                  onInsert={() => props.onInsert(message())}
-                  inserting={props.insertingId === message().id}
-                  onInsertClose={props.onInsertClose}
-                  insertPanel={props.insertPanel}
-                  sameFailureAsNext={sameFailures().has(message().id)}
-                  delivery={props.deliveries?.get(message().id)}
-                  phone={phone()}
-                  compact={props.compact}
-                  captain={props.captain}
-                  members={props.members}
-                  onTask={props.onTask}
-                  onPending={props.onPending}
-                  onArtifact={props.onArtifact}
-                  onWidgetDraft={(text) =>
-                    props.onWidgetDraft(message().conversationId, text)
-                  }
-                  onSelectionChange={(event, reply) =>
-                    quoteSelection.select(message(), event, reply)
-                  }
-                  onRetry={
-                    props.onRetryReply
-                      ? () => props.onRetryReply?.(message())
-                      : undefined
-                  }
-                  onMember={props.onMember}
-                />
               </If>
-            );
-            return onWindows ? <View onWheel={glide.onWheel}>{row}</View> : row;
-          }}
-        </List>
+            )}
+            empty={() => (
+              <EmptyState
+                size="page"
+                status="empty"
+                loading={null}
+                error={null}
+                empty={
+                  props.captain
+                    ? {
+                        art: "captain",
+                        title: uiText("noCaptainMessagesYet"),
+                        description: uiText("noCaptainMessagesYetHint"),
+                      }
+                    : {
+                        art: "chats",
+                        title: uiText("noMessagesYet"),
+                        description: uiText("noMessagesYetHint"),
+                      }
+                }
+              />
+            )}
+          >
+            {(message) => {
+              const row = (
+                <If
+                  when={!isSystemNotice(message())}
+                  else={<SystemNotice item={message()} phone={phone()} />}
+                >
+                  <Message
+                    item={message()}
+                    onReadDraft={readDraft}
+                    registerAction={registerAction}
+                    additions={props.additions.get(message().id) ?? []}
+                    canInsert={
+                      host.state().status === "open" &&
+                      props.recipients.has(message().id)
+                    }
+                    onInsert={() => props.onInsert(message())}
+                    inserting={props.insertingId === message().id}
+                    onInsertClose={props.onInsertClose}
+                    insertPanel={props.insertPanel}
+                    sameFailureAsNext={sameFailures().has(message().id)}
+                    delivery={props.deliveries?.get(message().id)}
+                    phone={phone()}
+                    compact={props.compact}
+                    captain={props.captain}
+                    members={props.members}
+                    onTask={props.onTask}
+                    onPending={props.onPending}
+                    onArtifact={props.onArtifact}
+                    onWidgetDraft={(text) =>
+                      props.onWidgetDraft(message().conversationId, text)
+                    }
+                    onSelectionChange={(event, reply) =>
+                      quoteSelection.select(message(), event, reply)
+                    }
+                    onRetry={
+                      props.onRetryReply
+                        ? () => props.onRetryReply?.(message())
+                        : undefined
+                    }
+                    onMember={props.onMember}
+                  />
+                </If>
+              );
+              return onWindows ? (
+                <View onWheel={glide.onWheel}>{row}</View>
+              ) : (
+                row
+              );
+            }}
+          </List>
+        </MessageViewport.Provider>
         <QuoteSelectionOverlay controller={quoteSelection} />
         <If when={selected()}>
           {(message) => (
