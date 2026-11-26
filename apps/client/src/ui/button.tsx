@@ -49,6 +49,8 @@ export function Button(props: {
   expanded?: boolean;
   /** The key that does the same, after the label (`⌘⏎` on a form's button). */
   shortcut?: string;
+  /** Keyboard focus ring placement; "inset" keeps the ring inside views flush against an edge. */
+  focusRingKind?: "ring" | "inset";
   style?: ViewStyle;
   onPress: () => void;
 }) {
@@ -64,6 +66,7 @@ export function Button(props: {
     busy: () => Boolean(props.busy),
     selected: () => props.selected,
     expanded: () => props.expanded,
+    focusRingKind: props.focusRingKind,
     hoverBackground: () => (primary() ? color().ink : color().selected),
     onPress: () => props.onPress(),
   });

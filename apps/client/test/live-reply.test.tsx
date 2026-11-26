@@ -1,5 +1,8 @@
 import type { App } from "nsh/test";
 import { expect, open, test } from "nsh/test";
+import { palette } from "../src/components/theme";
+
+const rgba = (hex: string) => `${hex.toLowerCase()}ff`;
 
 /** A caption is drawn in capitals (on a phone after a dot): the words at its end, whatever their case. */
 const reads = (app: App, words: string) =>
@@ -245,5 +248,60 @@ for (const width of [1440, 1024, 390]) {
     await app.press("Running tool");
     expect(app.layout("id:process-window")!.height).toBe(afterWindow.height);
     expect(app.layout("id:below-message")!.y).toBe(belowBefore.y);
+  });
+}
+
+async function assertStopButtonFlush(
+  app: App,
+  width: number,
+  scheme: "light" | "dark",
+) {
+  const windowBox = app.layout("id:process-window")!;
+  const stopBox = app.layout("label:Stop")!;
+  expect(stopBox.x + stopBox.width).toBe(windowBox.x + windowBox.width - 1);
+  expect(stopBox.y).toBeGreaterThanOrEqual(windowBox.y + 1);
+  expect(stopBox.y + stopBox.height).toBeLessThanOrEqual(windowBox.y + 24);
+
+  if (width >= 600) {
+    expect(app.viewStyle("label:Stop")?.backgroundColor ?? null).toBeNull();
+    await app.hover("label:Stop");
+    expect(app.viewStyle("label:Stop")?.backgroundColor).toBe(
+      rgba(palette(scheme).selected),
+    );
+    await app.hover("label:Thinking process");
+  }
+
+  await app.press("label:Thinking process");
+  const collapsedWindow = app.layout("id:process-window")!;
+  const collapsedStop = app.layout("label:Stop")!;
+  expect(collapsedWindow.height).toBe(26);
+  expect(collapsedStop.x + collapsedStop.width).toBe(
+    collapsedWindow.x + collapsedWindow.width - 1,
+  );
+  expect(collapsedStop.y).toBeGreaterThanOrEqual(collapsedWindow.y + 1);
+  expect(collapsedStop.y + collapsedStop.height).toBeLessThanOrEqual(
+    collapsedWindow.y + collapsedWindow.height - 1,
+  );
+}
+
+for (const width of [1440, 1024, 390]) {
+  test(`the process window Stop button aligns flush with the right edge across themes and states (${width}px)`, async () => {
+    const app = await open("./fixtures/live-reply.tsx", {
+      width,
+      height: 900,
+      platform: width < 600 ? "ios" : "macos",
+      colorScheme: "light",
+    });
+
+    await assertStopButtonFlush(app, width, "light");
+
+    await app.press("label:Thinking process");
+    await app.setColorScheme("dark");
+    await assertStopButtonFlush(app, width, "dark");
+
+    await app.press("label:Stop");
+    expect(app.texts()).toContain(
+      'conversations.stop {"conversationId":"group","messageId":"ada-1"}',
+    );
   });
 }

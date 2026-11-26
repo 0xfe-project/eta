@@ -4,8 +4,8 @@ import type {
   MessageView,
   ViewMessageRow,
 } from "@eta/client-contracts";
-import { mount, signal, View, windowSize } from "nsh";
-import { Button, Label } from "../../src/components";
+import { colorScheme, mount, signal, View, windowSize } from "nsh";
+import { Button, Label, palette, Palette } from "../../src/components";
 import { ToastLayer } from "../../src/components/toast";
 import { Message } from "../../src/pages/chat/message";
 import { createHost, Host } from "../../src/services/host";
@@ -141,6 +141,17 @@ function kept(ending: Ending): Partial<MessageView> {
 function Fixture() {
   const host = createHost();
   host.address.set({ origin: "http://example.invalid" });
+  const stopCalls = signal<string[]>([]);
+  host.call = async <T,>(target: string, action: string, args?: unknown) => {
+    if (target === "conversations" && action === "stop") {
+      stopCalls.update((log) => [
+        ...log,
+        `${target}.${action} ${JSON.stringify(args)}`,
+      ]);
+      return { stopped: [] } as T;
+    }
+    return undefined as T;
+  };
   const ending = signal<Ending>("working");
   const sessionMode = signal<
     "working" | "runningTool" | "plain" | "waiting" | "firstStep"
@@ -214,86 +225,33 @@ function Fixture() {
     },
   ];
   return (
-    <Host.Provider value={host}>
-      <View>
-        <Message
-          item={item()}
-          additions={[]}
-          canInsert={false}
-          onInsert={() => {}}
-          phone={windowSize().width < 600}
-          members={members()}
-          onArtifact={() => {}}
-          onWidgetDraft={() => {}}
-          onTask={() => {}}
-          onRetry={() => retried.update((n) => n + 1)}
-          onReadDraft={() => {}}
-          registerAction={() => () => {}}
-        />
-        <View testID="below-message">
-          <Label>{`Retried: ${retried()}`}</Label>
-        </View>
-        <Button
-          label="Start waiting"
-          onPress={() => {
-            sessionMode.set("waiting");
-            host.state.update((state) => ({
-              ...state,
-              targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
-            }));
-          }}
-        />
-        <Button
-          label="First step"
-          onPress={() => {
-            sessionMode.set("firstStep");
-            host.state.update((state) => ({
-              ...state,
-              targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
-            }));
-          }}
-        />
-        <Button
-          label="Running tool"
-          onPress={() => {
-            sessionMode.set("runningTool");
-            host.state.update((state) => ({
-              ...state,
-              targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
-            }));
-          }}
-        />
-        <Button
-          label="Complete tool"
-          onPress={() => {
-            sessionMode.set("working");
-            host.state.update((state) => ({
-              ...state,
-              targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
-            }));
-          }}
-        />
-        <Button
-          label="Write without tools"
-          onPress={() => {
-            sessionMode.set("plain");
-            host.state.update((state) => ({
-              ...state,
-              targets: { ...state.targets, "sessions.s-ada": sessionTarget() },
-            }));
-          }}
-        />
-        <Button
-          label="Write more"
-          // The run writes on a moment later, while the reader has the panel open.
-          onPress={() =>
-            setTimeout(() => {
-              later.set([
-                row(6, {
-                  role: "assistant",
-                  content: [{ type: "text", text: "Checking the key next." }],
-                }),
-              ]);
+    <Palette.Provider value={() => palette(colorScheme())}>
+      <Host.Provider value={host}>
+        <View>
+          <Message
+            item={item()}
+            additions={[]}
+            canInsert={false}
+            onInsert={() => {}}
+            phone={windowSize().width < 600}
+            members={members()}
+            onArtifact={() => {}}
+            onWidgetDraft={() => {}}
+            onTask={() => {}}
+            onRetry={() => retried.update((n) => n + 1)}
+            onReadDraft={() => {}}
+            registerAction={() => () => {}}
+          />
+          <View testID="below-message">
+            <Label>{`Retried: ${retried()}`}</Label>
+          </View>
+          <If when={stopCalls().length}>
+            <Label>{stopCalls().join("\n")}</Label>
+          </If>
+          <Button
+            label="Start waiting"
+            onPress={() => {
+              sessionMode.set("waiting");
               host.state.update((state) => ({
                 ...state,
                 targets: {
@@ -301,32 +259,105 @@ function Fixture() {
                   "sessions.s-ada": sessionTarget(),
                 },
               }));
-            }, 500)
-          }
-        />
-        <Button
-          label="Finish"
-          onPress={() =>
-            ending.set(sessionMode() === "plain" ? "plain" : "done")
-          }
-        />
-        <Button label="End stopped" onPress={() => ending.set("stopped")} />
-        <Button label="End failed" onPress={() => ending.set("failed")} />
-        <Button
-          label="Reload"
-          onPress={() => {
-            // A page opened afresh: the row as saved, no session in view.
-            reloaded.set(true);
-            host.state.update((state) => {
-              const targets = { ...state.targets };
-              delete targets["sessions.s-ada"];
-              return { ...state, targets };
-            });
-          }}
-        />
-        <ToastLayer />
-      </View>
-    </Host.Provider>
+            }}
+          />
+          <Button
+            label="First step"
+            onPress={() => {
+              sessionMode.set("firstStep");
+              host.state.update((state) => ({
+                ...state,
+                targets: {
+                  ...state.targets,
+                  "sessions.s-ada": sessionTarget(),
+                },
+              }));
+            }}
+          />
+          <Button
+            label="Running tool"
+            onPress={() => {
+              sessionMode.set("runningTool");
+              host.state.update((state) => ({
+                ...state,
+                targets: {
+                  ...state.targets,
+                  "sessions.s-ada": sessionTarget(),
+                },
+              }));
+            }}
+          />
+          <Button
+            label="Complete tool"
+            onPress={() => {
+              sessionMode.set("working");
+              host.state.update((state) => ({
+                ...state,
+                targets: {
+                  ...state.targets,
+                  "sessions.s-ada": sessionTarget(),
+                },
+              }));
+            }}
+          />
+          <Button
+            label="Write without tools"
+            onPress={() => {
+              sessionMode.set("plain");
+              host.state.update((state) => ({
+                ...state,
+                targets: {
+                  ...state.targets,
+                  "sessions.s-ada": sessionTarget(),
+                },
+              }));
+            }}
+          />
+          <Button
+            label="Write more"
+            // The run writes on a moment later, while the reader has the panel open.
+            onPress={() =>
+              setTimeout(() => {
+                later.set([
+                  row(6, {
+                    role: "assistant",
+                    content: [{ type: "text", text: "Checking the key next." }],
+                  }),
+                ]);
+                host.state.update((state) => ({
+                  ...state,
+                  targets: {
+                    ...state.targets,
+                    "sessions.s-ada": sessionTarget(),
+                  },
+                }));
+              }, 500)
+            }
+          />
+          <Button
+            label="Finish"
+            onPress={() =>
+              ending.set(sessionMode() === "plain" ? "plain" : "done")
+            }
+          />
+          <Button label="End stopped" onPress={() => ending.set("stopped")} />
+          <Button label="End failed" onPress={() => ending.set("failed")} />
+          <Button
+            label="Reload"
+            onPress={() => {
+              // A page opened afresh: the row as saved, no session in view.
+              reloaded.set(true);
+              host.state.update((state) => {
+                const targets = { ...state.targets };
+                delete targets["sessions.s-ada"];
+                return { ...state, targets };
+              });
+            }}
+          />
+          <ToastLayer />
+        </View>
+      </Host.Provider>
+    </Palette.Provider>
   );
 }
 mount(Fixture);
