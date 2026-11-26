@@ -203,6 +203,8 @@ export interface Hooks {
    * a host that has not written a policy yet is not silently gated.
    */
   authorize?: Authorizer;
+  /** The active evaluation's abort signal, if any. Read dynamically per call. */
+  signal?: () => AbortSignal | undefined;
 
   ctx?: () => CtxView;
   emit?: Partial<EmitSink>;

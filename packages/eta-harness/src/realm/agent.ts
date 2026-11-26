@@ -1,7 +1,7 @@
 import type { ApprovalStore } from "./authorize";
 
 import type { CtxView, Hooks } from "./hooks";
-import type { Evaluation } from "./realm";
+import type { EvaluateOptions, Evaluation } from "./realm";
 import { defaultApprovalStorePath, FileApprovalStore } from "./authorize";
 import { mountFileOps } from "./file-ops";
 import { mountGlobals, mountNodeGlobals, mountShell } from "./host-modules";
@@ -42,6 +42,7 @@ export class Agent {
   readonly #hooks: Hooks;
   readonly #approvalStore: ApprovalStore;
   readonly #cwd: string | undefined;
+  readonly #realms = new Set<Realm>();
   #realm: Realm | undefined;
   #waking: { hash: string; done: Promise<void> } | undefined;
   #woken = false;
@@ -123,14 +124,15 @@ export class Agent {
   /** Evaluates `source` on top of the agent's abilities. */
   async run(
     source: string,
-    options: { identifier?: string; timeoutMs?: number } = {},
+    options: EvaluateOptions = {},
   ): Promise<Evaluation> {
     await this.wake();
     return (this.#realm as Realm).evaluate(source, options);
   }
 
   dispose(): void {
-    this.#realm?.kill();
+    for (const realm of this.#realms) realm.kill();
+    this.#realms.clear();
     this.#realm = undefined;
     this.#waking = undefined;
     this.#woken = false;
@@ -153,9 +155,10 @@ export class Agent {
       onEffect: hooks.onEffect,
       authorize: hooks.authorize,
     });
-    mountGlobals(realm);
+    this.#realms.add(realm);
+    mountGlobals(realm, hooks.signal);
     mountNodeGlobals(realm);
-    mountShell(realm, this.#cwd);
+    mountShell(realm, this.#cwd, hooks.signal);
     mountFileOps(realm, this.#cwd);
     mountNonEtaHooks(realm, hooks);
     return realm;

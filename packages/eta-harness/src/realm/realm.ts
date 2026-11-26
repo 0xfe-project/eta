@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import process from "node:process";
 import * as vm from "node:vm";
 
@@ -12,7 +13,7 @@ export interface Effect {
   name: string;
   /** Where in the source the call was made. */
   at: { identifier: string; line: number; column: number };
-  status: "ok" | "failed" | "blocked";
+  status: "ok" | "failed" | "blocked" | "aborted";
   ms: number;
   /** One short line: the path, the URL, the error message. */
   detail: string;
@@ -40,11 +41,22 @@ export type Authorizer = (
   request: AuthorizationRequest,
 ) => string | undefined | Promise<string | undefined>;
 
+export interface EffectScopeHandle {
+  /**
+   * Synchronously seals this evaluation's effect scope and returns a snapshot
+   * of all effects completed before seal plus any currently in-flight effects
+   * materialized with `status: "aborted"`. Idempotent on repeated calls.
+   */
+  seal: () => Effect[];
+}
+
 export interface EvaluateOptions {
   /** Where the source claims to live. Shows up in stack traces and effect rows. */
   identifier?: string;
   /** Wall clock for the synchronous part. A module parked on `await` is not covered. */
   timeoutMs?: number;
+  /** Receives a scope handle before module evaluation starts so the caller can synchronously seal & snapshot effects on abort. */
+  onScope?: (handle: EffectScopeHandle) => void;
 }
 
 export interface Evaluation {
@@ -128,6 +140,21 @@ function isPromise(value: unknown): value is Promise<string | undefined> {
   return typeof (value as { then?: unknown } | undefined)?.then === "function";
 }
 
+interface InFlightEffect {
+  name: string;
+  at: Effect["at"];
+  detail: string;
+  started: number;
+}
+
+interface EffectScope {
+  identifier: string;
+  completed: Effect[];
+  inFlight: Map<number, InFlightEffect>;
+  sealed: boolean;
+  nextId: number;
+}
+
 /**
  * A module graph that evaluates against its own globals.
  *
@@ -138,6 +165,8 @@ function isPromise(value: unknown): value is Promise<string | undefined> {
 export class Realm {
   readonly #context: vm.Context;
   readonly #name: string;
+  readonly #effectScope = new AsyncLocalStorage<EffectScope>();
+  readonly #abortController = new AbortController();
   #linker: Linker | undefined;
   #effects: Effect[] = [];
   #modules = new Map<string, vm.Module>();
@@ -159,6 +188,16 @@ export class Realm {
 
   get context(): vm.Context {
     return this.#context;
+  }
+
+  /** Aborts when the realm is killed so mounted subprocesses/requests can cancel. */
+  get signal(): AbortSignal {
+    return this.#abortController.signal;
+  }
+
+  /** Whether the currently running evaluation's effect scope has been sealed. */
+  get scopeSealed(): boolean {
+    return this.#effectScope.getStore()?.sealed === true;
   }
 
   /**
@@ -216,6 +255,11 @@ export class Realm {
    */
   kill(): void {
     this.#killed = true;
+    if (!this.#abortController.signal.aborted) {
+      this.#abortController.abort(
+        new Error(`realm "${this.#name}" was killed`),
+      );
+    }
     this.#modules.clear();
     this.#effects = [];
   }
@@ -243,9 +287,50 @@ export class Realm {
     status: Effect["status"] = "ok",
     ms = 0,
   ): void {
+    const scope = this.#effectScope.getStore();
+    if (scope?.sealed === true) return;
     const effect: Effect = { name, at, status, ms: round(ms), detail };
+    scope?.completed.push(effect);
     this.#effects.push(effect);
     this.#onEffect?.(effect);
+  }
+
+  /**
+   * Tracks an in-flight host call inside the active evaluation's effect scope.
+   * Returns an idempotent completion function that removes the in-flight entry
+   * and records the finished effect unless the scope has already been sealed.
+   */
+  trackCall(
+    name: string,
+    detail: string,
+    at: Effect["at"] = this.#callsite(),
+  ): (status: Effect["status"], detail?: string) => void {
+    const started = performance.now();
+    const scope = this.#effectScope.getStore();
+    let id: number | undefined;
+    if (scope !== undefined && !scope.sealed) {
+      id = scope.nextId++;
+      scope.inFlight.set(id, { name, at, detail, started });
+    }
+    let finished = false;
+    return (status: Effect["status"], finalDetail = detail): void => {
+      if (finished) return;
+      finished = true;
+      if (scope !== undefined) {
+        if (id !== undefined) scope.inFlight.delete(id);
+        if (scope.sealed) return;
+      }
+      const effect: Effect = {
+        name,
+        at,
+        status,
+        ms: round(performance.now() - started),
+        detail: finalDetail,
+      };
+      scope?.completed.push(effect);
+      this.#effects.push(effect);
+      this.#onEffect?.(effect);
+    };
   }
 
   /**
@@ -286,20 +371,9 @@ export class Realm {
     const label =
       describe ?? ((...args: Args) => args.map(summarize).join(", "));
     return this.wrap((...args: Args): R => {
-      const started = performance.now();
       const at = this.#callsite();
       const request = label(...args);
-      const finish = (status: Effect["status"], detail: string): void => {
-        const effect: Effect = {
-          name,
-          at,
-          status,
-          ms: round(performance.now() - started),
-          detail,
-        };
-        this.#effects.push(effect);
-        this.#onEffect?.(effect);
-      };
+      const finish = this.trackCall(name, request, at);
       const deny = (reason: string): never => {
         finish("blocked", reason);
         throw new Error(`${name} was refused: ${reason}`);
@@ -329,14 +403,26 @@ export class Realm {
         }
       };
 
-      const verdict =
-        options.authorize === false
-          ? undefined
-          : this.#authorize?.({ name, input: args, at });
+      let verdict: string | undefined | Promise<string | undefined>;
+      try {
+        verdict =
+          options.authorize === false
+            ? undefined
+            : this.#authorize?.({ name, input: args, at });
+      } catch (error) {
+        finish("failed", request);
+        throw error;
+      }
       if (verdict === undefined) return run();
       if (!isPromise(verdict)) return deny(verdict) as R;
       return (async () => {
-        const reason = await verdict;
+        let reason: string | undefined;
+        try {
+          reason = await verdict;
+        } catch (error) {
+          finish("failed", request);
+          throw error;
+        }
         if (reason !== undefined) deny(reason);
         return run();
       })() as R;
@@ -385,45 +471,76 @@ export class Realm {
     if (this.#killed) throw new Error(`realm "${this.#name}" was killed`);
     const identifier = options.identifier ?? "esm.js";
     const started = Date.now();
-    const effectStart = this.#effects.length;
+    const scope: EffectScope = {
+      identifier,
+      completed: [],
+      inFlight: new Map(),
+      sealed: false,
+      nextId: 0,
+    };
+    options.onScope?.({
+      seal: () => this.#sealScope(scope),
+    });
     const previousIdentifier = this.#identifier;
     this.#identifier = identifier;
     const resolve = this.#resolver();
 
     try {
-      const module = new vm.SourceTextModule(source, {
-        context: this.#context,
-        identifier,
-        importModuleDynamically: async (specifier: string) => {
-          const target = await resolve(specifier, identifier);
-          if (target.status === "unlinked") {
-            await target.link((inner: string, referencing: vm.Module) =>
-              resolve(inner, referencing.identifier),
-            );
-          }
-          if (target.status === "linked") await target.evaluate();
-          return target;
-        },
-      });
+      return await this.#effectScope.run(scope, async () => {
+        const module = new vm.SourceTextModule(source, {
+          context: this.#context,
+          identifier,
+          importModuleDynamically: async (specifier: string) => {
+            const target = await resolve(specifier, identifier);
+            if (target.status === "unlinked") {
+              await target.link((inner: string, referencing: vm.Module) =>
+                resolve(inner, referencing.identifier),
+              );
+            }
+            if (target.status === "linked") await target.evaluate();
+            return target;
+          },
+        });
 
-      await module.link((specifier: string, referencing: vm.Module) =>
-        resolve(specifier, referencing.identifier),
-      );
-      await module.evaluate({
-        timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      });
+        await module.link((specifier: string, referencing: vm.Module) =>
+          resolve(specifier, referencing.identifier),
+        );
+        await module.evaluate({
+          timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        });
 
-      const namespace = module.namespace as Record<string, unknown>;
-      return {
-        value: Object.hasOwn(namespace, "default")
-          ? namespace.default
-          : undefined,
-        durationMs: Date.now() - started,
-        effects: this.#effects.slice(effectStart),
-      };
+        const namespace = module.namespace as Record<string, unknown>;
+        return {
+          value: Object.hasOwn(namespace, "default")
+            ? namespace.default
+            : undefined,
+          durationMs: Date.now() - started,
+          effects: scope.completed.slice(),
+        };
+      });
     } finally {
       this.#identifier = previousIdentifier;
     }
+  }
+
+  #sealScope(scope: EffectScope): Effect[] {
+    if (scope.sealed) return scope.completed.slice();
+    scope.sealed = true;
+    const now = performance.now();
+    for (const entry of scope.inFlight.values()) {
+      const effect: Effect = {
+        name: entry.name,
+        at: entry.at,
+        status: "aborted",
+        ms: round(now - entry.started),
+        detail: entry.detail,
+      };
+      scope.completed.push(effect);
+      this.#effects.push(effect);
+      this.#onEffect?.(effect);
+    }
+    scope.inFlight.clear();
+    return scope.completed.slice();
   }
 
   /**
@@ -465,6 +582,8 @@ export class Realm {
    * the file is only right for the module at the top.
    */
   #callsite(): Effect["at"] {
+    const identifier =
+      this.#effectScope.getStore()?.identifier ?? this.#identifier;
     const stack = (new Error("callsite").stack ?? "").split("\n").slice(1);
     let afterWrapper = false;
     for (const raw of stack) {
@@ -476,7 +595,7 @@ export class Realm {
       const source = SOURCE_FRAME.exec(raw);
       if (source !== null) {
         return {
-          identifier: this.#identifier,
+          identifier,
           line: Number(source[1]),
           column: Number(source[2]),
         };
@@ -487,14 +606,12 @@ export class Realm {
       if (file.startsWith("node:") || file.startsWith("internal/")) continue;
       return {
         identifier:
-          file === "unknown" || file.length === 0
-            ? this.#identifier
-            : basename(file),
+          file === "unknown" || file.length === 0 ? identifier : basename(file),
         line: Number(match[3]),
         column: Number(match[4]),
       };
     }
-    return { identifier: this.#identifier, line: 0, column: 0 };
+    return { identifier, line: 0, column: 0 };
   }
 
   /**
