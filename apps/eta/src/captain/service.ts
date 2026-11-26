@@ -41,7 +41,8 @@ import type { CaptainReviewRecord, CaptainStore } from "./store";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
 import { checkExternalPersona } from "../agents/bounds";
 import { createCaptainIdentity } from "../agents/create";
-import { ensureHome, homeOf } from "../agents/home";
+import { deleteAgent } from "../agents/delete";
+import { ensureHome } from "../agents/home";
 import { checkModel } from "../agents/model";
 import { agentHome } from "../agents/store";
 import { summaryOf } from "../conversations/views";
@@ -1014,16 +1015,9 @@ export class CaptainService {
       }
       case "delete_agent": {
         const agentId = String(operation.payload.agentId ?? "");
-        const agent = this.#deps.agents.get(agentId);
-        if (agent === undefined) throw new Error("no such agent");
-        if (agent.systemRole === "captain")
-          throw new Error("the Captain cannot delete itself");
-        this.#deps.engine.stopAgent(agentId);
-        this.#deps.policies.agentDeleted(agent);
-        const home = homeOf(this.#deps, agent);
-        if (home !== undefined)
-          this.#deps.projects.update(home.id, { archived: true });
-        this.#deps.agents.remove(agentId);
+        deleteAgent(this.#deps, agentId, {
+          captainMessage: "the Captain cannot delete itself",
+        });
         this.#deps.changed();
         return { agentId, deleted: true };
       }

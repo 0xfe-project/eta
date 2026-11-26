@@ -398,6 +398,23 @@ export function Workspace(props: {
         setup.set(true);
     }
     const all = host.conversations();
+    if (
+      conversation() &&
+      host.state().targets.conversations &&
+      !all.some((item) => item.id === conversation())
+    ) {
+      const next = phone()
+        ? undefined
+        : all.find(
+            (item) =>
+              item.kind === "group" &&
+              !item.archived &&
+              !host.state().missing[`conversations.${item.id}`],
+          );
+      conversation.set(next?.id ?? "");
+      if (phone()) showConversation(false);
+      if (!settings() && page() === "chat") link("chat", next?.id || undefined);
+    }
     if (!phone() && !conversation()) {
       const first = all.find(
         (item) =>

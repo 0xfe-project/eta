@@ -88,7 +88,6 @@ async function runtimeModels(
 function canRunAgents(machine: MachineView): boolean {
   return (
     (machine.kind === "primary" || machine.kind === "daemon") &&
-    machine.status !== "revoked" &&
     machine.status !== "pending"
   );
 }

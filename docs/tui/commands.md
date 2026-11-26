@@ -145,7 +145,7 @@ Invite an agent into the conversation in front
 /machines
 ```
 
-List the machines, add one, approve or revoke one
+List the machines, add one, approve or remove one
 
 ### Examples
 

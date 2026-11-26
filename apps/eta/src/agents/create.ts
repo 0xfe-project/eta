@@ -246,7 +246,7 @@ export function checkMachine(
     (machine.kind !== "primary" && machine.kind !== "daemon")
   )
     throw new Error(`no such machine: ${machineId}`);
-  if (machine.status === "revoked" || machine.status === "pending")
+  if (machine.status === "pending")
     throw new Error(
       `${machine.name} is ${machine.status}: an agent cannot run there`,
     );

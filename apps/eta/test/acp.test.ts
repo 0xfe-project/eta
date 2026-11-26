@@ -265,6 +265,85 @@ describe("the acp target", () => {
     });
   });
 
+  it("previews dependent agents and cascade-deletes them with deleteAgents while keeping group history", async () => {
+    const w = await host();
+    const { config } = fakeAgent("fake");
+    await save(w, config);
+    const ace = await w.agent("Ace", { runtime: "acp.fake" });
+    const bea = await w.agent("Bea", { runtime: "acp.fake" });
+    const project = await w.project();
+    const group = await w.group(project.id, [ace.id], "team");
+    await w.watch(group.id);
+
+    // Write a past message from Ace and start an active slow reply so we verify both history
+    // preservation and active turn stopping.
+    const first = await w.send(group.id, "hello");
+    await w.settled(group.id, first.replies[0]!.id);
+    const slow = await w.send(group.id, "a slow one");
+    await w.settled(group.id, slow.replies[0]!.id, ["working"]);
+
+    const preview = (await w.client.call("acp", "deletePreview", {
+      id: "fake",
+    })) as {
+      id: string;
+      machineId: string;
+      agents: {
+        id: string;
+        name: string;
+        runtime: string;
+        groupCount: number;
+        busy: boolean;
+      }[];
+    };
+    expect(preview.id).toBe("fake");
+    expect(preview.machineId).toBe(primaryOf(w));
+    expect(preview.agents).toEqual(
+      expect.arrayContaining([
+        {
+          id: ace.id,
+          name: "Ace",
+          runtime: "acp.fake",
+          groupCount: 1,
+          busy: true,
+        },
+        {
+          id: bea.id,
+          name: "Bea",
+          runtime: "acp.fake",
+          groupCount: 0,
+          busy: false,
+        },
+      ]),
+    );
+
+    // Without deleteAgents: true, still refused.
+    await expect(
+      w.client.call("acp", "delete", { id: "fake" }),
+    ).rejects.toThrow(/Cannot delete fake/);
+
+    // With deleteAgents: true, removes acp.json entry and deletes both Ace and Bea.
+    const deleted = (await w.client.call("acp", "delete", {
+      id: "fake",
+      deleteAgents: true,
+    })) as { deletedAgents?: string[] };
+    expect(deleted.deletedAgents).toEqual(
+      expect.arrayContaining([ace.id, bea.id]),
+    );
+    expect(
+      JSON.parse(readFileSync(join(w.host.dataDir, "acp.json"), "utf8")),
+    ).toEqual({ agents: [] });
+    await until(
+      () =>
+        w.client
+          .section<AgentView[]>("agents", "list")
+          ?.every((a) => a.id !== ace.id && a.id !== bea.id) === true,
+    );
+    // Past messages in the group remain intact, and the active reply was stopped.
+    expect(w.row(group.id, first.replies[0]!.id)?.status).toBe("done");
+    const stopped = await w.settled(group.id, slow.replies[0]!.id);
+    expect(stopped.status).toBe("stopped");
+  });
+
   it("tests a configuration that is not saved", async () => {
     const w = await host();
     const { config } = fakeAgent("fake");
@@ -600,5 +679,40 @@ describe("one machine at a time: the settings page on a daemon", () => {
     const done = await r.settled(chat, sent.replies[0]!.id);
     expect(done.status).toBe("done");
     expect(JSON.parse(done.text)).toMatchObject({ prompts: 1 });
+  });
+
+  it("refuses cascade delete when daemon is offline without deleting dependent eta agents, then cascade-deletes when online", async () => {
+    const r = await remoteWorld();
+    const machineId = r.daemon.machineId;
+    const { config } = fakeAgent("fake");
+    await save(r, config, undefined, machineId);
+    const ace = await r.agent("Ace", { runtime: "acp.fake", machineId });
+    const group = await r.group(r.remoteProject.id, [ace.id], "daemon-chat");
+    await r.watch(group.id);
+    const first = await r.send(group.id, "hello");
+    await r.settled(group.id, first.replies[0]!.id);
+
+    // Offline daemon: preview works from SQLite, delete with deleteAgents: true refuses atomically.
+    await r.daemon.stop();
+    await until(() => machineView(r.client, machineId)?.status === "offline");
+    const offlinePreview = (await r.client.call("acp", "deletePreview", {
+      machineId,
+      id: "fake",
+    })) as { agents: { id: string }[] };
+    expect(offlinePreview.agents.map((a) => a.id)).toEqual([ace.id]);
+    await expect(
+      r.client.call("acp", "delete", {
+        machineId,
+        id: "fake",
+        deleteAgents: true,
+      }),
+    ).rejects.toThrow(/is offline/);
+    // Ace was NOT deleted because daemon write did not happen.
+    expect(
+      r.client
+        .section<AgentView[]>("agents", "list")
+        ?.some((a) => a.id === ace.id),
+    ).toBe(true);
+    expect(readAgents(daemonFile(r))).toEqual([config]);
   });
 });

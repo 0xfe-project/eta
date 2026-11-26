@@ -1,10 +1,22 @@
-import type { MachineView } from "@eta/client-contracts";
-import { signal, View } from "nsh";
-import { Button, Label, Modal } from "../../../components";
+import type { MachineResults, MachineView } from "@eta/client-contracts";
+import { cleanup, signal, View } from "nsh";
+import {
+  Button,
+  colors,
+  dialogWidth,
+  Label,
+  Modal,
+  row,
+  SmoothScroll,
+} from "../../../components";
 import { FieldDialog } from "../../../components/field-dialog";
-import { space } from "../../../components/tokens";
+import { space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
+import { problemText } from "../../../services/problem-text";
+
+/** Maximum height of the scrollable preview summary inside the remove-machine confirmation modal. */
+const previewMaxHeight = 240;
 
 export function RenameMachine(props: {
   item: MachineView;
@@ -87,43 +99,223 @@ export function MachineRunsLimit(props: {
   );
 }
 
-/** Revoking asks first: the machine's agents stop reaching it. */
-export function RevokeMachine(props: {
+/** Permanently removing a machine previews every affected agent, project, chat, and active run first. */
+export function RemoveMachine(props: {
   item: MachineView;
   phone: boolean;
   onClose: () => void;
-  onRevoked?: () => void;
+  onRemoved?: () => void;
 }) {
   const host = useHost();
+  const c = colors();
   const busy = signal(false);
-  async function revoke() {
-    if (busy()) return;
+  const loading = signal(true);
+  const error = signal<string | undefined>(undefined);
+  const preview = signal<MachineResults["removePreview"] | undefined>(
+    undefined,
+  );
+
+  let alive = true;
+  cleanup(() => {
+    alive = false;
+  });
+
+  void host
+    .call<MachineResults["removePreview"]>("machines", "removePreview", {
+      machineId: props.item.id,
+    })
+    .then(
+      (result) => {
+        if (!alive) return;
+        preview.set(result);
+        loading.set(false);
+      },
+      (failure: unknown) => {
+        if (!alive) return;
+        error.set(problemText(failure));
+        loading.set(false);
+      },
+    );
+
+  const hasDependents = () => {
+    const p = preview();
+    if (!p) return false;
+    return (
+      p.agents.length > 0 ||
+      p.projects.length > 0 ||
+      p.conversations.length > 0 ||
+      p.activeRuns > 0 ||
+      p.activeReplies > 0
+    );
+  };
+
+  async function remove() {
+    if (busy() || loading() || error()) return;
     busy.set(true);
     const result = await host.action(() =>
-      host.call("machines", "revoke", { machineId: props.item.id }),
+      host.call("machines", "remove", { machineId: props.item.id }),
     );
     busy.set(false);
     if (result !== undefined) {
       props.onClose();
-      props.onRevoked?.();
+      props.onRemoved?.();
     }
   }
+
   return (
     <Modal
       title={uiText("removeMachine2")}
       phone={props.phone}
       sheet={props.phone}
-      onClose={props.onClose}
+      width={props.phone ? undefined : dialogWidth.md}
+      modalFocus
+      overPhoneNavigation
+      onClose={() => {
+        if (!busy()) props.onClose();
+      }}
     >
-      <View style={{ padding: space[16], gap: space[8] }}>
+      <View style={{ padding: space[16], gap: space[12] }}>
         <Label>
-          {uiText("willNoLongerBeAbleTo", { name: props.item.name })}
+          {uiText("removeMachineWarning", { name: props.item.name })}
         </Label>
-        <Button
-          label={uiText("removeMachine")}
-          disabled={busy()}
-          onPress={() => void revoke()}
-        />
+        <If when={loading()}>
+          <Label variant="small" tone="muted">
+            {uiText("removeMachineLoading")}
+          </Label>
+        </If>
+        <If when={error()}>
+          {(message) => (
+            <Label variant="small" tone="red">
+              {message()}
+            </Label>
+          )}
+        </If>
+        <If when={!loading() && !error()}>
+          <If when={preview()}>
+            {(data) => (
+              <If
+                when={hasDependents()}
+                else={
+                  <Label variant="small" tone="muted">
+                    {uiText("removeMachineNoDependents")}
+                  </Label>
+                }
+              >
+                <SmoothScroll style={{ maxHeight: previewMaxHeight }}>
+                  <View
+                    style={{
+                      padding: space[12],
+                      gap: space[8],
+                      backgroundColor: c().selected,
+                    }}
+                  >
+                    <If when={data().agents.length > 0}>
+                      <View style={{ gap: space[4] }}>
+                        <Label
+                          variant="caption"
+                          weight={weight.strong}
+                          tone="mutedInk"
+                        >
+                          {uiText("removeMachineAgents", {
+                            count: data().agents.length,
+                          })}
+                        </Label>
+                        <Each of={data().agents} key={(agent) => agent.id}>
+                          {(agent) => (
+                            <Label variant="small">
+                              {agent().runtime === "eta"
+                                ? uiText("removeMachineAgentPinnedEta", {
+                                    name: agent().name,
+                                  })
+                                : uiText("removeMachineAgentExternal", {
+                                    name: agent().name,
+                                    runtime: agent().runtime,
+                                  })}
+                            </Label>
+                          )}
+                        </Each>
+                      </View>
+                    </If>
+                    <If when={data().projects.length > 0}>
+                      <View style={{ gap: space[4] }}>
+                        <Label
+                          variant="caption"
+                          weight={weight.strong}
+                          tone="mutedInk"
+                        >
+                          {uiText("removeMachineProjects", {
+                            count: data().projects.length,
+                          })}
+                        </Label>
+                        <Each
+                          of={data().projects}
+                          key={(project) => project.id}
+                        >
+                          {(project) => (
+                            <Label variant="small">
+                              {`${project().name} (${project().path})`}
+                            </Label>
+                          )}
+                        </Each>
+                      </View>
+                    </If>
+                    <If when={data().conversations.length > 0}>
+                      <View style={{ gap: space[4] }}>
+                        <Label
+                          variant="caption"
+                          weight={weight.strong}
+                          tone="mutedInk"
+                        >
+                          {uiText("removeMachineConversations", {
+                            count: data().conversations.length,
+                          })}
+                        </Label>
+                        <Each
+                          of={data().conversations}
+                          key={(conversation) => conversation.id}
+                        >
+                          {(conversation) => (
+                            <Label variant="small">
+                              {conversation().archived
+                                ? uiText("removeMachineArchivedTag", {
+                                    name: conversation().name,
+                                  })
+                                : conversation().name}
+                            </Label>
+                          )}
+                        </Each>
+                      </View>
+                    </If>
+                    <If
+                      when={data().activeRuns > 0 || data().activeReplies > 0}
+                    >
+                      <Label variant="small" tone="warning">
+                        {uiText("removeMachineActiveWork", {
+                          runs: data().activeRuns,
+                          replies: data().activeReplies,
+                        })}
+                      </Label>
+                    </If>
+                  </View>
+                </SmoothScroll>
+              </If>
+            )}
+          </If>
+        </If>
+        <View style={{ ...row, justifyContent: "flex-end", gap: space[8] }}>
+          <Button
+            label={uiText("cancel")}
+            disabled={busy()}
+            onPress={props.onClose}
+          />
+          <Button
+            label={busy() ? uiText("removing") : uiText("removeMachine")}
+            tone="danger"
+            busy={busy()}
+            disabled={busy() || loading() || !!error()}
+            onPress={() => void remove()}
+          />
+        </View>
       </View>
     </Modal>
   );

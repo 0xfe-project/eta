@@ -303,17 +303,17 @@ describe("an agent pinned to the primary", () => {
 });
 
 describe("pinning", () => {
-  it("refuses a machine that is not there, or not let in", async () => {
+  it("refuses a machine that is not there, or was removed", async () => {
     const r = await named();
     await expect(r.agent("Ada", { machineId: "nope" })).rejects.toThrow(
       /no such machine/,
     );
-    await r.client.call("machines", "revoke", {
+    await r.client.call("machines", "remove", {
       machineId: r.daemon.machineId,
     });
     await expect(
       r.agent("Bob", { machineId: r.daemon.machineId }),
-    ).rejects.toThrow(/revoked/);
+    ).rejects.toThrow(/no such machine/);
   });
 
   it("a daemon machine's runtimes are asked of that machine", async () => {

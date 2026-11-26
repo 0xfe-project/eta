@@ -115,6 +115,18 @@ export class SessionMirrors {
     this.#wire = undefined;
   }
 
+  /** Drop every mirrored session and session list entry belonging to a removed machine. */
+  dropMachine(machineId: string): void {
+    let changed = this.#followed.delete(machineId);
+    for (const [session, mirror] of this.#mirrors) {
+      if (mirror.machineId !== machineId) continue;
+      mirror.off();
+      this.#mirrors.delete(session);
+      changed = true;
+    }
+    if (changed) this.#wire?.push("sessions");
+  }
+
   /** Put the session's target on the primary's wire. Once; asking again changes nothing. */
   register(session: string, machineId: string): void {
     const wire = this.#wire;

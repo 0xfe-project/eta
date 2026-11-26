@@ -6,8 +6,8 @@ const machines: SlashCommand = {
   name: "machines",
   args: [],
   summary: {
-    en: "List the machines, add one, approve or revoke one",
-    zh: "查看机器，添加、批准或撤销",
+    en: "List the machines, add one, approve or remove one",
+    zh: "查看机器，添加、批准或移除",
   },
   examples: [
     {
@@ -22,7 +22,8 @@ const machines: SlashCommand = {
     "machines.addresses",
     "machines.enroll",
     "machines.approve",
-    "machines.revoke",
+    "machines.removePreview",
+    "machines.remove",
   ],
   run: (ctx) => {
     ctx.openLayer((handle) => <MachinesLayer handle={handle} />);

@@ -29,8 +29,8 @@ import { AddMachine } from "./add-machine";
 import { MachineDetail, machineSystem } from "./machine-detail";
 import {
   MachineRunsLimit,
+  RemoveMachine,
   RenameMachine,
-  RevokeMachine,
 } from "./machine-dialogs";
 import { useMachineUpdate } from "./machine-update";
 import { PhonePairing } from "./phone-pairing";
@@ -40,7 +40,6 @@ const statusWidth = { updating: 160, idle: 100 } as const;
 
 export function machineStatus(item: MachineView) {
   if (item.status === "pending") return uiText("machinePending");
-  if (item.status === "revoked") return uiText("machineRevoked");
   if (item.status === "offline") return uiText("machineOffline");
   if (item.build === "outdated") return uiText("machineNeedsUpdate");
   if (item.build === "updating") return uiText("updating");
@@ -54,7 +53,7 @@ function MachineRow(props: {
 }) {
   const host = useHost();
   const c = colors();
-  const dialog = signal<"" | "menu" | "rename" | "runs" | "revoke">("");
+  const dialog = signal<"" | "menu" | "rename" | "runs" | "remove">("");
   const machineUpdate = useMachineUpdate(() => props.item);
   const updating = machineUpdate.pressed;
   const update = machineUpdate.start;
@@ -128,8 +127,8 @@ function MachineRow(props: {
           run: () => void update(),
         },
         props.item.kind !== "primary" && {
-          label: uiText("machineMenuRevoke"),
-          run: () => dialog.set("revoke"),
+          label: uiText("machineMenuRemove"),
+          run: () => dialog.set("remove"),
         },
       ] as (SheetAction | false)[]
     ).filter((action): action is SheetAction => !!action);
@@ -222,8 +221,8 @@ function MachineRow(props: {
                     }}
                   />
                   <ActionItem
-                    label={uiText("machineMenuRevoke")}
-                    onSelect={() => dialog.set("revoke")}
+                    label={uiText("machineMenuRemove")}
+                    onSelect={() => dialog.set("remove")}
                   />
                 </If>
               </ActionMenu>
@@ -328,8 +327,8 @@ function MachineRow(props: {
           onClose={() => dialog.set("")}
         />
       </If>
-      <If when={dialog() === "revoke"}>
-        <RevokeMachine
+      <If when={dialog() === "remove"}>
+        <RemoveMachine
           item={props.item}
           phone={props.phone}
           onClose={() => dialog.set("")}
@@ -352,8 +351,7 @@ export function Machines(props: {
   let pairingAnchor: ViewRef | undefined;
   const machineId = signal("");
   const phone = () => props.layout === "phone";
-  const visible = () =>
-    props.machines.filter((item) => item.status !== "revoked");
+  const visible = () => props.machines;
   const machine = () => visible().find((item) => item.id === machineId());
   const load = useLoadState({ targets: () => ["machines"] });
   return (

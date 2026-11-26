@@ -2,7 +2,7 @@
  * External runtime boundaries (`runtime !== "eta"`, covering OAR and ACP):
  * 1. No persona anywhere (creation, update, auto-clearing legacy/moved persona, Captain
  *    propose_agent / setPrompt, local + remote + daemon session defense-in-depth).
- * 2. Strict single-machine binding (`machineId !== null`, refusing null/pending/revoked, refusing
+ * 2. Strict single-machine binding (`machineId !== null`, refusing null/pending, refusing
  *    machine changes while in active regular groups on other machines, refusing cross-machine
  *    groups/invites/Captain group proposals/tasks/drafts/mentions, failing cross-machine runtime
  *    replies & task runs cleanly without falling back to the project's machine, while keeping
@@ -300,7 +300,7 @@ describe("external runtime rule 2: single-machine only, no cross-machine use", (
       }),
     ).rejects.toThrow(/must be pinned to a machine/);
 
-    // Revoked / pending machines are refused.
+    // Pending machines are refused.
     const pendingRowId = crypto.randomUUID();
     r.host.db
       .query(

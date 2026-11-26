@@ -31,8 +31,7 @@ export class SkillFileService {
     if (!target || typeof target.machineId !== "string")
       throw new Error("skill_files:machine_required");
     const machine = this.#options.machines.get(target.machineId);
-    if (!machine || machine.status === "revoked")
-      throw new Error("skill_files:machine_removed");
+    if (!machine) throw new Error("skill_files:machine_removed");
     if (machine.status !== "online")
       throw new Error(`skill_files:machine_${machine.status}`);
     if (!machine.home) throw new Error("skill_files:home_unknown");

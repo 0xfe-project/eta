@@ -211,16 +211,17 @@ export class MachineHub {
     return this.#options.machines.get(machineId)!;
   }
 
-  /** Close the door on a machine and cut the link, if there is one. */
-  revoke(machineId: string): MachineRecord {
-    const machine = this.#options.machines.revoke(machineId);
-    if (machine === undefined) throw new Error("no such machine");
+  /** Cut a daemon's live link and clear pending upgrade state before deleting its row. */
+  disconnectForRemoval(machineId: string): void {
+    this.#settled(machineId);
+    const prefix = `${machineId}:`;
+    for (const key of this.#tried.keys()) {
+      if (key.startsWith(prefix)) this.#tried.delete(key);
+    }
     const connection = this.#connections.get(machineId);
     if (connection !== undefined) {
-      this.#drop(connection, "revoked", LINK_CLOSE.revoked);
+      this.#drop(connection, "removed", LINK_CLOSE.revoked);
     }
-    this.#options.changed();
-    return machine;
   }
 
   /** Cut every link (the host is stopping). */

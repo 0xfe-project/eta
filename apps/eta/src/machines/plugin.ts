@@ -3,7 +3,7 @@
  *
  * The list is the database, whose `status` the hub keeps true (a daemon is `online` exactly while
  * its link is up). What can be done: name a machine, make an install code for a new one, approve
- * a pending one by its fingerprint, revoke one, bring one's daemon up to date, look at the tailnet
+ * a pending one by its fingerprint, remove one, bring one's daemon up to date, look at the tailnet
  * for computers to add, and put the daemon on one of them over SSH.
  *
  * An install over SSH takes a while (a build is tens of megabytes): the call returns at once and
@@ -11,6 +11,8 @@
  */
 import type {
   MachineInstallView,
+  MachineRemovePreview,
+  MachineRemoveResult,
   MachineView,
   TailnetPeerView,
 } from "@eta/client-contracts";
@@ -26,6 +28,8 @@ import { installCommand } from "./install-script";
 export interface MachinesDeps {
   machines: MachineStore;
   hub: MachineHub;
+  removePreview: (machineId: string) => MachineRemovePreview;
+  remove: (machineId: string) => Promise<MachineRemoveResult>;
   changed: () => void;
   /** Where a daemon should dial when the caller does not say: this host's own address. */
   defaultUrl: () => Promise<string>;
@@ -142,10 +146,13 @@ export function machinesPlugin(deps: MachinesDeps, applied: () => void) {
           );
           return { result: { machine: viewOf(machine) } };
         }),
-        wire.handle("machines", "revoke", (call) => {
+        wire.handle("machines", "removePreview", (call) => {
           const args = new Args(call);
-          const machine = deps.hub.revoke(args.string("machineId"));
-          return { result: { machine: viewOf(machine) } };
+          return { result: deps.removePreview(args.string("machineId")) };
+        }),
+        wire.handle("machines", "remove", async (call) => {
+          const args = new Args(call);
+          return { result: await deps.remove(args.string("machineId")) };
         }),
         wire.handle("machines", "upgrade", async (call) => {
           const machine = await deps.hub.upgrade(
@@ -176,7 +183,6 @@ export function machinesPlugin(deps: MachinesDeps, applied: () => void) {
               machines.find(
                 (machine) =>
                   machine.kind === "daemon" &&
-                  machine.status !== "revoked" &&
                   machine.name.toLowerCase() === peer.name.toLowerCase(),
               );
             return {

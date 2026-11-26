@@ -13,6 +13,8 @@
  */
 import type {
   AcpAgentView,
+  AcpDeletePreview,
+  AcpDeleteResult,
   AcpMachineList,
   AcpTestResult,
   MachineKind,
@@ -46,7 +48,12 @@ export interface AcpServiceOptions {
     name: string;
     runtime: string;
     machineId: string | null;
+    systemRole?: "captain" | null;
   }[];
+  groupCountOf?: ((agentId: string) => number) | undefined;
+  isAgentBusy?: ((agentId: string) => boolean) | undefined;
+  deleteAgent?: ((agentId: string, reason: string) => void) | undefined;
+  afterAgentsDeleted?: (() => void) | undefined;
   /** The lists moved: whoever watches them is told. */
   changed: () => void;
 }
@@ -157,15 +164,73 @@ export class AcpService {
     return view;
   }
 
-  async delete(machineId: string | undefined, id: string): Promise<void> {
+  /** Forget any cached list and fetch generation for a removed machine. */
+  forgetMachine(machineId: string): void {
+    const had = this.#remote.delete(machineId);
+    this.#nextGeneration(machineId);
+    if (had) this.#options.changed();
+  }
+
+  /** Preview all non-captain eta agents that depend on `acp.<id>` on `machineId`. */
+  deletePreview(machineId: string | undefined, id: string): AcpDeletePreview {
+    const machine = this.#machineFor(machineId);
+    const runtime = acpRuntimeId(id);
+    const dependents = this.#dependentAgents(machine.id, id);
+    return {
+      id,
+      machineId: machine.id,
+      agents: dependents.map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+        runtime,
+        groupCount: this.#options.groupCountOf?.(agent.id) ?? 0,
+        busy: this.#options.isAgentBusy?.(agent.id) ?? false,
+      })),
+    };
+  }
+
+  async delete(
+    machineId: string | undefined,
+    id: string,
+    options?: { deleteAgents?: boolean },
+  ): Promise<AcpDeleteResult> {
     const place = this.#place(machineId);
-    this.#unused(place.machine, id, `delete ${id}`);
+    const dependents = this.#dependentAgents(place.machine.id, id);
+    if (dependents.length > 0 && options?.deleteAgents !== true) {
+      this.#unused(place.machine, id, `delete ${id}`);
+    }
+    if (
+      options?.deleteAgents === true &&
+      dependents.length > 0 &&
+      this.#options.deleteAgent === undefined
+    ) {
+      throw new Error("cannot cascade-delete dependent agents here");
+    }
     if (place.kind === "local") {
       place.admin.delete(id);
-      return;
+    } else {
+      await place.link.daemon("acpDelete", { id });
+      void this.#fetch(place);
     }
-    await place.link.daemon("acpDelete", { id });
-    void this.#fetch(place);
+    if (options?.deleteAgents === true) {
+      const currentDependents = this.#dependentAgents(place.machine.id, id);
+      if (currentDependents.length > 0) {
+        if (this.#options.deleteAgent === undefined) {
+          throw new Error("cannot cascade-delete dependent agents here");
+        }
+        const deletedAgents: string[] = [];
+        for (const agent of currentDependents) {
+          this.#options.deleteAgent(
+            agent.id,
+            `External agent ${id} was removed.`,
+          );
+          deletedAgents.push(agent.id);
+        }
+        this.#options.afterAgentsDeleted?.();
+        return { deletedAgents };
+      }
+    }
+    return {};
   }
 
   /** Whether a configuration works on that machine, saved or not. */
@@ -183,8 +248,8 @@ export class AcpService {
     );
   }
 
-  /** The machine a call is for: the primary when none is named. Never another one instead. */
-  #place(machineId: string | undefined): Place {
+  /** The machine row for a call, without checking online status (used for local SQLite preview). */
+  #machineFor(machineId: string | undefined): MachineFacts {
     const { machines } = this.#options;
     const machine =
       machineId === undefined ? machines.primary() : machines.get(machineId);
@@ -194,13 +259,19 @@ export class AcpService {
           ? "this host has no primary machine yet"
           : `no such machine: ${machineId}`,
       );
+    if (machine.kind !== "primary" && machine.kind !== "daemon")
+      throw new Error(`${machine.name} runs no ACP agents`);
+    return machine;
+  }
+
+  /** The machine a call is for: the primary when none is named. Never another one instead. */
+  #place(machineId: string | undefined): Place {
+    const machine = this.#machineFor(machineId);
     if (machine.kind === "primary") {
       if (this.#admin === undefined)
         throw new Error(`${machine.name} runs no ACP agents`);
       return { kind: "local", machine, admin: this.#admin };
     }
-    if (machine.kind !== "daemon")
-      throw new Error(`${machine.name} runs no ACP agents`);
     const link =
       machine.status === "online" ? this.#options.link(machine.id) : undefined;
     if (link === undefined)
@@ -255,15 +326,25 @@ export class AcpService {
     return next;
   }
 
+  /** Dependent non-captain eta agents configured on `acp.<id>` on `machineId`. */
+  #dependentAgents(machineId: string, id: string) {
+    const runtime = acpRuntimeId(id);
+    return this.#options
+      .agents()
+      .filter(
+        (agent) =>
+          agent.runtime === runtime &&
+          agent.machineId === machineId &&
+          agent.systemRole !== "captain",
+      );
+  }
+
   /** Refuse when an agent still runs on `acp.<id>` on this machine. */
   #unused(machine: MachineFacts, id: string, what: string): void {
     const runtime = acpRuntimeId(id);
-    const users = this.#options
-      .agents()
-      .filter(
-        (agent) => agent.runtime === runtime && agent.machineId === machine.id,
-      )
-      .map((agent) => agent.name);
+    const users = this.#dependentAgents(machine.id, id).map(
+      (agent) => agent.name,
+    );
     if (users.length === 0) return;
     throw new Error(
       `Cannot ${what}: ${users.join(", ")} ${users.length === 1 ? "runs" : "run"} on ${runtime} on ${machine.name}. Move ${users.length === 1 ? "it" : "them"} to another runtime first.`,

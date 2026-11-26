@@ -39,6 +39,7 @@ import { kernelOn, thinkingLevelsFor } from "@eta/core";
 import { parseModelId, peerAddressOf, redactionMiddleware } from "@eta/server";
 import { acpPlugin } from "./acp/plugin";
 import { AcpService } from "./acp/service";
+import { deleteAgent } from "./agents/delete";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
 import { approvalMiddleware } from "./approval-middleware";
@@ -84,6 +85,7 @@ import { SessionMirrors } from "./machines/mirror";
 import { machinesPlugin } from "./machines/plugin";
 import { RemotePlace } from "./machines/remote-place";
 import { RemoteSessionsRouter } from "./machines/remote-sessions";
+import { previewRemoveMachine, removeMachine } from "./machines/remove";
 import { serveLink } from "./machines/service";
 import { transportOn } from "./machines/shell";
 import { MachineStore } from "./machines/store";
@@ -1133,6 +1135,7 @@ export function createProduct(options: {
             dataDir,
             db,
             engine,
+            runner: taskRunner,
             plugins,
             changed,
             runtimes: options.runtimes,
@@ -1179,12 +1182,95 @@ export function createProduct(options: {
           applied("agents"),
         ),
       );
+      const acpService =
+        options.acp === undefined
+          ? undefined
+          : new AcpService({
+              local: options.acp,
+              machines,
+              link: (machineId) => hub.link(machineId),
+              agents: () => agents.list(),
+              groupCountOf: (agentId) =>
+                conversations
+                  .list()
+                  .filter(
+                    (conversation) =>
+                      conversation.kind === "group" &&
+                      conversations.participant(conversation.id, agentId) !==
+                        undefined,
+                  ).length,
+              isAgentBusy: (agentId) =>
+                timeline.agentStatuses().has(agentId) ||
+                runRows.openOfAgent(agentId).length > 0,
+              deleteAgent: (agentId, reason) =>
+                deleteAgent(
+                  {
+                    dataDir,
+                    db,
+                    agents,
+                    machines,
+                    projects,
+                    policies,
+                    engine,
+                    runner: taskRunner,
+                  },
+                  agentId,
+                  { reason },
+                ),
+              afterAgentsDeleted: () => {
+                changed("all");
+                wire?.pushNow("tasks");
+                wire?.pushNow("acp");
+              },
+              changed: () => wire?.pushNow("acp"),
+            });
       server.mount(
         "machines",
         machinesPlugin(
           {
             machines,
             hub,
+            removePreview: (machineId) =>
+              previewRemoveMachine(
+                {
+                  machines,
+                  agents,
+                  projects,
+                  conversations,
+                  runs: runRows,
+                  timeline,
+                },
+                machineId,
+              ),
+            remove: async (machineId) =>
+              await removeMachine(
+                {
+                  dataDir,
+                  db,
+                  machines,
+                  agents,
+                  projects,
+                  conversations,
+                  policies,
+                  timeline,
+                  engine,
+                  runs: runRows,
+                  runner: taskRunner,
+                  hub,
+                  targets,
+                  attachments,
+                  mirrors,
+                  plugins,
+                  acp: acpService,
+                  changed,
+                  pushAfterRemove: () => {
+                    wire?.pushNow("tasks");
+                    wire?.pushNow("acp");
+                    wire?.pushNow("artifacts");
+                  },
+                },
+                machineId,
+              ),
             changed: () => {
               changed();
               // The limit may have moved: runs that were waiting for a slot can start.
@@ -1324,22 +1410,8 @@ export function createProduct(options: {
         ),
       );
       server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
-      if (options.acp !== undefined)
-        server.mount(
-          "acp",
-          acpPlugin(
-            {
-              service: new AcpService({
-                local: options.acp,
-                machines,
-                link: (machineId) => hub.link(machineId),
-                agents: () => agents.list(),
-                changed: () => wire?.pushNow("acp"),
-              }),
-            },
-            applied("acp"),
-          ),
-        );
+      if (acpService !== undefined)
+        server.mount("acp", acpPlugin({ service: acpService }, applied("acp")));
       if (memory !== undefined)
         server.mount(
           "memory",

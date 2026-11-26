@@ -22,6 +22,8 @@ export function homeOf(
   deps: HomeDeps,
   agent: Pick<AgentRecord, "id">,
 ): ProjectRecord | undefined {
+  const byOwner = deps.projects.homeOfAgent?.(agent.id);
+  if (byOwner !== undefined) return byOwner;
   const primary = deps.machines.primary();
   if (primary === undefined) return undefined;
   return deps.projects.byPath(primary.id, agentHome(deps.dataDir, agent.id));

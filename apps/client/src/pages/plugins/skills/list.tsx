@@ -71,11 +71,7 @@ export function Skills(props: {
   const devices = computed(() =>
     host
       .list<MachineView>("machines")
-      .filter(
-        (item) =>
-          (item.kind === "primary" || item.kind === "daemon") &&
-          item.status !== "revoked",
-      )
+      .filter((item) => item.kind === "primary" || item.kind === "daemon")
       .sort(
         (a, b) => Number(b.kind === "primary") - Number(a.kind === "primary"),
       ),

@@ -38,10 +38,7 @@ export function usePlaceFlow() {
   const machines = () =>
     host
       .list<MachineView>("machines")
-      .filter(
-        (machine) =>
-          machine.status !== "pending" && machine.status !== "revoked",
-      );
+      .filter((machine) => machine.status !== "pending");
   const flow = signal(openFlow({ machines: machines() }));
   effect(() => {
     const values = machines();

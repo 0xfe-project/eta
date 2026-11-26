@@ -67,12 +67,12 @@ export interface AgentView {
 }
 
 export type MachineKind = "primary" | "daemon" | "ssh";
-export type MachineStatus = "online" | "offline" | "pending" | "revoked";
+export type MachineStatus = "online" | "offline" | "pending";
 
 /**
  * A computer sessions can run on: the primary, or a machine that runs the daemon. A daemon is
  * `pending` from the moment it exchanges its install code until the user approves its
- * fingerprint, `online` while its link is up, `offline` while it is not, and `revoked` for good.
+ * fingerprint, `online` while its link is up, and `offline` while it is not.
  */
 export interface MachineView {
   id: string;
@@ -544,7 +544,8 @@ export const MACHINE_ACTIONS = [
   "rename",
   "enroll",
   "approve",
-  "revoke",
+  "removePreview",
+  "remove",
   "setMaxActiveRuns",
   "upgrade",
   "discover",
@@ -553,6 +554,27 @@ export const MACHINE_ACTIONS = [
   "phoneLink",
 ] as const;
 export type MachineAction = (typeof MACHINE_ACTIONS)[number];
+
+export interface MachineRemovePreview {
+  machine: { id: string; name: string };
+  agents: { id: string; name: string; runtime: AgentRuntime }[];
+  projects: { id: string; name: string; path: string }[];
+  conversations: {
+    id: string;
+    name: string;
+    projectId: string;
+    archived: boolean;
+  }[];
+  activeRuns: number;
+  activeReplies: number;
+}
+
+export interface MachineRemoveResult {
+  machineId: string;
+  removedAgents: string[];
+  removedProjects: string[];
+  removedConversations: string[];
+}
 
 export interface MachineArgs {
   rename: { machineId: string; name: string };
@@ -568,8 +590,10 @@ export interface MachineArgs {
   phoneLink: { url?: string };
   /** Let a pending machine in. `fingerprint` must be the one the machine printed. */
   approve: { machineId: string; fingerprint: string };
-  /** Close the door on a machine. Sessions already running there are not stopped. */
-  revoke: { machineId: string };
+  /** Preview every agent, project, conversation and active run/reply removing this machine affects. */
+  removePreview: { machineId: string };
+  /** Permanently remove a daemon machine and all projects, conversations, places and pinned agents on it. */
+  remove: { machineId: string };
   /** How many task runs the machine works on at once, 1 to 20; runs already going go on. */
   setMaxActiveRuns: { machineId: string; maxActiveRuns: number };
   /**
@@ -624,7 +648,8 @@ export interface MachineResults {
   /** `link` carries the access token, so it is shown, never logged. */
   phoneLink: { link: string; url: string };
   approve: { machine: MachineView };
-  revoke: { machine: MachineView };
+  removePreview: MachineRemovePreview;
+  remove: MachineRemoveResult;
   setMaxActiveRuns: { machine: MachineView };
   upgrade: { machine: MachineView };
   /** `available` is false without Tailscale on this host (`reason` says what is missing). */

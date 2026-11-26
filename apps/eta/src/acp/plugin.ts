@@ -50,13 +50,26 @@ export function acpPlugin(deps: AcpPluginDeps, applied: () => void) {
           };
         }),
 
+        wire.handle("acp", "deletePreview", (call) => {
+          const args = new Args(call);
+          return {
+            result: service.deletePreview(
+              args.optionalString("machineId"),
+              args.string("id"),
+            ),
+          };
+        }),
+
         wire.handle("acp", "delete", async (call) => {
           const args = new Args(call);
-          await service.delete(
-            args.optionalString("machineId"),
-            args.string("id"),
-          );
-          return { result: {} };
+          const deleteAgents = args.optionalBoolean("deleteAgents");
+          return {
+            result: await service.delete(
+              args.optionalString("machineId"),
+              args.string("id"),
+              deleteAgents === undefined ? undefined : { deleteAgents },
+            ),
+          };
         }),
 
         wire.handle("acp", "test", async (call) => ({

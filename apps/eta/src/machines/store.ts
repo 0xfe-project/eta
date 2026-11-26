@@ -280,9 +280,7 @@ export class MachineStore {
   /** The machine that is this tailnet node, when one is. */
   byTailnetNode(node: string): MachineRecord | undefined {
     const row = this.#db
-      .query<Row, [string]>(
-        "SELECT * FROM machine WHERE tailnet_node = ? AND status <> 'revoked'",
-      )
+      .query<Row, [string]>("SELECT * FROM machine WHERE tailnet_node = ?")
       .get(node);
     return row === null ? undefined : recordOf(row);
   }
@@ -305,14 +303,11 @@ export class MachineStore {
     return this.get(id);
   }
 
-  /** Close the door for good. Whatever the machine is running is not touched. */
-  revoke(id: string): MachineRecord | undefined {
-    const machine = this.get(id);
-    if (machine === undefined) return undefined;
-    if (machine.kind !== "daemon")
-      throw new Error(`${machine.name} is not a daemon machine`);
-    this.setStatus(id, "revoked");
-    return this.get(id);
+  /** Permanently remove a machine row. */
+  remove(id: string): boolean {
+    return (
+      this.#db.query("DELETE FROM machine WHERE id = ?").run(id).changes > 0
+    );
   }
 
   setStatus(
@@ -389,16 +384,14 @@ export class MachineStore {
   }
 
   /**
-   * The machine a credential belongs to, if it is good: a daemon that has not been revoked, whose
-   * fingerprint is the digest of the secret. Compared as digests, so the time it takes says
-   * nothing about the secret.
+   * The machine a credential belongs to, if it is good: a daemon whose fingerprint is the digest
+   * of the secret. Compared as digests, so the time it takes says nothing about the secret.
    */
   authenticate(id: string, secret: string): MachineRecord | undefined {
     const machine = this.get(id);
     if (
       machine === undefined ||
       machine.kind !== "daemon" ||
-      machine.status === "revoked" ||
       machine.fingerprint === null
     )
       return undefined;

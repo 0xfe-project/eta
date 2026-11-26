@@ -434,6 +434,15 @@ export class ConversationStore {
     })();
   }
 
+  /** Clear any participant session pointers tied to a machine being removed. */
+  clearSessionsOnMachine(machineId: string): void {
+    this.#db
+      .query(
+        "UPDATE participant SET session_id = NULL, pending_settings = NULL WHERE machine_id = ?",
+      )
+      .run(machineId);
+  }
+
   /** The member has been shown the timeline up to `seq`. Only ever forward. */
   setSeen(conversationId: string, agentId: string, seq: number): void {
     this.#db

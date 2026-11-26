@@ -4,7 +4,6 @@ export const machinesMessages = {
   machineOnline: ["Online", "在线"],
   machineOffline: ["Offline", "离线"],
   machinePending: ["Awaiting approval", "等待批准"],
-  machineRevoked: ["Removed", "已移除"],
   machineNeedsUpdate: ["Needs update", "需要更新"],
   machineUpdatingTo: ["Updating to {{version}}…", "正在更新到 {{version}}…"],
   machineUpdatedTo: ["Updated to {{version}}", "已更新到 {{version}}"],
@@ -19,7 +18,7 @@ export const machinesMessages = {
   machineMenuRename: ["Rename", "重命名"],
   machineMenuRuns: ["Runs at once", "并发数"],
   machineMenuUpdate: ["Update now", "立即更新"],
-  machineMenuRevoke: ["Revoke", "吊销"],
+  machineMenuRemove: ["Remove", "移除"],
   machineRenameTitle: ["Rename {{name}}", "重命名 {{name}}"],
   machineRunsTitle: [
     "Task runs at once on {{name}}",
@@ -88,6 +87,40 @@ export const machinesMessages = {
   phoneHostAddress: ["Phone host address", "手机要连接的主机地址"],
   removeMachine: ["Remove machine", "移除机器"],
   removeMachine2: ["Remove machine?", "移除机器？"],
+  removeMachineWarning: [
+    "Permanently remove {{name}}? Its projects, conversations, and all agents pinned to it (including built-in eta agents) will be deleted.",
+    "确定永久移除 {{name}}？该机器上的项目、对话以及所有绑定到它的智能体（包括手动绑定的内置 eta 智能体）都会被删除。",
+  ],
+  removeMachineLoading: [
+    "Checking what will be deleted…",
+    "正在检查将被删除的内容…",
+  ],
+  removeMachineNoDependents: [
+    "No pinned agents, projects, or conversations on this machine.",
+    "这台机器上没有绑定的智能体、项目或对话。",
+  ],
+  removeMachineAgents: [
+    "Pinned agents ({{count}})",
+    "绑定的智能体（{{count}}）",
+  ],
+  removeMachineAgentPinnedEta: [
+    "{{name}} (pinned built-in eta)",
+    "{{name}}（绑定的内置 eta）",
+  ],
+  removeMachineAgentExternal: [
+    "{{name}} ({{runtime}})",
+    "{{name}}（{{runtime}}）",
+  ],
+  removeMachineProjects: ["Projects ({{count}})", "项目（{{count}}）"],
+  removeMachineConversations: [
+    "Conversations ({{count}})",
+    "对话（{{count}}）",
+  ],
+  removeMachineArchivedTag: ["{{name}} (archived)", "{{name}}（已归档）"],
+  removeMachineActiveWork: [
+    "Will stop {{runs}} active run(s) and {{replies}} active reply(ies).",
+    "将立即停止 {{runs}} 个运行中的任务和 {{replies}} 条进行中的回复。",
+  ],
   runACommand: ["Run a command", "运行命令"],
   runningOnThisMachine: ["Running on this machine", "在这台机器上运行"],
   runTheCommandInThatMachines: [
@@ -118,10 +151,6 @@ export const machinesMessages = {
   wantsToConnectPasteTheFingerprint: [
     "{{name}} wants to connect. Paste the fingerprint from its terminal.",
     "{{name}} 请求连接。请粘贴它的终端中显示的指纹。",
-  ],
-  willNoLongerBeAbleTo: [
-    "{{name}} will no longer be able to connect to this Host.",
-    "{{name}} 将无法再连接此主机。",
   ],
   workingWithCount: ["#{{number}} · Working", "#{{number}} · 运行中"],
   nothingRunningOnThisMachine: [

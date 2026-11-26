@@ -848,7 +848,7 @@ export class Plugins {
           missing: requires.filter((command) => !has(command)),
           checked: true,
         });
-      } else if (machine.kind === "daemon" && machine.status !== "revoked") {
+      } else if (machine.kind === "daemon") {
         const found = this.#found.get(machine.id);
         views.push({
           machineId: machine.id,
@@ -862,6 +862,11 @@ export class Plugins {
       }
     }
     return views;
+  }
+
+  /** Forget cached command checks for a removed machine. */
+  forgetMachine(machineId: string): void {
+    this.#found.delete(machineId);
   }
 
   /** Read the plugins again and ask every machine that can be asked what it has. */

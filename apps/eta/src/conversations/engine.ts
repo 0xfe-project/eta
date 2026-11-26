@@ -1323,7 +1323,21 @@ export class Engine {
     extra?: Record<string, unknown>,
   ): MessageView | undefined {
     const row = this.#timeline.get(replyId);
-    if (row === undefined) return undefined;
+    if (row === undefined) {
+      // Conversation/message may already have been cascade-deleted; still release any live run entry.
+      for (const [key, running] of this.#running) {
+        if (running.replyId !== replyId) continue;
+        clearTimeout(running.deadline);
+        this.#running.delete(key);
+        this.#leftover.set(key, running.ended);
+        void running.ended.then(() => {
+          if (this.#leftover.get(key) === running.ended)
+            this.#leftover.delete(key);
+        });
+        running.release();
+      }
+      return undefined;
+    }
     const ended = this.#timeline.finish(replyId, {
       status: "stopped",
       text: row.text,

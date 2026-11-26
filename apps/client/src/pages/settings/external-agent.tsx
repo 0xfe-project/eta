@@ -1,15 +1,25 @@
 import type {
   AcpAgentView,
+  AcpDeletePreview,
   AcpTestResult,
   MachineView,
 } from "@eta/client-contracts";
 import { signal, View } from "nsh";
-import { Button, colors, grow, Label, Modal, row } from "../../components";
+import {
+  Button,
+  colors,
+  dialogWidth,
+  grow,
+  Label,
+  Modal,
+  row,
+} from "../../components";
 import { BackButton } from "../../components/navigation-buttons";
 import { StatusDot } from "../../components/status-dot";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
 import { LetterBox } from "./section";
 
 /** The detail's body off phones, and the label column of its facts. */
@@ -42,12 +52,55 @@ export function ExternalAgentDetail(props: {
   const testing = signal(false);
   const removing = signal(false);
   const confirm = signal(false);
+  const preview = signal<AcpDeletePreview | undefined>(undefined);
+  const previewLoading = signal(false);
+  const previewError = signal<string | undefined>(undefined);
+  let previewRequest = 0;
   const result = signal<AcpTestResult | undefined>(undefined);
   const status = () => result()?.status ?? props.agent.status;
   const machineName = () =>
     props.machine
       ? `${props.machine.name}${props.machine.kind === "primary" ? " (primary)" : ""}`
       : "Host";
+  const hasDependents = () => (preview()?.agents.length ?? 0) > 0;
+  function openRemoveConfirm() {
+    const seq = ++previewRequest;
+    confirm.set(true);
+    preview.set(undefined);
+    previewError.set(undefined);
+    if (!host.can("acp.deletePreview")) {
+      preview.set({
+        id: props.agent.id,
+        machineId: props.machineId,
+        agents: [],
+      });
+      previewLoading.set(false);
+      return;
+    }
+    previewLoading.set(true);
+    void host
+      .call<AcpDeletePreview>("acp", "deletePreview", {
+        machineId: props.machineId,
+        id: props.agent.id,
+      })
+      .then(
+        (answer) => {
+          if (seq !== previewRequest) return;
+          preview.set(answer);
+          previewLoading.set(false);
+        },
+        (failure: unknown) => {
+          if (seq !== previewRequest) return;
+          previewError.set(problemText(failure));
+          previewLoading.set(false);
+        },
+      );
+  }
+  function closeRemoveConfirm() {
+    if (removing()) return;
+    previewRequest += 1;
+    confirm.set(false);
+  }
   async function test() {
     if (testing()) return;
     testing.set(true);
@@ -62,12 +115,13 @@ export function ExternalAgentDetail(props: {
     testing.set(false);
   }
   async function remove() {
-    if (removing()) return;
+    if (removing() || previewLoading() || previewError()) return;
     removing.set(true);
     const answer = await host.action(() =>
       host.call("acp", "delete", {
         machineId: props.machineId,
         id: props.agent.id,
+        ...(hasDependents() ? { deleteAgents: true } : {}),
       }),
     );
     removing.set(false);
@@ -253,7 +307,7 @@ export function ExternalAgentDetail(props: {
               icon="archive"
               style={{ gap: space[4], paddingHorizontal: space[12] }}
               disabled={testing()}
-              onPress={() => confirm.set(true)}
+              onPress={openRemoveConfirm}
             />
           </View>
         </If>
@@ -282,20 +336,83 @@ export function ExternalAgentDetail(props: {
         <Modal
           title={uiText("removeExternalAgent")}
           phone={props.phone}
-          onClose={() => confirm.set(false)}
+          sheet={props.phone}
+          width={props.phone ? undefined : dialogWidth.md}
+          modalFocus
+          overPhoneNavigation
+          onClose={closeRemoveConfirm}
         >
-          <View style={{ padding: space[16], gap: space[8] }}>
+          <View style={{ padding: space[16], gap: space[12] }}>
             <Label>
               {uiText("removeFromWithCount", {
                 label: props.agent.label,
                 machineName: machineName(),
               })}
             </Label>
-            <Button
-              label={removing() ? uiText("removing") : uiText("remove2")}
-              disabled={removing()}
-              onPress={() => void remove()}
-            />
+            <If when={previewLoading()}>
+              <Label variant="small" tone="muted">
+                {uiText("acpRemovePreviewLoading")}
+              </Label>
+            </If>
+            <If when={previewError()}>
+              {(message) => (
+                <Label variant="small" tone="red">
+                  {message()}
+                </Label>
+              )}
+            </If>
+            <If when={!previewLoading() && !previewError() && hasDependents()}>
+              <View
+                style={{
+                  padding: space[12],
+                  gap: space[8],
+                  backgroundColor: c().selected,
+                }}
+              >
+                <Label variant="small" tone="warning">
+                  {uiText("acpRemoveCascadeWarning", {
+                    count: preview()?.agents.length ?? 0,
+                  })}
+                </Label>
+                <Each
+                  of={preview()?.agents ?? []}
+                  key={(dependent) => dependent.id}
+                >
+                  {(dependent) => (
+                    <Label variant="small">
+                      {`${
+                        dependent().groupCount > 0
+                          ? uiText("acpRemoveAgentInGroups", {
+                              name: dependent().name,
+                              count: dependent().groupCount,
+                            })
+                          : dependent().name
+                      }${dependent().busy ? uiText("acpRemoveAgentBusySuffix") : ""}`}
+                    </Label>
+                  )}
+                </Each>
+              </View>
+            </If>
+            <View style={{ ...row, justifyContent: "flex-end", gap: space[8] }}>
+              <Button
+                label={uiText("cancel")}
+                disabled={removing()}
+                onPress={closeRemoveConfirm}
+              />
+              <Button
+                label={
+                  removing()
+                    ? uiText("removing")
+                    : hasDependents()
+                      ? uiText("acpRemoveAndDeleteAgents")
+                      : uiText("remove2")
+                }
+                tone="danger"
+                busy={removing()}
+                disabled={removing() || previewLoading() || !!previewError()}
+                onPress={() => void remove()}
+              />
+            </View>
           </View>
         </Modal>
       </If>

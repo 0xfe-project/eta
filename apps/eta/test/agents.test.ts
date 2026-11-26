@@ -11,6 +11,7 @@ import type {
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { TaskRunStore } from "../src/tasks/runs";
 import { until } from "./support/client";
 import { gate, HANG, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
@@ -416,6 +417,103 @@ describe("deleting an agent", () => {
     await expect(
       w.client.call("agents", "delete", { agentId: ada.id }),
     ).rejects.toThrow(/no such agent/);
+  });
+
+  it("stops open task runs (executor and mentioned lanes) on agents.delete and captain delete_agent", async () => {
+    const { models } = scriptedModels(() => HANG);
+    const w = await world({ models });
+    const ada = await w.agent("Ada");
+    const bob = await w.agent("Bob");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id, bob.id], "tasks-room");
+
+    const adaTask = w.host.product.board.create(
+      {
+        title: "Ada runs",
+        description: "Work",
+        status: "todo",
+        conversationId: group.id,
+        workspace: "local",
+      },
+      { kind: "agent", agentId: ada.id },
+    );
+    const bobTask = w.host.product.board.create(
+      {
+        title: "Bob runs",
+        description: "Work",
+        status: "todo",
+        conversationId: group.id,
+        workspace: "local",
+      },
+      { kind: "agent", agentId: bob.id },
+    );
+    // Mention Ada on Bob's task so Ada also has a mentioned-lane open run.
+    w.host.product.board.comment(
+      bobTask.id,
+      "@Ada please review",
+      { kind: "user", agentId: null },
+      { mentions: [ada.id] },
+    );
+    const runs = new TaskRunStore(w.host.db);
+    await until(
+      () =>
+        runs.openOf(adaTask.id).length > 0 &&
+        runs.openOf(bobTask.id).some((r) => r.agentId === ada.id),
+    );
+
+    // 1. Direct agents.delete stops Ada's executor run and Ada's mentioned run, leaving Bob's executor run.
+    await w.client.call("agents", "delete", { agentId: ada.id });
+    await until(
+      () =>
+        runs.openOf(adaTask.id).length === 0 &&
+        runs.openOf(bobTask.id).every((r) => r.agentId !== ada.id),
+    );
+    expect(runs.ofTask(adaTask.id)[0]).toMatchObject({
+      status: "failed",
+      error: "Agent Ada was deleted.",
+    });
+    const adaMentionRun = runs
+      .ofTask(bobTask.id)
+      .find((r) => r.agentId === ada.id)!;
+    expect(adaMentionRun).toMatchObject({
+      status: "failed",
+      error: "Agent Ada was deleted.",
+    });
+
+    // 2. Captain delete_agent operation also stops Bob's open task run via the shared helper.
+    const op = w.host.product.captain.store.createOperation({
+      kind: "delete_agent",
+      requiresApproval: true,
+      payload: { agentId: bob.id },
+    });
+    await w.client.call("captain", "decideOperation", {
+      operationId: op.id,
+      decision: "approve",
+    });
+    await until(() => runs.openOf(bobTask.id).length === 0);
+    const bobExecRun = runs.ofTask(bobTask.id).find((r) => r.agentId === null)!;
+    expect(bobExecRun).toMatchObject({
+      status: "failed",
+      error: "Agent Bob was deleted.",
+    });
+  });
+
+  it("archives an agent's agent_home project even when its path came from a different dataDir", async () => {
+    const w = await world();
+    const ada = await w.agent("Ada", { model: "fake:fake-model" });
+    w.host.db
+      .query("UPDATE project SET path = ? WHERE id = ?")
+      .run(`/moved/dataDir/agents/${ada.id}`, ada.homeProjectId);
+
+    await w.client.call("agents", "delete", { agentId: ada.id });
+
+    expect(
+      w.host.db
+        .query<{ archived: number }, [string]>(
+          "SELECT archived FROM project WHERE id = ?",
+        )
+        .get(ada.homeProjectId)?.archived,
+    ).toBe(1);
   });
 });
 

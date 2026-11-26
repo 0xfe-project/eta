@@ -4,13 +4,24 @@
  * Every test here runs a real daemon (the daemon's own node and link, in this process, with a
  * data directory of its own) against a real host on a free port.
  */
-import type { MachineView } from "@eta/client-contracts";
+import type {
+  AgentView,
+  ConversationSummary,
+  MachineRemovePreview,
+  MachineRemoveResult,
+  MachineView,
+  ProjectView,
+} from "@eta/client-contracts";
+import { Buffer } from "node:buffer";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { LINK_LIMITS } from "@eta/client-contracts";
+import { TARGET_MISSING } from "@eta/client-wire-proto";
 import { DaemonLink, enroll } from "@eta/daemon";
 import { describe, expect, it } from "vitest";
 import { MachineStore } from "../src/machines/store";
+import { TaskRunStore } from "../src/tasks/runs";
 import { connect, until } from "./support/client";
 import {
   approve,
@@ -20,6 +31,7 @@ import {
   startDaemon,
 } from "./support/daemon";
 import { tempDir, testHost } from "./support/host";
+import { HANG, scriptedModels } from "./support/models";
 import { world } from "./support/world";
 
 const base = (port: number): string => `http://127.0.0.1:${port}`;
@@ -294,17 +306,357 @@ describe("the link", () => {
     },
   );
 
-  it("revoking cuts the link and the machine cannot come back", async () => {
-    const w = await world();
-    const daemon = await startDaemon(w.host, w.client);
+  it("removing an online machine cuts the link with 4003, refuses 401 reconnects, and cleans up all dependents", async () => {
+    const { models, requests } = scriptedModels(() => HANG);
+    const w = await world({ models });
+    const daemon = await startDaemon(w.host, w.client, { name: "gpu-box" });
     await approve(w.client, daemon);
-    await w.client.call("machines", "revoke", { machineId: daemon.machineId });
+
+    const primaryId = w.client
+      .section<MachineView[]>("machines", "list")!
+      .find((m) => m.kind === "primary")!.id;
+
+    // Refuses removing primary machine or unknown machine.
+    await expect(
+      w.client.call("machines", "removePreview", { machineId: primaryId }),
+    ).rejects.toThrow(/not a daemon machine/);
+    await expect(
+      w.client.call("machines", "remove", { machineId: primaryId }),
+    ).rejects.toThrow(/not a daemon machine/);
+    await expect(
+      w.client.call("machines", "remove", { machineId: "no-such-machine" }),
+    ).rejects.toThrow(/no such machine/);
+
+    // Create pinned external agent, pinned built-in eta agent, and an unpinned eta agent.
+    const extAgent = await w.agent("ExtClaude", {
+      runtime: "claude",
+      machineId: daemon.machineId,
+    });
+    const etaPinned = await w.agent("PinnedEta", {
+      machineId: daemon.machineId,
+    });
+    const etaFree = await w.agent("FreeEta");
+
+    // Project and two conversations (one active, one archived) on the daemon.
+    const projDir = await tempDir("eta-remove-proj-");
+    const project = await w.project({
+      machineId: daemon.machineId,
+      path: projDir,
+      name: "remote-repo",
+    });
+    const conv = await w.group(
+      project.id,
+      [etaPinned.id, etaFree.id],
+      "remote-chat",
+    );
+    const archivedConv = await w.group(
+      project.id,
+      [etaFree.id],
+      "archived-chat",
+    );
+    await w.client.call("conversations", "update", {
+      conversationId: archivedConv.id,
+      archived: true,
+    });
+    await w.watch(conv.id);
+
+    // Upload an attachment into conv so its attachments/<convId> directory exists on disk.
+    await w.client.call("conversations", "attach", {
+      conversationId: conv.id,
+      uploadId: crypto.randomUUID(),
+      name: "note.txt",
+      contentType: "text/plain",
+      index: 0,
+      last: true,
+      data: Buffer.from("hello").toString("base64"),
+    });
+    const attachDir = join(w.host.dataDir, "attachments", conv.id);
+    expect(existsSync(attachDir)).toBe(true);
+
+    // Project creation already records place_recent; also seed place_clone_parent for the daemon.
+    expect(
+      w.host.db
+        .query<{ n: number }, [string]>(
+          "SELECT COUNT(*) AS n FROM place_recent WHERE machine_id = ?",
+        )
+        .get(daemon.machineId)!.n,
+    ).toBeGreaterThan(0);
+    w.host.db
+      .query(
+        "INSERT INTO place_clone_parent (machine_id, path, updated_at) VALUES (?, ?, ?)",
+      )
+      .run(daemon.machineId, projDir, Date.now());
+
+    // Start an active reply on the pinned eta agent (running on the daemon).
+    const sent = await w.send(conv.id, "say hi", { mentions: [etaPinned.id] });
+    await until(() => requests.length >= 1);
+    await w.settled(conv.id, sent.replies[0]!.id, ["working"]);
+
+    // Create a task on the remote project assigned to etaPinned so an open task_run exists,
+    // plus an artifact attached to the task and conversation.
+    const task = w.host.product.board.create(
+      {
+        title: "Remote job",
+        description: "Run on gpu-box",
+        status: "todo",
+        conversationId: conv.id,
+        workspace: "local",
+      },
+      { kind: "agent", agentId: etaPinned.id },
+    );
+    const runs = new TaskRunStore(w.host.db);
+    await until(() =>
+      runs
+        .openOf(task.id)
+        .some((r) => r.status === "starting" || r.status === "running"),
+    );
+    w.host.db
+      .query(
+        `INSERT INTO artifact (id, title, publisher_agent, task_id, conversation_id, created_at, updated_at)
+         VALUES ('art-hist', 'Build report', ?, ?, ?, ?, ?)`,
+      )
+      .run(etaPinned.id, task.id, conv.id, Date.now(), Date.now());
+
+    // Preview reports everything accurately.
+    const preview = (await w.client.call("machines", "removePreview", {
+      machineId: daemon.machineId,
+    })) as MachineRemovePreview;
+    expect(preview.machine).toEqual({
+      id: daemon.machineId,
+      name: "gpu-box",
+    });
+    expect(preview.agents).toEqual(
+      expect.arrayContaining([
+        { id: extAgent.id, name: "ExtClaude", runtime: "claude" },
+        { id: etaPinned.id, name: "PinnedEta", runtime: "eta" },
+      ]),
+    );
+    expect(preview.agents).toHaveLength(2);
+    expect(preview.projects).toEqual([
+      { id: project.id, name: "remote-repo", path: projDir },
+    ]);
+    expect(preview.conversations).toEqual(
+      expect.arrayContaining([
+        {
+          id: conv.id,
+          name: "remote-chat",
+          projectId: project.id,
+          archived: false,
+        },
+        {
+          id: archivedConv.id,
+          name: "archived-chat",
+          projectId: project.id,
+          archived: true,
+        },
+      ]),
+    );
+    expect(preview.activeRuns).toBeGreaterThanOrEqual(1);
+    expect(preview.activeReplies).toBeGreaterThanOrEqual(1);
+
+    // Execute removal.
+    const removed = (await w.client.call("machines", "remove", {
+      machineId: daemon.machineId,
+    })) as MachineRemoveResult;
+    expect(removed.machineId).toBe(daemon.machineId);
+    expect(removed.removedAgents).toEqual(
+      expect.arrayContaining([extAgent.id, etaPinned.id]),
+    );
+    expect(removed.removedProjects).toEqual([project.id]);
+    expect(removed.removedConversations).toEqual(
+      expect.arrayContaining([conv.id, archivedConv.id]),
+    );
+
+    // Daemon received 4003 (revoked close code -> client enters "revoked" backoff state).
     await daemon.reached("revoked");
-    expect(machineView(w.client, daemon.machineId)?.status).toBe("revoked");
-    // It keeps knocking; it keeps being refused.
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(machineView(w.client, daemon.machineId)?.status).toBe("revoked");
     expect(w.host.product.hub.link(daemon.machineId)).toBeUndefined();
+
+    // Machine row is gone and subsequent reconnect attempts fail with 401.
+    await until(() => machineView(w.client, daemon.machineId) === undefined);
+    const reconnect = await fetch(`${base(w.host.port)}/machines/connect`, {
+      headers: {
+        authorization: `Bearer ${daemon.identity.machineId}.${daemon.identity.secret}`,
+      },
+    });
+    expect(reconnect.status).toBe(401);
+
+    // Both pinned agents deleted (and their agent_home projects archived); unpinned agent remains.
+    await until(
+      () =>
+        w.client
+          .section<AgentView[]>("agents", "list")
+          ?.every((a) => a.id !== extAgent.id && a.id !== etaPinned.id) ===
+        true,
+    );
+    const remainingAgents = w.client.section<AgentView[]>("agents", "list")!;
+    expect(remainingAgents.some((a) => a.id === etaFree.id)).toBe(true);
+
+    const projects = w.client.section<ProjectView[]>("projects", "list")!;
+    expect(projects.some((p) => p.id === project.id)).toBe(false);
+    expect(
+      projects.find((p) => p.id === extAgent.homeProjectId)?.archived,
+    ).toBe(true);
+    expect(
+      projects.find((p) => p.id === etaPinned.homeProjectId)?.archived,
+    ).toBe(true);
+
+    // Conversations and attachment directories are gone.
+    const conversations = w.client.section<ConversationSummary[]>(
+      "conversations",
+      "list",
+    )!;
+    expect(
+      conversations.some((c) => c.id === conv.id || c.id === archivedConv.id),
+    ).toBe(false);
+    expect(existsSync(attachDir)).toBe(false);
+
+    // Place records are gone.
+    expect(
+      w.host.db
+        .query<{ n: number }, [string]>(
+          "SELECT COUNT(*) AS n FROM place_recent WHERE machine_id = ?",
+        )
+        .get(daemon.machineId)!.n,
+    ).toBe(0);
+
+    // Open task runs were failed synchronously.
+    await until(() => runs.openOf(task.id).length === 0);
+    const [failedRun] = runs.ofTask(task.id);
+    expect(failedRun).toMatchObject({
+      status: "failed",
+      error: "Machine gpu-box was removed.",
+    });
+
+    // Historical task and artifact are preserved with NULL references.
+    expect(
+      w.host.db
+        .query<
+          {
+            project_id: string | null;
+            conversation_id: string | null;
+            origin_conversation_id: string | null;
+          },
+          [string]
+        >(
+          "SELECT project_id, conversation_id, origin_conversation_id FROM task WHERE id = ?",
+        )
+        .get(task.id),
+    ).toEqual({
+      project_id: null,
+      conversation_id: null,
+      origin_conversation_id: null,
+    });
+    expect(
+      w.host.db
+        .query<{ conversation_id: string | null }, []>(
+          "SELECT conversation_id FROM artifact WHERE id = 'art-hist'",
+        )
+        .get(),
+    ).toEqual({ conversation_id: null });
+
+    // Conversation wire target was unregistered (subscribing from a fresh client gets an error).
+    const probe = await connect(`ws://127.0.0.1:${w.host.port}/ws`);
+    await probe.hello();
+    probe.subscribe(`conversations.${conv.id}`);
+    await until(() =>
+      probe.frames.some(
+        (frame) =>
+          frame.type === "event" &&
+          frame.target === `conversations.${conv.id}` &&
+          frame.name === TARGET_MISSING,
+      ),
+    );
+    probe.close();
+  });
+
+  it("removes offline and pending daemon machines and fails orphaned queued runs", async () => {
+    const w = await world();
+    // 1. Offline daemon with a queued run.
+    const offlineDaemon = await startDaemon(w.host, w.client, {
+      name: "offline-box",
+    });
+    await approve(w.client, offlineDaemon);
+    const agent = await w.agent("OfflineClaude", {
+      runtime: "claude",
+      machineId: offlineDaemon.machineId,
+    });
+    const project = await w.project({
+      machineId: offlineDaemon.machineId,
+      path: await tempDir("eta-off-"),
+      name: "off-proj",
+    });
+    const conv = await w.group(project.id, [agent.id], "off-chat");
+    await offlineDaemon.stop();
+    await until(
+      () =>
+        machineView(w.client, offlineDaemon.machineId)?.status === "offline",
+    );
+    const task = w.host.product.board.create(
+      {
+        title: "Queued on offline",
+        description: "Wait",
+        status: "todo",
+        conversationId: conv.id,
+        workspace: "local",
+      },
+      { kind: "agent", agentId: agent.id },
+    );
+    const runs = new TaskRunStore(w.host.db);
+    await until(
+      () => runs.openOf(task.id)[0]?.queueReason === "machine_offline",
+    );
+
+    await w.client.call("machines", "remove", {
+      machineId: offlineDaemon.machineId,
+    });
+    await until(
+      () => machineView(w.client, offlineDaemon.machineId) === undefined,
+    );
+    expect(runs.openOf(task.id)).toEqual([]);
+    expect(runs.ofTask(task.id)[0]).toMatchObject({
+      status: "failed",
+      error: "Machine offline-box was removed.",
+    });
+
+    // 2. Pending daemon removal.
+    const pendingDaemon = await startDaemon(w.host, w.client, {
+      name: "pending-box",
+    });
+    await pendingDaemon.reached("pending");
+    await w.client.call("machines", "remove", {
+      machineId: pendingDaemon.machineId,
+    });
+    await until(
+      () => machineView(w.client, pendingDaemon.machineId) === undefined,
+    );
+
+    // 3. TaskRunner.#pass() fails a queued run whose machine id does not exist rather than
+    // looping machine_offline forever.
+    const primaryAgent = await w.agent("PrimaryWorker");
+    const primaryProj = await w.project();
+    const primaryGroup = await w.group(primaryProj.id, [primaryAgent.id]);
+    const orphanTask = w.host.product.board.create(
+      {
+        title: "Orphaned machine run",
+        description: "Check guard",
+        status: "backlog",
+        conversationId: primaryGroup.id,
+        workspace: "local",
+      },
+      { kind: "agent", agentId: primaryAgent.id },
+    );
+    const orphanRun = runs.create(orphanTask.id, "missing-machine-id");
+    const primaryId = w.client
+      .section<MachineView[]>("machines", "list")!
+      .find((m) => m.kind === "primary")!.id;
+    await w.client.call("machines", "setMaxActiveRuns", {
+      machineId: primaryId,
+      maxActiveRuns: 3,
+    });
+    expect(runs.get(orphanRun.id)).toMatchObject({
+      status: "failed",
+      error: "The machine for this run was removed.",
+    });
   });
 
   it("is offline when its daemon goes away", async () => {

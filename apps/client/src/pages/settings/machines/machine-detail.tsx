@@ -23,7 +23,7 @@ import { problemText } from "../../../services/problem-text";
 import { TaskGlyph } from "../../tasks/status";
 import { EntityRow, leadingBoxWidth, SectionHeader } from "../section";
 import { SettingRow } from "../setting-row";
-import { MachineRunsLimit, RevokeMachine } from "./machine-dialogs";
+import { MachineRunsLimit, RemoveMachine } from "./machine-dialogs";
 import { useMachineUpdate } from "./machine-update";
 import { machineStatus } from "./machines";
 
@@ -302,11 +302,7 @@ export function MachineDetail(props: {
         <Each of={pending() ? [] : candidates()} key={(item) => item.id}>
           {(item) => <MachineTaskSubscription id={item().id} />}
         </Each>
-        <If
-          when={
-            props.item.kind !== "primary" && props.item.status !== "revoked"
-          }
-        >
+        <If when={props.item.kind !== "primary"}>
           <View style={rowStyle()}>
             <Label style={{ flex: 1 }}>{uiText("removeMachine")}</Label>
             <Button
@@ -381,11 +377,11 @@ export function MachineDetail(props: {
         />
       </If>
       <If when={removing()}>
-        <RevokeMachine
+        <RemoveMachine
           item={props.item}
           phone={props.phone}
           onClose={() => removing.set(false)}
-          onRevoked={props.onClose}
+          onRemoved={props.onClose}
         />
       </If>
     </Modal>

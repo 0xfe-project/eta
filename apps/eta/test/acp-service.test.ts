@@ -28,11 +28,27 @@ const tick = async () => {
   for (let i = 0; i < 5; i++) await Promise.resolve();
 };
 
-function setup() {
+function setup(
+  options: {
+    agents?: {
+      id: string;
+      name: string;
+      runtime: string;
+      machineId: string | null;
+      systemRole?: "captain" | null;
+    }[];
+    rejectDelete?: boolean;
+    onDeleteAgent?: (agentId: string, reason: string) => void;
+  } = {},
+) {
   const calls: Pending[] = [];
   const link = {
     daemon: (method: string, params: unknown) =>
-      new Promise((resolve) => calls.push({ method, params, resolve })),
+      new Promise((resolve, reject) =>
+        calls.push({ method, params, resolve, reject } as Pending & {
+          reject: (e: unknown) => void;
+        }),
+      ),
   };
   let online = true;
   const box = {
@@ -41,6 +57,7 @@ function setup() {
     name: "box",
     status: "online" as const,
   };
+  const deletedList: string[] = [];
   const service = new AcpService({
     local: undefined,
     machines: {
@@ -48,11 +65,21 @@ function setup() {
       primary: () => undefined,
     },
     link: () => (online ? (link as never) : undefined),
-    agents: () => [],
+    agents: () =>
+      (options.agents ?? []).filter((a) => !deletedList.includes(a.id)),
+    groupCountOf: () => 2,
+    isAgentBusy: (id) => id === "a-busy",
+    deleteAgent: (agentId, reason) => {
+      deletedList.push(agentId);
+      options.onDeleteAgent?.(agentId, reason);
+    },
     changed: () => undefined,
   });
   /** The oldest call still waiting with this method (and `settled`, for a list). */
-  const take = (method: string, settled?: boolean): Pending => {
+  const take = (
+    method: string,
+    settled?: boolean,
+  ): Pending & { reject: (e: unknown) => void } => {
     const at = calls.findIndex(
       (call) =>
         call.method === method &&
@@ -61,7 +88,7 @@ function setup() {
             settled),
     );
     if (at < 0) throw new Error(`no pending ${method} (settled=${settled})`);
-    return calls.splice(at, 1)[0]!;
+    return calls.splice(at, 1)[0] as Pending & { reject: (e: unknown) => void };
   };
   const shown = (): AcpMachineList | undefined => service.lists()[box.id];
   return {
@@ -71,6 +98,7 @@ function setup() {
     shown,
     goOffline: () => {
       online = false;
+      box.status = "offline" as never;
     },
   };
 }
@@ -142,5 +170,69 @@ describe("a daemon's list in the host's cache", () => {
     oldLook.resolve({ agents: [view("fake")] });
     await tick();
     expect(shown()).toBeUndefined();
+  });
+
+  it("previews dependent agents and deletes acp.json before cascade-deleting agents", async () => {
+    const events: string[] = [];
+    const { service, box, take } = setup({
+      agents: [
+        { id: "a-busy", name: "Ace", runtime: "acp.fake", machineId: "m-box" },
+        {
+          id: "a-other",
+          name: "Other",
+          runtime: "acp.other",
+          machineId: "m-box",
+        },
+      ],
+      onDeleteAgent: (id) => events.push(`deleteAgent:${id}`),
+    });
+    expect(service.deletePreview(box.id, "fake")).toEqual({
+      id: "fake",
+      machineId: box.id,
+      agents: [
+        {
+          id: "a-busy",
+          name: "Ace",
+          runtime: "acp.fake",
+          groupCount: 2,
+          busy: true,
+        },
+      ],
+    });
+    // Without deleteAgents, deletion is refused before touching daemon.
+    await expect(service.delete(box.id, "fake")).rejects.toThrow(
+      /Cannot delete fake/,
+    );
+    expect(events).toEqual([]);
+
+    // With deleteAgents: acpDelete runs first; agents are deleted only after it resolves.
+    const deleting = service.delete(box.id, "fake", { deleteAgents: true });
+    await tick();
+    expect(events).toEqual([]);
+    const call = take("acpDelete");
+    call.resolve({});
+    expect(await deleting).toEqual({ deletedAgents: ["a-busy"] });
+    expect(events).toEqual(["deleteAgent:a-busy"]);
+  });
+
+  it("never deletes dependent agents when daemon acpDelete fails or machine is offline", async () => {
+    const events: string[] = [];
+    const { service, box, take, goOffline } = setup({
+      agents: [
+        { id: "a-1", name: "Ace", runtime: "acp.fake", machineId: "m-box" },
+      ],
+      onDeleteAgent: (id) => events.push(id),
+    });
+    const failing = service.delete(box.id, "fake", { deleteAgents: true });
+    await tick();
+    take("acpDelete").reject(new Error("write failed"));
+    await expect(failing).rejects.toThrow(/write failed/);
+    expect(events).toEqual([]);
+
+    goOffline();
+    await expect(
+      service.delete(box.id, "fake", { deleteAgents: true }),
+    ).rejects.toThrow(/offline/);
+    expect(events).toEqual([]);
   });
 });

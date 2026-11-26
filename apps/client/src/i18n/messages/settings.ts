@@ -243,6 +243,20 @@ export const settingsMessages = {
     "Remove {{label}} from {{machineName}}?",
     "从 {{machineName}} 移除 {{label}}？",
   ],
+  acpRemovePreviewLoading: [
+    "Checking dependent agents…",
+    "正在检查依赖此运行方式的智能体…",
+  ],
+  acpRemoveCascadeWarning: [
+    "Removing this external agent will also permanently delete {{count}} agent(s) using it and stop any active replies or task runs. Past messages in groups will be kept.",
+    "移除此外部智能体也将永久删除正在使用它的 {{count}} 个智能体，并停止它们正在进行的回复和任务。群组中的历史消息会保留。",
+  ],
+  acpRemoveAgentInGroups: [
+    "{{name}} · {{count}} group(s)",
+    "{{name}} · {{count}} 个群组",
+  ],
+  acpRemoveAgentBusySuffix: [" · active", " · 运行中"],
+  acpRemoveAndDeleteAgents: ["Remove and delete agents", "移除并删除智能体"],
   removeSource: ["Remove source", "移除来源"],
   removeThisSource: ["Remove this source", "移除这个来源"],
   removeThisSource2: ["Remove this source?", "移除这个来源"],
