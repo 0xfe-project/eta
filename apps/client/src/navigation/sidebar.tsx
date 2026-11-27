@@ -36,6 +36,8 @@ const phoneItemWidth = "20%";
 /** An unread count over a rail or tab icon. */
 const badgeHeight = 16;
 const footerHeight = 36;
+/** The wordmark's own spacing, not a caption's. */
+const wordmarkTracking = 3.2;
 
 export function NavItem(props: {
   item: Destination;
@@ -187,25 +189,42 @@ export function DesktopSidebar(
           flexShrink: 0,
         }}
       >
-        <Label
-          variant={props.collapsed ? "caption" : "subtitle"}
-          tone={props.collapsed ? "muted" : "ink"}
-          tracking={props.collapsed ? "caps" : undefined}
-          // design-value: the wordmark's own spacing, not a caption's
-          style={props.collapsed ? undefined : { letterSpacing: 3.2 }}
-        >
-          ETA
-        </Label>
-        <If when={!props.collapsed}>
+        <If when={props.collapsed}>
           <RailButton
-            label={text("collapseSidebar")}
+            label={text("expandSidebar")}
             icon="sidebar"
             size={control.md}
             iconSize={icon.md}
-            expanded
+            expanded={false}
             attach={attachToggle}
             onPress={toggleSidebar}
           />
+        </If>
+        <If when={!props.collapsed}>
+          <View
+            style={{
+              ...row,
+              width: "100%",
+              justifyContent: "space-between",
+            }}
+          >
+            <Label
+              variant="subtitle"
+              tone="ink"
+              style={{ letterSpacing: wordmarkTracking }}
+            >
+              ETA
+            </Label>
+            <RailButton
+              label={text("collapseSidebar")}
+              icon="sidebar"
+              size={control.md}
+              iconSize={icon.md}
+              expanded
+              attach={attachToggle}
+              onPress={toggleSidebar}
+            />
+          </View>
         </If>
       </View>
       <If
@@ -236,17 +255,6 @@ export function DesktopSidebar(
             : {}),
         }}
       >
-        <If when={props.collapsed}>
-          <RailButton
-            label={text("expandSidebar")}
-            icon="sidebar"
-            size={control.md}
-            iconSize={icon.md}
-            expanded={false}
-            attach={attachToggle}
-            onPress={toggleSidebar}
-          />
-        </If>
         <Each of={sections}>
           {(item) => (
             <If
