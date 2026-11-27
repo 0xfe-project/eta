@@ -107,15 +107,20 @@ export function ConversationMembers(props: {
                 session={entry().sessionId}
               />
               <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-                <View style={{ ...row, gap: space[4] }}>
-                  <Label lines={1}>
+                <View style={{ ...row, gap: space[4], minWidth: 0 }}>
+                  <Label lines={1} style={{ flexShrink: 1, minWidth: 0 }}>
                     {host.agent(entry().agentId)?.name ?? uiText("agent")}
                   </Label>
                   <StatusDot
                     color={activeReply(entry().status) ? c().blue : c().muted}
                     opacity={activeReply(entry().status) ? 1 : 0.4}
                   />
-                  <Label variant="caption" tone="muted">
+                  <Label
+                    variant="caption"
+                    tone="muted"
+                    lines={1}
+                    style={{ flexShrink: 1, minWidth: 0 }}
+                  >
                     {memberStatus(entry().status)}
                   </Label>
                   <If

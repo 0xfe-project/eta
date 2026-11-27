@@ -31,10 +31,18 @@ const summary = (adaStatus: MemberStatus): ConversationSummary => ({
 
 const agent = (id: string, name: string) => ({ id, name }) as AgentView;
 
+const steps = (total: number) =>
+  Array.from({ length: total }, (_, index) => ({
+    id: `step-${index}`,
+    content: `Step ${index}`,
+    status: "completed" as const,
+  }));
+
 const session = (id: string, rate: GenerationRate | null) => ({
   sections: {
     ...memberSnapshot(id, "acp"),
     rate,
+    tasks: id === "s-ada" ? steps(39) : [],
     tools: [],
     model: { id: "fake:m", thinkingLevel: "off" },
   },
@@ -55,7 +63,10 @@ function Fixture() {
     targets: {
       ...s.targets,
       conversations: list([summary("working")]),
-      agents: list([agent("ada", "Ada"), agent("bo", "Bo")]),
+      agents: list([
+        agent("ada", "Ada the long-named release captain"),
+        agent("bo", "Bo"),
+      ]),
       "sessions.s-ada": session("s-ada", {
         tokensPerSec: 38.4,
         basis: "estimate",

@@ -20,3 +20,16 @@ test("a working member shows its output speed beside its status, an idle member 
   await app.press("label:Run ends");
   expect(rates(app.texts())).toEqual([]);
 });
+
+test("a long member name and the steps button never squeeze the speed", async () => {
+  const app = await open(fixture, {
+    width: 1440,
+    height: 900,
+    locale: "en-US",
+  });
+  const rate = app.layout("text:≈38 tok/s")!;
+  expect(app.texts()).toContain("Steps 39/39");
+  expect(rate.hidden).toBe(false);
+  expect(rate.clipped).toBe(false);
+  expect(rate.width).toBeGreaterThanOrEqual(50);
+});
