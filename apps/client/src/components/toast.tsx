@@ -2,7 +2,7 @@ import { signal, View } from "nsh";
 import { uiText } from "../i18n";
 import { StatusDot } from "./status-dot";
 import { Label } from "./text";
-import { colors, focusRing, row } from "./theme";
+import { colors, focusRing, row, textFaces } from "./theme";
 import { shadow, space, weight } from "./tokens";
 
 const toastWidth = 356;
@@ -59,6 +59,7 @@ export function hasToasts() {
 /** Pure presentational stack of active toasts, positioned by `NotificationHost`. */
 export function ToastStack(props: { phone: () => boolean }) {
   const c = colors();
+  const type = textFaces();
   return (
     <If when={toasts().length > 0}>
       <View
@@ -95,8 +96,17 @@ export function ToastStack(props: { phone: () => boolean }) {
                 pointerEvents: "auto",
               }}
             >
-              <View style={{ paddingTop: space[8] }}>
-                <StatusDot color={c()[toast().tone ?? "green"]} />
+              <View
+                style={{
+                  height: type("small").line,
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <StatusDot
+                  testID="toast-dot"
+                  color={c()[toast().tone ?? "green"]}
+                />
               </View>
               <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
                 <Label variant="small" weight={weight.regular}>

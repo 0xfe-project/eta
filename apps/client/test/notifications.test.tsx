@@ -406,3 +406,83 @@ test("initially mounted NativeDialog keeps NotificationHost priority over later-
   expect(app.shows("id:toast")).toBe(false);
   expect(app.shows("text:Settings")).toBe(true);
 });
+
+test("toast status dot vertically centers on the title's first line across desktop, tablet, and phone", async () => {
+  const viewports = [
+    { width: 1280, height: 800 },
+    { width: 900, height: 700 },
+    { width: 390, height: 844 },
+  ] as const;
+
+  const wrappingTitle =
+    "Copied workspace diagnostics bundle and recent session logs to the system clipboard for bug reporting";
+
+  for (const viewport of viewports) {
+    const app = await open(fixture, {
+      ...viewport,
+      locale: "en-US",
+      platform: "web",
+      clock: {},
+    });
+
+    // 1. Title-only toast: dot center matches title center within 1px.
+    await app.press("label:Root Title-only Toast");
+    expect(app.shows("id:toast")).toBe(true);
+    const titleOnlyDot = app.layout("id:toast-dot");
+    const titleOnlyLabel = app.layout("text:Copied to clipboard");
+    expect(titleOnlyDot).toBeTruthy();
+    expect(titleOnlyLabel).toBeTruthy();
+    expect(
+      Math.abs(
+        titleOnlyDot!.y +
+          titleOnlyDot!.height / 2 -
+          (titleOnlyLabel!.y + titleOnlyLabel!.height / 2),
+      ),
+    ).toBeLessThanOrEqual(1);
+    const singleLineHeight = titleOnlyLabel!.height;
+    await app.press("id:toast");
+    expect(app.shows("id:toast")).toBe(false);
+
+    // 2. Title + body toast: dot aligns with the single-line title center,
+    // not hanging at the bottom of the title line and not centered over title + body.
+    await app.press("label:Root Toast");
+    expect(app.shows("id:toast")).toBe(true);
+    const bodyToastDot = app.layout("id:toast-dot");
+    const bodyToastTitle = app.layout("text:Archived task");
+    const bodyToastBody = app.layout("text:Moved to archive");
+    expect(bodyToastDot).toBeTruthy();
+    expect(bodyToastTitle).toBeTruthy();
+    expect(bodyToastBody).toBeTruthy();
+    expect(bodyToastBody!.y).toBeGreaterThanOrEqual(
+      bodyToastTitle!.y + bodyToastTitle!.height,
+    );
+    const bodyDotCenter = bodyToastDot!.y + bodyToastDot!.height / 2;
+    const bodyTitleCenter = bodyToastTitle!.y + bodyToastTitle!.height / 2;
+    const combinedCenter =
+      (bodyToastTitle!.y + bodyToastBody!.y + bodyToastBody!.height) / 2;
+    expect(Math.abs(bodyDotCenter - bodyTitleCenter)).toBeLessThanOrEqual(1);
+    expect(bodyToastDot!.y + bodyToastDot!.height).toBeLessThan(
+      bodyToastTitle!.y + bodyToastTitle!.height,
+    );
+    expect(bodyDotCenter).toBeLessThan(combinedCenter);
+    await app.press("id:toast");
+    expect(app.shows("id:toast")).toBe(false);
+
+    // 3. Multi-line wrapping title toast: dot stays centered on the first line.
+    await app.press("label:Root Wrapping Toast");
+    expect(app.shows("id:toast")).toBe(true);
+    const wrappedDot = app.layout("id:toast-dot");
+    const wrappedTitle = app.layout(`text:${wrappingTitle}`);
+    expect(wrappedDot).toBeTruthy();
+    expect(wrappedTitle).toBeTruthy();
+    expect(wrappedTitle!.height).toBeGreaterThan(singleLineHeight * 1.5);
+    const wrappedDotCenter = wrappedDot!.y + wrappedDot!.height / 2;
+    const firstLineCenter = wrappedTitle!.y + singleLineHeight / 2;
+    expect(Math.abs(wrappedDotCenter - firstLineCenter)).toBeLessThanOrEqual(1);
+    expect(wrappedDotCenter).toBeLessThan(
+      wrappedTitle!.y + wrappedTitle!.height / 2,
+    );
+    await app.press("id:toast");
+    expect(app.shows("id:toast")).toBe(false);
+  }
+});
