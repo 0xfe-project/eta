@@ -16,6 +16,7 @@ import {
 } from "nsh/updater";
 import { startProgress } from "../components/progress-notification";
 import { uiText } from "../i18n";
+import { flatpakBundleUrl, isFlatpak } from "./flatpak";
 import { problemText } from "./problem-text";
 
 /** The update channels a release build names in `nsh.json`'s
@@ -55,10 +56,17 @@ const shell = readShell();
  * `"updater"` only in builds made with ETA_CLIENT_UPDATE_URL, never in
  * development runs or on the web, where `shellInfo().version` is null. */
 export const clientUpdatable = (desktop || android) && !!shell?.version;
-/** The desktops replace the app and restart it; Android runs a package from
- * its next start and leaves an APK to the system. */
-export const clientPlatform: "desktop" | "android" | undefined =
-  !clientUpdatable ? undefined : desktop ? "desktop" : "android";
+/** The desktops replace the app and restart it; Flatpak bundles open the
+ * download instead of replacing /app; Android runs a package from its next
+ * start and leaves an APK to the system. */
+export const clientPlatform: "desktop" | "flatpak" | "android" | undefined =
+  !clientUpdatable
+    ? undefined
+    : desktop
+      ? isFlatpak
+        ? "flatpak"
+        : "desktop"
+      : "android";
 
 /** The version this run's code is: a package's when one runs, else the
  * installed app's. */
@@ -71,7 +79,8 @@ function defaultChannel(): ClientChannel {
   return shell?.version?.includes("-") ? "rc" : "stable";
 }
 
-function createClientUpdate() {
+export function createClientUpdate(options: { flatpak?: boolean } = {}) {
+  const flatpak = options.flatpak ?? isFlatpak;
   const channel = signal<ClientChannel>(defaultChannel());
   const offer = signal<ClientOffer | undefined>(undefined);
   const checking = signal(false);
@@ -131,6 +140,17 @@ function createClientUpdate() {
     // `shell`: the code already is this release, only the APK is behind.
     // Nothing a user needs to act on, so it is not offered.
     if (!update || update.shell) return undefined;
+    if (flatpak) {
+      return {
+        kind: "app",
+        version: update.version,
+        update: {
+          ...update,
+          canInstall: false,
+          url: flatpakBundleUrl(update.url),
+        },
+      };
+    }
     return { kind: "app", version: update.version, update };
   }
 

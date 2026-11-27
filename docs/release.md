@@ -107,8 +107,8 @@ flatpak run dev.eta.client
 The bundle runs on `org.gnome.Platform//49` (with Flathub runtime-repo metadata embedded), so GTK 4 and WebKitGTK 6.0 come from the Flatpak runtime rather than the host OS.
 
 - **Sandbox permissions**: uses Native Shell's minimal defaults (`--share=ipc`, `--socket=wayland`, `--socket=fallback-x11`, `--device=dri`, `--share=network`).
-- **Connecting to a host**: works seamlessly with **Connect to an existing host**, including an `eta-host` running on this machine (`http://127.0.0.1:8787`) or a remote/Tailscale host. For a local host on this computer, install `eta-host` directly on the host OS (see [Self-hosting](self-hosting.md)) rather than picking **Run on this computer** inside the Flatpak, since a host started inside the sandbox cannot reach host workspaces, tools, or systemd user services.
-- **Updates**: Flatpak mounts `/app` read-only, so the Flatpak build does not replace itself in place; update by installing the newer `eta-desktop-linux-x64.flatpak`. The `.tar.gz` build still updates in place via Settings → Update.
+- **Connecting to a host**: works seamlessly with **Connect to an existing host**, including an `eta-host` running on this machine (`http://127.0.0.1:8787`) or a remote/Tailscale host. Inside Flatpak, Eta detects the sandbox (`FLATPAK_ID` / `/app/`), disables **Run on this computer** in the connection screen, and prompts you to install `eta-host` directly on the host OS (see [Self-hosting](self-hosting.md)) so agents can reach your real workspaces, tools, and systemd user services.
+- **Updates**: Flatpak mounts `/app` read-only and single-file `.flatpak` bundles have no remote for `flatpak update`, so the Flatpak build disables in-place replacement; Settings → Update and the update banner link directly to the newer `eta-desktop-linux-x64.flatpak` for `flatpak install --user`. The `.tar.gz` build still updates in place via Settings → Update.
 
 ### Phone packages
 

@@ -6,6 +6,7 @@ import { cleanup, effect, platform, signal, View } from "nsh";
 import { Button, colors, grow, Header, Label, row } from "../../components";
 import { control, opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { isFlatpak } from "../../services/flatpak";
 import { addressFrom, useHost } from "../../services/host";
 import { problemText } from "../../services/problem-text";
 import { ConnectionError, LostPhoneConnection } from "./connection-errors";
@@ -14,6 +15,7 @@ import { DownloadStatus } from "./download-progress";
 import { HostFields } from "./host-fields";
 import {
   canStartHost,
+  isDesktopPlatform,
   LocalHostError,
   localProgress,
   startLocalHost,
@@ -44,13 +46,16 @@ export function Connection(props: {
   layout: Layout;
   resuming: boolean;
   openingWeb?: boolean;
+  flatpak?: boolean;
   onConnect: (address: HostAddress) => void;
 }) {
   const c = colors();
   const host = useHost();
+  const inFlatpak = props.flatpak ?? isFlatpak;
+  const allowLocalHost = canStartHost && !inFlatpak;
   const draft = signal(shownAddress(props.initial?.origin));
   const token = signal(props.initial?.token ?? "");
-  const remote = signal(Boolean(props.initial?.origin) || !canStartHost);
+  const remote = signal(Boolean(props.initial?.origin) || !allowLocalHost);
   const scanned = signal(false);
   const scanFailure = signal<"unavailable" | "invalid" | undefined>(undefined);
   const unavailable = () => uiText("connectScannerUnavailable");
@@ -62,8 +67,8 @@ export function Connection(props: {
   const attempt = signal<HostAddress | undefined>(
     host.paused() ? (host.address() ?? undefined) : undefined,
   );
-  const phone = () => props.layout === "phone" && !canStartHost;
-  const desktop = () => props.layout === "desktop" || canStartHost;
+  const phone = () => props.layout === "phone" && !isDesktopPlatform;
+  const desktop = () => props.layout === "desktop" || isDesktopPlatform;
   const tablet = () => !phone() && !desktop();
   const remoteFailure = () =>
     !desktop() && ["token", "address", "not-eta"].includes(problem() ?? "");
@@ -154,7 +159,7 @@ export function Connection(props: {
   }
 
   async function launch() {
-    if (busy() || !canStartHost) return;
+    if (busy() || !allowLocalHost) return;
     generation++;
     host.start(null);
     error.set("");
@@ -348,9 +353,13 @@ export function Connection(props: {
                           ? uiText("starting")
                           : uiText("runOnThisComputer")
                       }
-                      description={uiText("theHostAndItsDataStay")}
+                      description={
+                        inFlatpak
+                          ? uiText("flatpakLocalHostUnavailable")
+                          : uiText("theHostAndItsDataStay")
+                      }
                       selected={false}
-                      disabled={!canStartHost || busy()}
+                      disabled={!allowLocalHost || busy()}
                       onPress={() => void launch()}
                     />
                     <LocationOption
@@ -411,7 +420,9 @@ export function Connection(props: {
                 </If>
                 <If when={desktop()}>
                   <Label variant="small" tone="muted" style={{ flex: 1 }}>
-                    {uiText("theTwoKeepSeparateDataSwitching")}
+                    {inFlatpak
+                      ? uiText("flatpakLocalHostFooter")
+                      : uiText("theTwoKeepSeparateDataSwitching")}
                   </Label>
                 </If>
                 <If when={tablet() && remoteFailure()}>

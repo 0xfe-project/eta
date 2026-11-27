@@ -197,12 +197,22 @@ export const updatesMessages = {
   channel: ["Channel", "更新通道"],
   channelHost: ["Host", "host"],
   androidAppHere: ["Android app · this device", "Android 应用 · 本机"],
+  appUpdateManualDownload: [
+    "Eta {{version}} is available to download manually.",
+    "Eta {{version}} 已发布，请手动下载安装。",
+  ],
+  appUpdateNeedsFlatpak: [
+    "Eta {{version}} is available. Download the new Flatpak and install it with flatpak install --user.",
+    "Eta {{version}} 已发布。请下载新版 Flatpak 并通过 flatpak install --user 安装。",
+  ],
   appUpdateNotOpened: [
     "The download didn't open. Try again, or download it from the Eta site.",
     "下载页没打开。再试一次，或者到 Eta 网站下载。",
   ],
   appUpdateChannel: ["App update channel", "应用更新通道"],
   downloadApk: ["Download APK", "下载 APK"],
+  downloadFlatpak: ["Download Flatpak", "下载 Flatpak"],
+  downloadRelease: ["Download release", "下载新版本"],
   closeEtaToUpdate: ["Close Eta to update", "关闭 Eta 以完成更新"],
   reopenEtaToUse: [
     "Version {{version}} is downloaded. Close Eta and open it again to use it.",
@@ -221,6 +231,11 @@ export const updatesMessages = {
   checkForUpdates: ["Check for updates", "检查更新"],
   desktopApp: ["Desktop app", "桌面应用"],
   desktopAppHere: ["Desktop app · this computer", "桌面应用 · 本机"],
+  flatpakAppHere: ["Desktop app · Flatpak", "桌面应用 · Flatpak"],
+  flatpakUpdateHint: [
+    "Single-file Flatpak bundles don't self-update or use flatpak update. Install new releases with flatpak install --user.",
+    "Flatpak 单文件包无法应用内自更新，也不支持 flatpak update；更新时请下载新版并运行 flatpak install --user。",
+  ],
   downloadingWithCount: [
     "Downloading {{percentage}}%",
     "正在下载 {{percentage}}%",

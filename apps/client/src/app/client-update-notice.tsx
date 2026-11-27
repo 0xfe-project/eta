@@ -1,3 +1,4 @@
+import type { createClientUpdate } from "../services/client-update";
 import { signal, View } from "nsh";
 import { Button, colors, Label, row } from "../components";
 import { control, icon, space } from "../components/tokens";
@@ -7,22 +8,33 @@ import {
   ClientUpdateConfirm,
   pressClientUpdate,
 } from "../pages/settings/updates/client-app";
-import { clientUpdate } from "../services/client-update";
+import { clientPlatform, clientUpdate } from "../services/client-update";
 
 /** A strip along the bottom once the start-up check found a newer app: one
  * button to download it and then restart into it, and one to put it off.
  * Closed, it stays closed for that version; the Update settings still offer
  * it. */
-export function ClientUpdateNotice() {
+export function ClientUpdateNotice(
+  props: {
+    flatpak?: boolean;
+    update?: ReturnType<typeof createClientUpdate>;
+  } = {},
+) {
   const c = colors();
-  const update = clientUpdate;
+  const update = props.update ?? clientUpdate;
+  const platformKind = props.flatpak ? "flatpak" : clientPlatform;
   const confirm = signal(false);
   const message = () => {
     const offer = update.notice();
     if (!offer) return "";
     if (update.failure()) return update.failure();
-    if (offer.kind === "app" && !offer.update.canInstall)
-      return uiText("appUpdateNeedsApk", { version: offer.version });
+    if (offer.kind === "app" && !offer.update.canInstall) {
+      if (platformKind === "android")
+        return uiText("appUpdateNeedsApk", { version: offer.version });
+      if (platformKind === "flatpak")
+        return uiText("appUpdateNeedsFlatpak", { version: offer.version });
+      return uiText("appUpdateManualDownload", { version: offer.version });
+    }
     // The button says what comes next: a restart, or closing the app.
     if (update.ready())
       return uiText("appUpdateReady", { version: offer.version });
@@ -54,10 +66,10 @@ export function ClientUpdateNotice() {
             {message()}
           </Label>
           <Button
-            label={clientUpdateAction(offer())}
+            label={clientUpdateAction(offer(), platformKind, update)}
             tone="primary"
             disabled={update.downloading() || update.restarting()}
-            onPress={() => pressClientUpdate(() => confirm.set(true))}
+            onPress={() => pressClientUpdate(() => confirm.set(true), update)}
           />
           <Button
             label={uiText("dismissAppUpdate")}

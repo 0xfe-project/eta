@@ -177,7 +177,7 @@ docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token
 
 ## 全端原生体验，随时随地指挥
 
-- **原生桌面端（`macOS`、`Windows`、`Linux`）：** 支持本机托管或连接远程宿主，提供签名校验的应用内自动更新。
+- **原生桌面端（`macOS`、`Windows`、`Linux`）：** 支持本机托管或连接远程宿主，`.dmg`、`.zip`、`.tar.gz` 提供签名校验的应用内自动更新（Linux `.flatpak` 搭配宿主机或远程 `eta-host` 使用，更新需重新安装新版 `.flatpak`）。
 - **原生移动端（`Android`、`iOS`、`HarmonyOS`）：** 支持扫码配对，随时在手机上跟进作战室、验收任务与审批操作；Android 端支持签名 OTA 热更新。
 - **内置 Web UI（`:8787`）：** 由 `eta-host` 直接提供，打开浏览器即可使用。
 - **终端 TUI（`eta`）：** 为键盘流准备的极速终端界面，本地与远程宿主同样流畅。
@@ -230,7 +230,7 @@ docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token
 eta-host upgrade
 ```
 
-`eta-host upgrade` 会自动校验 `SHA256SUMS`、等待正在执行的任务平滑收尾、将 `~/.eta/eta.sqlite` 备份至 `~/.eta/backups`、重启服务，并在新版本未能正常启动时自动回滚；已连接的 `eta-daemon` 节点会在重连时同步更新。桌面端与 Android 客户端同样可在 **Settings → Update** 完成升级。
+`eta-host upgrade` 会自动校验 `SHA256SUMS`、等待正在执行的任务平滑收尾、将 `~/.eta/eta.sqlite` 备份至 `~/.eta/backups`、重启服务，并在新版本未能正常启动时自动回滚；已连接的 `eta-daemon` 节点会在重连时同步更新。桌面端（`.dmg`、`.zip`、`.tar.gz`）与 Android 客户端同样可在 **Settings → Update** 原地升级，Linux `.flatpak` 包则会在该页提示新版本并通过 `flatpak install --user` 安装更新。
 
 ## 相关文档
 

@@ -177,7 +177,7 @@ Scale from a laptop to Linux build servers, GPU workstations, and remote boxes w
 
 ## Every Screen, Always in Sync
 
-- **Native Desktop (`macOS`, `Windows`, `Linux`):** Embedded local host mode or connect to remote hosts, with signed in-app auto-updates.
+- **Native Desktop (`macOS`, `Windows`, `Linux`):** Embedded local host mode or connect to remote hosts, with signed in-app auto-updates on `.dmg`, `.zip`, and `.tar.gz` (Linux `.flatpak` pairs with a host-OS or remote `eta-host` and updates by reinstalling the new `.flatpak` bundle).
 - **Native Mobile (`Android`, `iOS`, `HarmonyOS`):** Monitor war rooms, review task deliverables, and approve actions on the go with QR code pairing — plus signed OTA updates on Android.
 - **Built-in Web UI (`:8787`):** Instant browser access served straight from `eta-host`.
 - **Terminal TUI (`eta`):** Fast, keyboard-first terminal interface for local or remote hosts.
@@ -230,7 +230,7 @@ Update from **Settings → Update** in the UI or via CLI:
 eta-host upgrade
 ```
 
-`eta-host upgrade` verifies `SHA256SUMS`, waits for running tasks, backs up `~/.eta/eta.sqlite` to `~/.eta/backups`, restarts the service, and rolls back automatically if the new build fails to start. Connected `eta-daemon` workers update on reconnect, and desktop/Android clients update via **Settings → Update**.
+`eta-host upgrade` verifies `SHA256SUMS`, waits for running tasks, backs up `~/.eta/eta.sqlite` to `~/.eta/backups`, restarts the service, and rolls back automatically if the new build fails to start. Connected `eta-daemon` workers update on reconnect; desktop (`.dmg`, `.zip`, `.tar.gz`) and Android clients update in place via **Settings → Update**, while the Linux `.flatpak` bundle notifies there and updates via `flatpak install --user`.
 
 ## Documentation
 
