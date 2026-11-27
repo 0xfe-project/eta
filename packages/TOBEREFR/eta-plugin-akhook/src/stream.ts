@@ -19,7 +19,6 @@
 import type { GenerationFrame, GenerationInterrupt } from "@eta/core";
 import type { StreamRule } from "./rules";
 import { isAbsolute, relative, resolve } from "node:path";
-import { astMatches, languageForPath, normalizeLanguage } from "./ast";
 
 /** What survives a restart: the completed-turn count and when each rule last fired. */
 export interface StreamState {
@@ -234,36 +233,8 @@ export class StreamRules {
         found.push(rule);
         continue;
       }
-      if (final && surface.source === "tool" && rule.asts.length > 0) {
-        if (await this.astHolds(rule, text, surface)) found.push(rule);
-      }
     }
     return found;
-  }
-
-  private async astHolds(
-    rule: StreamRule,
-    text: string,
-    surface: Surface,
-  ): Promise<boolean> {
-    const path = surface.paths[0];
-    for (const check of rule.asts) {
-      const language =
-        check.language ??
-        (path === undefined ? undefined : languageForPath(path));
-      if (language === undefined || normalizeLanguage(language) === undefined)
-        continue;
-      try {
-        if ((await astMatches(language, check.pattern, text)).length > 0)
-          return true;
-      } catch (error) {
-        // A rule that cannot be evaluated must not stop the model from working.
-        this.options.warn?.(
-          `akhook: ${rule.id}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-    return false;
   }
 
   /**

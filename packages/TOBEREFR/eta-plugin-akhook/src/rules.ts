@@ -20,7 +20,6 @@ import type {
 } from "./types";
 import { isAbsolute, relative, sep } from "node:path";
 import picomatch from "picomatch";
-import { astMatches, languageForPath, normalizeLanguage } from "./ast";
 import { CheckerError, runCommand, runJson } from "./command";
 import { argvMatches, simpleCommands } from "./shell";
 import { ConfigError } from "./types";
@@ -94,7 +93,6 @@ interface CompiledScript {
 type CompiledCheck =
   | { kind: "regex"; regex: RegExp }
   | { kind: "argv"; argv: ArgvItem[] }
-  | { kind: "ast"; language: string | undefined; pattern: string }
   | { kind: "command"; script: CompiledScript };
 
 type Outcome =
@@ -130,7 +128,6 @@ export interface StreamRule {
   id: string;
   message: string;
   regexes: RegExp[];
-  asts: { language: string | undefined; pattern: string }[];
   scope: StreamScope;
   /** Extra path gate for file-bearing tool calls (omp's `globs`). */
   paths: ((path: string) => boolean)[];
@@ -220,15 +217,6 @@ function compileChecks(
           `invalid regex: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
-    }
-    if ("ast" in check) {
-      const language =
-        check.ast.language === undefined
-          ? undefined
-          : normalizeLanguage(check.ast.language);
-      if (check.ast.language !== undefined && language === undefined)
-        throw new Error(`invalid AST language: ${check.ast.language}`);
-      return { kind: "ast", language, pattern: check.ast.pattern };
     }
     if ("argv" in check) {
       if (check.argv.length === 0) throw new Error("argv cannot be empty");
@@ -323,7 +311,7 @@ export class RuleSet {
       event === "shell_exec"
         ? ["regex", "argv", "command"]
         : event === "file_change"
-          ? ["regex", "ast", "command"]
+          ? ["regex", "command"]
           : ["regex", "command"];
     const checks = compileChecks(spec, allowed);
     if (spec.action !== undefined && spec.decide !== undefined)
@@ -355,17 +343,12 @@ export class RuleSet {
       throw new Error(
         "stream rules take scope, paths and checks, not actions, tools, action or decide",
       );
-    const checks = compileChecks(spec, ["regex", "ast"]);
+    const checks = compileChecks(spec, ["regex"]);
     return {
       id: spec.id,
       message,
       regexes: checks.flatMap((check) =>
         check.kind === "regex" ? [check.regex] : [],
-      ),
-      asts: checks.flatMap((check) =>
-        check.kind === "ast"
-          ? [{ language: check.language, pattern: check.pattern }]
-          : [],
       ),
       scope: parseScope(spec.scope),
       paths: compileGlobs(spec.paths, "path"),
@@ -504,27 +487,6 @@ export class RuleSet {
         if (candidate.type !== "shell_exec") return false;
         const commands = await simpleCommands(candidate.command);
         return commands.some((words) => argvMatches(check.argv, words));
-      }
-      case "ast": {
-        if (
-          candidate.type !== "file_change" ||
-          candidate.new_text === undefined
-        )
-          return false;
-        const language = check.language ?? languageForPath(candidate.path);
-        if (language === undefined)
-          throw new CheckerError(
-            rule.id,
-            `cannot infer AST language for ${candidate.path}`,
-          );
-        const found = await astMatches(
-          language,
-          check.pattern,
-          candidate.new_text,
-        );
-        const before = candidate.old_text ?? "";
-        // Only what the change introduces: a match the old text already held is not new.
-        return found.some((text) => !before.includes(text));
       }
     }
   }

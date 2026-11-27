@@ -79,25 +79,10 @@ function check(where: string, value: unknown): CheckSpec {
   if (!isPlain(value)) fail(where, "must be a mapping");
   const keys = Object.keys(value);
   if (keys.length !== 1)
-    fail(where, "must have exactly one of regex, ast, argv, command");
+    fail(where, "must have exactly one of regex, argv, command");
   if ("regex" in value) {
     if (typeof value.regex !== "string") fail(where, "regex must be a string");
     return { regex: value.regex };
-  }
-  if ("ast" in value) {
-    const ast = value.ast;
-    if (!isPlain(ast)) fail(where, "ast must be a mapping");
-    only(`${where}.ast`, ast, ["language", "pattern"]);
-    if (typeof ast.pattern !== "string")
-      fail(where, "ast.pattern must be a string");
-    if (ast.language !== undefined && typeof ast.language !== "string")
-      fail(where, "ast.language must be a string");
-    return {
-      ast: {
-        pattern: ast.pattern,
-        ...(ast.language === undefined ? {} : { language: ast.language }),
-      },
-    };
   }
   if ("argv" in value) {
     if (!Array.isArray(value.argv)) fail(where, "argv must be a list");

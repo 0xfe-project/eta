@@ -94,7 +94,7 @@ rules:
     });
   });
 
-  it("limits by action, and never runs regex or ast on a deletion", async () => {
+  it("limits by action, and never runs regex on a deletion", async () => {
     const { root, rules } = project(yaml);
     expect(
       await rules.evaluate(change(root, "src/lib.rs", "", "delete")),
@@ -127,86 +127,6 @@ rules:
     });
   });
 
-  describe("ast checks look only at what the change introduces", () => {
-    const ast = `
-rules:
-  - id: no-any
-    on: file_change
-    checks:
-      - ast: {language: tsx, pattern: 'const $A: any = $B'}
-    message: no any
-`;
-    it("matches new structure, found from the path when no language is given", async () => {
-      const { root, rules } = project(ast.replace("language: tsx, ", ""));
-      expect(
-        await rules.evaluate(change(root, "a.ts", "const x: any = 1;")),
-      ).toMatchObject({ kind: "deny" });
-      expect(
-        await rules.evaluate(change(root, "a.ts", "const x: number = 1;")),
-      ).toEqual({ kind: "allow" });
-    });
-
-    it("ignores a match the old text already held", async () => {
-      const { root, rules } = project(ast);
-      const old = "const x: any = 1;\n";
-      expect(
-        await rules.evaluate(
-          change(root, "a.ts", `${old}const y = 2;`, "modify", {
-            old_text: old,
-          }),
-        ),
-      ).toEqual({ kind: "allow" });
-      expect(
-        await rules.evaluate(
-          change(root, "a.ts", `${old}const z: any = 2;`, "modify", {
-            old_text: old,
-          }),
-        ),
-      ).toMatchObject({ kind: "deny" });
-    });
-
-    it("cannot infer a language from an unknown extension: the check fails closed", async () => {
-      const { root, rules } = project(ast.replace("language: tsx, ", ""));
-      await expect(
-        rules.evaluate(change(root, "a.weird", "const x: any = 1;")),
-      ).rejects.toThrow(/cannot infer AST language/);
-    });
-
-    it("an invalid pattern is an error, not a non-match", async () => {
-      const { root, rules } = project(
-        ast.replace("const $A: any = $B", "a; b"),
-      );
-      await expect(
-        rules.evaluate(change(root, "a.ts", "const x = 1;")),
-      ).rejects.toThrow(/AST pattern/);
-    });
-
-    it("works for rust and go through the dynamic parsers", async () => {
-      const { root, rules } = project(`
-rules:
-  - id: rs
-    on: file_change
-    checks: [{ast: {language: rust, pattern: 'Box::leak($V)'}}]
-    message: m
-  - id: go
-    on: file_change
-    checks: [{ast: {language: go, pattern: 'runtime.SetFinalizer($A, $B)'}}]
-    message: m
-`);
-      const hit = await rules.evaluate([
-        ...change(root, "a.rs", "fn f() { Box::leak(Box::new(1)); }"),
-        ...change(
-          root,
-          "a.go",
-          "package a\nfunc f(o *T) { runtime.SetFinalizer(o, nil) }",
-        ),
-      ]);
-      expect(hit.kind === "deny" && hit.hits.map((h) => h.id)).toEqual([
-        "go",
-        "rs",
-      ]);
-    });
-  });
 });
 
 describe("shell_exec rules", () => {

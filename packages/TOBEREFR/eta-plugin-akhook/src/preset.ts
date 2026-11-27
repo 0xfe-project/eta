@@ -14,7 +14,6 @@ import { ConfigError } from "./types";
 
 interface Frontmatter {
   condition?: string | string[];
-  astCondition?: string | string[];
   scope?: string | string[];
   interruptMode?: InterruptMode;
 }
@@ -40,27 +39,27 @@ export function splitScope(scope: string): string[] {
 const list = (value: string | string[] | undefined): string[] =>
   value === undefined ? [] : typeof value === "string" ? [value] : value;
 
-/** The ast-grep language of a preset rule, from its name prefix (akhook's mapping). */
-function languageOf(name: string): string {
-  if (name.startsWith("go-")) return "go";
-  if (name.startsWith("rs-")) return "rust";
-  return "tsx";
-}
-
-/** One omp Markdown rule as a `stream` rule. */
-export function ompRule(name: string, markdown: string): RuleSpec {
+/** The frontmatter and body of one omp Markdown rule. */
+function parseRule(
+  name: string,
+  markdown: string,
+): { front: Frontmatter; body: string } {
   const source = markdown.startsWith("---\n") ? markdown.slice(4) : undefined;
   const end = source?.indexOf("\n---\n") ?? -1;
   if (source === undefined || end < 0)
     throw new ConfigError(`omp/${name}: missing or unterminated frontmatter`);
-  const front = (parseYaml(source.slice(0, end)) ?? {}) as Frontmatter;
-  const body = source.slice(end + "\n---\n".length).trim();
-  const checks: RuleSpec["checks"] = [
-    ...list(front.condition).map((regex) => ({ regex })),
-    ...list(front.astCondition).map((pattern) => ({
-      ast: { language: languageOf(name), pattern },
-    })),
-  ];
+  return {
+    front: (parseYaml(source.slice(0, end)) ?? {}) as Frontmatter,
+    body: source.slice(end + "\n---\n".length).trim(),
+  };
+}
+
+/** One omp Markdown rule as a `stream` rule. */
+export function ompRule(name: string, markdown: string): RuleSpec {
+  const { front, body } = parseRule(name, markdown);
+  const checks: RuleSpec["checks"] = list(front.condition).map((regex) => ({
+    regex,
+  }));
   if (checks.length === 0) throw new ConfigError(`omp/${name}: no checks`);
   return {
     id: `omp/${name}`,
@@ -77,9 +76,23 @@ export function ompRule(name: string, markdown: string): RuleSpec {
   };
 }
 
-/** All 27 rules of the preset, sorted by name. */
+/**
+ * The rules of the preset that still have a check, sorted by name.
+ *
+ * Five of the upstream rules were written with `astCondition` alone. Structural matching is
+ * gone (see NAPI-REMOVED.md), so those five have nothing left to match on and are left out
+ * rather than packed as rules that can never fire.
+ */
+export const AST_ONLY_RULES: readonly string[] = [
+  "go-bench-loop",
+  "go-new-expr",
+  "go-range-int",
+  "ts-no-inline-cast-access",
+  "ts-redundant-clear-guard",
+];
+
 export function ompRules(): RuleSpec[] {
-  return Object.entries(OMP_PRESET).map(([name, markdown]) =>
-    ompRule(name, markdown),
-  );
+  return Object.entries(OMP_PRESET)
+    .filter(([name]) => !AST_ONLY_RULES.includes(name))
+    .map(([name, markdown]) => ompRule(name, markdown));
 }

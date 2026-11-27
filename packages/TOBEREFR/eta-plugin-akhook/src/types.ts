@@ -31,7 +31,6 @@ export type ArgvItem = string | string[];
 
 export type CheckSpec =
   | { regex: string }
-  | { ast: { language?: string; pattern: string } }
   | { argv: ArgvItem[] }
   | { command: CommandSpec };
 

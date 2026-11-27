@@ -50,7 +50,6 @@ rules:
     actions: [create, modify]
     checks:
       - regex: 'Box::leak\\('
-      - ast: {language: rust, pattern: 'Box::leak($V)'}
     message: m
   - id: b
     on: shell_exec
@@ -353,9 +352,9 @@ describe("validation when compiled", () => {
       /argv is not allowed/,
     ],
     [
-      "ast outside file_change",
-      "  - id: a\n    on: shell_exec\n    checks: [{ast: {pattern: x}}]\n    message: m\n",
-      /ast is not allowed/,
+      "structural checks are gone with their addon",
+      "  - id: a\n    on: file_change\n    checks: [{ast: {pattern: x}}]\n    message: m\n",
+      /must have exactly one of regex, argv, command/,
     ],
     [
       "action and decide",
@@ -366,11 +365,6 @@ describe("validation when compiled", () => {
       "bad regex",
       "  - id: a\n    on: shell_exec\n    checks: [{regex: '('}]\n    message: m\n",
       /invalid regex/,
-    ],
-    [
-      "bad ast language",
-      "  - id: a\n    on: file_change\n    checks: [{ast: {language: klingon, pattern: x}}]\n    message: m\n",
-      /invalid AST language/,
     ],
     [
       "lifecycle with checks",

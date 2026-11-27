@@ -246,24 +246,6 @@ describe("interrupting rules", () => {
     expect(g.interrupted).toEqual(["r"]);
   });
 
-  it("structural conditions are checked on the finished tool call", async () => {
-    const ast = rule(
-      `    scope: ["tool:edit(*.ts)"]\n    checks: [{ast: {language: tsx, pattern: 'const $A: any = $B'}}]\n`,
-    );
-    const s = await setup(ast, [
-      edit("/project/a.ts", "const x: any = 1;"),
-      say("rewritten"),
-    ]);
-    await s.run();
-    expect(s.interrupted).toEqual(["r"]);
-    const clean = await setup(ast, [
-      edit("/project/a.ts", "const x: number = 1;"),
-      say("ok"),
-    ]);
-    await clean.run();
-    expect(clean.interrupted).toEqual([]);
-  });
-
   it("several matching rules interrupt once and all give their reminder", async () => {
     const s = await setup(
       rule(`    checks: [{regex: 'foo'}]\n`, "a") +

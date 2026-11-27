@@ -23,15 +23,25 @@ describe("the embedded preset", () => {
       );
   });
 
-  it("has the 27 rules, five of them structural, all kept as soft reminders", () => {
+  it("has the 22 rules that still have a check, all kept as soft reminders", () => {
     const rules = ompRules();
-    expect(rules).toHaveLength(27);
+    expect(rules).toHaveLength(22);
     expect(rules.every((rule) => rule.id.startsWith("omp/"))).toBe(true);
     expect(rules.every((rule) => rule.on === "stream")).toBe(true);
-    expect(
-      rules.filter((rule) => rule.checks.some((check) => "ast" in check)),
-    ).toHaveLength(5);
+    expect(rules.every((rule) => rule.checks.length > 0)).toBe(true);
     expect(rules.every((rule) => rule.interrupt_mode === "never")).toBe(true);
+  });
+
+  it("leaves out the five rules that were built on astCondition", () => {
+    const packed = new Set(ompRules().map((rule) => rule.id));
+    for (const name of [
+      "go-bench-loop",
+      "go-new-expr",
+      "go-range-int",
+      "ts-no-inline-cast-access",
+      "ts-redundant-clear-guard",
+    ])
+      expect(packed.has(`omp/${name}`)).toBe(false);
   });
 
   it("compiles: every condition, scope and pattern is valid", () => {
@@ -41,7 +51,7 @@ describe("the embedded preset", () => {
       shellTools: {},
       files: [],
     });
-    expect(set.streamRules).toHaveLength(27);
+    expect(set.streamRules).toHaveLength(22);
   });
 
   it("reads a rule's condition, scope, language and body", () => {
@@ -52,12 +62,6 @@ describe("the embedded preset", () => {
       checks: [{ regex: "Box::leak" }],
     });
     expect(rule.message).toMatch(/^Never use `Box::leak`/);
-    const ast = ompRules().find((r) => r.checks.some((c) => "ast" in c))!;
-    expect(
-      ast.checks.find((c) => "ast" in c) as { ast: { language: string } },
-    ).toMatchObject({
-      ast: { language: expect.stringMatching(/^(go|rust|tsx)$/) },
-    });
   });
 
   it("rejects a rule with no frontmatter or no checks", () => {
