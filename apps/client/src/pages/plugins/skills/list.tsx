@@ -35,6 +35,7 @@ import { uiText } from "../../../i18n";
 import { follow, useHost } from "../../../services/host";
 import { problemText } from "../../../services/problem-text";
 import { SearchField } from "../../../ui";
+import { PluginSettingsButton } from "../settings-button";
 import { SkillDetail } from "./detail";
 import { SkillSelect } from "./select";
 
@@ -49,6 +50,7 @@ export function Skills(props: {
   layout: Layout;
   tabs: () => JSX.Element;
   onBack?: () => void;
+  onSettings: () => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -573,16 +575,22 @@ export function Skills(props: {
               layout="phone"
               onBack={props.onBack}
             >
-              <Button
-                label={uiText("skillReload")}
-                icon="refresh"
-                spinIcon
-                busy={loading()}
-                iconOnly
-                iconSize={icon.md}
-                size={control.lg}
-                onPress={refresh}
-              />
+              <View style={{ ...row, gap: space[8] }}>
+                <PluginSettingsButton
+                  layout="phone"
+                  onPress={props.onSettings}
+                />
+                <Button
+                  label={uiText("skillReload")}
+                  icon="refresh"
+                  spinIcon
+                  busy={loading()}
+                  iconOnly
+                  iconSize={icon.md}
+                  size={control.lg}
+                  onPress={refresh}
+                />
+              </View>
             </Header>
             {props.tabs()}
           </If>
@@ -596,6 +604,10 @@ export function Skills(props: {
               <If when={!showing()}>
                 <View style={{ ...row, gap: space[12] }}>
                   {deviceMenu(160)}
+                  <PluginSettingsButton
+                    layout={props.layout}
+                    onPress={props.onSettings}
+                  />
                   <Button
                     label={uiText("skillReload")}
                     icon="refresh"
@@ -637,6 +649,7 @@ export function Skills(props: {
             end={space[12]}
           >
             <View style={{ flex: 1 }} />
+            <PluginSettingsButton layout="tablet" onPress={props.onSettings} />
             <Button
               label={uiText("skillReload")}
               icon="refresh"

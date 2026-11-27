@@ -87,7 +87,11 @@ function Fixture() {
   return (
     <Host.Provider value={stub}>
       <View style={{ flex: 1 }}>
-        <Market layout="desktop" tabs={() => <Label>tabs</Label>} />
+        <Market
+          onSettings={() => {}}
+          layout="desktop"
+          tabs={() => <Label>tabs</Label>}
+        />
       </View>
     </Host.Provider>
   );

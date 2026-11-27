@@ -202,6 +202,7 @@ export function openInstalled(
             <Label>asked-the-network</Label>
           </If>
           <Plugins
+            onSettings={() => {}}
             layout={layout}
             open={async (url) => {
               log.update((all) => [...all, "opened:" + url]);

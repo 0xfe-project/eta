@@ -47,6 +47,7 @@ import { ComposioDisconnect, linkAndOpen } from "./composio-actions";
 import { sheetEdge } from "./configure";
 import { pendingLogos, PluginLogo, primeLogos } from "./plugin-logo";
 import { PluginName } from "./plugin-name";
+import { PluginSettingsButton } from "./settings-button";
 
 /**
  * The online market. Everything the catalog says is shown as text, never as markup. The detail shows
@@ -94,6 +95,7 @@ export function Market(props: {
   layout: Layout;
   tabs: () => JSX.Element;
   onBack?: () => void;
+  onSettings: () => void;
   /** Opens an address in the browser; the system's by default. */
   open?: (url: string) => Promise<void>;
 }) {
@@ -701,6 +703,8 @@ export function Market(props: {
       >
         <View style={{ flex: 1 }} />
         <View style={{ ...row, gap: space[12] }}>
+          {/* Like the refresh button beside it, small and ghost on every layout. */}
+          <PluginSettingsButton layout="desktop" onPress={props.onSettings} />
           <Button
             label={uiText("refreshPlugins")}
             icon="refresh"
