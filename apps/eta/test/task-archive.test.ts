@@ -406,15 +406,19 @@ describe("the setting", () => {
     const r = await room();
     const task = await r.finished("Done");
     const now = lastAt(r.w, task.id) + 4 * DAY;
-    const sweep = () =>
-      new TaskArchiver({
-        board: r.board,
-        settings: new SettingStore(
-          openDatabase(databasePath(r.w.host.dataDir)),
-        ),
-        timer: false,
-        now: () => now,
-      }).sweep();
+    const sweep = () => {
+      const db = openDatabase(databasePath(r.w.host.dataDir));
+      try {
+        return new TaskArchiver({
+          board: r.board,
+          settings: new SettingStore(db),
+          timer: false,
+          now: () => now,
+        }).sweep();
+      } finally {
+        db.close();
+      }
+    };
     expect(sweep()).toEqual([]);
     await r.w.client.call("tasks", "setSettings", { archiveAfterDays: 3 });
     expect(sweep()).toEqual([task.id]);

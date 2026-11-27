@@ -34,6 +34,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { createOarRuntimes } from "@eta/runtime-oar";
@@ -45,8 +46,9 @@ import { call, say, scriptedModels } from "./support/models";
 import { remoteWorld } from "./support/remote";
 import { world } from "./support/world";
 
-const FIXTURE = new URL("./fixtures/plugins/hello-plugin/", import.meta.url)
-  .pathname;
+const FIXTURE = fileURLToPath(
+  new URL("./fixtures/plugins/hello-plugin/", import.meta.url),
+);
 const NAME = "hello-plugin";
 
 const API_KEY = "sk-noneLevelSentinel123";
@@ -629,44 +631,50 @@ describe("get_plugin_config", () => {
     };
   }
 
-  it("answers each field at its level, and keeps the others' values out", async () => {
-    const { w, result, agent } = await reading({ plugin: NAME });
-    const fields = fieldsOf(result);
-    expect(fields.team).toEqual({ level: "read", value: "ops" });
-    // A default is the value in force.
-    expect(fields.max_greetings).toEqual({ level: "read", value: 3 });
-    expect(fields.plain_key).toEqual({ level: "value", value: PLAIN_KEY });
-    expect(fields.api_key).toMatchObject({ level: "none", readable: false });
-    expect(String(fields.api_key!.note)).toContain("Not readable");
-    expect(result).not.toContain(API_KEY);
-    expect(result).not.toContain(SCRIPT_KEY);
+  it(
+    "answers each field at its level, and keeps the others' values out",
+    async () => {
+      const { w, result, agent } = await reading({ plugin: NAME });
+      const fields = fieldsOf(result);
+      expect(fields.team).toEqual({ level: "read", value: "ops" });
+      // A default is the value in force.
+      expect(fields.max_greetings).toEqual({ level: "read", value: 3 });
+      expect(fields.plain_key).toEqual({ level: "value", value: PLAIN_KEY });
+      expect(fields.api_key).toMatchObject({ level: "none", readable: false });
+      expect(String(fields.api_key!.note)).toContain("Not readable");
+      expect(result).not.toContain(API_KEY);
+      expect(result).not.toContain(SCRIPT_KEY);
 
-    const path = String(fields.script_key!.path);
-    expect(fields.script_key!.level).toBe("file");
-    expect(await readFile(path, "utf8")).toBe(SCRIPT_KEY);
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
-    await rm(join(path, ".."), { recursive: true, force: true });
+      const path = String(fields.script_key!.path);
+      expect(fields.script_key!.level).toBe("file");
+      expect(await readFile(path, "utf8")).toBe(SCRIPT_KEY);
+      // Windows NTFS does not preserve POSIX 0o600 permission bits.
+      if (process.platform !== "win32")
+        expect((await stat(path)).mode & 0o777).toBe(0o600);
+      await rm(join(path, ".."), { recursive: true, force: true });
 
-    // The reads of a secret are on record, and the record has no value in it.
-    await w.client.subscribe("plugins");
-    await until(
-      () =>
-        (w.client.section<PluginAuditView[]>("plugins", "audit")?.length ?? 0) >
-        0,
-    );
-    const audit = w.client.section<PluginAuditView[]>("plugins", "audit")!;
-    expect(
-      audit.map((row) => [row.agentName, row.plugin, row.field, row.level]),
-    ).toEqual(
-      expect.arrayContaining([
-        [agent.name, NAME, "script_key", "file"],
-        [agent.name, NAME, "plain_key", "value"],
-      ]),
-    );
-    expect(audit).toHaveLength(2);
-    expect(audit[0]?.sessionId).toMatch(/\S/);
-    expect(JSON.stringify(audit)).not.toContain(PLAIN_KEY);
-  });
+      // The reads of a secret are on record, and the record has no value in it.
+      await w.client.subscribe("plugins");
+      await until(
+        () =>
+          (w.client.section<PluginAuditView[]>("plugins", "audit")?.length ??
+            0) > 0,
+      );
+      const audit = w.client.section<PluginAuditView[]>("plugins", "audit")!;
+      expect(
+        audit.map((row) => [row.agentName, row.plugin, row.field, row.level]),
+      ).toEqual(
+        expect.arrayContaining([
+          [agent.name, NAME, "script_key", "file"],
+          [agent.name, NAME, "plain_key", "value"],
+        ]),
+      );
+      expect(audit).toHaveLength(2);
+      expect(audit[0]?.sessionId).toMatch(/\S/);
+      expect(JSON.stringify(audit)).not.toContain(PLAIN_KEY);
+    },
+    process.platform === "win32" ? 30_000 : undefined,
+  );
 
   it("reads only the fields asked for", async () => {
     const { result } = await reading({
@@ -956,37 +964,43 @@ async function callServer(
     stdout: "pipe",
     env: { PATH: process.env.PATH ?? "", ...server.env },
   });
-  const lines = [
-    {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "initialize",
-      params: { protocolVersion: "2025-06-18" },
-    },
-    { jsonrpc: "2.0", method: "notifications/initialized" },
-    {
-      jsonrpc: "2.0",
-      id: 2,
-      method: "tools/call",
-      params: { name: "say_hello", arguments: { name: "Ada" } },
-    },
-  ];
-  child.stdin.write(
-    `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`,
-  );
-  await child.stdin.flush();
   const reader = child.stdout.getReader();
-  let text = "";
-  while (text.split("\n").filter((line) => line !== "").length < 2) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    text += new TextDecoder().decode(value);
+  try {
+    const lines = [
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-06-18" },
+      },
+      { jsonrpc: "2.0", method: "notifications/initialized" },
+      {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: { name: "say_hello", arguments: { name: "Ada" } },
+      },
+    ];
+    child.stdin.write(
+      `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`,
+    );
+    await child.stdin.flush();
+    let text = "";
+    while (text.split("\n").filter((line) => line !== "").length < 2) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      text += new TextDecoder().decode(value);
+    }
+    const reply = JSON.parse(text.trim().split("\n")[1]!) as {
+      result: { content: { text: string }[] };
+    };
+    return JSON.parse(reply.result.content[0]!.text);
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    await Promise.resolve(child.stdin.end()).catch(() => undefined);
+    child.kill();
+    await child.exited;
   }
-  child.kill();
-  const reply = JSON.parse(text.trim().split("\n")[1]!) as {
-    result: { content: { text: string }[] };
-  };
-  return JSON.parse(reply.result.content[0]!.text);
 }
 
 describe("a session on a daemon's machine", () => {
@@ -1154,7 +1168,9 @@ export default { greeting, cwd, max, servers: eta.mcp.servers().map((s) => s.nam
     expect(fields.script_key?.level).toBe("file");
     const path = String(fields.script_key?.path);
     expect(await readFile(path, "utf8")).toBe(SCRIPT_KEY);
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    // Windows NTFS does not preserve POSIX 0o600 permission bits.
+    if (process.platform !== "win32")
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
     await rm(join(path, ".."), { recursive: true, force: true });
   });
 

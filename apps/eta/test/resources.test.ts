@@ -90,9 +90,12 @@ describe("unpack", () => {
     const { dataDir, target } = await tool();
     expect(await unpack(dataDir, "tool/run")).toBe(target);
     expect(readFileSync(target, "utf8")).toContain("echo ok");
-    expect(mode(target)).toBe(0o755);
-    expect(mode(join(target, ".."))).toBe(0o755);
-    expect(Bun.spawnSync([target]).stdout.toString()).toBe("ok\n");
+    if (process.platform !== "win32") {
+      // Windows NTFS has no POSIX mode bits and cannot spawn extensionless #!/bin/sh scripts.
+      expect(mode(target)).toBe(0o755);
+      expect(mode(join(target, ".."))).toBe(0o755);
+      expect(Bun.spawnSync([target]).stdout.toString()).toBe("ok\n");
+    }
   });
 
   it("leaves a file that is already there alone", async () => {
@@ -193,11 +196,11 @@ describe("the daemon builds a compiled host carries", () => {
   it("unpacks a build on demand to the bytes the manifest describes", async () => {
     const build = (await carried()).get(PLATFORM);
     const path = await build?.path();
-    expect(path).toMatch(/unpacked\/daemon-bbbb\/eta-daemon-linux-x64$/);
+    expect(path).toMatch(/unpacked[\\/]daemon-bbbb[\\/]eta-daemon-linux-x64$/);
     const bytes = readFileSync(path as string);
     expect(sha256(bytes)).toBe(build?.sha256);
     expect(bytes.length).toBe(build?.size);
-    expect(mode(path as string)).toBe(0o755);
+    if (process.platform !== "win32") expect(mode(path as string)).toBe(0o755);
     expect(readdirSync(join(path as string, ".."))).toEqual([
       "eta-daemon-linux-x64",
     ]);

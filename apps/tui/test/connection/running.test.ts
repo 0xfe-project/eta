@@ -5,7 +5,7 @@
  */
 import type { HostProgram } from "../../src/connection/types";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
@@ -19,7 +19,7 @@ import {
 import { launchTemporaryHost } from "../../src/connection/temporary-host";
 import { script } from "../support/fake-programs";
 import { childEnv, SOURCE_HOST } from "../support/host";
-import { tempDir, until } from "../support/temp";
+import { removeWithRetry, tempDir, until } from "../support/temp";
 
 function alive(pid: number): boolean {
   try {
@@ -228,13 +228,7 @@ setInterval(() => undefined, 1_000);
           `the processes left behind in ${dir} to end`,
         );
       } finally {
-        // A process that just ended may still hold a file for a moment on Windows.
-        await rm(dir, {
-          recursive: true,
-          force: true,
-          maxRetries: 10,
-          retryDelay: 100,
-        });
+        await removeWithRetry(dir);
       }
     });
     const orphanScript = join(dir, "orphan.ts");

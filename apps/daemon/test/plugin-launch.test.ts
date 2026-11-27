@@ -11,7 +11,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   loadPlugin,
@@ -137,18 +137,28 @@ describe("a stdio server", () => {
   });
 
   it("really runs in that directory, with its arguments intact", async () => {
+    // MSYS2 CRT strips an unquoted bare `'` on Windows CreateProcess, so include spaces when checking single quotes there.
+    const quoteArg = process.platform === "win32" ? "a 'b' c" : "'";
     const loaded = await plugin({
       server: {
         type: "stdio",
-        command: "printf",
-        args: ["%s|%s|%s", "a b", "$HOME", "'"],
+        command: "bun",
+        args: [
+          "-e",
+          "process.stdout.write([...process.argv.slice(1), process.cwd()].join('|'))",
+          "a b",
+          "$HOME",
+          quoteArg,
+        ],
         cwd: "${PLUGIN_DATA}",
       },
     });
     const { server, data } = await only(loaded);
     const { command, args } = server as Stdio;
     const child = Bun.spawn([command, ...args!], { stdout: "pipe" });
-    expect(await new Response(child.stdout).text()).toBe("a b|$HOME|'");
+    expect(await new Response(child.stdout).text()).toBe(
+      `a b|$HOME|${quoteArg}|${data}`,
+    );
     expect(argv(server)[0]).toBe(data);
   });
 
@@ -383,7 +393,7 @@ describe("skills on an external runtime", () => {
     expect(got.skills).toBeUndefined();
     expect(got.launchArgs?.[0]).toBe("--plugin-dir");
     const dir = got.launchArgs![1]!;
-    expect(dir.endsWith("/demo")).toBe(true);
+    expect(dir.endsWith(`${sep}demo`)).toBe(true);
     expect(readdirSync(dir)).toEqual(["skills"]);
     expect(readdirSync(join(dir, "skills"))).toEqual(["good"]);
     expect(await readlink(join(dir, "skills", "good"))).toBe(

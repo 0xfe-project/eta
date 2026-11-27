@@ -32,9 +32,11 @@ import type { RuntimeExtras } from "@eta/server";
 import type { PluginPackage, PluginServer } from "./plugin-package";
 import { mkdirSync, realpathSync, symlinkSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import process from "node:process";
 import { isCursorServer } from "@eta/client-contracts";
 import { effectiveValue } from "@eta/client-contracts/plugin-fields";
 import { renderSkillDirs } from "@eta/server";
+import { localWindowsProbe, windowsShell } from "@eta/ssh";
 import { fillTemplate, isWithin } from "./plugin-package";
 
 /** The values one server gets, by name: resolved on the primary, kept in memory everywhere. */
@@ -405,6 +407,9 @@ export function resolvePluginServers(
   return resolved;
 }
 
+const sessionShell = (): string =>
+  process.platform === "win32" ? windowsShell(localWindowsProbe) : "/bin/sh";
+
 /**
  * The shape an external runtime takes (oar's `SessionMcpServer`). A runtime has no working
  * directory for a stdio server, so it is started through `sh`; sse is left out.
@@ -435,7 +440,7 @@ export function toSessionServers(
     return [
       {
         name: server.name,
-        command: "/bin/sh",
+        command: sessionShell(),
         args: [
           "-c",
           'cd "$0" && exec "$@"',

@@ -9,13 +9,20 @@ import type { ReleaseToken } from "@eta/releases";
 import type { HostService } from "../src/upgrade/service";
 import type { UpgradeOptions } from "../src/upgrade/upgrade";
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import {
   BUILT_UPSTREAM,
   chooseUpstream,
+  hostAsset,
   parseSums,
   parseUpstream,
   Releases,
@@ -44,7 +51,11 @@ import { openToken, sealToken, tokenHost } from "../src/upgrade/token";
 import { upgradeHost } from "../src/upgrade/upgrade";
 import { tempDir } from "./support/host";
 
-const PLATFORM = `eta-host-${process.platform}-${process.arch}`;
+const PLATFORM = hostAsset();
+// Integration cases that execute staged #!/bin/sh mock binaries via execFile (tryBuild / gh)
+// require POSIX; real Windows PE upgrades run in CI upgrade-e2e.yml.
+const posixShellIt = it.skipIf(process.platform === "win32");
+const posixShellDescribe = describe.skipIf(process.platform === "win32");
 
 /** A build: it says `says` is its version and carries `migrations`. */
 const build = (
@@ -280,28 +291,34 @@ describe("eta-host upgrade", () => {
     readdirSync(dir).filter((file) => file.endsWith(".next"));
 
   describe("which version", () => {
-    it("takes the latest full release and leaves a pre-release to be named", async () => {
-      github.publish("1.1.0", { body: build("1.1.0") });
-      github.publish("1.2.0-rc.1", {
-        body: build("1.2.0-rc.1"),
-        prerelease: true,
-      });
-      await upgrade();
-      expect(await readFile(exe, "utf8")).toBe(build("1.1.0"));
+    posixShellIt(
+      "takes the latest full release and leaves a pre-release to be named",
+      async () => {
+        github.publish("1.1.0", { body: build("1.1.0") });
+        github.publish("1.2.0-rc.1", {
+          body: build("1.2.0-rc.1"),
+          prerelease: true,
+        });
+        await upgrade();
+        expect(await readFile(exe, "utf8")).toBe(build("1.1.0"));
 
-      await upgrade({ wanted: "1.2.0-rc.1", version: "1.1.0" });
-      expect(await readFile(exe, "utf8")).toBe(build("1.2.0-rc.1"));
-    });
+        await upgrade({ wanted: "1.2.0-rc.1", version: "1.1.0" });
+        expect(await readFile(exe, "utf8")).toBe(build("1.2.0-rc.1"));
+      },
+    );
 
-    it("takes the latest pre-release when pre-releases are on", async () => {
-      github.publish("1.1.0", { body: build("1.1.0") });
-      github.publish("1.2.0-rc.1", {
-        body: build("1.2.0-rc.1"),
-        prerelease: true,
-      });
-      await upgrade({ prerelease: true });
-      expect(await readFile(exe, "utf8")).toBe(build("1.2.0-rc.1"));
-    });
+    posixShellIt(
+      "takes the latest pre-release when pre-releases are on",
+      async () => {
+        github.publish("1.1.0", { body: build("1.1.0") });
+        github.publish("1.2.0-rc.1", {
+          body: build("1.2.0-rc.1"),
+          prerelease: true,
+        });
+        await upgrade({ prerelease: true });
+        expect(await readFile(exe, "utf8")).toBe(build("1.2.0-rc.1"));
+      },
+    );
 
     it("stays on a pre-release when they are turned off, and says why", async () => {
       github.publish("1.1.0", { body: build("1.1.0") });
@@ -361,7 +378,7 @@ describe("eta-host upgrade", () => {
       );
     });
 
-    it("goes from a checkout's build to a release", async () => {
+    posixShellIt("goes from a checkout's build to a release", async () => {
       github.publish("1.1.0", { body: build("1.1.0") });
       await upgrade({ version: "0f3d99e59084" });
       expect(await readFile(exe, "utf8")).toBe(build("1.1.0"));
@@ -369,20 +386,25 @@ describe("eta-host upgrade", () => {
   });
 
   describe("a private repository", () => {
-    it("cannot see it without a token, and upgrades with one", async () => {
-      github.stop();
-      github = fakeGitHub({ requireToken: "s3cret" });
-      github.publish("1.1.0", { body: build("1.1.0") });
-      await expect(upgrade()).rejects.toThrow(/not found.*ETA_RELEASES_TOKEN/);
+    posixShellIt(
+      "cannot see it without a token, and upgrades with one",
+      async () => {
+        github.stop();
+        github = fakeGitHub({ requireToken: "s3cret" });
+        github.publish("1.1.0", { body: build("1.1.0") });
+        await expect(upgrade()).rejects.toThrow(
+          /not found.*ETA_RELEASES_TOKEN/,
+        );
 
-      await upgrade({
-        releases: new Releases({
-          upstream: github.url,
-          token: () => Promise.resolve({ token: "s3cret" }),
-        }),
-      });
-      expect(await readFile(exe, "utf8")).toBe(build("1.1.0"));
-    });
+        await upgrade({
+          releases: new Releases({
+            upstream: github.url,
+            token: () => Promise.resolve({ token: "s3cret" }),
+          }),
+        });
+        expect(await readFile(exe, "utf8")).toBe(build("1.1.0"));
+      },
+    );
 
     it("drops a stale token on a public repository", async () => {
       github.publish("1.1.0", { body: build("1.1.0") });
@@ -445,19 +467,24 @@ describe("eta-host upgrade", () => {
       await expect(upgrade()).rejects.toThrow(/does not name/);
     });
 
-    it("stops at a build that does not run, or says something else", async () => {
-      github.publish("1.1.0", { body: "not a program" });
-      const { service, calls } = fakeService(exe, dataDir);
-      await expect(upgrade({ service })).rejects.toThrow(/did not run/);
+    posixShellIt(
+      "stops at a build that does not run, or says something else",
+      async () => {
+        github.publish("1.1.0", { body: "not a program" });
+        const { service, calls } = fakeService(exe, dataDir);
+        await expect(upgrade({ service })).rejects.toThrow(/did not run/);
 
-      github.publish("1.2.0", { body: build("1.3.0") });
-      await expect(upgrade({ service })).rejects.toThrow(/says "eta-host 1.3/);
-      expect(calls).toEqual([]);
-      expect(leftovers()).toEqual([]);
-      expect(await readFile(exe, "utf8")).toBe(build("1.0.0"));
-    });
+        github.publish("1.2.0", { body: build("1.3.0") });
+        await expect(upgrade({ service })).rejects.toThrow(
+          /says "eta-host 1.3/,
+        );
+        expect(calls).toEqual([]);
+        expect(leftovers()).toEqual([]);
+        expect(await readFile(exe, "utf8")).toBe(build("1.0.0"));
+      },
+    );
 
-    it("stops at a database ahead of the build", async () => {
+    posixShellIt("stops at a database ahead of the build", async () => {
       github.publish("1.1.0", { body: build("1.1.0", ["0001-a"]) });
       const { service, calls } = fakeService(exe, dataDir);
       await expect(upgrade({ service })).rejects.toThrow(
@@ -466,34 +493,40 @@ describe("eta-host upgrade", () => {
       expect(calls).toEqual([]);
     });
 
-    it("refuses a build that can run but not list its migrations", async () => {
-      github.publish("1.1.0", {
-        body: build("1.1.0").replace(
+    posixShellIt(
+      "refuses a build that can run but not list its migrations",
+      async () => {
+        github.publish("1.1.0", {
+          body: build("1.1.0").replace(
+            "--migrations)",
+            "--migrations) exit 3 ;; x)",
+          ),
+        });
+        const { service, calls } = fakeService(exe, dataDir);
+        await expect(upgrade({ service })).rejects.toThrow(/did not run/);
+        expect(calls).toEqual([]);
+      },
+    );
+
+    posixShellIt(
+      "cannot tell with the one release that does not list them",
+      async () => {
+        const old = build("0.1.0").replace(
           "--migrations)",
           "--migrations) exit 3 ;; x)",
-        ),
-      });
-      const { service, calls } = fakeService(exe, dataDir);
-      await expect(upgrade({ service })).rejects.toThrow(/did not run/);
-      expect(calls).toEqual([]);
-    });
-
-    it("cannot tell with the one release that does not list them", async () => {
-      const old = build("0.1.0").replace(
-        "--migrations)",
-        "--migrations) exit 3 ;; x)",
-      );
-      github.publish("0.1.0", { body: old });
-      // From a checkout's build, whose database may be anything.
-      await expect(upgrade({ version: "abc123def456" })).rejects.toThrow(
-        /database may be ahead/,
-      );
-      expect(await readFile(exe, "utf8")).toBe(build("1.0.0"));
-      // From an older release, which it follows.
-      await upgrade({ version: "0.0.9" });
-      expect(await readFile(exe, "utf8")).toBe(old);
-      expect(said()).toContain("does not list its migrations");
-    });
+        );
+        github.publish("0.1.0", { body: old });
+        // From a checkout's build, whose database may be anything.
+        await expect(upgrade({ version: "abc123def456" })).rejects.toThrow(
+          /database may be ahead/,
+        );
+        expect(await readFile(exe, "utf8")).toBe(build("1.0.0"));
+        // From an older release, which it follows.
+        await upgrade({ version: "0.0.9" });
+        expect(await readFile(exe, "utf8")).toBe(old);
+        expect(said()).toContain("does not list its migrations");
+      },
+    );
 
     it("does not touch a service that runs another file", async () => {
       github.publish("1.1.0", { body: build("1.1.0") });
@@ -504,20 +537,23 @@ describe("eta-host upgrade", () => {
       expect(calls).toEqual([]);
     });
 
-    it("runs one at a time, and takes over a lock left by a dead process", async () => {
-      github.publish("1.1.0", { body: build("1.1.0") });
-      const lock = join(dataDir, "upgrade.lock");
-      writeFileSync(lock, String(process.pid));
-      await expect(upgrade()).rejects.toThrow(/another upgrade/);
+    posixShellIt(
+      "runs one at a time, and takes over a lock left by a dead process",
+      async () => {
+        github.publish("1.1.0", { body: build("1.1.0") });
+        const lock = join(dataDir, "upgrade.lock");
+        writeFileSync(lock, String(process.pid));
+        await expect(upgrade()).rejects.toThrow(/another upgrade/);
 
-      writeFileSync(lock, "2147483646");
-      await upgrade();
-      expect(existsSync(lock)).toBe(false);
-      expect(await readFile(exe, "utf8")).toBe(build("1.1.0"));
-    });
+        writeFileSync(lock, "2147483646");
+        await upgrade();
+        expect(existsSync(lock)).toBe(false);
+        expect(await readFile(exe, "utf8")).toBe(build("1.1.0"));
+      },
+    );
   });
 
-  describe("with no service running", () => {
+  posixShellDescribe("with no service running", () => {
     it("replaces the file, backs up, and leaves the restart to the user", async () => {
       github.publish("1.1.0", { body: build("1.1.0") });
       await upgrade();
@@ -539,7 +575,7 @@ describe("eta-host upgrade", () => {
     });
   });
 
-  describe("restarting the service", () => {
+  posixShellDescribe("restarting the service", () => {
     const next = build("1.1.0", ["0001-a", "0002-b", "0003-c"]);
 
     it("stops, backs up, swaps, starts, and keeps the old file", async () => {
@@ -778,7 +814,7 @@ describe("eta-host upgrade", () => {
       expect(busyAgents(dataDir)).toEqual([{ kind: "reply", name: "eta" }]);
     });
 
-    it("gives up after --wait, with nothing changed", async () => {
+    posixShellIt("gives up after --wait, with nothing changed", async () => {
       working();
       github.publish("1.1.0", { body: build("1.1.0", carried) });
       const fake = fakeService(exe, dataDir);
@@ -791,7 +827,7 @@ describe("eta-host upgrade", () => {
       expect(leftovers()).toEqual([]);
     });
 
-    it("goes on once they are done", async () => {
+    posixShellIt("goes on once they are done", async () => {
       working();
       github.publish("1.1.0", { body: build("1.1.0", carried) });
       const fake = fakeService(exe, dataDir);
@@ -808,7 +844,7 @@ describe("eta-host upgrade", () => {
       expect(fake.calls).toEqual(["stop", "start"]);
     });
 
-    it("--force does not wait", async () => {
+    posixShellIt("--force does not wait", async () => {
       working();
       github.publish("1.1.0", { body: build("1.1.0", carried) });
       const fake = fakeService(exe, dataDir);
@@ -817,7 +853,7 @@ describe("eta-host upgrade", () => {
       expect(said()).toContain("--force");
     });
 
-    it("does not wait when there is no restart", async () => {
+    posixShellIt("does not wait when there is no restart", async () => {
       working();
       github.publish("1.1.0", { body: build("1.1.0", carried) });
       await upgrade();
@@ -837,13 +873,22 @@ describe("eta-host upgrade", () => {
     });
 
     it("is put back without the log of the file it replaces", () => {
+      const dbPath = databasePath(dataDir);
       const backup = backupDatabase(dataDir, "1.0.0") as string;
-      const db = openDatabase(databasePath(dataDir));
-      db.exec("PRAGMA wal_autocheckpoint = 0");
-      db.exec("DELETE FROM gone");
-      expect(existsSync(`${databasePath(dataDir)}-wal`)).toBe(true);
+      const db = openDatabase(dbPath);
+      let wal: Uint8Array;
+      try {
+        db.exec("PRAGMA wal_autocheckpoint = 0");
+        db.exec("DELETE FROM gone");
+        expect(existsSync(`${dbPath}-wal`)).toBe(true);
+        wal = readFileSync(`${dbPath}-wal`);
+      } finally {
+        // Windows refuses to remove a -wal file while a SQLite connection holds it open.
+        db.close();
+      }
+      writeFileSync(`${dbPath}-wal`, wal);
       restoreDatabase(dataDir, backup);
-      db.close();
+      expect(existsSync(`${dbPath}-wal`)).toBe(false);
       expect(stored()).toEqual({ value: "kept" });
       expect(existsSync(backup)).toBe(true);
     });
@@ -1104,7 +1149,7 @@ describe("which token", () => {
   async function gh(script: string): Promise<NodeJS.ProcessEnv> {
     const bin = await tempDir("eta-gh-");
     await writeFile(join(bin, "gh"), `#!/bin/sh\n${script}\n`, { mode: 0o755 });
-    return { PATH: `${bin}:${process.env.PATH}` };
+    return { PATH: `${bin}${delimiter}${process.env.PATH}` };
   }
 
   it("takes GitHub's from the environment, in order", async () => {
@@ -1122,7 +1167,10 @@ describe("which token", () => {
   });
 
   it("does not ask gh about what the environment answers", async () => {
-    const env = await gh("exit 7");
+    const env =
+      process.platform === "win32"
+        ? { PATH: await tempDir("eta-empty-") }
+        : await gh("exit 7");
     expect(await releaseToken(github, { ...env, GH_TOKEN: "a" })).toMatchObject(
       { token: "a" },
     );
@@ -1141,10 +1189,9 @@ describe("which token", () => {
     });
   });
 
-  it("gives another server only its own, and never asks gh", async () => {
-    const env = await gh('echo "from-gh"');
+  it("gives another server only its own", async () => {
     const all = {
-      ...env,
+      PATH: await tempDir("eta-empty-"),
       GH_TOKEN: "a",
       GITHUB_TOKEN: "b",
       GH_ENTERPRISE_TOKEN: "c",
@@ -1153,6 +1200,17 @@ describe("which token", () => {
     expect(
       await releaseToken(mirror, { ...all, ETA_RELEASES_TOKEN: "d" }),
     ).toEqual({ token: "d", from: "ETA_RELEASES_TOKEN" });
+  });
+
+  posixShellIt("never asks gh for another server", async () => {
+    const env = await gh('echo "from-gh"');
+    const all = {
+      ...env,
+      GH_TOKEN: "a",
+      GITHUB_TOKEN: "b",
+      GH_ENTERPRISE_TOKEN: "c",
+    };
+    expect(await releaseToken(mirror, all)).toEqual({});
     expect(
       await releaseToken(github, { ETA_RELEASES_TOKEN: "d", ...env }),
     ).toEqual({
@@ -1165,7 +1223,10 @@ describe("which token", () => {
     const saved = { host: "github.com", token: "saved" };
 
     it("comes after the environment and before gh", async () => {
-      const env = await gh('echo "from-gh"');
+      const env =
+        process.platform === "win32"
+          ? { PATH: await tempDir("eta-empty-") }
+          : await gh('echo "from-gh"');
       expect(
         await releaseToken(github, { ...env, GH_TOKEN: "a" }, saved),
       ).toEqual({ token: "a", from: "GH_TOKEN" });
@@ -1175,16 +1236,21 @@ describe("which token", () => {
       });
     });
 
-    it("goes to its own host and nowhere else", async () => {
-      const env = await gh('echo "from-gh"');
-      expect(await releaseToken(enterprise, env, saved)).toEqual({
-        token: "from-gh",
-        from: "gh",
-      });
+    it("goes nowhere outside its host, and falls back to gh on another GitHub host", async () => {
+      const env = { PATH: await tempDir("eta-empty-") };
       expect(await releaseToken(mirror, env, saved)).toEqual({});
       const lookalike = parseUpstream("http://github.com/repos/o/r");
       expect(lookalike.host).toBe("github.com");
       expect(await releaseToken(lookalike, env, saved)).toEqual({});
+      if (process.platform !== "win32") {
+        // Fake `gh` binary uses #!/bin/sh; see posixShellIt note above.
+        expect(
+          await releaseToken(enterprise, await gh('echo "from-gh"'), saved),
+        ).toEqual({
+          token: "from-gh",
+          from: "gh",
+        });
+      }
     });
 
     it("does not open under another host's key", () => {
@@ -1224,7 +1290,7 @@ describe("which token", () => {
     });
   });
 
-  it("asks gh about the upstream's own host", async () => {
+  posixShellIt("asks gh about the upstream's own host", async () => {
     const env = await gh(
       '[ "$1 $2 $3" = "auth token --hostname" ] && echo "for $4"',
     );
@@ -1236,20 +1302,23 @@ describe("which token", () => {
     });
   });
 
-  it("knows gh without a login from gh that cannot read one", async () => {
-    expect(
-      await releaseToken(
-        github,
-        await gh('echo "no oauth token found for github.com" >&2; exit 1'),
-      ),
-    ).toEqual({ gh: "logged-out" });
-    expect(
-      await releaseToken(
-        github,
-        await gh('[ "$1" = config ] && echo someone && exit 0; exit 1'),
-      ),
-    ).toEqual({ gh: "unreadable" });
-  });
+  posixShellIt(
+    "knows gh without a login from gh that cannot read one",
+    async () => {
+      expect(
+        await releaseToken(
+          github,
+          await gh('echo "no oauth token found for github.com" >&2; exit 1'),
+        ),
+      ).toEqual({ gh: "logged-out" });
+      expect(
+        await releaseToken(
+          github,
+          await gh('[ "$1" = config ] && echo someone && exit 0; exit 1'),
+        ),
+      ).toEqual({ gh: "unreadable" });
+    },
+  );
 
   it("knows when there is no gh", async () => {
     const empty = await tempDir("eta-gh-");

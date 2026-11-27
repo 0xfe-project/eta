@@ -70,14 +70,14 @@ export class PathRules {
     }
     const { root } = win32.parse(expanded);
     if (root === "") return refused("not_absolute");
+    // `\x`, `/x` and `\\host` have a 1-char root with no drive or share; refuse before resolving against CWD.
+    if (root.length <= 1) return refused("invalid");
     // A bare drive (`D:`) is that drive's root; anything else relative to a drive is not one place.
     const rooted =
       win32.isAbsolute(expanded) || expanded === root
         ? win32.resolve(win32.isAbsolute(expanded) ? expanded : `${root}\\`)
         : undefined;
     if (rooted === undefined) return refused("invalid");
-    // `\x` and `/x` have a root but no drive or share.
-    if (win32.parse(rooted).root.length <= 1) return refused("invalid");
     const parts = rooted.slice(win32.parse(rooted).root.length).split("\\");
     if (parts.some((part) => part !== "" && !isValidFilename(part)))
       return refused("invalid");

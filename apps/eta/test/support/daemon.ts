@@ -8,6 +8,7 @@ import type { MachineView } from "@eta/client-contracts";
 import type { Identity, LinkState } from "@eta/daemon";
 import type { Host } from "../../src/host";
 import type { Client } from "./client";
+import process from "node:process";
 import { DaemonLink, DaemonNode, enroll } from "@eta/daemon";
 import { afterEach } from "vitest";
 import { until } from "./client";
@@ -81,7 +82,7 @@ export async function startDaemon(
     server: node,
     backoff: { minMs: 20, maxMs: 100 },
     heartbeatMs: 200,
-    silenceMs: 2_000,
+    silenceMs: process.platform === "win32" ? 8_000 : 2_000,
     tap: options.tap,
     onState: (state) => states.push(state),
     warn: () => undefined,

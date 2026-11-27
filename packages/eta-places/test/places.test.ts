@@ -12,6 +12,10 @@ import { fakeFs } from "./fake-fs";
 
 const ok = (stdout = ""): RunResult => ({ code: 0, stdout, stderr: "" });
 const missing: RunResult = { code: 127, stdout: "", stderr: "", missing: true };
+const hostOs = process.platform;
+const isWin = hostOs === "win32";
+const hostDisplay = (sub = ""): string =>
+  sub === "" ? "~" : isWin ? `~\\${sub.replaceAll("/", "\\")}` : `~/${sub}`;
 
 /** git and gh as asked: `gh` signed in or not, or not there. */
 function programs(
@@ -71,23 +75,24 @@ describe("list", () => {
       "Developer/node_modules",
     ]);
     await writeFile(join(at, "Developer/readme.txt"), "x");
-    const places = new Places({ home: at, os: "linux", run: programs().run });
+    const places = new Places({ home: at, os: hostOs, run: programs().run });
     const listing = await places.list("~/Developer");
     expect(listing.path).toBe(join(at, "Developer"));
-    expect(listing.display).toBe("~/Developer");
+    expect(listing.display).toBe(hostDisplay("Developer"));
     expect(listing.crumbs).toEqual([
       { name: "~", path: at },
       { name: "Developer", path: join(at, "Developer") },
     ]);
     expect(listing.parent).toEqual({ path: at, display: "~" });
-    expect(listing.drives).toEqual([]);
+    if (isWin) expect(listing.drives.length).toBeGreaterThan(0);
+    else expect(listing.drives).toEqual([]);
     expect(
       listing.entries.map((e) => [e.name, e.hidden, e.git, e.display]),
     ).toEqual([
-      [".cache", true, false, "~/Developer/.cache"],
-      ["eta", false, true, "~/Developer/eta"],
-      ["node_modules", false, false, "~/Developer/node_modules"],
-      ["notes", false, false, "~/Developer/notes"],
+      [".cache", true, false, hostDisplay("Developer/.cache")],
+      ["eta", false, true, hostDisplay("Developer/eta")],
+      ["node_modules", false, false, hostDisplay("Developer/node_modules")],
+      ["notes", false, false, hostDisplay("Developer/notes")],
     ]);
     expect(JSON.stringify(listing)).not.toContain("readme");
   });
@@ -95,7 +100,7 @@ describe("list", () => {
   it("starts at the home, and says why it cannot list", async () => {
     const at = await home();
     await writeFile(join(at, "file"), "x");
-    const places = new Places({ home: at, os: "linux", run: programs().run });
+    const places = new Places({ home: at, os: hostOs, run: programs().run });
     expect((await places.list()).path).toBe(at);
     await expect(places.list("~/nope")).rejects.toMatchObject({
       failure: { code: "not_found" },
@@ -106,7 +111,9 @@ describe("list", () => {
     await expect(places.list("relative")).rejects.toMatchObject({
       failure: { code: "not_absolute" },
     });
-    await expect(places.list("C:\\Users")).rejects.toMatchObject({
+    await expect(
+      places.list(isWin ? "/home/ada" : "C:\\Users"),
+    ).rejects.toMatchObject({
       failure: { code: "invalid" },
     });
   });
@@ -170,20 +177,20 @@ describe("search", () => {
       "src/etaweb/.git",
       "Developer/website",
     ]);
-    const places = new Places({ home: at, os: "linux", run: programs().run });
+    const places = new Places({ home: at, os: hostOs, run: programs().run });
     const found = await places.search("eta");
     expect(found.matches.map((m) => m.display).slice(0, 3)).toEqual([
-      "~/Developer/eta",
-      "~/Developer/eta-web-old",
-      "~/src/etaweb",
+      hostDisplay("Developer/eta"),
+      hostDisplay("Developer/eta-web-old"),
+      hostDisplay("src/etaweb"),
     ]);
-    expect(found.matches.find((m) => m.display === "~/src/etaweb")?.git).toBe(
-      true,
-    );
+    expect(
+      found.matches.find((m) => m.display === hostDisplay("src/etaweb"))?.git,
+    ).toBe(true);
     // Across the path when the name alone does not match.
     expect(
       (await places.search("eta web")).matches.map((m) => m.display),
-    ).toContain("~/Developer/eta/apps/web");
+    ).toContain(hostDisplay("Developer/eta/apps/web"));
     expect((await places.search("")).matches).toEqual([]);
   });
 
@@ -196,7 +203,7 @@ describe("search", () => {
       "a/b/c/d/e/f/g/target-deep",
       "a/target-ok",
     ]);
-    const places = new Places({ home: at, os: "linux", run: programs().run });
+    const places = new Places({ home: at, os: hostOs, run: programs().run });
     const names = (await places.search("target")).matches.map((m) => m.name);
     expect(names).toEqual(["target-ok"]);
     expect(SEARCH_LIMITS.maxDepth).toBeLessThan(8);
@@ -211,7 +218,7 @@ describe("search", () => {
         (_, i) => `proj-${String(i).padStart(2, "0")}`,
       ),
     );
-    const places = new Places({ home: at, os: "linux", run: programs().run });
+    const places = new Places({ home: at, os: hostOs, run: programs().run });
     const found = await places.search("proj", 5);
     expect(found.matches).toHaveLength(5);
     expect(found.truncated).toBe(true);
@@ -224,7 +231,7 @@ describe("search", () => {
     let now = 1_000;
     const places = new Places({
       home: at,
-      os: "linux",
+      os: hostOs,
       run: programs().run,
       now: () => now,
     });
@@ -240,19 +247,26 @@ describe("search", () => {
   it("a typed path lists inside it, hidden ones too", async () => {
     const at = await home();
     await dirs(at, ["Developer/new-thing", "Developer/newer", ".config/app"]);
-    const places = new Places({ home: at, os: "linux", run: programs().run });
+    const places = new Places({ home: at, os: hostOs, run: programs().run });
     expect(
       (await places.search("~/Developer/new")).matches.map((m) => m.display),
-    ).toEqual(["~/Developer/new-thing", "~/Developer/newer"]);
+    ).toEqual([
+      hostDisplay("Developer/new-thing"),
+      hostDisplay("Developer/newer"),
+    ]);
     expect(
       (await places.search("~/.config")).matches.map((m) => m.display),
-    ).toEqual(["~/.config"]);
+    ).toEqual([hostDisplay(".config")]);
     expect(
       (await places.search("~/.co")).matches.map((m) => m.display),
-    ).toEqual(["~/.config"]);
+    ).toEqual([hostDisplay(".config")]);
     expect(
       (await places.search(`${at}/Developer/`)).matches.map((m) => m.display),
-    ).toEqual(["~/Developer", "~/Developer/new-thing", "~/Developer/newer"]);
+    ).toEqual([
+      hostDisplay("Developer"),
+      hostDisplay("Developer/new-thing"),
+      hostDisplay("Developer/newer"),
+    ]);
   });
 
   it("on Windows, a drive path is typed and the home is walked with backslashes", async () => {
@@ -287,10 +301,10 @@ describe("search", () => {
 describe("mkdir", () => {
   it("makes one directory in a parent that is there", async () => {
     const at = await home();
-    const places = new Places({ home: at, os: "linux", run: programs().run });
+    const places = new Places({ home: at, os: hostOs, run: programs().run });
     expect(await places.mkdir("~", "fresh")).toEqual({
       path: join(at, "fresh"),
-      display: "~/fresh",
+      display: hostDisplay("fresh"),
     });
     expect((await places.list("~/fresh")).entries).toEqual([]);
     await expect(places.mkdir("~", "fresh")).rejects.toMatchObject({
@@ -336,7 +350,7 @@ describe("resolve", () => {
   it("says what is there, by the machine's rules", async () => {
     const at = await home();
     await writeFile(join(at, "f"), "x");
-    const places = new Places({ home: at, os: "linux", run: programs().run });
+    const places = new Places({ home: at, os: hostOs, run: programs().run });
     expect(await places.resolve("~/")).toEqual({
       path: at,
       display: "~",
@@ -374,12 +388,12 @@ describe("capabilities and repositories", () => {
     let now = 0;
     const places = new Places({
       home: at,
-      os: "linux",
+      os: hostOs,
       run: ready.run,
       now: () => now,
     });
     expect(await places.capabilities()).toEqual({
-      flavor: "posix",
+      flavor: isWin ? "win32" : "posix",
       home: at,
       git: true,
       gh: "ready",
@@ -393,14 +407,14 @@ describe("capabilities and repositories", () => {
     expect(
       await new Places({
         home: at,
-        os: "linux",
+        os: hostOs,
         run: programs({ git: false, gh: "signed_out" }).run,
       }).capabilities(),
     ).toMatchObject({ git: false, gh: "signed_out" });
     expect(
       await new Places({
         home: at,
-        os: "linux",
+        os: hostOs,
         run: programs().run,
       }).capabilities(),
     ).toMatchObject({ gh: "missing" });
@@ -419,7 +433,7 @@ describe("capabilities and repositories", () => {
         },
       ],
     });
-    const places = new Places({ home: at, os: "linux", run: ready.run });
+    const places = new Places({ home: at, os: hostOs, run: ready.run });
     expect(await places.repos("eta")).toEqual({
       available: true,
       repos: [
@@ -442,7 +456,7 @@ describe("capabilities and repositories", () => {
     expect(ready.calls.at(-1)?.slice(0, 3)).toEqual(["gh", "repo", "list"]);
     const out = new Places({
       home: at,
-      os: "linux",
+      os: hostOs,
       run: programs({ gh: "signed_out" }).run,
     });
     expect(await out.repos("eta")).toEqual({
@@ -455,7 +469,7 @@ describe("capabilities and repositories", () => {
 describe("serve", () => {
   it("answers an op with its value, or its failure's code, never a throw", async () => {
     const at = await home();
-    const places = new Places({ home: at, os: "linux", run: programs().run });
+    const places = new Places({ home: at, os: hostOs, run: programs().run });
     expect(await places.serve({ op: "resolve", path: "~" })).toMatchObject({
       ok: true,
       value: { path: at },
