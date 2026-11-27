@@ -782,11 +782,81 @@ function mentionedTools(
     },
   });
 
+  const requestChanges = defineTool({
+    name: "request_task_changes",
+    label: "request_task_changes",
+    description:
+      `Request rework from the executor on a task you made, waking it in its existing session ` +
+      `with your feedback. Allowed once per review run while the task is workable and used ` +
+      `automatic revision rounds are below the configured limit. When the limit is reached (or ` +
+      `set to 0), use report_task_review instead so the user can decide. ${ARCHIVED_RULE}`,
+    parameters: Type.Object({
+      feedback: Type.String({
+        description: "Clear, actionable revision instructions for the executor",
+      }),
+      notifyGroup: Type.Optional(
+        Type.String({
+          description:
+            "Optional short note to also post in the origin conversation (without waking other agents)",
+        }),
+      ),
+    }),
+    execute(args) {
+      try {
+        const archived = archivedNotice.before(who.taskId);
+        return text(
+          `${runner.requestChanges(who.taskId, who.agentId, args)}${archived?.after() ?? ""}`,
+          { id: who.taskId },
+        );
+      } catch (error) {
+        return failure(error);
+      }
+    },
+  });
+
+  const reportReview = defineTool({
+    name: "report_task_review",
+    label: "report_task_review",
+    description:
+      `Record your review conclusion on a task you made without waking the executor, keeping ` +
+      `the task's current status (e.g. in_review stays in_review for the user's final ` +
+      `confirmation). By default, also posts the review summary to the origin conversation ` +
+      `without waking other agents. Use this when the work passes review, when you found ` +
+      `important findings or need user input, or when the automatic revision limit is reached. ` +
+      `${ARCHIVED_RULE}`,
+    parameters: Type.Object({
+      summary: Type.String({
+        description:
+          "Review verdict, important findings, and any next steps for the user",
+      }),
+      postToGroup: Type.Optional(
+        Type.Boolean({
+          description:
+            "Whether to also post this review to the origin conversation (defaults to true)",
+        }),
+      ),
+    }),
+    execute(args) {
+      try {
+        const archived = archivedNotice.before(who.taskId);
+        return text(
+          `${runner.reportReview(who.taskId, who.agentId, args)}${archived?.after() ?? ""}`,
+          { id: who.taskId },
+        );
+      } catch (error) {
+        return failure(error);
+      }
+    },
+  });
+
   const none = (): undefined => undefined;
   return [
     toKernelTool(list, none),
     toKernelTool(get, none),
     toKernelTool(answer, none),
+    ...(who.maker
+      ? [toKernelTool(requestChanges, none), toKernelTool(reportReview, none)]
+      : []),
     ...(who.maker && asks !== undefined
       ? [
           toKernelTool(answerQuestion, none),

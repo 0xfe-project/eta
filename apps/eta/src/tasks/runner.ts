@@ -68,7 +68,10 @@ import type { RunRecord, TaskRunStore } from "./runs";
 import type { TaskRecord, TaskStore } from "./store";
 import type { TaskUsageStore } from "./usage";
 import { homedir } from "node:os";
-import { isExternalRuntime } from "@eta/client-contracts";
+import {
+  isExternalRuntime,
+  TASK_REVIEW_MAX_ROUNDS,
+} from "@eta/client-contracts";
 import { LinkError } from "@eta/daemon";
 import { shellQuote } from "@eta/ssh";
 import { externalAgentProjectError } from "../agents/bounds";
@@ -158,6 +161,8 @@ export interface TaskRunnerDeps {
   warn: (message: string) => void;
   /** Whether a finished task wakes its maker (`tasks.reactToResults`); asked at each `finish_task`. */
   reactToResults?: (() => boolean) | undefined;
+  /** Maximum automatic revision rounds the maker may request (`tasks.reviewMaxRounds`); default 3. */
+  reviewMaxRounds?: (() => number | undefined) | undefined;
   /** Captain makes tasks too, and its results are its own: it is never woken here. */
   isCaptain?: ((agentId: string) => boolean) | undefined;
 }
@@ -196,6 +201,8 @@ interface Live {
   read: boolean;
   /** The executor called `finish_task`; a mentioned agent answered in the thread. */
   reported: boolean;
+  /** A maker's review run already called `request_task_changes` once. */
+  changesRequested?: boolean | undefined;
   /** Why the session was stopped from outside, if it was. */
   stopped: "interrupt" | "closing" | "failed" | undefined;
   /** The reason given when `stopped` is `"failed"` or `"interrupt"`. */
@@ -576,7 +583,9 @@ export class TaskRunner implements TaskRuns {
       (run) => run.status === "starting" || run.status === "running",
     );
     const live = going === undefined ? undefined : this.#live.get(going.id);
-    if (going !== undefined && live !== undefined) {
+    // Once a run has already reported its final result or answer (`live.reported`), it cannot
+    // submit again; park waking comments so they trigger a continuation run as soon as it ends.
+    if (going !== undefined && live !== undefined && !live.reported) {
       if (live.inFlight && live.handle !== undefined) {
         const handle = live.handle;
         // In order: a comment with files is ready a moment later than one without.
@@ -773,6 +782,98 @@ export class TaskRunner implements TaskRuns {
   }
 
   /**
+   * The maker requests changes on a finished task it made, waking the executor in its original
+   * session to rework it. Allowed once per review run while the task is workable and within the
+   * configured automatic revision limit.
+   */
+  requestChanges(
+    taskId: string,
+    agentId: string,
+    input: { feedback: string; notifyGroup?: string | undefined },
+  ): string {
+    const { task, live } = this.#reviewSession(
+      taskId,
+      agentId,
+      "you are not reviewing this task now, so there is nothing to request changes on",
+    );
+    const feedback = input.feedback.trim();
+    if (feedback === "") throw new Error("request_task_changes needs feedback");
+    if (live.changesRequested === true)
+      throw new Error(
+        "this review run has already requested changes on this task; use report_task_review or stop and wait for the executor",
+      );
+    if (!workable(task.status) || this.#deps.board.isParent(task.id))
+      throw new Error(
+        `#${task.number} is [${task.status}] and cannot be woken for rework; use report_task_review to report your findings to the user`,
+      );
+    const used = this.#reviewRoundsUsed(task.id);
+    const max = this.#reviewMaxRounds();
+    if (used >= max)
+      throw new Error(
+        max === 0
+          ? "Automatic revision requests are disabled (0/0 rounds). Use report_task_review to report your review to the origin group so the user can decide."
+          : `Automatic revision limit reached (${used}/${max} rounds used). Use report_task_review to report your findings to the origin group so the user can decide.`,
+      );
+    const round = used + 1;
+    this.#deps.board.comment(
+      task.id,
+      feedback,
+      { kind: "agent", agentId },
+      {
+        wake: true,
+        reviewAction: "request_changes",
+        round,
+        maxRounds: max,
+      },
+    );
+    live.changesRequested = true;
+    live.reported = true;
+    const note = input.notifyGroup?.trim() ?? "";
+    const posted =
+      note === "" ? false : this.#post(task, agentId, note, "task_review");
+    return `Requested changes on #${task.number} (round ${round}/${max}); the executor has been woken to rework it${posted ? ", and your update was posted to the origin conversation" : ""}. Stop now and wait for the updated result.`;
+  }
+
+  /**
+   * The maker records a review conclusion without waking the executor, keeping the task's current
+   * status (e.g. `in_review` waits for the user's final confirmation), and by default posts the
+   * summary to the origin conversation without waking other agents.
+   */
+  reportReview(
+    taskId: string,
+    agentId: string,
+    input: { summary: string; postToGroup?: boolean | undefined },
+  ): string {
+    const { task, live } = this.#reviewSession(
+      taskId,
+      agentId,
+      "you are not reviewing this task now, so there is nothing to report",
+    );
+    const summary = input.summary.trim();
+    if (summary === "") throw new Error("report_task_review needs a summary");
+    const used = this.#reviewRoundsUsed(task.id);
+    const max = this.#reviewMaxRounds();
+    this.#deps.board.comment(
+      task.id,
+      summary,
+      { kind: "agent", agentId },
+      {
+        wake: false,
+        reviewAction: "report",
+        round: used,
+        maxRounds: max,
+      },
+    );
+    live.reported = true;
+    const posted =
+      input.postToGroup === false
+        ? false
+        : this.#post(task, agentId, summary, "task_review");
+    const current = this.#task(task.id);
+    return `Recorded review on #${current.number} (status remains [${current.status}]${posted ? ", and posted to the origin conversation" : ""}). Your review is complete; stop now.`;
+  }
+
+  /**
    * The executor says it is done (or stuck). The summary becomes a comment, the task moves to
    * review, and the same words are posted in the conversation the task came from, as the agent.
    * Returns what to tell the model, or throws what it should hear as an error.
@@ -798,7 +899,7 @@ export class TaskRunner implements TaskRuns {
     if (!split)
       this.#deps.board.update(task.id, { status: submission.status }, executor);
     live.reported = true;
-    this.#post(task, executor, summary);
+    this.#post(task, executor.agentId, summary);
     // A mentioned agent's run answers in the thread; only the executor's run reports a result.
     if (run.agentId === null && !split)
       this.#wakeMaker(task, submission.status, summary);
@@ -807,33 +908,72 @@ export class TaskRunner implements TaskRuns {
       : `Task #${task.number} is now [${submission.status}] and your summary is posted.`;
   }
 
-  /** The result goes where the task came from, in the executor's name. */
-  #post(task: TaskRecord, executor: TaskActor, summary: string): void {
+  /** Post an agent message to the task's origin conversation without waking any group member. */
+  #post(
+    task: TaskRecord,
+    agentId: string | null,
+    body: string,
+    event: "task_result" | "task_review" = "task_result",
+  ): boolean {
     const conversationId = task.originConversationId;
-    if (conversationId === null || executor.agentId === null) return;
+    if (conversationId === null || agentId === null) return false;
     try {
       const row: MessageView = this.#deps.timeline.append({
         conversationId,
         kind: "message",
         author: "agent",
-        agentId: executor.agentId,
-        text: `#${task.number} ${task.title}\n\n${summary}`,
-        data: { event: "task_result", taskId: task.id },
+        agentId,
+        text: `#${task.number} ${task.title}\n\n${body}`,
+        data: { event, taskId: task.id },
       });
       this.#deps.changed([row.conversationId]);
+      return true;
     } catch (error) {
       // A conversation that is gone is not the run's to mourn; the summary is on the task.
       this.#deps.warn(
-        `[eta] task ${task.id} could not post its result: ${messageOf(error)}`,
+        `[eta] task ${task.id} could not post its ${event === "task_review" ? "review" : "result"}: ${messageOf(error)}`,
       );
+      return false;
     }
   }
 
+  #reviewSession(
+    taskId: string,
+    agentId: string,
+    inactiveError: string,
+  ): { task: TaskRecord; live: Live } {
+    const run = this.workingRunOf(taskId, agentId);
+    const live = run === undefined ? undefined : this.#live.get(run.id);
+    if (run === undefined || live === undefined) throw new Error(inactiveError);
+    const task = this.#task(taskId);
+    if (
+      task.createdBy.agentId !== agentId ||
+      this.#executorOf(task) === agentId
+    )
+      throw new Error("only the task's maker may review this task");
+    return { task, live };
+  }
+
+  #reviewRoundsUsed(taskId: string): number {
+    return this.#deps.board
+      .activity(taskId)
+      .filter(
+        (entry) =>
+          entry.kind === "comment" &&
+          entry.data.reviewAction === "request_changes",
+      ).length;
+  }
+
+  #reviewMaxRounds(): number {
+    return this.#deps.reviewMaxRounds?.() ?? TASK_REVIEW_MAX_ROUNDS.default;
+  }
+
   /**
-   * With `tasks.reactToResults` on, the agent that made the task is woken once, in its lane, to
-   * review the result. Nothing it says wakes anyone: its lane's answers are comments that wake nobody,
-   * and only an executor's run reaches here. The user's tasks, the executor's own, Captain's and
-   * tasks with no conversation to come back to are left as they are.
+   * With `tasks.reactToResults` on, the agent that made the task is woken in its lane to review
+   * the result. It can either request rework within the configured automatic revision budget
+   * (`request_task_changes`) or record and report its conclusion (`report_task_review`) while
+   * leaving the task in `in_review` for the user's final confirmation. The user's tasks, the
+   * executor's own, Captain's and tasks with no conversation to come back to are left as they are.
    */
   #wakeMaker(
     task: TaskRecord,
@@ -863,13 +1003,29 @@ export class TaskRunner implements TaskRuns {
     )
       return;
     const executor = agents.get(this.#executorOf(task) ?? "")?.name;
+    const used = this.#reviewRoundsUsed(task.id);
+    const max = this.#reviewMaxRounds();
+    const roundsLine =
+      max === 0
+        ? `Automatic revision rounds: ${used}/${max} (automatic rework requests are disabled; report your review to the user).`
+        : used >= max
+          ? `Automatic revision rounds: ${used}/${max} (limit reached; do not request another automatic revision—report to the user instead).`
+          : `Automatic revision rounds: ${used}/${max} used (${max - used} remaining).`;
     this.consult(
       task.id,
       makerId,
       [
-        `This is not a comment from the user. ${executor ?? "The executor"} finished its work on task #${task.number}, "${task.title}", and you made the task, so the result comes to you first. The user is often away: follow it up yourself.`,
+        `This is not a comment from the user. ${executor ?? "The executor"} finished its work on task #${task.number}, "${task.title}", and you made the task, so the result comes to you first. The user is often away: review it and follow up.`,
         `## Result (status: ${status === "blocked" ? "blocked: the user must act" : "in review"})\n\n${summary}`,
-        `## What to do\n\n- Read the work (get_task shows the task and its timeline) and check it against what the task asked.\n- If it is good, say so in the thread; mark the task done if you may.\n- If it is not, comment on the task what is missing: that carries the executor on.\n- Tell the user only what needs their decision. A new task you draft is yours to weigh: each one runs on its own.`,
+        `## Review budget\n\n${roundsLine}`,
+        `## What to do\n\n${[
+          "- Read the work (get_task shows the task and its timeline) and verify it against what the task asked.",
+          used < max
+            ? "- If changes are needed and rounds remain, call request_task_changes with clear actionable feedback to wake the executor in its session for rework (and optionally notifyGroup if the origin chat should know)."
+            : `- Automatic revision rounds are at the limit (${used}/${max}), so request_task_changes is unavailable.`,
+          "- If the work passes review, or you uncovered important findings, or the user must decide (including when blocked or at the revision limit), call report_task_review with your conclusion: it records your review on the task, keeps the task's current status (in_review waits for the user's final confirmation), and posts to the origin conversation by default.",
+          "- comment_task only adds a silent note on the task (it does not wake the executor or post to the origin conversation).",
+        ].join("\n")}`,
       ].join("\n\n"),
     );
   }

@@ -261,6 +261,7 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           const saved = saveBoardSettings(settings, {
             archiveAfterDays: raw.archiveAfterDays,
             reactToResults: raw.reactToResults,
+            reviewMaxRounds: raw.reviewMaxRounds,
             autoAnswerAsks: raw.autoAnswerAsks,
             draftTimeout: raw.draftTimeout,
           });

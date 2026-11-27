@@ -349,6 +349,7 @@ describe("the setting", () => {
     expect((await settings()).settings).toEqual({
       archiveAfterDays: 7,
       reactToResults: false,
+      reviewMaxRounds: 3,
       autoAnswerAsks: false,
       draftTimeout: { enabled: false, minutes: 10, action: "discard" },
     });
@@ -358,6 +359,7 @@ describe("the setting", () => {
       settings: {
         archiveAfterDays: 30,
         reactToResults: false,
+        reviewMaxRounds: 3,
         autoAnswerAsks: false,
         draftTimeout: { enabled: false, minutes: 10, action: "discard" },
       },
@@ -368,6 +370,7 @@ describe("the setting", () => {
       settings: {
         archiveAfterDays: null,
         reactToResults: false,
+        reviewMaxRounds: 3,
         autoAnswerAsks: false,
         draftTimeout: { enabled: false, minutes: 10, action: "discard" },
       },

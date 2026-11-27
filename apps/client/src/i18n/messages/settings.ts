@@ -481,9 +481,19 @@ export const settingsMessages = {
   taskFollowUp: ["Task follow-up", "任务跟进"],
   reactToResults: ["Review finished tasks", "任务完成后让负责人验收"],
   reactToResultsHint: [
-    "When on, a finished task wakes the agent that made it to review the result and follow up.",
-    "开启后，任务完成时会叫醒创建任务的负责人去验收并跟进。",
+    "When on, a finished task wakes the agent that made it to review the result, request rework up to the limit, or report findings to the group while keeping the task in review for your confirmation.",
+    "开启后，任务完成时会叫醒创建任务的负责人验收：在轮次上限内自动打回返工，或向群组汇报结论并保持任务待验收，等你最终确认。",
   ],
+  reviewMaxRounds: ["Max automatic revision rounds", "自动打回最大轮次"],
+  reviewMaxRoundsHint: [
+    "Whole number, {{min}} to {{max}}. 0 reviews and reports only without automatic rework.",
+    "整数，{{min}} 到 {{max}}；设为 0 表示仅评审汇报、不自动打回。",
+  ],
+  reviewMaxRoundsInvalid: [
+    "Enter a whole number of rounds from {{min}} to {{max}}.",
+    "请输入 {{min}} 到 {{max}} 之间的整数轮次。",
+  ],
+  reviewMaxRoundsUnit: ["rounds", "轮"],
   taskDraftTimeout: ["Task drafts", "任务草稿"],
   draftTimeoutEnabled: [
     "Handle unanswered drafts automatically",

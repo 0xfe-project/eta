@@ -768,6 +768,10 @@ export class TaskBoard {
       mentions?: readonly string[];
       /** Files uploaded for this task (`tasks.attach`), by id: the comment claims them. */
       attachments?: readonly string[];
+      /** Structured metadata recorded by maker review tools on `task_activity.data`. */
+      reviewAction?: "request_changes" | "report" | undefined;
+      round?: number | undefined;
+      maxRounds?: number | undefined;
     } = {},
   ): { task: BoardTaskDetail; activity: TaskActivityView } {
     const { clientId } = options;
@@ -797,6 +801,13 @@ export class TaskBoard {
         ...(files.length === 0
           ? {}
           : { attachments: files.map(attachmentView) }),
+        ...(options.reviewAction === undefined
+          ? {}
+          : { reviewAction: options.reviewAction }),
+        ...(options.round === undefined ? {} : { round: options.round }),
+        ...(options.maxRounds === undefined
+          ? {}
+          : { maxRounds: options.maxRounds }),
       };
       activity = this.#deps.tasks.record(id, "comment", actor, {
         body,

@@ -104,6 +104,7 @@ describe("an executor's question on a task", () => {
       settings: {
         archiveAfterDays: 7,
         reactToResults: false,
+        reviewMaxRounds: 3,
         autoAnswerAsks: false,
         draftTimeout: { enabled: false, minutes: 10, action: "discard" },
       },

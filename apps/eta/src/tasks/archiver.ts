@@ -15,6 +15,7 @@ import {
   TASK_ARCHIVE_DAYS,
   TASK_DRAFT_TIMEOUT_ACTIONS,
   TASK_DRAFT_TIMEOUT_MINUTES,
+  TASK_REVIEW_MAX_ROUNDS,
 } from "@eta/client-contracts";
 
 /** The setting's key: a number of days from `TASK_ARCHIVE_DAYS`, or null for never. */
@@ -22,6 +23,8 @@ const ARCHIVE_AFTER_SETTING = "tasks.archiveAfterDays";
 
 /** The setting's key: whether `finish_task` wakes the task's maker (a boolean; off when never set). */
 const REACT_TO_RESULTS_SETTING = "tasks.reactToResults";
+/** The setting's key: whole number `0..10` of automatic revision rounds allowed per task (3 by default). */
+const REVIEW_MAX_ROUNDS_SETTING = "tasks.reviewMaxRounds";
 /** The setting's key: true lets a task's maker answer its executor's questions first; off by default. */
 const AUTO_ANSWER_ASKS_SETTING = "tasks.autoAnswerAsks";
 /** The setting's key: a `TaskDraftTimeout`; off, 10 minutes, discard when never set. */
@@ -40,6 +43,12 @@ const isMinutes = (value: unknown): value is number =>
   Number.isInteger(value) &&
   value >= TASK_DRAFT_TIMEOUT_MINUTES.min &&
   value <= TASK_DRAFT_TIMEOUT_MINUTES.max;
+
+const isReviewMaxRounds = (value: unknown): value is number =>
+  typeof value === "number" &&
+  Number.isInteger(value) &&
+  value >= TASK_REVIEW_MAX_ROUNDS.min &&
+  value <= TASK_REVIEW_MAX_ROUNDS.max;
 
 const isAction = (value: unknown): value is TaskDraftTimeout["action"] =>
   (TASK_DRAFT_TIMEOUT_ACTIONS as readonly unknown[]).includes(value);
@@ -92,12 +101,17 @@ export function boardSettings(
 ): TaskBoardSettings {
   const stored = settings.get(ARCHIVE_AFTER_SETTING);
   const reactToResults = settings.get(REACT_TO_RESULTS_SETTING) === true;
+  const storedReviewMaxRounds = settings.get(REVIEW_MAX_ROUNDS_SETTING);
+  const reviewMaxRounds = isReviewMaxRounds(storedReviewMaxRounds)
+    ? storedReviewMaxRounds
+    : TASK_REVIEW_MAX_ROUNDS.default;
   const autoAnswerAsks = settings.get(AUTO_ANSWER_ASKS_SETTING) === true;
   const draftTimeout = draftTimeoutOf(settings.get(DRAFT_TIMEOUT_SETTING));
   if (stored === null)
     return {
       archiveAfterDays: null,
       reactToResults,
+      reviewMaxRounds,
       autoAnswerAsks,
       draftTimeout,
     };
@@ -106,6 +120,7 @@ export function boardSettings(
       ? (stored as TaskArchiveDays)
       : DEFAULT_TASK_ARCHIVE_DAYS,
     reactToResults,
+    reviewMaxRounds,
     autoAnswerAsks,
     draftTimeout,
   };
@@ -117,6 +132,7 @@ export function saveBoardSettings(
   input: {
     archiveAfterDays?: unknown;
     reactToResults?: unknown;
+    reviewMaxRounds?: unknown;
     autoAnswerAsks?: unknown;
     draftTimeout?: unknown;
   },
@@ -135,6 +151,13 @@ export function saveBoardSettings(
   )
     throw new Error(
       `reactToResults is true or false, not ${JSON.stringify(input.reactToResults)}`,
+    );
+  if (
+    input.reviewMaxRounds !== undefined &&
+    !isReviewMaxRounds(input.reviewMaxRounds)
+  )
+    throw new Error(
+      `reviewMaxRounds is a whole number from ${TASK_REVIEW_MAX_ROUNDS.min} to ${TASK_REVIEW_MAX_ROUNDS.max}, not ${JSON.stringify(input.reviewMaxRounds)}`,
     );
   if (
     input.autoAnswerAsks !== undefined &&
@@ -156,6 +179,8 @@ export function saveBoardSettings(
   }
   if (input.reactToResults !== undefined)
     settings.set(REACT_TO_RESULTS_SETTING, input.reactToResults);
+  if (input.reviewMaxRounds !== undefined)
+    settings.set(REVIEW_MAX_ROUNDS_SETTING, input.reviewMaxRounds);
   if (input.autoAnswerAsks !== undefined)
     settings.set(AUTO_ANSWER_ASKS_SETTING, input.autoAnswerAsks);
   if (draftTimeout !== undefined)

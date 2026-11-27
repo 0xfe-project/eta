@@ -243,12 +243,21 @@ export interface TaskDraftTimeout {
   action: TaskDraftTimeoutAction;
 }
 
+/** How many automatic revision rounds a task's maker may request when reviewing finished work. */
+export const TASK_REVIEW_MAX_ROUNDS = {
+  min: 0,
+  max: 10,
+  default: 3,
+} as const;
+
 /** The board's own settings, on `tasks`. */
 export interface TaskBoardSettings {
   /** Days a done or cancelled task stays quiet before the host archives it; null never does. */
   archiveAfterDays: TaskArchiveDays | null;
   /** Whether a finished task's result wakes the agent that made it, to review and follow up. Off by default. */
   reactToResults: boolean;
+  /** Maximum automatic revision rounds the maker may trigger via `request_task_changes` (0 disables auto-rework). Absent from a host that predates it. */
+  reviewMaxRounds?: number | undefined;
   /** Whether the agent that made a task answers its executor's questions before the user is asked. */
   autoAnswerAsks: boolean;
   /** What happens to a draft nobody confirmed or discarded in time. Absent from a host that predates it. */
@@ -332,7 +341,8 @@ export interface BoardTaskDetail extends BoardTaskView {
  * `draftId` it was confirmed from); `status` and `title` have `from` and `to`; `conversation` has
  * `from` and `to` (conversation ids or null); `comment` has its text in `body` (and, when files came
  * with it, `attachments`: `AttachmentView[]`; `imagesUnseenBy`: the agents it was handed to whose
- * model takes no images, so they got its pictures as files only); `description` says
+ * model takes no images, so they got its pictures as files only; when written by a maker's review
+ * tools, `reviewAction`: `"request_changes"` | `"report"`, `round` and `maxRounds`); `description` says
  * only that it changed; `artifact` has `artifactId`, `title` and `version`. The `run_*` kinds are a
  * run's life (`runId` names it): `run_started` has the `workspace` it works in, `run_failed` and
  * `run_interrupted` say why in `body`. `dependency` is the graph: `action` (`added`, `removed`,

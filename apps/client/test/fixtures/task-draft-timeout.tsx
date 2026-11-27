@@ -9,6 +9,7 @@ const kept: TaskBoardSettings = {
   archiveAfterDays: 7,
   autoAnswerAsks: false,
   reactToResults: false,
+  reviewMaxRounds: 3,
   draftTimeout: { enabled: false, minutes: 10, action: "discard" },
 };
 
@@ -26,9 +27,11 @@ function Fixture() {
   }));
   host.call = (async (target: string, action: string, args: unknown) => {
     sent.set([...sent(), `${target}.${action} ${JSON.stringify(args)}`]);
-    const change = (args as { draftTimeout?: object }).draftTimeout ?? {};
+    const body = args as Partial<TaskBoardSettings>;
+    const change = body.draftTimeout ?? {};
     const next: TaskBoardSettings = {
       ...kept,
+      ...body,
       draftTimeout: { ...kept.draftTimeout!, ...change },
     };
     Object.assign(kept, next);

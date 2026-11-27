@@ -5,6 +5,7 @@ import type {
 import {
   TASK_DRAFT_TIMEOUT_ACTIONS,
   TASK_DRAFT_TIMEOUT_MINUTES,
+  TASK_REVIEW_MAX_ROUNDS,
 } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import {
@@ -27,32 +28,78 @@ import { emptyStyle, SectionHeader } from "./section";
 const minutesWidth = 72;
 const actionWidth = 160;
 
+/** A whole-number field that keeps what is typed until submitted or blurred, then falls back to host state. */
+function boundedIntField(options: {
+  range: { min: number; max: number };
+  current: () => number;
+  onCommit: (value: number) => Promise<void>;
+}) {
+  const typed = signal<string | undefined>(undefined);
+  const invalid = signal(false);
+  async function commit() {
+    const text = (typed() ?? "").trim();
+    typed.set(undefined);
+    if (text === "") {
+      invalid.set(false);
+      return;
+    }
+    const value = Number(text);
+    if (
+      !Number.isInteger(value) ||
+      value < options.range.min ||
+      value > options.range.max
+    ) {
+      invalid.set(true);
+      return;
+    }
+    invalid.set(false);
+    if (value !== options.current()) await options.onCommit(value);
+  }
+  return {
+    invalid,
+    value: () => typed() ?? String(options.current()),
+    onChange: (value: string) => typed.set(value),
+    commit,
+  };
+}
+
 export function TaskSettings(props: { phone?: boolean }) {
   const host = useHost();
   const c = colors();
-  const saving = signal(false);
+  const savingCount = signal(0);
+  const saving = () => savingCount() > 0;
+  let saveQueue = Promise.resolve();
+  // Serialize updates rather than dropping concurrent calls (e.g. a field blur racing a toggle press).
+  function saveSettings(change: Partial<TaskBoardSettings>) {
+    savingCount.set(savingCount() + 1);
+    const next = saveQueue.then(async () => {
+      try {
+        await host.action(() => host.call("tasks", "setSettings", change));
+      } finally {
+        savingCount.set(savingCount() - 1);
+      }
+    });
+    saveQueue = next;
+    return next;
+  }
   const reacting = () =>
     host.section<TaskBoardSettings>("tasks", "settings")?.reactToResults ===
     true;
-  async function setReacting(value: boolean) {
-    if (saving()) return;
-    saving.set(true);
-    await host.action(() =>
-      host.call("tasks", "setSettings", { reactToResults: value }),
-    );
-    saving.set(false);
-  }
+  const reviewMaxRounds = () =>
+    host.section<TaskBoardSettings>("tasks", "settings")?.reviewMaxRounds ??
+    TASK_REVIEW_MAX_ROUNDS.default;
+  const reviewRange = {
+    min: TASK_REVIEW_MAX_ROUNDS.min,
+    max: TASK_REVIEW_MAX_ROUNDS.max,
+  };
+  const reviewRounds = boundedIntField({
+    range: reviewRange,
+    current: reviewMaxRounds,
+    onCommit: (value) => saveSettings({ reviewMaxRounds: value }),
+  });
   const autoAnswer = () =>
     host.section<TaskBoardSettings>("tasks", "settings")?.autoAnswerAsks ??
     false;
-  async function setAutoAnswer(value: boolean) {
-    if (saving()) return;
-    saving.set(true);
-    await host.action(() =>
-      host.call("tasks", "setSettings", { autoAnswerAsks: value }),
-    );
-    saving.set(false);
-  }
   const timeout = (): TaskDraftTimeout =>
     host.section<TaskBoardSettings>("tasks", "settings")?.draftTimeout ?? {
       enabled: false,
@@ -60,35 +107,17 @@ export function TaskSettings(props: { phone?: boolean }) {
       action: "discard",
     };
   async function saveTimeout(change: Partial<TaskDraftTimeout>) {
-    if (saving()) return;
-    saving.set(true);
-    await host.action(() =>
-      host.call("tasks", "setSettings", { draftTimeout: change }),
-    );
-    saving.set(false);
+    await saveSettings({ draftTimeout: change as TaskDraftTimeout });
   }
-  // The minutes field keeps what is typed until it is committed; what the host kept is shown again.
-  const typed = signal<string | undefined>(undefined);
-  const minutesInvalid = signal(false);
   const range = {
     min: TASK_DRAFT_TIMEOUT_MINUTES.min,
     max: TASK_DRAFT_TIMEOUT_MINUTES.max,
   };
-  async function commitMinutes() {
-    const text = (typed() ?? "").trim();
-    typed.set(undefined);
-    if (text === "") {
-      minutesInvalid.set(false);
-      return;
-    }
-    const value = Number(text);
-    if (!Number.isInteger(value) || value < range.min || value > range.max) {
-      minutesInvalid.set(true);
-      return;
-    }
-    minutesInvalid.set(false);
-    if (value !== timeout().minutes) await saveTimeout({ minutes: value });
-  }
+  const minutes = boundedIntField({
+    range,
+    current: () => timeout().minutes,
+    onCommit: (value) => saveTimeout({ minutes: value }),
+  });
   const actionLabel = (action: TaskDraftTimeout["action"]) =>
     uiText(action === "accept" ? "draftTimeoutAccept" : "draftTimeoutDiscard");
   const rowStyle = {
@@ -120,17 +149,7 @@ export function TaskSettings(props: { phone?: boolean }) {
       </If>
       <If when={host.can("tasks.setSettings")}>
         <SectionHeader title={uiText("taskFollowUp")} phone={props.phone} />
-        <View
-          style={{
-            ...row,
-            minHeight: space[40],
-            gap: space[16],
-            paddingHorizontal: space[16],
-            paddingVertical: space[8],
-            borderBottomWidth: 1,
-            borderColor: c().border,
-          }}
-        >
+        <View style={rowStyle}>
           <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
             <Label>{uiText("reactToResults")}</Label>
             <Label variant="small" tone="muted">
@@ -141,20 +160,40 @@ export function TaskSettings(props: { phone?: boolean }) {
             label={uiText("reactToResults")}
             checked={reacting()}
             disabled={saving()}
-            onChange={(checked) => void setReacting(checked)}
+            onChange={(checked) =>
+              void saveSettings({ reactToResults: checked })
+            }
           />
         </View>
-        <View
-          style={{
-            ...row,
-            minHeight: space[40],
-            gap: space[16],
-            paddingHorizontal: space[16],
-            paddingVertical: space[8],
-            borderBottomWidth: 1,
-            borderColor: c().border,
-          }}
-        >
+        <View style={rowStyle}>
+          <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+            <Label>{uiText("reviewMaxRounds")}</Label>
+            <Label
+              variant="small"
+              tone={reviewRounds.invalid() ? "red" : "muted"}
+            >
+              {uiText(
+                reviewRounds.invalid()
+                  ? "reviewMaxRoundsInvalid"
+                  : "reviewMaxRoundsHint",
+                reviewRange,
+              )}
+            </Label>
+          </View>
+          <Field
+            label={uiText("reviewMaxRounds")}
+            value={reviewRounds.value()}
+            maxLength={4}
+            style={{ width: minutesWidth, height: control.md }}
+            onChange={reviewRounds.onChange}
+            onSubmit={() => void reviewRounds.commit()}
+            onBlur={() => void reviewRounds.commit()}
+          />
+          <Label variant="small" tone="muted">
+            {uiText("reviewMaxRoundsUnit")}
+          </Label>
+        </View>
+        <View style={rowStyle}>
           <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
             <Label>{uiText("taskAsksMakerFirst")}</Label>
             <Label variant="small" tone="muted">
@@ -165,7 +204,7 @@ export function TaskSettings(props: { phone?: boolean }) {
             label={uiText("taskAsksMakerFirst")}
             checked={autoAnswer()}
             disabled={saving()}
-            onChange={(value) => void setAutoAnswer(value)}
+            onChange={(value) => void saveSettings({ autoAnswerAsks: value })}
           />
         </View>
         <SectionHeader title={uiText("taskDraftTimeout")} phone={props.phone} />
@@ -186,9 +225,9 @@ export function TaskSettings(props: { phone?: boolean }) {
         <View style={rowStyle}>
           <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
             <Label>{uiText("draftTimeoutMinutes")}</Label>
-            <Label variant="small" tone={minutesInvalid() ? "red" : "muted"}>
+            <Label variant="small" tone={minutes.invalid() ? "red" : "muted"}>
               {uiText(
-                minutesInvalid()
+                minutes.invalid()
                   ? "draftTimeoutMinutesInvalid"
                   : "draftTimeoutMinutesHint",
                 range,
@@ -197,12 +236,12 @@ export function TaskSettings(props: { phone?: boolean }) {
           </View>
           <Field
             label={uiText("draftTimeoutMinutes")}
-            value={typed() ?? String(timeout().minutes)}
+            value={minutes.value()}
             maxLength={4}
             style={{ width: minutesWidth, height: control.md }}
-            onChange={(value) => typed.set(value)}
-            onSubmit={() => void commitMinutes()}
-            onBlur={() => void commitMinutes()}
+            onChange={minutes.onChange}
+            onSubmit={() => void minutes.commit()}
+            onBlur={() => void minutes.commit()}
           />
           <Label variant="small" tone="muted">
             {uiText("draftTimeoutMinutesUnit")}

@@ -728,6 +728,7 @@ export function createProduct(options: {
     usage: taskUsage,
     warn,
     reactToResults: () => boardSettings(taskSettings).reactToResults,
+    reviewMaxRounds: () => boardSettings(taskSettings).reviewMaxRounds,
     isCaptain: (agentId) => made.captain?.identity()?.agentId === agentId,
   });
   later.taskRunner = taskRunner;
