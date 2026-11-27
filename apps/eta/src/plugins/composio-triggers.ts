@@ -1323,17 +1323,145 @@ function intOrNull(value: unknown): number | null {
     : null;
 }
 
-function groupAccountsBySlug(
+const MAX_ACCOUNT_LABEL = 120;
+
+function cleanLabelPart(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (cleaned === "" || cleaned === "REDACTED") return null;
+  return cleaned.length > MAX_ACCOUNT_LABEL
+    ? `${cleaned.slice(0, MAX_ACCOUNT_LABEL - 1).trimEnd()}…`
+    : cleaned;
+}
+
+interface ParsedAccountDate {
+  year: number;
+  month: string;
+  day: string;
+}
+
+function parseAccountDate(
+  value: string | null | undefined,
+): ParsedAccountDate | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (trimmed === "" || trimmed === "REDACTED" || /^\d+$/.test(trimmed)) {
+    return null;
+  }
+  const ms = Date.parse(trimmed);
+  if (!Number.isFinite(ms)) return null;
+  const date = new Date(ms);
+  const year = date.getUTCFullYear();
+  if (year < 1970 || year > 9999) return null;
+  return {
+    year,
+    month: String(date.getUTCMonth() + 1).padStart(2, "0"),
+    day: String(date.getUTCDate()).padStart(2, "0"),
+  };
+}
+
+function primaryAccountName(account: ComposioConnectedAccount): string {
+  const alias = cleanLabelPart(account.alias);
+  const displayName = cleanLabelPart(account.displayName);
+  const wordId = cleanLabelPart(account.wordId);
+  if (alias !== null && displayName !== null) {
+    return alias.toLowerCase() !== displayName.toLowerCase()
+      ? `${alias} · ${displayName}`
+      : alias;
+  }
+  return alias ?? displayName ?? wordId ?? account.connectedAccountId;
+}
+
+/**
+ * Group connected accounts by toolkit slug with human-readable labels, adding a compact
+ * `MM-DD · <last4>` (or `YYYY-MM-DD · <last4>` across years) suffix when names collide.
+ */
+export function groupAccountsBySlug(
   accounts: readonly ComposioConnectedAccount[],
 ): Map<string, TriggerCatalogAccount[]> {
-  const grouped = new Map<string, TriggerCatalogAccount[]>();
+  const bySlug = new Map<string, ComposioConnectedAccount[]>();
   for (const account of accounts) {
-    const list = grouped.get(account.slug) ?? [];
-    list.push({
-      id: account.connectedAccountId,
-      label: account.connectedAccountId,
+    const list = bySlug.get(account.slug) ?? [];
+    list.push(account);
+    bySlug.set(account.slug, list);
+  }
+
+  const grouped = new Map<string, TriggerCatalogAccount[]>();
+  for (const [slug, list] of bySlug) {
+    const entries = list.map((account) => ({
+      account,
+      primary: primaryAccountName(account),
+      date: parseAccountDate(account.createdAt),
+    }));
+
+    const primaryBuckets = new Map<string, typeof entries>();
+    for (const entry of entries) {
+      const key = entry.primary.toLowerCase();
+      const bucket = primaryBuckets.get(key) ?? [];
+      bucket.push(entry);
+      primaryBuckets.set(key, bucket);
+    }
+
+    const candidates = entries.map((entry) => {
+      const { account, primary, date } = entry;
+      const bucket = primaryBuckets.get(primary.toLowerCase()) ?? [];
+      if (
+        list.length > 1 &&
+        bucket.length > 1 &&
+        primary !== account.connectedAccountId
+      ) {
+        const bucketYears = new Set(
+          bucket.flatMap((item) =>
+            item.date === null ? [] : [item.date.year],
+          ),
+        );
+        const crossYear = bucketYears.size > 1;
+        const shortId = account.connectedAccountId.slice(-4);
+        const datePart =
+          date === null
+            ? null
+            : crossYear
+              ? `${date.year}-${date.month}-${date.day}`
+              : `${date.month}-${date.day}`;
+        const suffix = datePart === null ? shortId : `${datePart} · ${shortId}`;
+        return {
+          account,
+          primary,
+          label: `${primary} (${suffix})`,
+        };
+      }
+      return { account, primary, label: primary };
     });
-    grouped.set(account.slug, list);
+
+    // Ensure every option label under the same toolkit is unique even if short suffixes collide.
+    const labelCounts = new Map<string, number>();
+    for (const item of candidates) {
+      labelCounts.set(item.label, (labelCounts.get(item.label) ?? 0) + 1);
+    }
+    const resolved = candidates.map((item) => {
+      if ((labelCounts.get(item.label) ?? 0) <= 1) return item;
+      const fallback =
+        item.primary !== item.account.connectedAccountId
+          ? `${item.primary} (${item.account.connectedAccountId})`
+          : item.account.connectedAccountId;
+      return { ...item, label: fallback };
+    });
+
+    const finalCounts = new Map<string, number>();
+    for (const item of resolved) {
+      finalCounts.set(item.label, (finalCounts.get(item.label) ?? 0) + 1);
+    }
+
+    grouped.set(
+      slug,
+      resolved.map((item) => ({
+        id: item.account.connectedAccountId,
+        label:
+          (finalCounts.get(item.label) ?? 0) > 1
+            ? item.account.connectedAccountId
+            : item.label,
+      })),
+    );
   }
   return grouped;
 }

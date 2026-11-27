@@ -24,6 +24,7 @@ import { Composio } from "../src/plugins/composio";
 import {
   classifyPusherCloseCode,
   ComposioTriggerProvider,
+  groupAccountsBySlug,
   parseComposioTriggerEvent,
 } from "../src/plugins/composio-triggers";
 import { CatalogCache } from "../src/plugins/market-cache";
@@ -72,6 +73,11 @@ function createFakeComposio() {
     slug: string;
     authConfigId?: string;
     userId?: string;
+    alias?: unknown;
+    word_id?: unknown;
+    created_at?: unknown;
+    data?: unknown;
+    state?: unknown;
   }[] = [{ id: "ca_gh_1", slug: "github", authConfigId: "ac_gh_1" }];
 
   let customRoute:
@@ -175,6 +181,13 @@ function createFakeComposio() {
             ...(acc.authConfigId === undefined
               ? {}
               : { auth_config: { id: acc.authConfigId } }),
+            ...(acc.alias === undefined ? {} : { alias: acc.alias }),
+            ...(acc.word_id === undefined ? {} : { word_id: acc.word_id }),
+            ...(acc.created_at === undefined
+              ? {}
+              : { created_at: acc.created_at }),
+            ...(acc.data === undefined ? {} : { data: acc.data }),
+            ...(acc.state === undefined ? {} : { state: acc.state }),
           })),
           next_cursor: null,
         });
@@ -545,6 +558,294 @@ describe("the ComposioTriggerProvider REST & contracts", () => {
     composio.setKey("bad-key");
     expect(await provider.listTriggers()).toEqual([]);
     expect(provider.status().status).toBe("key_rejected");
+  });
+
+  it("extracts readable account labels from alias, data/state displayName, word_id while ignoring REDACTED and secrets", async () => {
+    const h = (activeHarness = createFakeComposio());
+    h.setCatalog([
+      {
+        slug: "NOTION_PAGE_ADDED",
+        name: "Page Added",
+        description: "Fires when a page is added",
+        types: ["webhook"],
+        toolkit: { slug: "notion", name: "Notion" },
+      },
+      {
+        slug: "GITHUB_COMMIT_EVENT",
+        name: "New Commit",
+        description: "Fires on push commits",
+        types: ["poll"],
+        toolkit: { slug: "github", name: "GitHub" },
+      },
+      {
+        slug: "SLACK_RECEIVE_MESSAGE",
+        name: "New Message",
+        description: "Fires on new Slack messages",
+        types: ["webhook"],
+        toolkit: { slug: "slack", name: "Slack" },
+      },
+      {
+        slug: "LINEAR_ISSUE_CREATED",
+        name: "Issue Created",
+        description: "Fires on new Linear issues",
+        types: ["webhook"],
+        toolkit: { slug: "linear", name: "Linear" },
+      },
+      {
+        slug: "GMAIL_NEW_MESSAGE",
+        name: "New Email",
+        description: "Fires on incoming email",
+        types: ["poll"],
+        toolkit: { slug: "gmail", name: "Gmail" },
+      },
+    ]);
+    h.setAccounts([
+      // Multi-account Notion with duplicate state.val.displayName & REDACTED fields + secrets that must never be read.
+      {
+        id: "ca_notion_1Yvy-",
+        slug: "notion",
+        created_at: "2026-11-27T08:15:00.000Z",
+        word_id: "calm-lake-1",
+        data: {
+          displayName: "REDACTED",
+          workspace_name: "REDACTED",
+          access_token: "secret-notion-token-1",
+        },
+        state: {
+          val: {
+            displayName: "  Arno's\nNotion  ",
+            refresh_token: "secret-notion-refresh-1",
+            owner: { user: { name: "REDACTED" } },
+          },
+        },
+      },
+      {
+        id: "ca_notion_2K9mP",
+        slug: "notion",
+        created_at: "2026-11-27T10:30:00.000Z",
+        data: {
+          displayName: "Arno's Notion",
+          bot_token: "secret-notion-bot-2",
+        },
+      },
+      // Single GitHub account with alias + different displayName.
+      {
+        id: "ca_gh_work",
+        slug: "github",
+        alias: "Work",
+        data: { displayName: "ArnoChenFx" },
+      },
+      // Single Gmail account with case-insensitive matching alias & displayName -> kept concise as alias.
+      {
+        id: "ca_gmail_1",
+        slug: "gmail",
+        alias: "arno@example.com",
+        data: { displayName: "ARNO@EXAMPLE.COM" },
+      },
+      // Slack account where displayName is empty/REDACTED -> falls back to word_id.
+      {
+        id: "ca_slack_1",
+        slug: "slack",
+        alias: "   ",
+        word_id: "gentle-river-pine",
+        data: { displayName: "" },
+        state: { val: { displayName: "REDACTED" } },
+      },
+      // Linear account with no display metadata -> falls back to bare connectedAccountId.
+      {
+        id: "ca_linear_1",
+        slug: "linear",
+        alias: "REDACTED",
+        word_id: "REDACTED",
+        data: { displayName: "REDACTED" },
+      },
+    ]);
+
+    const { composio, provider } = h.make();
+    const accountRes = await composio.connectedAccounts();
+    expect(accountRes.status).toBe("ready");
+    expect(accountRes.accounts).toEqual([
+      {
+        slug: "notion",
+        connectedAccountId: "ca_notion_1Yvy-",
+        authConfigId: null,
+        alias: null,
+        displayName: "Arno's Notion",
+        wordId: "calm-lake-1",
+        createdAt: "2026-11-27T08:15:00.000Z",
+      },
+      {
+        slug: "notion",
+        connectedAccountId: "ca_notion_2K9mP",
+        authConfigId: null,
+        alias: null,
+        displayName: "Arno's Notion",
+        wordId: null,
+        createdAt: "2026-11-27T10:30:00.000Z",
+      },
+      {
+        slug: "github",
+        connectedAccountId: "ca_gh_work",
+        authConfigId: null,
+        alias: "Work",
+        displayName: "ArnoChenFx",
+        wordId: null,
+        createdAt: null,
+      },
+      {
+        slug: "gmail",
+        connectedAccountId: "ca_gmail_1",
+        authConfigId: null,
+        alias: "arno@example.com",
+        displayName: "ARNO@EXAMPLE.COM",
+        wordId: null,
+        createdAt: null,
+      },
+      {
+        slug: "slack",
+        connectedAccountId: "ca_slack_1",
+        authConfigId: null,
+        alias: null,
+        displayName: null,
+        wordId: "gentle-river-pine",
+        createdAt: null,
+      },
+      {
+        slug: "linear",
+        connectedAccountId: "ca_linear_1",
+        authConfigId: null,
+        alias: null,
+        displayName: null,
+        wordId: null,
+        createdAt: null,
+      },
+    ]);
+    expect(JSON.stringify(accountRes)).not.toContain("secret-notion");
+    expect(JSON.stringify(accountRes)).not.toContain("REDACTED");
+
+    const items = await provider.listTriggers();
+    const bySource = new Map(items.map((item) => [item.source, item.accounts]));
+    expect(bySource.get("notion")).toEqual([
+      { id: "ca_notion_1Yvy-", label: "Arno's Notion (11-27 · Yvy-)" },
+      { id: "ca_notion_2K9mP", label: "Arno's Notion (11-27 · K9mP)" },
+    ]);
+    expect(bySource.get("github")).toEqual([
+      { id: "ca_gh_work", label: "Work · ArnoChenFx" },
+    ]);
+    expect(bySource.get("gmail")).toEqual([
+      { id: "ca_gmail_1", label: "arno@example.com" },
+    ]);
+    expect(bySource.get("slack")).toEqual([
+      { id: "ca_slack_1", label: "gentle-river-pine" },
+    ]);
+    expect(bySource.get("linear")).toEqual([
+      { id: "ca_linear_1", label: "ca_linear_1" },
+    ]);
+
+    // Overlong displayName is safely truncated without crashing or keeping trailing spaces.
+    h.setAccounts([
+      {
+        id: "ca_gh_long",
+        slug: "github",
+        data: { displayName: `  ${"A".repeat(150)}  ` },
+      },
+    ]);
+    const longAccount = (await composio.connectedAccounts()).accounts[0]!;
+    expect(longAccount.displayName).toHaveLength(120);
+    expect(longAccount.displayName?.endsWith("…")).toBe(true);
+  });
+
+  it("disambiguates cross-year duplicates, missing dates, and full-id fallback on suffix collisions", () => {
+    const grouped = groupAccountsBySlug([
+      // Cross-year collision includes year in date suffix.
+      {
+        slug: "notion",
+        connectedAccountId: "ca_n_2025_aaaa",
+        authConfigId: null,
+        displayName: "Workspace",
+        createdAt: "2025-12-31T23:00:00Z",
+      },
+      {
+        slug: "notion",
+        connectedAccountId: "ca_n_2026_bbbb",
+        authConfigId: null,
+        displayName: "Workspace",
+        createdAt: "2026-01-05T10:00:00Z",
+      },
+      // Distinct primary name under same toolkit stays clean without suffix.
+      {
+        slug: "notion",
+        connectedAccountId: "ca_n_personal",
+        authConfigId: null,
+        displayName: "Personal Docs",
+        createdAt: "2026-02-01T10:00:00Z",
+      },
+      // Missing / invalid createdAt uses <last4> suffix.
+      {
+        slug: "github",
+        connectedAccountId: "ca_gh_one_1111",
+        authConfigId: null,
+        displayName: "BotAccount",
+        createdAt: null,
+      },
+      {
+        slug: "github",
+        connectedAccountId: "ca_gh_two_2222",
+        authConfigId: null,
+        displayName: "botaccount",
+        createdAt: "not-a-date",
+      },
+      // Identical date + last-4 collision falls back to full connectedAccountId while keeping name readable.
+      {
+        slug: "gmail",
+        connectedAccountId: "ca_mail_first_9999",
+        authConfigId: null,
+        displayName: "team@example.com",
+        createdAt: "2026-11-27T01:00:00Z",
+      },
+      {
+        slug: "gmail",
+        connectedAccountId: "ca_mail_second_9999",
+        authConfigId: null,
+        displayName: "team@example.com",
+        createdAt: "2026-11-27T09:00:00Z",
+      },
+      // Bare ID fallback stays as bare ID without duplicate suffixing.
+      {
+        slug: "slack",
+        connectedAccountId: "ca_sl_1",
+        authConfigId: null,
+      },
+      {
+        slug: "slack",
+        connectedAccountId: "ca_sl_2",
+        authConfigId: null,
+      },
+    ]);
+
+    expect(grouped.get("notion")).toEqual([
+      { id: "ca_n_2025_aaaa", label: "Workspace (2025-12-31 · aaaa)" },
+      { id: "ca_n_2026_bbbb", label: "Workspace (2026-01-05 · bbbb)" },
+      { id: "ca_n_personal", label: "Personal Docs" },
+    ]);
+    expect(grouped.get("github")).toEqual([
+      { id: "ca_gh_one_1111", label: "BotAccount (1111)" },
+      { id: "ca_gh_two_2222", label: "botaccount (2222)" },
+    ]);
+    expect(grouped.get("gmail")).toEqual([
+      {
+        id: "ca_mail_first_9999",
+        label: "team@example.com (ca_mail_first_9999)",
+      },
+      {
+        id: "ca_mail_second_9999",
+        label: "team@example.com (ca_mail_second_9999)",
+      },
+    ]);
+    expect(grouped.get("slack")).toEqual([
+      { id: "ca_sl_1", label: "ca_sl_1" },
+      { id: "ca_sl_2", label: "ca_sl_2" },
+    ]);
   });
 });
 

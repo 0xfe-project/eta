@@ -77,6 +77,10 @@ export interface ComposioConnectedAccount {
   slug: string;
   connectedAccountId: string;
   authConfigId: string | null;
+  alias?: string | null;
+  displayName?: string | null;
+  wordId?: string | null;
+  createdAt?: string | null;
 }
 
 /** Structured error thrown by `Composio.triggerRequest` with `x-api-key` redacted. */
@@ -183,6 +187,27 @@ function https(value: unknown, max = 512): string | null {
   } catch {
     return null;
   }
+}
+
+const MAX_ACCOUNT_LABEL = 120;
+
+/** Clean a non-sensitive account label field, dropping empty strings and literal `"REDACTED"`. */
+function displayText(value: unknown, max = MAX_ACCOUNT_LABEL): string | null {
+  if (typeof value !== "string") return null;
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (cleaned === "" || cleaned === "REDACTED") return null;
+  return cleaned.length > max
+    ? `${cleaned.slice(0, max - 1).trimEnd()}…`
+    : cleaned;
+}
+
+/** Clean a timestamp string without altering date structure. */
+function timestampText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const cleaned = value.trim();
+  if (cleaned === "" || cleaned === "REDACTED" || cleaned.length > 64)
+    return null;
+  return cleaned;
 }
 
 /** One toolkit as it must be; null for one that does not fit. */
@@ -1148,6 +1173,10 @@ export class Composio {
           slug: one.slug,
           connectedAccountId: one.id,
           authConfigId: one.authConfigId,
+          alias: one.alias,
+          displayName: one.displayName,
+          wordId: one.wordId,
+          createdAt: one.createdAt,
         });
       }
       return { status: "ready", accounts };
@@ -1280,6 +1309,10 @@ export class Composio {
       id: string | undefined;
       authConfigId: string | null;
       user: unknown;
+      alias: string | null;
+      displayName: string | null;
+      wordId: string | null;
+      createdAt: string | null;
     }[]
   > {
     const found: {
@@ -1287,6 +1320,10 @@ export class Composio {
       id: string | undefined;
       authConfigId: string | null;
       user: unknown;
+      alias: string | null;
+      displayName: string | null;
+      wordId: string | null;
+      createdAt: string | null;
     }[] = [];
     let cursor: string | null = null;
     for (let page = 1; ; page++) {
@@ -1315,6 +1352,9 @@ export class Composio {
           typeof authConfigRaw === "string" && SESSION_ID.test(authConfigRaw)
             ? authConfigRaw
             : null;
+        const data = isPlain(item.data) ? item.data : null;
+        const state = isPlain(item.state) ? item.state : null;
+        const stateVal = state && isPlain(state.val) ? state.val : null;
         if (typeof slug === "string" && SLUG.test(slug))
           found.push({
             slug,
@@ -1324,6 +1364,12 @@ export class Composio {
                 : undefined,
             authConfigId,
             user: item.user_id,
+            alias: displayText(item.alias),
+            displayName:
+              displayText(data?.displayName) ??
+              displayText(stateVal?.displayName),
+            wordId: displayText(item.word_id),
+            createdAt: timestampText(item.created_at),
           });
       }
       const next: unknown = body.next_cursor;

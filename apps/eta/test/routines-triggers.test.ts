@@ -108,6 +108,7 @@ function fakeComposioServer() {
               user_id: uid ?? undefined,
               toolkit: { slug: "github" },
               auth_config: { id: "ac_gh_1" },
+              data: { displayName: "ArnoChenFx" },
             },
           ],
           next_cursor: null,
@@ -445,6 +446,9 @@ describe("triggerHub catalog, lifecycle, and error isolation", () => {
       "composio:GITHUB_COMMIT_EVENT",
       "rss:RSS_NEW_ITEM",
       "webhook:HTTP_POST",
+    ]);
+    expect(catalog.triggers[0]?.accounts).toEqual([
+      { id: "ca_github_1", label: "ArnoChenFx" },
     ]);
     expect(catalog.providers).toContainEqual({
       provider: "composio",
