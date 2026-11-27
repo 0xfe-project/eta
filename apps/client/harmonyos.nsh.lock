@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "packages": [
+    {
+      "name": "nsh-platform-harmonyos",
+      "version": "0.7.0",
+      "source": "git+https://github.com/huacnlee/nsh-platform-harmonyos",
+      "commit": "59259fbb364282a765de8ff8ecf7ae8ada7ceb2a",
+      "dir": "github.com/huacnlee/nsh-platform-harmonyos/0.7.0",
+      "platform": "harmonyos"
+    }
+  ]
+}

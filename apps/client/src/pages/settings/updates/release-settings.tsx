@@ -85,7 +85,17 @@ function ChannelRow(props: {
 export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
   const c = colors();
   const host = useHost();
-  const { advanced, check, source, token, editable, save, edit } = props.update;
+  const {
+    advanced,
+    check,
+    source,
+    token,
+    editable,
+    channelEditable,
+    connected,
+    save,
+    edit,
+  } = props.update;
   const advancedOpen = () =>
     advanced() ??
     ((!!source() && source()!.source !== "build") || !!check()?.error);
@@ -114,43 +124,39 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
 
   return (
     <>
-      <If when={check() || clientPlatform === "desktop"}>
-        <GroupHeading title={uiText("whichVersions")} phone={props.phone} />
-        <If when={check()}>
-          <ChannelRow title={uiText("channelHost")} phone={props.phone}>
-            <UpdateChannelMenu
-              label={uiText("channel")}
-              choices={[
-                { value: "full", label: uiText("updateFullReleases") },
-                { value: "pre", label: uiText("updatePreReleases") },
-              ]}
-              value={check()?.prerelease ? "pre" : "full"}
-              disabled={!editable() || !host.can("upgrade.setPrerelease")}
-              onChange={(value) => {
-                if ((value === "pre") !== check()?.prerelease)
-                  return save("setPrerelease", { prerelease: value === "pre" });
-                return true;
-              }}
-            />
-          </ChannelRow>
-        </If>
-        <If when={clientPlatform === "desktop"}>
-          <ChannelRow title={uiText("desktopApp")} phone={props.phone}>
-            <ClientChannelSelect />
-          </ChannelRow>
-        </If>
-        <View
-          style={{
-            paddingHorizontal: space[16],
-            paddingVertical: space[8],
-            borderBottomWidth: 1,
-            borderColor: c().border,
-          }}
-        >
-          <Label variant="small" tone="muted">
-            {uiText("preReleasesRcBetaGetNew")}
-          </Label>
+      <GroupHeading title={uiText("whichVersions")} phone={props.phone} />
+      <View style={{ paddingHorizontal: space[16], paddingVertical: space[8] }}>
+        <Label variant="small" tone="muted">
+          {uiText("preReleasesRcBetaGetNew")}
+        </Label>
+      </View>
+      <ChannelRow title={uiText("channelHost")} phone={props.phone}>
+        <View style={{ gap: space[4] }}>
+          <UpdateChannelMenu
+            label={uiText("channel")}
+            choices={[
+              { value: "full", label: uiText("updateFullReleases") },
+              { value: "pre", label: uiText("updatePreReleases") },
+            ]}
+            value={check()?.prerelease ? "pre" : "full"}
+            disabled={!channelEditable()}
+            onChange={(value) => {
+              if ((value === "pre") !== check()?.prerelease)
+                return save("setPrerelease", { prerelease: value === "pre" });
+              return true;
+            }}
+          />
+          <If when={connected() && !host.can("upgrade.setPrerelease")}>
+            <Label variant="small" tone="muted">
+              {uiText("updateChannelUnsupported")}
+            </Label>
+          </If>
         </View>
+      </ChannelRow>
+      <If when={clientPlatform === "desktop"}>
+        <ChannelRow title={uiText("desktopApp")} phone={props.phone}>
+          <ClientChannelSelect />
+        </ChannelRow>
       </If>
       <If when={check()}>
         <GroupHeading

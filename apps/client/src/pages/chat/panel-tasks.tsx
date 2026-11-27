@@ -203,7 +203,6 @@ export function ContextTasks(props: {
           }
           style={{
             paddingHorizontal: space[12],
-            paddingTop: 0,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
@@ -609,12 +608,24 @@ function TaskRow(props: {
         cursor: "pointer",
       }}
     >
-      <TaskGlyph status={task().status} size={icon.sm} />
       <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-        <Label variant="small" lines={1}>
-          {task().title}
-        </Label>
-        <View style={{ ...row, minWidth: 0 }}>
+        <View style={{ ...row, gap: space[8], minWidth: 0 }}>
+          <TaskGlyph
+            status={task().status}
+            size={icon.sm}
+            testID={`panel-task-glyph-${task().number}`}
+          />
+          <Label variant="small" lines={1} style={{ flex: 1, minWidth: 0 }}>
+            {task().title}
+          </Label>
+        </View>
+        <View
+          style={{
+            ...row,
+            minWidth: 0,
+            paddingLeft: icon.sm + space[8],
+          }}
+        >
           <If when={props.timeFirst}>
             <Label variant="caption" lines={1} style={{ flexShrink: 0 }}>
               {changed()}

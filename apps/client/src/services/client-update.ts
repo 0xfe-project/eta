@@ -48,7 +48,7 @@ function readShell(): ShellInfo | undefined {
 }
 
 const desktop = ["macos", "linux", "windows"].includes(platform.os);
-const android = platform.os === "android";
+const android = platform.os === "android" && platform.name !== "harmonyos";
 const shell = readShell();
 
 /** A release build that knows where its updates are: `nsh.json` has
@@ -93,18 +93,23 @@ function createClientUpdate() {
     if (!clientUpdatable || busy()) return;
     checking.set(true);
     failure.set("");
+    const asked = channel();
     try {
       const next = await find();
-      // A download already made stays usable while the offer is the same.
-      if (next?.version !== offer()?.version || next?.kind !== offer()?.kind)
-        ready.set(false);
-      offer.set(next);
-      checked.set(true);
+      if (channel() === asked) {
+        // A download already made stays usable while the offer is the same.
+        if (next?.version !== offer()?.version || next?.kind !== offer()?.kind)
+          ready.set(false);
+        offer.set(next);
+        checked.set(true);
+      }
     } catch (error) {
-      failure.set(describe(error));
+      if (channel() === asked) failure.set(describe(error));
     } finally {
       checking.set(false);
     }
+    // A channel changed meanwhile asks again, for its own offer.
+    if (channel() !== asked) await check();
   }
 
   async function find(): Promise<ClientOffer | undefined> {

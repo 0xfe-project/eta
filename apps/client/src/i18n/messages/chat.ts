@@ -362,6 +362,7 @@ export const chatMessages = {
   ],
   memberTools: ["tools {{count}}", "工具 {{count}}"],
   memberRate: ["{{rate}} tok/s", "{{rate}} tok/s"],
+  memberRateAbout: ["about {{rate}} tok/s", "约 {{rate}} tok/s"],
   memberRateEstimate: [
     "Output speed of this generation, estimated from its text so far",
     "本次生成的输出速度，按已输出的文本估算",

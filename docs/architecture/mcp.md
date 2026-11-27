@@ -14,11 +14,11 @@ Both the main node and the daemon have MCP for eta's own loop. On a daemon (`app
 
 Later sources override earlier ones for servers with the same name. The override is whole, not a merge of fields: the earlier server's `url`, `headers`, `env`, `auth` and everything else are dropped, and nothing connects to it (`resolveServers`, which lists what it replaced in `overridden`).
 
-| Source            | Location                      | Description                                                                                 |
-| ----------------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
-| `plugin:<plugin>` | The agent's enabled plugins   | Only for agents on eta's own loop; one source per plugin, servers named `<plugin>-<server>` |
-| `~/.eta/mcp.json` | This machine's user directory | For all agents on this machine                                                              |
-| `.mcp.json`       | Session working directory     | Loaded directly, no approval needed (it is in the user's own project)                       |
+| Source            | Location                      | Description                                                                                                                                                                                     |
+| ----------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plugin:<plugin>` | The agent's enabled plugins   | Only for agents on eta's own loop; one source per plugin, servers named `<plugin>` when normalized plugin and server names match (unless reserved) or `<plugin>-<server>` (`sessionServerName`) |
+| `~/.eta/mcp.json` | This machine's user directory | For all agents on this machine                                                                                                                                                                  |
+| `.mcp.json`       | Session working directory     | Loaded directly, no approval needed (it is in the user's own project)                                                                                                                           |
 
 Plugin sources come from `pluginMcpSources` (`apps/daemon/src/plugin-launch.ts`) through `McpHostOptions.pluginSources`: on the main node `Plugins.mcpSourcesFor(agentId)`, on a daemon the plugins of the agent's opening in that conversation. `McpHost` does not read plugin directories. They are resolved the same way as for an external runtime (see [plugins](plugins.md#what-a-session-gets)) and then take `@eta/mcp`'s shape: a stdio server keeps its own `cwd` (no `sh` wrapper), sse is taken, and a remote server's `auth` is what the extension declares (`mcp.<server>.auth`: `false` or `"oauth"`, see [plugins](plugins.md#configuration)), else `"oauth"` unless the extension already sends an `Authorization` header (`authOf` in `plugin-launch.ts`, the one place this is decided). The plugin's `mcp.json` itself is still read as the spec says, with no `auth` field.
 

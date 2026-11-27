@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
@@ -102,6 +103,7 @@ const desktop = desktopTarget !== undefined;
 // Android updates by signed packages of the app's code (`nsh publish`), and
 // by a new APK when the code needs a newer shell. iOS goes through the store.
 const android = packaging && target === "android";
+const harmonyos = packaging && target === "harmonyos";
 // `nsh publish` with a key signs an OTA package; `publish ios|android` uploads
 // a store build, which needs nothing generated here.
 const storeUpload =
@@ -161,9 +163,84 @@ const manifest =
   !args.includes("-h") &&
   !!(updateUrl || updateKey);
 let staging: string | undefined;
+function stripOption(argv: string[], name: string): string[] {
+  const result: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === name) {
+      i++;
+      continue;
+    }
+    if (arg.startsWith(`${name}=`)) continue;
+    result.push(arg);
+  }
+  return result;
+}
 try {
-  const command = desktop ? args.filter((arg) => arg !== "--run") : [...args];
-  if (updateEnabled || manifest) {
+  let command = desktop ? args.filter((arg) => arg !== "--run") : [...args];
+  if (harmonyos) {
+    const appVersion = option("--app-version");
+    const appBuild = option("--build");
+    command = stripOption(stripOption(command, "--app-version"), "--build");
+    const generated = join(cwd, ".nsh");
+    mkdirSync(generated, { recursive: true });
+    staging = mkdtempSync(join(generated, "harmonyos-source-"));
+    for (const file of readdirSync(cwd)) {
+      if (
+        file.endsWith(".tsx") ||
+        file.endsWith(".ts") ||
+        file === "assets" ||
+        file === "src"
+      )
+        cpSync(join(cwd, file), join(staging, file), { recursive: true });
+    }
+    const harmonyosLock = join(cwd, "harmonyos.nsh.lock");
+    if (existsSync(harmonyosLock))
+      copyFileSync(harmonyosLock, join(staging, "nsh.lock"));
+    const stagingNsh = join(staging, ".nsh");
+    mkdirSync(stagingNsh, { recursive: true });
+    for (const dir of ["platforms", "harmonyos"]) {
+      const targetDir = join(generated, dir);
+      mkdirSync(targetDir, { recursive: true });
+      symlinkSync(targetDir, join(stagingNsh, dir), "dir");
+    }
+    const entry = command.indexOf("App.tsx", 1);
+    if (entry === -1)
+      throw new Error(
+        "Use the Eta client App.tsx entry for HarmonyOS packages.",
+      );
+    command[entry] = join(staging, "App.tsx");
+    if (!option("--out", "-o")) command.push("--out", out);
+    writeFileSync(
+      join(staging, "nsh.json"),
+      JSON.stringify({
+        ...meta,
+        // nsh-platform-harmonyos expects a single PNG path string for `icon`.
+        icon: resolve(
+          cwd,
+          meta.icon.harmonyos ??
+            meta.icon.android ??
+            "../web/public/Eta-Logo.png",
+        ),
+        dependencies: {
+          "nsh-platform-harmonyos": {
+            github: "huacnlee/nsh-platform-harmonyos",
+          },
+        },
+        harmonyos: {
+          permissions: [
+            {
+              name: "ohos.permission.CAMERA",
+              reason: "Scan an Eta pairing code to connect to your host.",
+              when: "inuse",
+            },
+          ],
+        },
+        ...(appVersion ? { version: appVersion } : {}),
+        ...(appBuild ? { build: Number(appBuild) } : {}),
+      }),
+    );
+  } else if (updateEnabled || manifest) {
     if (!updateUrl || !updateKey)
       throw new Error(
         "ETA_CLIENT_UPDATE_URL and ETA_CLIENT_UPDATE_PUBLIC_KEY must be set together.",

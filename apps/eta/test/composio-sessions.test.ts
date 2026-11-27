@@ -583,6 +583,14 @@ describe("a Composio toolkit as a plugin of the agents", () => {
                 headers: {},
               },
             },
+            {
+              name: "composio",
+              config: {
+                type: "streamable-http",
+                url: "http://installed.example/composio",
+                headers: {},
+              },
+            },
           ],
         },
       };
@@ -590,19 +598,25 @@ describe("a Composio toolkit as a plugin of the agents", () => {
         name === "composio" ? (installed as never) : undefined,
       );
       const { mcpServers = [] } = await extrasOf(plugins, "ada");
-      // An installed plugin's server is `<plugin>-<server>`, which has a `-`, so it can never take
-      // the toolkits' `composio`: both are given, and no two have one name.
+      // `composio` is reserved in `sessionServerName`, so even a plugin `composio` with a
+      // same-named server `composio` stays `composio-composio` and can never take the virtual
+      // toolkits' `composio`: all are given, and no two share a name.
       expect(mcpServers.map((server) => server.name)).toEqual([
         "composio-gmail",
+        "composio-composio",
         "composio",
       ]);
       expect(mcpServers[0]).toMatchObject({
         url: "http://installed.example/mcp",
       });
       expect(mcpServers[1]).toMatchObject({
+        url: "http://installed.example/composio",
+      });
+      expect(mcpServers[2]).toMatchObject({
         url: `${base()}/tool_router/sess-1/mcp`,
       });
       expect(JSON.stringify(mcpServers[0])).not.toContain(KEY);
+      expect(JSON.stringify(mcpServers[1])).not.toContain(KEY);
     });
 
     it("hands a daemon the same servers, for the agent that enabled a ready toolkit only", async () => {

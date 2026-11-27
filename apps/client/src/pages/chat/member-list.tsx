@@ -5,7 +5,7 @@ import type {
   MemberView,
 } from "@eta/client-contracts";
 import { displaySpend } from "@eta/client-contracts";
-import { View } from "nsh";
+import { effect, reduceMotion, signal, untracked, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -18,6 +18,8 @@ import { AgentFace } from "../../components/agent-face";
 import { ContextRing, useContextUsage } from "../../components/context-ring";
 import { hint } from "../../components/controls";
 import { EmptyState } from "../../components/empty-state";
+import { fade, motion, passing } from "../../components/motion";
+import { RollingNumber } from "../../components/rolling-number";
 import { StatusDot } from "../../components/status-dot";
 import { avatar, icon, sizes, space } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
@@ -107,15 +109,20 @@ export function ConversationMembers(props: {
                 session={entry().sessionId}
               />
               <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-                <View style={{ ...row, gap: space[4] }}>
-                  <Label lines={1}>
+                <View style={{ ...row, gap: space[4], minWidth: 0 }}>
+                  <Label lines={1} style={{ flexShrink: 1, minWidth: 0 }}>
                     {host.agent(entry().agentId)?.name ?? uiText("agent")}
                   </Label>
                   <StatusDot
                     color={activeReply(entry().status) ? c().blue : c().muted}
                     opacity={activeReply(entry().status) ? 1 : 0.4}
                   />
-                  <Label variant="caption" tone="muted">
+                  <Label
+                    variant="caption"
+                    tone="muted"
+                    lines={1}
+                    style={{ flexShrink: 1, minWidth: 0 }}
+                  >
                     {memberStatus(entry().status)}
                   </Label>
                   <If
@@ -260,7 +267,8 @@ function MemberFace(props: { agentId: string; session: string | null }) {
 
 /**
  * How fast a working member's model writes: the estimate of the generation in flight, else the
- * last generation's measured rate.
+ * last generation's measured rate. Its digits roll to each new value (`RollingNumber`); assistive
+ * technologies read the whole value.
  */
 function MemberRate(props: { session: string }) {
   const host = useHost();
@@ -269,29 +277,68 @@ function MemberRate(props: { session: string }) {
     host.section<GenerationRate | null>(`sessions.${props.session}`, "rate");
   return (
     <If when={rate()}>
-      {(current) => (
-        <View
-          tooltip={hint(
-            uiText(
-              current().basis === "estimate"
-                ? "memberRateEstimate"
-                : "memberRateMeasured",
-            ),
-            c,
-          )}
-          style={{ ...row, gap: space[4], flexShrink: 0 }}
-        >
-          <Label variant="caption" tone="muted">
-            ·
-          </Label>
-          <Label variant="caption" tone="muted" mono>
-            {`${current().basis === "estimate" ? "≈" : ""}${uiText(
-              "memberRate",
-              { rate: String(Math.round(current().tokensPerSec)) },
-            )}`}
-          </Label>
-        </View>
-      )}
+      {(current) => {
+        const estimate = () => current().basis === "estimate";
+        const value = () => Math.round(current().tokensPerSec);
+        // The unit around the number, as the message places it.
+        const [before, after] = uiText("memberRate", { rate: "\u0000" }).split(
+          "\u0000",
+        );
+        const shown = passing();
+        void shown.play(fade(1, motion.counter.appear), true);
+        // The `≈` stays while it fades out once the rate is measured.
+        const mark = passing();
+        let wanted = untracked(estimate);
+        const marked = signal(wanted);
+        effect(() => {
+          if (estimate() === wanted) return;
+          wanted = estimate();
+          if (wanted) {
+            marked.set(true);
+            void mark.play(fade(1, motion.counter.appear), true);
+          } else if (untracked(reduceMotion)) marked.set(false);
+          else
+            void mark
+              .play(fade(0, motion.counter.appear))
+              .then(({ finished }) => finished && !wanted && marked.set(false));
+        });
+        return (
+          <View
+            testID={`rate:${props.session}`}
+            accessibilityLabel={uiText(
+              estimate() ? "memberRateAbout" : "memberRate",
+              { rate: String(value()) },
+            )}
+            tooltip={hint(
+              uiText(estimate() ? "memberRateEstimate" : "memberRateMeasured"),
+              c,
+            )}
+            style={{ ...row, gap: space[4], flexShrink: 0, ...shown.style() }}
+          >
+            <Label variant="caption" tone="muted">
+              ·
+            </Label>
+            <View accessibilityElementsHidden style={{ ...row, flexShrink: 0 }}>
+              <If when={marked()}>
+                <View style={mark.style()}>
+                  <Label variant="caption" tone="muted" mono>
+                    ≈
+                  </Label>
+                </View>
+              </If>
+              <If when={before}>
+                <Label variant="caption" tone="muted" mono>
+                  {before}
+                </Label>
+              </If>
+              <RollingNumber value={value()} variant="caption" tone="muted" />
+              <Label variant="caption" tone="muted" mono>
+                {after}
+              </Label>
+            </View>
+          </View>
+        );
+      }}
     </If>
   );
 }

@@ -620,6 +620,7 @@ export function Workspace(props: {
           <If when={page() === "plugins"}>
             <Plugins
               layout={props.layout}
+              onSettings={() => showSettings("Plugins")}
               onBack={
                 phone()
                   ? () => {

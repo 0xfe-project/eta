@@ -40,6 +40,7 @@ import {
   Status,
 } from "./plugin-status";
 import { ServersDialog } from "./servers-panel";
+import { PluginSettingsButton } from "./settings-button";
 import { Skills } from "./skills/list";
 import { PluginTablet } from "./tablet-list";
 import { pluginWarnings, PluginWarningsDialog } from "./warnings";
@@ -55,6 +56,8 @@ const phoneRowHeight = { needsConfig: 64, other: 60 } as const;
 export function Plugins(props: {
   layout: Layout;
   onBack?: () => void;
+  /** Opens Settings on the plugin sources. */
+  onSettings: () => void;
   /** Opens an address in the browser; the system's by default. */
   open?: (url: string) => Promise<void>;
 }) {
@@ -275,6 +278,10 @@ export function Plugins(props: {
                   >
                     {/* Touch-sized outline buttons, 8pt apart. */}
                     <View style={{ ...row, gap: space[8] }}>
+                      <PluginSettingsButton
+                        layout="phone"
+                        onPress={props.onSettings}
+                      />
                       <Button
                         label={uiText("refreshPlugins")}
                         icon="refresh"
@@ -304,6 +311,10 @@ export function Plugins(props: {
                   >
                     <View style={{ flex: 1 }} />
                     <View style={{ ...row, gap: space[12] }}>
+                      <PluginSettingsButton
+                        layout={props.layout}
+                        onPress={props.onSettings}
+                      />
                       <Button
                         label={uiText("refreshPlugins")}
                         icon="refresh"
@@ -334,6 +345,7 @@ export function Plugins(props: {
                         <Market
                           layout={props.layout}
                           onBack={props.onBack}
+                          onSettings={props.onSettings}
                           tabs={() => tabs(props.layout === "tablet")}
                         />
                       }
@@ -341,6 +353,7 @@ export function Plugins(props: {
                       <Skills
                         layout={props.layout}
                         onBack={props.onBack}
+                        onSettings={props.onSettings}
                         tabs={() => tabs(props.layout === "tablet")}
                       />
                     </If>
@@ -399,6 +412,7 @@ export function Plugins(props: {
           tabs={tabs(true)}
           onSelect={selected.set}
           onRefresh={refreshPlugins}
+          onSettings={props.onSettings}
           onAdd={() => add.set(true)}
           onMarket={() => tab.set("Market")}
           detail={detailView()}

@@ -13,9 +13,11 @@ export function StatusDot(props: {
   color: string;
   size?: number;
   opacity?: number;
+  testID?: string;
 }) {
   return (
     <View
+      testID={props.testID}
       accessibilityElementsHidden
       style={{
         width: props.size ?? dotSize,

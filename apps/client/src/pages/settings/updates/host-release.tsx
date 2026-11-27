@@ -3,6 +3,7 @@ import type { HostUpdate } from "./host-update";
 import { openUrl, View } from "nsh";
 import { Button, colors, Icon, Label, row } from "../../../components";
 import { chatText } from "../../../components/eta-editor";
+import { Spinner } from "../../../components/spinner";
 import { StatusDot } from "../../../components/status-dot";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
@@ -41,7 +42,30 @@ const blockedExplanation = {
   "other-file": "updateDifferentBinary",
 } as const;
 
-export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
+/** A release row's status: a dot in its tone, or a spinner while it is checking. */
+export function ReleaseStatus(props: {
+  tone: "blue" | "green" | "red" | "warning" | "strong";
+  label: string;
+  checking: boolean;
+}) {
+  const c = colors();
+  return (
+    <View style={{ ...row, gap: space[4] }}>
+      <If when={props.checking} else={<StatusDot color={c()[props.tone]} />}>
+        <Spinner size={icon.sm} tone="muted" />
+      </If>
+      <Label variant="small" tone={props.tone === "red" ? "red" : "mutedInk"}>
+        {props.label}
+      </Label>
+    </View>
+  );
+}
+
+export function HostRelease(props: {
+  update: HostUpdate;
+  phone: boolean;
+  onConnect: () => void;
+}) {
   const host = useHost();
   const c = colors();
   const {
@@ -61,7 +85,14 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
     editor,
     notes,
     request,
+    unavailable,
   } = props.update;
+  /** A check under way: no upgrade is, and none has just ended badly. */
+  const checking = () =>
+    pending() === "check" &&
+    !active() &&
+    !starting() &&
+    (result()?.state ?? "done") === "done";
   const desktopTitle = () => {
     const address = host.address();
     if (address?.local) return uiText("updateLocalHost");
@@ -70,12 +101,14 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
       : uiText("updateServerHost");
   };
   const statusTone = () => {
-    if (active() || starting()) return "blue";
+    if (active() || starting() || checking()) return "blue";
     const ended = result();
     if (ended && ended.state !== "done") {
       const tone = resultTone(ended);
       return tone === "faint" ? "strong" : tone;
     }
+    if (unavailable()) return "strong";
+    if (!check()) return error() ? "red" : "blue";
     if (check()?.error) return "red";
     if (offer()) return "blue";
     if (check()?.blocked || check()?.heldOnPrerelease) return "warning";
@@ -89,8 +122,13 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         return uiText("updateDownloadingPercent", { percent: percent() });
       return uiText(phaseName[status()!.phase]);
     }
+    if (checking()) return uiText("updateChecking");
     const ended = result();
     if (ended && ended.state !== "done") return resultLabel(ended);
+    const reason = unavailable();
+    if (reason) return reason;
+    if (!check())
+      return error() ? uiText("updateCheckFailed") : uiText("updateChecking");
     if (check()?.error) return uiText("updateCheckFailed");
     if (offer()) return uiText("updateAvailable");
     if (check()?.heldOnPrerelease) return uiText("updatePreRelease");
@@ -131,6 +169,8 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
   /** The status would only say an update is available: its button says it instead. */
   const offered = () =>
     offer() &&
+    !unavailable() &&
+    !checking() &&
     !active() &&
     !starting() &&
     !check()?.error &&
@@ -139,7 +179,23 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
     <If
       when={active() || starting()}
       else={
-        <If when={offer()}>
+        <If
+          when={!unavailable() && offer()}
+          else={
+            <If when={unavailable()}>
+              <Button
+                label={uiText("changeHost")}
+                size={props.phone ? control.touch : undefined}
+                style={
+                  props.phone
+                    ? { marginTop: space[8], alignSelf: "stretch" }
+                    : undefined
+                }
+                onPress={props.onConnect}
+              />
+            </If>
+          }
+        >
           <Button
             label={offerLabel()}
             size={props.phone ? control.touch : undefined}
@@ -184,6 +240,14 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
     </If>
   );
 
+  const statusLine = () => (
+    <ReleaseStatus
+      tone={statusTone()}
+      label={statusLabel()}
+      checking={checking()}
+    />
+  );
+
   return (
     <>
       <View
@@ -213,16 +277,9 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
         </If>
         <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
           <View testID="host-version">
-            <Label weight={weight.regular}>{version()}</Label>
+            <Label weight={weight.regular}>{version() ?? "—"}</Label>
           </View>
-          <If when={props.phone && !offered()}>
-            <View style={{ ...row, gap: space[4] }}>
-              <StatusDot color={c()[statusTone()]} />
-              <Label variant="small" tone="mutedInk">
-                {statusLabel()}
-              </Label>
-            </View>
-          </If>
+          <If when={props.phone && !offered()}>{statusLine()}</If>
           <Label variant="small" tone="muted">
             {desktopTitle()}
           </Label>
@@ -259,19 +316,12 @@ export function HostRelease(props: { update: HostUpdate; phone: boolean }) {
                 gap: space[8],
               }}
             >
-              <If when={!offered()}>
-                <View style={{ ...row, gap: space[4] }}>
-                  <StatusDot color={c()[statusTone()]} />
-                  <Label variant="small" tone="mutedInk">
-                    {statusLabel()}
-                  </Label>
-                </View>
-              </If>
+              <If when={!offered()}>{statusLine()}</If>
               {updateAction()}
             </View>
           }
         >
-          <If when={active() || starting() || offer()}>
+          <If when={active() || starting() || offer() || unavailable()}>
             <View style={{ alignItems: "stretch" }}>{updateAction()}</View>
           </If>
         </If>

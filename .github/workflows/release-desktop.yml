@@ -1,5 +1,5 @@
 # A `desktop-v*` tag becomes a GitHub Release of the client app: an installer for each desktop
-# platform, an Android APK, an iOS IPA, and SHA256SUMS. The host is released apart, from `v*` tags (release.yml). How to cut either is
+# platform, an Android APK, an iOS IPA, a HarmonyOS HAP, and SHA256SUMS. The host is released apart, from `v*` tags (release.yml). How to cut either is
 # in docs/release.md.
 #
 # With an update key configured, the release also feeds the apps' own updates: the desktop
@@ -110,6 +110,8 @@ jobs:
                 echo "> **iOS:** \`eta-ios.ipa\` is unsigned, as no signing certificate is configured. Install it with a tool that signs it for your device (AltStore, Sideloadly, or \`codesign\` with your own profile)."
                 echo
               fi
+              echo "> **HarmonyOS:** \`eta-harmonyos.hap\` is unsigned (built with the OpenHarmony 7.0 SDK). Sign it with your own certificate before installing on a device."
+              echo
             } > "$RUNNER_TEMP/notes.md"
             # Prepended to the generated notes, after a blank line, or the last quote would swallow them.
             if [[ -s $RUNNER_TEMP/notes.md ]]; then
@@ -144,6 +146,9 @@ jobs:
           - target: ios
             runner: macos-latest
             desktop: eta-ios.ipa
+          - target: harmonyos
+            runner: ubuntu-latest
+            desktop: eta-harmonyos.hap
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     permissions:
@@ -158,10 +163,10 @@ jobs:
       # The app downloads its host from this repository, so a fork's app follows the fork.
       ETA_HOST_UPSTREAM: ${{ github.api_url }}/repos/${{ github.repository }}
       ETA_DESKTOP_TARGET: ${{ matrix.target }}
-      # iOS updates through the store: no update source in its build.
-      ETA_CLIENT_UPDATE_URL: ${{ matrix.target != 'ios' && needs.prepare.outputs.update-url || '' }}
-      ETA_CLIENT_UPDATE_CHANNELS: ${{ matrix.target != 'ios' && needs.prepare.outputs.update-channels || '' }}
-      ETA_CLIENT_UPDATE_PUBLIC_KEY: ${{ matrix.target != 'ios' && needs.prepare.outputs.update-url && vars.ETA_CLIENT_UPDATE_PUBLIC_KEY || '' }}
+      # iOS updates through the store and HarmonyOS ships unsigned HAPs: no update source in their builds.
+      ETA_CLIENT_UPDATE_URL: ${{ matrix.target != 'ios' && matrix.target != 'harmonyos' && needs.prepare.outputs.update-url || '' }}
+      ETA_CLIENT_UPDATE_CHANNELS: ${{ matrix.target != 'ios' && matrix.target != 'harmonyos' && needs.prepare.outputs.update-channels || '' }}
+      ETA_CLIENT_UPDATE_PUBLIC_KEY: ${{ matrix.target != 'ios' && matrix.target != 'harmonyos' && needs.prepare.outputs.update-url && vars.ETA_CLIENT_UPDATE_PUBLIC_KEY || '' }}
       # The OTA root Android builds trust: packages signed by a release key it certified run in them.
       ETA_CLIENT_PACKAGE_ROOT: ${{ matrix.target == 'android' && vars.ETA_CLIENT_PACKAGE_ROOT || '' }}
     steps:
@@ -219,6 +224,70 @@ jobs:
             echo "IOS_PROFILE=$RUNNER_TEMP/eta.mobileprovision" >> "$GITHUB_ENV"
           fi
 
+      - uses: actions/setup-node@v4
+        if: matrix.target == 'harmonyos'
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-java@v4
+        if: matrix.target == 'harmonyos'
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.target == 'harmonyos'
+        with:
+          targets: aarch64-unknown-linux-ohos
+
+      - name: Cache OpenHarmony 7.0 SDK (API 26)
+        if: matrix.target == 'harmonyos'
+        id: ohos-sdk
+        uses: actions/cache@v4
+        with:
+          path: ~/ohos-sdk
+          key: ohos-sdk-7.0-release-linux-api26-v1
+
+      - name: Download OpenHarmony 7.0 SDK
+        if: matrix.target == 'harmonyos' && steps.ohos-sdk.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          tmp="$RUNNER_TEMP/ohos-sdk-download"
+          mkdir -p "$tmp" ~/ohos-sdk/26.0.0
+          curl -fL --retry 3 "https://repo.huaweicloud.com/openharmony/os/7.0-Release/ohos-sdk-windows_linux-public.tar.gz" -o "$tmp/ohos-sdk.tar.gz"
+          tar -xzf "$tmp/ohos-sdk.tar.gz" -C "$tmp"
+          find "$tmp" -path '*/linux/*.zip' -exec unzip -q -o {} -d ~/ohos-sdk/26.0.0 \;
+          ln -sfn 26.0.0 ~/ohos-sdk/26
+          rm -rf "$tmp"
+
+      - name: Cache hvigor
+        if: matrix.target == 'harmonyos'
+        id: hvigor
+        uses: actions/cache@v4
+        with:
+          path: ~/hvigor
+          key: ohos-hvigor-npm-v1
+
+      - name: Install hvigor
+        if: matrix.target == 'harmonyos' && steps.hvigor.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/hvigor
+          npm --prefix ~/hvigor install @ohos/hvigor @ohos/hvigor-ohos-plugin --registry https://repo.harmonyos.com/npm/
+
+      - name: Cache Rust and NSH HarmonyOS build artifacts
+        if: matrix.target == 'harmonyos'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            apps/client/.nsh/platforms/harmonyos/target
+            apps/client/.nsh/harmonyos/runner/target
+          key: harmonyos-client-rust-${{ hashFiles('apps/client/harmonyos.nsh.lock') }}
+          restore-keys: |
+            harmonyos-client-rust-
+
       - name: Package the app
         env:
           NSH_KEYSTORE_PASSWORD: ${{ secrets.ETA_ANDROID_KEYSTORE_PASSWORD }}
@@ -238,6 +307,15 @@ jobs:
             ios)
               args+=(--build "$ETA_CLIENT_BUILD")
               if [[ -n ${IOS_IDENTITY:-} ]]; then args+=(--sign "$IOS_IDENTITY" --profile "$IOS_PROFILE"); fi
+              ;;
+            harmonyos)
+              export OHOS_BASE_SDK_HOME="$HOME/ohos-sdk"
+              export OHOS_NDK_HOME="$HOME/ohos-sdk/26.0.0"
+              export HVIGOR_HOME="$HOME/hvigor"
+              export CARGO_PROFILE_RELEASE_LTO=false
+              export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
+              export CARGO_INCREMENTAL=0
+              args+=(--runtime-os openharmony --build "$ETA_CLIENT_BUILD")
               ;;
           esac
           bun run client:package "${args[@]}"
@@ -280,6 +358,11 @@ jobs:
                 ditto "$out/Eta.app" "$RUNNER_TEMP/ipa/Payload/Eta.app"
                 (cd "$RUNNER_TEMP/ipa" && ditto -c -k --keepParent Payload "$RUNNER_TEMP/try/$DESKTOP")
               fi
+              ;;
+            harmonyos)
+              hap=$(find "$out/entry/build" -type f -name '*-unsigned.hap' | head -n 1)
+              test -f "$hap"
+              cp "$hap" "$RUNNER_TEMP/try/$DESKTOP"
               ;;
           esac
 

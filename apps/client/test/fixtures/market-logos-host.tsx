@@ -115,7 +115,11 @@ export function mountMarket(mode: "hit" | "stalled" | "old" | "many") {
         <View style={{ flex: 1 }}>
           <Label>{`batches ${batches().join("+")}`}</Label>
           <Label>{`logo ${logoPaths().join(",")}`}</Label>
-          <Market layout="desktop" tabs={() => <Label>tabs</Label>} />
+          <Market
+            onSettings={() => {}}
+            layout="desktop"
+            tabs={() => <Label>tabs</Label>}
+          />
         </View>
       </Host.Provider>
     );

@@ -15,7 +15,6 @@ import {
   row,
   SmoothScroll,
 } from "../../../components";
-import { StatusDot } from "../../../components/status-dot";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import {
@@ -26,7 +25,7 @@ import {
 import { useHost } from "../../../services/host";
 import { BusyList } from "./busy-list";
 import { UpdateChannelMenu } from "./channel";
-import { releaseRow, statusWidth } from "./host-release";
+import { releaseRow, ReleaseStatus, statusWidth } from "./host-release";
 
 /** The update dialog's height, and one item of the channel menu. */
 const dialogHeight = 248;
@@ -145,7 +144,7 @@ export function ClientChannelSelect() {
         { value: "rc", label: names.rc },
       ]}
       value={update.channel()}
-      disabled={update.busy() || update.ready()}
+      disabled={update.downloading() || update.restarting() || update.ready()}
       onChange={(value) => {
         if (value === "stable" || value === "rc") {
           update.changeChannel(value);
@@ -166,7 +165,7 @@ export function ClientAppUpdate(props: { phone: boolean }) {
   const confirm = signal(false);
   const status = () => {
     if (update.checking())
-      return { tone: "blue", label: uiText("checkingForUpdates") } as const;
+      return { tone: "blue", label: uiText("updateChecking") } as const;
     if (update.failure() && !update.offer())
       return { tone: "red", label: uiText("updateCheckFailed") } as const;
     if (update.checked() && !update.offer())
@@ -176,12 +175,11 @@ export function ClientAppUpdate(props: { phone: boolean }) {
   const statusLine = () => (
     <If when={update.offer() ? undefined : status()}>
       {(shown) => (
-        <View style={{ ...row, gap: space[4] }}>
-          <StatusDot color={c()[shown().tone]} />
-          <Label variant="small" tone="mutedInk">
-            {shown().label}
-          </Label>
-        </View>
+        <ReleaseStatus
+          tone={shown().tone}
+          label={shown().label}
+          checking={update.checking()}
+        />
       )}
     </If>
   );

@@ -3,11 +3,10 @@ import type {
   MemberView,
   MessageView,
 } from "@eta/client-contracts";
-import type { Bounds, JSX, ListRef, ViewRef } from "nsh";
-import type { TextSelection } from "../../components/eta-editor";
+import type { JSX, ListRef, ViewRef } from "nsh";
 import type { DeliveryActions } from "./composer-delivery";
 import { isCaptainOutcome } from "@eta/client-contracts";
-import { cleanup, computed, effect, List, Overlay, signal, View } from "nsh";
+import { cleanup, computed, effect, List, signal, View } from "nsh";
 import { onWindows } from "../../app/platform";
 import {
   Button,
@@ -22,12 +21,13 @@ import { EmptyState } from "../../components/empty-state";
 import { settled, shownWhile } from "../../components/pending";
 import { wheelScroll } from "../../components/scroll-follow";
 import { Spinner } from "../../components/spinner";
-import { control, icon, opacity, shadow, space } from "../../components/tokens";
+import { control, icon, opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
 import { useLoadState } from "../../services/load-status";
 import { Message } from "./message";
 import { questionRowIndex } from "./question-row";
+import { createQuoteSelection, QuoteSelectionOverlay } from "./quote-selection";
 import { isSystemNotice, SystemNotice } from "./system-notice";
 import { TaskDraftDetail } from "./task-draft-detail";
 
@@ -109,32 +109,11 @@ export function ConversationTimeline(props: {
   };
   const actions = new Map<string, () => void>();
   // The reply text the reader selected, and where: a Quote button floats above it.
-  const selection = signal<{
-    message: MessageView;
-    /** The selected text as the reply reads (mentions as `@Ada`). */
-    read: () => string;
-    at: Bounds | ViewRef;
-  }>();
-  function select(
-    message: MessageView,
-    event: TextSelection,
-    reply: ViewRef | undefined,
-  ) {
-    const text = event.text.trim();
-    // Where the platform gives no box around the selection (the web), the
-    // button goes over the reply instead. A phone has its own edit menu.
-    const at = event.pageBounds ?? reply;
-    if (text && at && !phone())
-      selection.set({ message, read: event.read, at });
-    else if (selection()?.message.id === message.id) selection.set(undefined);
-  }
-  function quote() {
-    const current = selection();
-    if (!current) return;
-    selection.set(undefined);
-    const text = current.read().trim();
-    if (text) props.onQuote(current.message.conversationId, text);
-  }
+  const quoteSelection = createQuoteSelection({
+    phone,
+    onQuote: (conversationId, text) => props.onQuote(conversationId, text),
+  });
+  cleanup(() => quoteSelection.dispose());
   // On Windows the wheel scrolls the list itself, so mouse notches can glide;
   // elsewhere the system already scrolls smoothly and the list keeps it.
   const glide = wheelScroll((offset, animated) =>
@@ -302,7 +281,7 @@ export function ConversationTimeline(props: {
           scrollEventThrottle={onWindows ? 16 : undefined}
           onScroll={(event) => {
             // The button was placed against the selection where it was.
-            if (selection()) selection.set(undefined);
+            quoteSelection.dismiss();
             if (onWindows) glide.onScroll(event);
           }}
           onViewableItemsChange={({ viewableItems }) => {
@@ -403,7 +382,7 @@ export function ConversationTimeline(props: {
                     props.onWidgetDraft(message().conversationId, text)
                   }
                   onSelectionChange={(event, reply) =>
-                    select(message(), event, reply)
+                    quoteSelection.select(message(), event, reply)
                   }
                   onRetry={
                     props.onRetryReply
@@ -417,31 +396,7 @@ export function ConversationTimeline(props: {
             return onWindows ? <View onWheel={glide.onWheel}>{row}</View> : row;
           }}
         </List>
-        <If when={selection()}>
-          {(current) => (
-            <Overlay
-              anchor={current().at}
-              placement="top"
-              align={"origin" in current().at ? "center" : "end"}
-              offset={6}
-            >
-              <Button
-                label={uiText("quoteSelection")}
-                icon="return"
-                size={control.md}
-                style={{
-                  paddingHorizontal: space[12],
-                  gap: space[4],
-                  backgroundColor: c().canvas,
-                  borderWidth: 1,
-                  borderColor: c().border,
-                  boxShadow: [shadow.float],
-                }}
-                onPress={quote}
-              />
-            </Overlay>
-          )}
-        </If>
+        <QuoteSelectionOverlay controller={quoteSelection} />
         <If when={selected()}>
           {(message) => (
             <TaskDraftDetail

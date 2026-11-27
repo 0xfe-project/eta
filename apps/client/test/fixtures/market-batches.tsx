@@ -67,7 +67,11 @@ mount(() => {
         <Label>
           {"logos:" + new Set(asked()).size + " calls:" + asked().length}
         </Label>
-        <Market layout="desktop" tabs={() => <Label>tabs</Label>} />
+        <Market
+          onSettings={() => {}}
+          layout="desktop"
+          tabs={() => <Label>tabs</Label>}
+        />
       </View>
     </Host.Provider>
   );

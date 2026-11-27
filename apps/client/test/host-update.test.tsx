@@ -1,5 +1,5 @@
+import type { OpenOptions, Platform } from "nsh/test";
 import { expect, open, test } from "nsh/test";
-import type { Platform } from "nsh/test";
 
 // A Host update as the user follows it: Settings › Update says what is happening at each step,
 // the whole window is covered from the moment the service stops, and the end is told, with
@@ -15,6 +15,13 @@ async function settings(
     platform?: Platform;
     prereleaseDelay?: number;
     prereleaseFailure?: boolean;
+    checks?: boolean;
+    checkFailure?: boolean;
+    switchChannel?: boolean;
+    fresh?: boolean;
+    offline?: boolean;
+    modules?: OpenOptions["modules"];
+    ready?: string;
   } = {},
 ) {
   const app = await open(fixture, {
@@ -27,12 +34,145 @@ async function settings(
       script,
       prereleaseDelay: String(options.prereleaseDelay ?? 0),
       prereleaseFailure: String(!!options.prereleaseFailure),
+      checks: String(!!options.checks),
+      checkFailure: String(!!options.checkFailure),
+      switchChannel: String(!!options.switchChannel),
+      fresh: String(!!options.fresh),
+      offline: String(!!options.offline),
     },
+    modules: options.modules,
     clock: {},
   });
-  await app.waitFor(page === "update" ? "text:0.9.0" : "text:gpu-box");
+  await app.waitFor(
+    options.ready ?? (page === "update" ? "text:0.9.0" : "text:gpu-box"),
+  );
   return app;
 }
+
+/** A release build of the desktop app. */
+const desktopApp = {
+  platform: "macos",
+  modules: {
+    "nsh/updater": {
+      shellInfo: {
+        version: "1.2.0",
+        build: 1,
+        nshVersion: "0.7.1",
+        packages: false,
+      },
+    },
+  },
+} as const;
+
+test("before the first answer both rows are there, the Host's without a version yet", async () => {
+  const app = await settings("update", "", {
+    ...desktopApp,
+    fresh: true,
+    checks: true,
+    ready: "text:Desktop app · this computer",
+  });
+  expect(app.texts()).toContain("—");
+  expect(app.texts()).toContain("eta host · this server");
+  expect(app.texts()).toContain("1.2.0");
+  expect(app.texts()).toContain("Checking…");
+
+  await app.press("label:Answer");
+  await app.waitFor("text:0.9.0");
+  expect(app.texts()).toContain("Desktop app · this computer");
+});
+
+test("checking again keeps both rows, both say they are checking, and the Host's channel stays open", async () => {
+  const app = await settings("update", "", {
+    ...desktopApp,
+    checks: true,
+  });
+  await app.press("label:Answer");
+  await app.press("label:Check again");
+
+  expect(app.texts().filter((text) => text === "Checking…")).toHaveLength(2);
+  expect(app.texts()).toContain("0.9.0");
+  expect(app.texts()).toContain("1.2.0");
+  expect(app.texts()).toContain("Check again");
+  expect(app.enabled("label:Channel")).toBe(true);
+  expect(app.enabled("label:App update channel")).toBe(true);
+});
+
+test("a channel chosen during a check is saved once the check has answered", async () => {
+  const app = await settings("update", "", { checks: true });
+  await app.press("label:Channel");
+  await app.press("label:Pre-releases too");
+  expect(app.texts()).toContain("Sent: upgrade.check");
+
+  expect(app.shows("text:Pre-releases too")).toBe(true);
+
+  await app.press("label:Answer");
+  await app.waitFor(
+    "text:Sent: upgrade.check, upgrade.setPrerelease, upgrade.check",
+  );
+  await app.press("label:Answer");
+  expect(app.shows("text:Pre-releases too")).toBe(true);
+});
+
+test("a first check that fails says so in the Host's row", async () => {
+  const app = await settings("update", "", {
+    fresh: true,
+    checks: true,
+    checkFailure: true,
+    ready: "text:Checking…",
+  });
+  await app.press("label:Answer");
+  await app.waitFor("text:Couldn't check for updates");
+  expect(app.texts()).toContain("GitHub did not answer");
+  expect(app.texts()).toContain("—");
+  expect(app.texts()).not.toContain("Up to date");
+});
+
+test("the desktop app's channel changed during its check is checked again", async () => {
+  const channels: string[] = [];
+  const app = await settings("update", "", {
+    platform: "macos",
+    modules: {
+      "nsh/updater": {
+        ...desktopApp.modules["nsh/updater"],
+        checkForUpdate: (options?: { channel?: string }) => {
+          channels.push(options?.channel ?? "");
+          return options?.channel === "rc"
+            ? {
+                version: "1.3.0-rc.1",
+                url: "https://example.invalid/eta.dmg",
+                canInstall: true,
+                shell: false,
+              }
+            : null;
+        },
+      },
+    },
+    switchChannel: true,
+    ready: "label:Download update",
+  });
+  expect(channels).toEqual(["stable", "rc"]);
+  expect(app.texts()).not.toContain("Up to date");
+});
+
+test("a Host that is not connected keeps its row, says so and offers another", async () => {
+  const app = await settings("update", "", {
+    fresh: true,
+    offline: true,
+    ready: "text:Not connected",
+  });
+  expect(app.texts()).toContain("—");
+  expect(app.shows("label:Change host")).toBe(true);
+  expect(app.enabled("label:Channel")).toBe(false);
+});
+
+test("which versions explains the channels before either menu", async () => {
+  const app = await settings("update", "", desktopApp);
+  const explanation = app.layout(
+    "text:Pre-releases (-rc, -beta...) get new features earlier and can be unstable. Switching back never goes to an older version.",
+  )!;
+  expect(explanation.y).toBeLessThan(app.layout("label:Channel")!.y);
+  expect(explanation.y).toBeLessThan(app.layout("label:App update channel")!.y);
+});
 
 test("the update channel uses the shared action menu", async () => {
   const app = await settings();
