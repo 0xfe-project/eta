@@ -8,7 +8,7 @@ import { StatusDot } from "../../../components/status-dot";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { useHost } from "../../../services/host";
-import { canStartHost } from "../../connection/local-host";
+import { isDesktopPlatform } from "../../connection/local-host";
 import { BusyList } from "./busy-list";
 import {
   downloadPercent,
@@ -96,7 +96,7 @@ export function HostRelease(props: {
   const desktopTitle = () => {
     const address = host.address();
     if (address?.local) return uiText("updateLocalHost");
-    return canStartHost && address
+    return isDesktopPlatform && address
       ? `eta host · ${address.origin}`
       : uiText("updateServerHost");
   };

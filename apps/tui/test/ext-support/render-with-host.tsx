@@ -139,7 +139,10 @@ async function waitForScreen(
   for (;;) {
     await flush();
     try {
-      if (holds(plain(rendered))) return;
+      if (holds(plain(rendered))) {
+        await flush();
+        return;
+      }
       lastError = undefined;
     } catch (error) {
       lastError = error;

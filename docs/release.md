@@ -85,14 +85,30 @@ The `desktop-v*` workflow packages `apps/client` with the Native Shell release p
 
 The workflow opens a draft, runs CI and builds on each target's own runner. It checks that every desktop package includes the local host launcher, then publishes the draft with `SHA256SUMS`.
 
-| File                           | Platform                    | Contents                        |
-| ------------------------------ | --------------------------- | ------------------------------- |
-| `eta-desktop-linux-x64.tar.gz` | Linux x64                   | App directory and desktop entry |
-| `eta-desktop-darwin-arm64.dmg` | macOS arm64                 | App bundle                      |
-| `eta-desktop-windows-x64.zip`  | Windows x64                 | App directory with `Eta.exe`    |
-| `eta-android.apk`              | Android 8+, arm64 and armv7 | APK for sideloading             |
-| `eta-ios.ipa`                  | iOS 15+ devices             | IPA, signed or not, see below   |
-| `SHA256SUMS`                   |                             | Checksums for these files       |
+| File                            | Platform                    | Contents                                      |
+| ------------------------------- | --------------------------- | --------------------------------------------- |
+| `eta-desktop-linux-x64.tar.gz`  | Linux x64                   | App directory and desktop entry               |
+| `eta-desktop-linux-x64.flatpak` | Linux x64                   | Flatpak single-file bundle (`dev.eta.client`) |
+| `eta-desktop-darwin-arm64.dmg`  | macOS arm64                 | App bundle                                    |
+| `eta-desktop-windows-x64.zip`   | Windows x64                 | App directory with `Eta.exe`                  |
+| `eta-android.apk`               | Android 8+, arm64 and armv7 | APK for sideloading                           |
+| `eta-ios.ipa`                   | iOS 15+ devices             | IPA, signed or not, see below                 |
+| `SHA256SUMS`                    |                             | Checksums for these files                     |
+
+### Linux Flatpak
+
+Install and launch the single-file bundle for your user:
+
+```sh
+flatpak install --user eta-desktop-linux-x64.flatpak
+flatpak run dev.eta.client
+```
+
+The bundle runs on `org.gnome.Platform//49` (with Flathub runtime-repo metadata embedded), so GTK 4 and WebKitGTK 6.0 come from the Flatpak runtime rather than the host OS.
+
+- **Sandbox permissions**: uses Native Shell's minimal defaults (`--share=ipc`, `--socket=wayland`, `--socket=fallback-x11`, `--device=dri`, `--share=network`).
+- **Connecting to a host**: works seamlessly with **Connect to an existing host**, including an `eta-host` running on this machine (`http://127.0.0.1:8787`) or a remote/Tailscale host. Inside Flatpak, Eta detects the sandbox (`FLATPAK_ID` / `/app/`), disables **Run on this computer** in the connection screen, and prompts you to install `eta-host` directly on the host OS (see [Self-hosting](self-hosting.md)) so agents can reach your real workspaces, tools, and systemd user services.
+- **Updates**: Flatpak mounts `/app` read-only and single-file `.flatpak` bundles have no remote for `flatpak update`, so the Flatpak build disables in-place replacement; Settings → Update and the update banner link directly to the newer `eta-desktop-linux-x64.flatpak` for `flatpak install --user`. The `.tar.gz` build still updates in place via Settings → Update.
 
 ### Phone packages
 
@@ -116,7 +132,7 @@ A signed IPA installs only on the devices its profile allows (development or ad 
 
 The desktop apps (macOS, Windows, Linux) and the Android app update themselves from Settings → Update, whichever host they are connected to, and check once at start: a newer release shows a strip at the bottom of the window with one button (download, then restart) and a close button that hides it for that version. iOS is left to the store or a manual install: its build has no update source.
 
-- **Desktop**: `nsh/updater` downloads the platform's archive (`Eta-<version>-<os>-<arch>.tar.gz|zip`), checks its size and SHA-256 against the signed manifest, and on restart swaps the app in place and opens it again. When the app runs this computer's host, the confirmation lists the work the restart would stop, as the host's own update does. The settings choose the channel: Full releases only (`stable`) or Pre-releases too (`rc`); a build starts on its own kind's channel.
+- **Desktop**: `nsh/updater` downloads the platform's archive (`Eta-<version>-<os>-<arch>.tar.gz|zip`), checks its size and SHA-256 against the signed manifest, and on restart swaps the app in place and opens it again (on Linux, the `.tar.gz` install updates in place; the Flatpak bundle mounts `/app` read-only and sends you to the download instead). When the app runs this computer's host, the confirmation lists the work the restart would stop, as the host's own update does. The settings choose the channel: Full releases only (`stable`) or Pre-releases too (`rc`); a build starts on its own kind's channel.
 - **Android**: the release's code also ships as a signed OTA package (`dev.eta.client-<build>.nshpkg`, `nsh publish`). The app downloads and verifies it, and runs it from its next start: the button then closes the app, and opening it again runs the new version. When the code needs a newer native shell (a newer nsh runtime than the installed APK's), there is no package for it and the app offers the release's APK instead, which the system installs. That only works over an APK signed with the same key, so the manifest lists the APK only when `ETA_ANDROID_KEYSTORE` is configured; without it, a new shell still means uninstalling and installing by hand. Android follows its build's own channel (nsh 0.7 checks for packages on the default source only).
 
 Where they look is fixed in each build: two releases that are never Latest and hold nothing but `latest.json` and `latest.json.sig`, `desktop-channel-stable` and `desktop-channel-rc` (`https://github.com/<repo>/releases/download/desktop-channel-<channel>/latest.json`, downloadable without a token as the repository is public). The archives, the package and the APK stay on the versioned `desktop-v*` release, which the manifest points at. The publish job writes the manifest from the published release (notes included) and puts it on `rc`, and for a full release on `stable` too; a channel only moves forward, so rerunning an older tag leaves it alone. Not GitHub Pages: two small files do not need a site and a deploy, and a release asset is replaced at once rather than after a CDN's cache.
@@ -140,11 +156,12 @@ Install the Native Shell release that CI pins (`v0.7.1`, or point `ETA_NSH` at t
 
 ```sh
 bun run client:package --target macos --out dist/macos
+bun run client:package --target linux --format flatpak --out dist/linux
 ```
 
-The path passed to `--out` is relative to `apps/client`. The macOS build is ad hoc signed. For public distribution, sign it with a Developer ID and notarize it.
+The path passed to `--out` is relative to `apps/client`. On Linux, `--format flatpak` also emits `flatpak/dev.eta.client.yml` and (when `flatpak` and `flatpak-builder` are installed) `Eta.flatpak` alongside `Eta.tar.gz`. The macOS build is ad hoc signed. For public distribution, sign it with a Developer ID and notarize it.
 
-Run the **Package Eta client** workflow to create downloadable CI artifacts for the web, the native desktop platforms, the iOS simulator and Android. For store builds, pass signing credentials to Native Shell when packaging, then use the corresponding upload command.
+Run the **Package Eta client** workflow to create downloadable CI artifacts for the web, the native desktop platforms (including the Linux Flatpak bundle), the iOS simulator and Android. For store builds, pass signing credentials to Native Shell when packaging, then use the corresponding upload command.
 
 ```sh
 bun run client:package --target ios --sign "Apple Distribution: Your Team" --profile /path/to/profile.mobileprovision

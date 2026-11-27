@@ -105,8 +105,9 @@ In the client, add a model service under Settings → Model services first (an A
 link for a Codex or Grok subscription, or a Google AI Studio key), then create agents and conversations.
 
 `bun run check` is `dprint check`, `bun run lint:repo` (root eslint) and
-`turbo run build typecheck lint test knip`. `bun run format` formats with dprint. CI and the pre-commit
-hook run the same set, through turbo's remote cache.
+`turbo run build typecheck lint test knip` (`bun run check:affected` scopes that to what changed).
+`bun run format` formats with dprint. CI runs the same verification suite through turbo's remote cache;
+the local `pre-commit` hook only formats staged files with `dprint`.
 
 ## Running from a checkout
 

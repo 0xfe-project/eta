@@ -45,6 +45,7 @@ import { Connection, WorkspaceSkeleton } from "./src/pages/connection";
 import { HostRestartScreen } from "./src/pages/connection/host-restart";
 import {
   canStartHost,
+  isDesktopPlatform,
   startLocalHost,
 } from "./src/pages/connection/local-host";
 import {
@@ -142,6 +143,10 @@ function App() {
         const address = JSON.parse(stored) as HostAddress;
         if (!address.local) {
           host.start(address);
+          return;
+        }
+        if (!canStartHost) {
+          forcedConnect.set(true);
           return;
         }
         startingLocal.set(true);
@@ -296,7 +301,7 @@ function App() {
                       </If>
                       <If
                         when={
-                          canStartHost &&
+                          isDesktopPlatform &&
                           host.hasConnected() &&
                           !dismissCompatibility() &&
                           desktopTooOld(applicationVersion)

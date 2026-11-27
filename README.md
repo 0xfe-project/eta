@@ -2,103 +2,81 @@
   <img src="public/Eta-Banner.png" alt="Eta" width="900" />
 </p>
 
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
+</p>
+
 <h2 align="center">
-  Who's holding the AI that knows you?
+  Command a fleet of coding agents. Ship across every machine.
 </h2>
 
 <p align="center">
-  <strong>100% transparent. 100% yours.</strong><br />
-  An open-source workbench for always-on agents that run on your machine, answer with your own model
-  accounts, and keep everything they know in one SQLite file you can open.
+  Put <strong>Claude Code</strong>, <strong>Codex</strong>, <strong>Antigravity</strong>, <strong>OpenCode</strong>, <strong>Pi</strong>, <strong>ACP</strong>, and native Eta agents in the same room — backed by a <code>git worktree</code> task board with dependency plans, an autonomous <strong>Captain</strong>, remote worker machines, and native apps across desktop, mobile, web, and terminal.
 </p>
 
 <p align="center">
-  <a href="#tldr">TL;DR</a> ·
-  <a href="#what-it-is">What it is</a> ·
-  <a href="#the-part-where-we-disagree">The part where we disagree</a> ·
+  <a href="#any-coding-agent-one-control-plane">Agents</a> ·
   <a href="#install">Install</a> ·
-  <a href="#documentation">Documentation</a> ·
-  <a href="#license">License</a>
+  <a href="#multi-agent-war-rooms">War Rooms</a> ·
+  <a href="#captain">Captain</a> ·
+  <a href="#task-board--dependency-plans">Task Plans</a> ·
+  <a href="#ship-across-every-machine">Machines</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#documentation">Docs</a>
 </p>
 
-## TL;DR
+---
 
-Grok Bot says every agent gets its own computer. True. That computer sits in xAI's datacenter.
+## Any Coding Agent, One Control Plane
 
-Muse gets your mail, your photos, your shopping. Today gets your calendar, your meetings, your work
-chat, and promises the memory is "readable, editable, erasable" — on their servers, on their word.
+Bring different coding agents into the **same group chat** so they can plan, code, review, and hand off work together — sharing one task board, visual artifacts, MCP tools, and approval gates:
 
-Grok Bot, Muse, Today: different logos, the same trade. They learn everything about you, and they keep
-it somewhere you will never be allowed to look.
+<p align="center">
+  <img
+    src="public/screenshot-war-room.png"
+    alt="Eta group chat with Claude Code, Codex, Antigravity, and OpenCode collaborating via @mentions alongside inline benchmark artifacts and live member status"
+    width="900"
+  />
+</p>
 
-**We don't think you have to accept the second half.**
+- **Built-in Eta agent** — works out of the box with any API key, subscription, or local model.
+- **Major coding CLIs (powered by OAR)** — **Claude Code**, **Codex**, **Antigravity**, **OpenCode**, **Pi**, **Grok Build**, and **Qwen Code**.
+- **Any [ACP](https://agentclientprotocol.com) agent** — plug in custom or community Agent Client Protocol agents on any machine.
 
-eta is the same product with the address changed. The thing that knows you lives on the machine under
-your desk. Read its source, watch what it does, swap the model, open the database, carry the whole
-thing to another machine with `cp -r`.
-
-> One process. One SQLite file. Zero required external services. 100% BYOK.
-
-## What it is
-
-A workbench where one person directs a crew of always-on agents: each one has a persona, a project it
-belongs to, its own tools and its own memory. You talk to them, hand them tasks, put things on a
-schedule — and when something needs your OK, they stop and wait for it. Long jobs survive the
-conversation that started them; wake-ups arrive only with what's new since the last time the agent
-looked.
-
-Nothing here is a black box, because there is no box:
-
-- **Every agent has its own computer — and it's yours.** Run the host on your laptop and the sessions
-  run there. Add a second machine and the sessions move: the daemon dials out to you, shows a
-  fingerprint, and waits for you to approve it.
-- **100% BYOK, not "supports BYOK".** Your ChatGPT, Grok and Gemini subscriptions by device code, any
-  OpenAI-compatible endpoint, and the private model in your own rack. A first-class citizen, not a
-  compatibility mode. Nothing is routed anywhere you didn't point it.
-- **Memory is a SQLite file.** One file, in the same data directory as everything else, queried per
-  conversation. Open it, grep it, fix a row, delete a row. Delete it and it's actually gone.
-- **You can see the work.** Every turn and every tool call — what it read, what it ran, what it
-  changed — lands on a timeline instead of a spinner. When an agent wakes up, it gets the increment,
-  not a rewrite of the whole story.
-- **Nothing to cancel.** No seat, no credits, no rate limit we invented. There is no account to be
-  banned from, because there is no account.
-- **The door has a lock that turns itself on.** Bind anything other than loopback and the token gate
-  comes up on its own. A file on disk, mode 0600, `Authorization: Bearer` for scripts.
-
-And it's all there to change. Prompts are files, personas are markdown cards, tools are plugins, the
-wire is documented frame by frame. If the runtime doesn't behave the way you need, it's not a feature
-request away — it's right there.
-
-## The part where we disagree
-
-**Grok Bot** Every agent gets its own computer — in their datacenter, on their dynamic router, which
-conveniently never tells you which model actually answered.
-
-**Muse** Ten million users in forty days, and the most popular thing to do with it is shopping. It's
-not a workbench, it's a storefront that remembers your address.
-
-**Today** "Memory you can read, edit and erase." Great. Ship me the file, then.
-
-**Claude Code** Useful? Yes. Yours? Not really.
-
-**Codex** The prompt, the state, the context and the storage move around while you're expected to
-smile and trust the dashboard.
-
-**OpenCode** If the runtime ignores your plan, that isn't autonomy, it's an argument you keep losing.
+---
 
 ## Install
 
-There are two ways to run eta. **We recommend installing the host** on a computer that stays on — a
-home server, a desktop, a small VPS. Your agents keep working while your laptop is closed, and you
-reach the same eta from any browser or your phone.
+Start by handing our agent runbook to your AI coding assistant, open a native desktop or mobile app, or deploy `eta-host` on an always-on machine so your agent fleet keeps shipping while your laptop is closed.
 
-### Recommended: install the host
+### Option 1 — Let Your AI Agent Install Eta (Fastest)
 
-eta is one file, `eta-host`. It serves the web app, keeps everything in `~/.eta`, and needs nothing
-else running. Builds for Linux x64, macOS (Apple silicon) and Windows x64 are on
-[Releases](https://github.com/0xfe-project/eta/releases/latest).
+Hand this prompt to **Claude Code**, **Codex**, **Antigravity**, **Cursor**, **OpenCode**, or any coding agent. It inspects your machine using [INSTALL.md](INSTALL.md), picks the best path, and handles macOS quarantine removal, Windows SmartScreen, Linux Flatpak vs. `.tar.gz`, always-on host + Web UI, and mobile setup automatically:
 
-On Linux:
+```text
+Read https://raw.githubusercontent.com/0xfe-project/eta/main/INSTALL.md and install Eta on this machine. Inspect my environment first, recommend the best path, handle any OS quirks, and verify it works.
+```
+
+### Option 2 — Native Apps (Desktop & Mobile — zero-terminal start)
+
+Download the app for your device from the `desktop-v*` releases on [GitHub Releases](https://github.com/0xfe-project/eta/releases) (published separately from `v*` host releases), launch it, and choose **Run on this computer** (manages the local host automatically) or **Connect to an existing host**.
+
+| Platform                      | Package                                                           | Notes                                                                                                                                                                                                 |
+| ----------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **macOS** (Apple Silicon)     | `eta-desktop-darwin-arm64.dmg`                                    | Drag `Eta.app` to Applications; run `xattr -dr com.apple.quarantine /Applications/Eta.app` before first launch (unsigned build)                                                                       |
+| **Windows** (x64)             | `eta-desktop-windows-x64.zip`                                     | Extract and launch `Eta.exe` (if SmartScreen prompts, click **More info → Run anyway**)                                                                                                               |
+| **Linux** (x64)               | `eta-desktop-linux-x64.tar.gz`<br>`eta-desktop-linux-x64.flatpak` | `.tar.gz` supports in-app updates and local host management; `.flatpak` works across distros via `flatpak install --user` (pair with OS/remote `eta-host`; update by reinstalling the new `.flatpak`) |
+| **Android** (8+, arm64/armv7) | `eta-android.apk`                                                 | Sideload APK; pair via host URL or QR code                                                                                                                                                            |
+| **iOS** (15+)                 | `eta-ios.ipa`                                                     | Sideload via AltStore / Sideloadly or re-sign with your team profile                                                                                                                                  |
+| **HarmonyOS**                 | `eta-harmonyos.hap`                                               | Sign with your developer certificate before installing on device                                                                                                                                      |
+
+Prefer a browser or terminal? Every host serves the full **Web UI** on port `:8787`, and the standalone terminal **TUI** (`eta`) gives you full control from the shell. Desktop (`.dmg`, `.zip`, `.tar.gz`) and Android apps also receive signed **in-app / OTA updates** under **Settings → Update**.
+
+### Option 3 — Always-On Host (24/7 fleets & multi-device access)
+
+`eta-host` is a single self-contained binary on [Latest Releases](https://github.com/0xfe-project/eta/releases/latest) that serves the Web UI, runs agent sessions, and stores everything in `~/.eta`.
+
+**Linux (systemd user service over Tailscale):**
 
 ```sh
 curl -LO https://github.com/0xfe-project/eta/releases/latest/download/eta-host-linux-x64
@@ -108,57 +86,160 @@ mv eta-host-linux-x64 ~/.local/share/eta/host/eta-host
 ~/.local/share/eta/host/eta-host install-service --host tailscale
 ```
 
-That starts eta now and at every login, listening on your tailnet; leave out `--host` to keep it on this
-machine only. On a headless box, `loginctl enable-linger` keeps it running without a login. Open
-`http://<this machine>:8787`. Anything other than localhost turns on a token by itself: the first visit
-is `http://<this machine>:8787/?token=<token>`, with the token from `~/.eta/access-token`.
+- Omit `--host tailscale` to listen on `127.0.0.1` only. On headless servers, run `loginctl enable-linger` so the user service stays active after logout.
+- Listening beyond localhost turns on an automatic token gate (`~/.eta/access-token`, mode `0600`). Open `http://<this-machine>:8787/?token=<token>` once in your browser or pair desktop and mobile clients from Settings.
+- Want a quick trial without installing a service? Run `./eta-host-linux-x64` directly in a terminal.
 
-On macOS, use `eta-host-darwin-arm64` the same way, and clear the download flag before the first run
-(`xattr -d com.apple.quarantine eta-host-darwin-arm64`): the build is not signed yet.
+**macOS & Windows:**
 
-On Windows, download `eta-host-windows-x64.exe` and run `eta-host-windows-x64.exe install-service` in an
-Administrator terminal. It runs as a Windows service under your account and asks for your password once,
-which it hands to Windows without storing it.
+```sh
+# macOS (Apple Silicon) — clear quarantine flag on unsigned binary
+curl -LO https://github.com/0xfe-project/eta/releases/latest/download/eta-host-darwin-arm64
+chmod +x eta-host-darwin-arm64
+xattr -d com.apple.quarantine eta-host-darwin-arm64
+./eta-host-darwin-arm64 install-service --host tailscale
+```
 
-To try it without installing anything, run the file directly (`./eta-host-linux-x64`): eta runs in that
-terminal until you stop it.
+On Windows, download `eta-host-windows-x64.exe` and run `eta-host-windows-x64.exe install-service` in an Administrator terminal to register a Windows service under your account (so agents inherit your `git`, `gh`, `claude`, and `codex` logins).
 
-### Experimental: the desktop app
+**Docker Compose:**
 
-Prefer to just open an app? Download the desktop installer for your system from
-[Releases](https://github.com/0xfe-project/eta/releases), open it, choose **Run on this computer**, and
-it sets everything up by itself.
+```sh
+docker compose -f deploy/compose.yaml up -d --build
+docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token
+```
 
-> The desktop app is experimental. eta runs only while the app is open and the computer is awake, and
-> other devices can't reach it. For an assistant that is always there, install the host on a server
-> instead — the app can connect to that host too (**Connect to an existing host**).
+### First 60 Seconds
 
-## First steps
+1. **Connect models or local agents:** Open **Settings → Model services** to sign in with ChatGPT/Codex or Grok via device code, or paste OpenAI / Anthropic / Gemini / custom API keys. Any locally installed **Claude Code**, **Codex**, **Antigravity**, **OpenCode**, **Pi**, or **ACP** agent is discovered automatically.
+2. **Assemble a specialist group:** Add distinct coding agents (`Claude Code`, `Codex`, `Antigravity`, `OpenCode`, or built-in Eta agents) with tailored instructions, models, and skills into a shared project group.
+3. **Dispatch worktree-isolated tasks:** `@mention` teammates in the war room or promote work onto the Task Board — each task checks out its own `git worktree` (`eta/task-<N>`), tracks live progress, and reports back for your review.
 
-Settings → Model services → Add a source: sign in with a ChatGPT or Grok subscription, or paste an API
-key. Then create an agent and start a conversation.
+---
+
+## Multi-Agent War Rooms
+
+Turn every repository into a shared war room where specialist agents collaborate alongside you on one timeline:
+
+- **One room, specialized teammates:** Mix `Claude Code`, `Codex`, `Antigravity`, `OpenCode`, or built-in Eta agents in the same project chat; `@mention` whoever you need or designate a default **Steward**, and let agents hand work off to each other naturally.
+- **Parallel work, mid-flight steering:** Run multiple agents side by side without waiting; jump in mid-turn to steer a running agent onto a better path or queue your next instruction.
+- **Decisions and deliverables in one place:** Confirm task proposals, follow live progress cards, and open interactive web previews right inside the conversation.
+
+---
+
+## Captain
+
+**Captain** is your autonomous fleet coordinator — watching every group, machine, and background run so nothing falls through the cracks:
+
+<p align="center">
+  <img
+    src="public/screenshot-captain.png"
+    alt="Eta Captain view showing fleet review observations, dispatched task #51, and a pending approval card for a scheduled routine"
+    width="900"
+  />
+</p>
+
+- **A supervisor watching your whole fleet:** Surfaces what finished, what stalled, and what needs your decision across every group and machine.
+- **Delegate outcomes, not busywork:** Tell Captain the goal; it breaks work down, dispatches tasks to the right specialist groups, and tracks them to completion.
+- **You stay in command:** Creating new agents, groups, or routines — and running sensitive tools — waits for your one-click approval.
+- **Scheduled Routines:** Put recurring engineering tasks (benchmarks, audits, digests, nightly checks) on a schedule and refine them simply by replying to their reports.
+
+---
+
+## Task Board & Dependency Plans
+
+Keep chat for alignment and move execution onto the **Task Board**, where every task runs in its own clean workspace:
+
+<p align="center">
+  <img
+    src="public/screenshot-tasks-dag.png"
+    alt="Eta Tasks Plan view displaying parent/subtask staging, dependency DAG edges, critical path, and multi-machine execution"
+    width="900"
+  />
+</p>
+
+- **Isolated `git worktree` per task:** Spin up parallel coding tasks in automatic worktrees (`eta/task-<N>`) without branch conflicts or dirtying your main checkout.
+- **Visual dependency plans:** Split big features into subtasks and chain dependencies so downstream steps start automatically when prerequisites hit review or finish — across **Plan** (DAG), **Board** (Kanban), and **List** views.
+- **Review with full memory intact:** Comment directly on a task in review to request tweaks; the agent continues in the same session without losing context.
+- **Full visibility on every run:** Follow live tool activity, file diffs, terminal output, and token rollups right on the task card.
+
+---
+
+## Ship Across Every Machine
+
+Scale from a laptop to Linux build servers, GPU workstations, and remote boxes with `eta-daemon`:
+
+- **Zero inbound ports:** Worker machines dial out to your host after one-time fingerprint approval — no firewall openings or SSH key shuffling required.
+- **Execute where the code and hardware live:** Worktrees, builds, and local CLIs run directly on the target machine while you manage every repo from one workspace. See [Self-hosting](docs/self-hosting.md#more-machines-the-daemon).
+- **Zero-touch worker upgrades:** Paired service daemons update automatically alongside your primary host.
+
+---
+
+## Every Screen, Always in Sync
+
+- **Native Desktop (`macOS`, `Windows`, `Linux`):** Embedded local host mode or connect to remote hosts, with signed in-app auto-updates on `.dmg`, `.zip`, and `.tar.gz` (Linux `.flatpak` pairs with a host-OS or remote `eta-host` and updates by reinstalling the new `.flatpak` bundle).
+- **Native Mobile (`Android`, `iOS`, `HarmonyOS`):** Monitor war rooms, review task deliverables, and approve actions on the go with QR code pairing — plus signed OTA updates on Android.
+- **Built-in Web UI (`:8787`):** Instant browser access served straight from `eta-host`.
+- **Terminal TUI (`eta`):** Fast, keyboard-first terminal interface for local or remote hosts.
+
+---
+
+## Architecture
+
+```text
+  Native Desktop · Mobile · Web UI (:8787) · Terminal TUI (eta)
+                               │
+                     Real-Time WebSocket + HTTP
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  eta-host (Single Binary + ~/.eta/eta.sqlite)                    │
+│                                                                  │
+│  War Rooms · Captain · Task DAGs · Routines · Artifacts · Inbox  │
+│  Models & Subscriptions · Plugins · Per-Agent MCP · Approvals    │
+└──────────────┬──────────────────────────────────┬────────────────┘
+               │ Outbound Worker Link             │ Optional
+               ▼                                  ▼
+   eta-daemon Worker Nodes                   Memory Sidecar
+   (Remote worktrees, local CLIs, MCP)       (Semantic memory)
+```
+
+---
+
+## Plugins, MCP & Visual Artifacts
+
+- **Plugins & integrations:** Add skills and tools from local folders, Git repositories, or the **Composio** marketplace, with encrypted secret storage.
+- **Per-agent MCP:** Configure MCP servers per agent with one-click OAuth sign-in that carries seamlessly to remote machines.
+- **Interactive Visual Artifacts:** Agents publish live HTML/React reports, dashboards, and prototypes you can safely preview in-app, download as a ZIP, or share via a revocable link.
+- **Human-in-the-loop approvals:** Gate sensitive tools and answer agent questions from desktop or phone whenever your judgment is needed.
+
+---
+
+## And Yes — 100% Self-Hosted & Yours
+
+- **One binary, one SQLite file:** Your entire state — agents, tasks, approvals, routine briefs, and encrypted credentials — lives in `~/.eta/eta.sqlite` beside plain JSONL transcripts. Move or back up everything with `$HOME/.eta`.
+- **100% BYOK, zero lock-in:** Use your own API keys, ChatGPT/Codex or Grok subscriptions, or private endpoints. No seats, no credits, no cloud black box.
+- **Full transparency:** Every turn, reasoning block, tool call, diff, and token count lives in your own database and timeline.
+
+---
 
 ## Updating
 
-Settings → Update, or `eta-host upgrade`. It verifies the download, waits for working agents, backs up
-the database to `~/.eta/backups`, restarts the service, and goes back to the old version on its own if
-the new one does not start. The machines you added follow on their next connect.
+Update from **Settings → Update** in the UI or via CLI:
 
-## More machines
+```sh
+eta-host upgrade
+```
 
-Sessions can run on other computers too. Settings → Machines → Add a machine gives you a command to run
-there; it shows a fingerprint, and the machine joins once you approve it. See
-[Self-hosting](docs/self-hosting.md#more-machines-the-daemon).
+`eta-host upgrade` verifies `SHA256SUMS`, waits for running tasks, backs up `~/.eta/eta.sqlite` to `~/.eta/backups`, restarts the service, and rolls back automatically if the new build fails to start. Connected `eta-daemon` workers update on reconnect; desktop (`.dmg`, `.zip`, `.tar.gz`) and Android clients update in place via **Settings → Update**, while the Linux `.flatpak` bundle notifies there and updates via `flatpak install --user`.
 
 ## Documentation
 
-- [Self-hosting](docs/self-hosting.md): flags, the token, reverse proxies, more machines, upgrades
-- [Development](docs/development.md): the layout, the tools (Bun, Node 24 via `.nvmrc`), working from a checkout, checks
-- [Release](docs/release.md): how versions are built and published, checksums
-- [Architecture](docs/architecture/overview.md): processes, the wire protocol, data, access control
+- [Install Guide (Agent-Executable)](INSTALL.md) — automated install runbook for AI agents across macOS, Windows, Linux, Docker, and mobile
+- [Self-hosting](docs/self-hosting.md) — flags, token gate, reverse proxies, `eta-daemon`, upgrades
+- [Architecture Overview](docs/architecture/overview.md) — processes, wire protocol, data model, plugins
+- [Development](docs/development.md) — repo layout, Bun/Node 24 setup, running from source, CI checks
+- [Release](docs/release.md) — release pipelines, checksums, OTA manifests, upgrade testing
 
 ## License
 
-eta is under the [MIT License](LICENSE). What it carries from others keeps its own terms: the Eta Sans
-font is not covered by the MIT License, and a compiled host embeds SearXNG, which is AGPL-3.0-or-later.
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Eta is licensed under the [MIT License](LICENSE). Bundled third-party components keep their own licenses — notably the Eta Sans / AKR DWG font is not covered by the MIT License, and compiled host binaries bundle SearXNG (`AGPL-3.0-or-later`). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

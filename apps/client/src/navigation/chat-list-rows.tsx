@@ -6,7 +6,7 @@ import { colors, focusRing, Label, row, RowChevron } from "../components";
 import { AgentFace } from "../components/agent-face";
 import { touchScreen } from "../components/menu";
 import { StatusDot } from "../components/status-dot";
-import { avatar, control, space } from "../components/tokens";
+import { avatar, space } from "../components/tokens";
 import { relativeTime, useHost } from "../services/host";
 import { RailEntry } from "./rail-controls";
 
@@ -95,7 +95,8 @@ export function GroupRow(props: {
         <Label
           variant="caption"
           tone="muted"
-          style={{ width: control.md, textAlign: "right", flexShrink: 0 }}
+          lines={1}
+          style={{ textAlign: "right", flexShrink: 0 }}
         >
           {time()}
         </Label>

@@ -30,6 +30,10 @@ jobs:
           - target: linux
             runner: ubuntu-latest
             file: Eta.tar.gz
+          - target: linux
+            runner: ubuntu-latest
+            file: Eta.flatpak
+            format: flatpak
           - target: windows
             runner: windows-latest
             file: Eta.zip
@@ -65,20 +69,102 @@ jobs:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile --ignore-scripts
       - uses: ./.github/actions/setup-nsh
+      - name: Install Flatpak toolchain
+        if: matrix.target == 'linux' && matrix.format == 'flatpak'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder xvfb dbus
+      - name: Cache Flatpak GNOME 49 runtime
+        if: matrix.target == 'linux' && matrix.format == 'flatpak'
+        id: flatpak-runtime
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/flatpak
+          key: flatpak-gnome-49-x86_64-v1
+      - name: Set up Flathub remote and GNOME 49 runtime
+        if: matrix.target == 'linux' && matrix.format == 'flatpak'
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          if [[ "${{ steps.flatpak-runtime.outputs.cache-hit }}" != "true" ]]; then
+            flatpak install --user --noninteractive -y flathub org.gnome.Platform//49 org.gnome.Sdk//49
+          fi
       - run: bun run --cwd apps/client client:check
       - run: |
           args=(--target "$ETA_CLIENT_TARGET" --app-version "$ETA_CLIENT_VERSION"
                 --build "$ETA_CLIENT_BUILD" --out "$RUNNER_TEMP/eta-client")
           if [[ -n "$ETA_CLIENT_FORMAT" ]]; then args+=(--format "$ETA_CLIENT_FORMAT"); fi
           bun run client:package "${args[@]}"
+      - name: Verify Linux Flatpak bundle
+        if: matrix.target == 'linux' && matrix.format == 'flatpak'
+        run: |
+          out="$RUNNER_TEMP/eta-client"
+          test -x "$out/Eta/nsh/eta-bootstrap"
+          test -f "$out/Eta.tar.gz"
+          test -f "$out/Eta.flatpak"
+          cleanup_flatpak() {
+            flatpak uninstall --user --noninteractive -y dev.eta.client >/dev/null 2>&1 || true
+            flatpak remote-delete --user --force client-origin >/dev/null 2>&1 || true
+            rm -rf "$HOME/.var/app/dev.eta.client"
+          }
+          trap cleanup_flatpak EXIT
+          flatpak install --user --noninteractive -y "$out/Eta.flatpak"
+          flatpak info dev.eta.client
+          flatpak info --show-permissions dev.eta.client
+          flatpak run --command=sh dev.eta.client -c '
+            set -eu
+            test -n "${FLATPAK_ID:-}"
+            test -f /.flatpak-info
+            test -x /app/lib/dev.eta.client/Eta
+            test -x /app/lib/dev.eta.client/nsh/eta-bootstrap
+            test -f /app/lib/dev.eta.client/nsh/bundle.nshc
+            test -f /app/lib/dev.eta.client/nsh/app.json
+            test -L /app/bin/Eta
+            test -f /app/share/applications/dev.eta.client.desktop
+            test -f /app/share/metainfo/dev.eta.client.metainfo.xml
+            test -f /app/share/icons/hicolor/256x256/apps/dev.eta.client.png
+            for bin in /app/lib/dev.eta.client/Eta /app/lib/dev.eta.client/nsh/eta-bootstrap; do
+              echo "=== ldd $bin ==="
+              ldd_out=$(ldd "$bin")
+              printf "%s\n" "$ldd_out"
+              if printf "%s\n" "$ldd_out" | grep -F "not found"; then
+                echo "Missing shared libraries for $bin" >&2
+                exit 1
+              fi
+            done
+          '
+          launch_log="$RUNNER_TEMP/flatpak-launch.log"
+          set +e
+          xvfb-run -a -s "-screen 0 1280x800x24" \
+            dbus-run-session -- \
+            timeout --signal=TERM --kill-after=5s 8s \
+            flatpak run \
+              --env=GSK_RENDERER=cairo \
+              --env=LIBGL_ALWAYS_SOFTWARE=1 \
+              dev.eta.client >"$launch_log" 2>&1
+          rc=$?
+          set -e
+          echo "=== Flatpak launch log (exit=$rc) ==="
+          cat "$launch_log" || true
+          if [[ "$rc" -ne 124 ]]; then
+            echo "::error::Flatpak app exited early with status $rc (expected timeout status 124 while running cleanly)."
+            exit 1
+          fi
+          cleanup_flatpak
+          trap - EXIT
+          changed=$(git status --porcelain)
+          if [[ -n $changed ]]; then
+            echo "::error::The checkout changed during the build:"
+            echo "$changed"
+            exit 1
+          fi
       - uses: actions/upload-artifact@v7
         with:
-          name: eta-client-${{ matrix.target }}${{ matrix.format && '-aab' || '' }}
+          name: eta-client-${{ matrix.target }}${{ matrix.format && format('-{0}', matrix.format) || '' }}
           if-no-files-found: error
           path: ${{ runner.temp }}/eta-client/${{ matrix.file }}
 
       - uses: actions/upload-artifact@v7
-        if: vars.ETA_CLIENT_UPDATE_URL != '' && contains(fromJSON('["macos","windows","linux"]'), matrix.target)
+        if: vars.ETA_CLIENT_UPDATE_URL != '' && !matrix.format && contains(fromJSON('["macos","windows","linux"]'), matrix.target)
         with:
           name: eta-client-update-${{ matrix.target }}
           if-no-files-found: error

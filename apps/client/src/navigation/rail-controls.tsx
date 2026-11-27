@@ -1,4 +1,4 @@
-import type { JSX, Point, ViewRef } from "nsh";
+import type { JSX, Point, ViewRef, ViewStyle } from "nsh";
 import type { IconName } from "../components/icons";
 import { View } from "nsh";
 import { colors, focusRing, Icon, Label } from "../components";
@@ -17,9 +17,11 @@ export function RailButton(props: {
   size?: number;
   width?: number;
   iconSize?: number;
+  iconTestID?: string;
   selected?: boolean;
   expanded?: boolean;
   count?: number;
+  style?: ViewStyle;
   attach?: (node: ViewRef | null) => void;
   onPress: () => void;
 }) {
@@ -45,6 +47,7 @@ export function RailButton(props: {
         flexShrink: 0,
         backgroundColor: props.selected ? c().selected : "transparent",
         cursor: "pointer",
+        ...props.style,
       }}
     >
       <View
@@ -54,7 +57,11 @@ export function RailButton(props: {
           position: "relative",
         }}
       >
-        <Icon name={props.icon} size={props.iconSize ?? icon.md} />
+        <Icon
+          name={props.icon}
+          size={props.iconSize ?? icon.md}
+          testID={props.iconTestID}
+        />
         <If when={(props.count ?? 0) > 0}>
           <View
             style={{

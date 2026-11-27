@@ -186,6 +186,28 @@ jobs:
 
       - uses: ./.github/actions/setup-nsh
 
+      - name: Install Flatpak toolchain
+        if: matrix.target == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder xvfb dbus
+
+      - name: Cache Flatpak GNOME 49 runtime
+        if: matrix.target == 'linux'
+        id: flatpak-runtime
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/flatpak
+          key: flatpak-gnome-49-x86_64-v1
+
+      - name: Set up Flathub remote and GNOME 49 runtime
+        if: matrix.target == 'linux'
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          if [[ "${{ steps.flatpak-runtime.outputs.cache-hit }}" != "true" ]]; then
+            flatpak install --user --noninteractive -y flathub org.gnome.Platform//49 org.gnome.Sdk//49
+          fi
+
       # A release key when the repository has one; nsh's debug key otherwise, which the notes say.
       - name: Android signing
         if: matrix.target == 'android'
@@ -317,6 +339,9 @@ jobs:
               export CARGO_INCREMENTAL=0
               args+=(--runtime-os openharmony --build "$ETA_CLIENT_BUILD")
               ;;
+            linux)
+              args+=(--format flatpak)
+              ;;
           esac
           bun run client:package "${args[@]}"
           case "$ETA_DESKTOP_TARGET" in
@@ -340,7 +365,60 @@ jobs:
               ;;
             linux)
               test -x "$out/Eta/nsh/eta-bootstrap"
+              test -f "$out/Eta.tar.gz"
+              test -f "$out/Eta.flatpak"
+              cleanup_flatpak() {
+                flatpak uninstall --user --noninteractive -y dev.eta.client >/dev/null 2>&1 || true
+                flatpak remote-delete --user --force client-origin >/dev/null 2>&1 || true
+                rm -rf "$HOME/.var/app/dev.eta.client"
+              }
+              trap cleanup_flatpak EXIT
+              flatpak install --user --noninteractive -y "$out/Eta.flatpak"
+              flatpak info dev.eta.client
+              flatpak info --show-permissions dev.eta.client
+              flatpak run --command=sh dev.eta.client -c '
+                set -eu
+                test -n "${FLATPAK_ID:-}"
+                test -f /.flatpak-info
+                test -x /app/lib/dev.eta.client/Eta
+                test -x /app/lib/dev.eta.client/nsh/eta-bootstrap
+                test -f /app/lib/dev.eta.client/nsh/bundle.nshc
+                test -f /app/lib/dev.eta.client/nsh/app.json
+                test -L /app/bin/Eta
+                test -f /app/share/applications/dev.eta.client.desktop
+                test -f /app/share/metainfo/dev.eta.client.metainfo.xml
+                test -f /app/share/icons/hicolor/256x256/apps/dev.eta.client.png
+                for bin in /app/lib/dev.eta.client/Eta /app/lib/dev.eta.client/nsh/eta-bootstrap; do
+                  echo "=== ldd $bin ==="
+                  ldd_out=$(ldd "$bin")
+                  printf "%s\n" "$ldd_out"
+                  if printf "%s\n" "$ldd_out" | grep -F "not found"; then
+                    echo "Missing shared libraries for $bin" >&2
+                    exit 1
+                  fi
+                done
+              '
+              launch_log="$RUNNER_TEMP/flatpak-launch.log"
+              set +e
+              xvfb-run -a -s "-screen 0 1280x800x24" \
+                dbus-run-session -- \
+                timeout --signal=TERM --kill-after=5s 8s \
+                flatpak run \
+                  --env=GSK_RENDERER=cairo \
+                  --env=LIBGL_ALWAYS_SOFTWARE=1 \
+                  dev.eta.client >"$launch_log" 2>&1
+              rc=$?
+              set -e
+              echo "=== Flatpak launch log (exit=$rc) ==="
+              cat "$launch_log" || true
+              if [[ "$rc" -ne 124 ]]; then
+                echo "::error::Flatpak app exited early with status $rc (expected timeout status 124 while running cleanly)."
+                exit 1
+              fi
+              cleanup_flatpak
+              trap - EXIT
               cp "$out/Eta.tar.gz" "$RUNNER_TEMP/try/$DESKTOP"
+              cp "$out/Eta.flatpak" "$RUNNER_TEMP/try/eta-desktop-linux-x64.flatpak"
               ;;
             windows)
               test -f "$out/Eta/eta-bootstrap.exe"
@@ -401,8 +479,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$TAG" "$RUNNER_TEMP/try/$DESKTOP" --clobber
           shopt -s nullglob
+          test -f "$RUNNER_TEMP/try/$DESKTOP"
+          assets=("$RUNNER_TEMP/try"/*)
+          gh release upload "$TAG" "${assets[@]}" --clobber
           # The desktops' update archives (Eta-<version>-<os>-<arch>.*) and Android's OTA package.
           updates=("$RUNNER_TEMP/eta-desktop"/Eta-"$ETA_DESKTOP_VERSION"-* "$RUNNER_TEMP/eta-desktop"/*.nshpkg)
           if [[ -n $ETA_CLIENT_UPDATE_URL && ${#updates[@]} -gt 0 ]]; then
