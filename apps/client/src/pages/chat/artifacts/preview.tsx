@@ -21,6 +21,7 @@ import {
   Button,
   colors,
   DetailSkeleton,
+  fill,
   grow,
   Label,
   Modal,
@@ -71,21 +72,27 @@ export function ArtifactPreview(props: {
    * How the version shows:
    * - `frame` (the browser): an `html` page around a sandboxed iframe; Export PDF asks the frame
    *   to print itself (`eta:print`).
-   * - `direct` (macOS, Windows, Linux): the web view navigates to the `/preview/` page itself, as a
-   *   browser tab would. The host's `Content-Security-Policy: sandbox` keeps it in an opaque
-   *   origin all the same. Export PDF runs `print()` in the page: the system's print dialog.
-   * - `render` (the phones): the app fetches the page and renders it in its own document, which
-   *   also rasterizes it for Export PDF.
+   * - `direct` (macOS, Windows, Linux, iOS, Android): the web view navigates to the `/preview/`
+   *   page itself, as a browser tab would. The host's `Content-Security-Policy: sandbox` keeps it
+   *   in an opaque origin all the same.
+   * - `render` (HarmonyOS): the app fetches the page and renders it in its own document.
+   *
+   * Export PDF: the desktops run `print()` in the page (the system's print dialog). The phones'
+   * web views print nothing, so there the app's own renderer (`ArtifactPdfPreview`) rasterizes the
+   * page: always mounted in `render`, and in `direct` only while an export runs, under the page.
    */
   const mode: "frame" | "direct" | "render" =
     platform.os === "web"
       ? "frame"
-      : platform.os === "macos" ||
-          platform.os === "windows" ||
-          platform.os === "linux"
-        ? "direct"
-        : "render";
-  const printsInFrame = mode !== "render";
+      : platform.name === "harmonyos"
+        ? "render"
+        : "direct";
+  const printsInPage =
+    mode === "direct" &&
+    (platform.os === "macos" ||
+      platform.os === "windows" ||
+      platform.os === "linux");
+  const rendersOnDemand = mode === "direct" && !printsInPage;
   const version = signal(
     props.initialVersion ?? props.artifact.versions[0]?.number,
   );
@@ -117,6 +124,49 @@ export function ArtifactPreview(props: {
   let exportController: AbortController | undefined;
   let exportProgress: ProgressHandle | undefined;
   let frame: WebViewRef | undefined;
+  /** The renderer is mounted for an export (`rendersOnDemand`). */
+  const rendering = signal(false);
+  let rendererWaiting:
+    | {
+        resolve: (capture: CaptureArtifactPdf) => void;
+        reject: (error: Error) => void;
+      }
+    | undefined;
+  function captureReady(capture?: CaptureArtifactPdf) {
+    pdfCapture.set(capture);
+    if (capture) rendererWaiting?.resolve(capture);
+  }
+  function rendererFailed(message: string) {
+    if (rendererWaiting) rendererWaiting.reject(new Error(message));
+    else problem.set(message);
+  }
+  /** The renderer's capture, mounting it first where it renders only for an export. */
+  async function openCapture(abort: AbortSignal) {
+    const ready = pdfCapture();
+    if (ready || !rendersOnDemand) return ready;
+    return new Promise<CaptureArtifactPdf>((resolve, reject) => {
+      function cancel() {
+        settle();
+        reject(new Error(uiText("cancel")));
+      }
+      function settle() {
+        rendererWaiting = undefined;
+        abort.removeEventListener("abort", cancel);
+      }
+      rendererWaiting = {
+        resolve(capture) {
+          settle();
+          resolve(capture);
+        },
+        reject(error) {
+          settle();
+          reject(error);
+        },
+      };
+      abort.addEventListener("abort", cancel, { once: true });
+      rendering.set(true);
+    });
+  }
   cleanup(() => {
     exportController?.abort();
     exportProgress?.dismiss();
@@ -223,13 +273,17 @@ export function ArtifactPreview(props: {
       frame?.postMessage("eta:print");
       return;
     }
-    if (mode === "direct") {
+    if (printsInPage) {
       frame?.injectJavaScript("print()");
       return;
     }
-    const capture = pdfCapture();
     const number = version();
-    if (!capture || number === undefined || exportController) return;
+    if (
+      (!pdfCapture() && !rendersOnDemand) ||
+      number === undefined ||
+      exportController
+    )
+      return;
     const controller = new AbortController();
     exportController = controller;
     exportingPdf.set(true);
@@ -243,6 +297,8 @@ export function ArtifactPreview(props: {
     });
     exportProgress = progress;
     try {
+      const capture = await openCapture(controller.signal);
+      if (!capture) throw new Error(uiText("artifactPdfRenderError"));
       const bytes = await capture(controller.signal);
       if (controller.signal.aborted) {
         progress.dismiss();
@@ -290,6 +346,7 @@ export function ArtifactPreview(props: {
       }
     } finally {
       exportingPdf.set(false);
+      if (rendersOnDemand) rendering.set(false);
       if (exportController === controller) exportController = undefined;
       if (exportProgress === progress) exportProgress = undefined;
     }
@@ -433,7 +490,7 @@ export function ArtifactPreview(props: {
         sharing={busy()}
         exportDisabled={
           !url() ||
-          (!printsInFrame && !pdfCapture()) ||
+          (mode === "render" && !pdfCapture()) ||
           exportingPdf() ||
           downloading()
         }
@@ -530,19 +587,34 @@ export function ArtifactPreview(props: {
               mode === "render" ? (
                 <ArtifactPdfPreview
                   url={link()}
-                  onCapture={pdfCapture.set}
-                  onError={problem.set}
+                  onCapture={captureReady}
+                  onError={rendererFailed}
                 />
               ) : mode === "direct" ? (
-                <WebView
-                  src={link().href}
-                  incognito
-                  style={grow}
-                  ref={(node) => {
-                    frame = node;
-                  }}
-                  onError={(error) => problem.set(error)}
-                />
+                <View style={grow}>
+                  {/* The renderer lays the page out at its own width, so it can sit under the
+                      page the user sees, for as long as an export needs it. */}
+                  <If when={rendering()}>
+                    <View style={fill}>
+                      <ArtifactPdfPreview
+                        url={link()}
+                        onCapture={captureReady}
+                        onError={rendererFailed}
+                      />
+                    </View>
+                  </If>
+                  <View style={fill}>
+                    <WebView
+                      src={link().href}
+                      incognito
+                      style={grow}
+                      ref={(node) => {
+                        frame = node;
+                      }}
+                      onError={(error) => problem.set(error)}
+                    />
+                  </View>
+                </View>
               ) : (
                 <WebView
                   html={previewDocument(link())}
