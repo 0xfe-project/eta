@@ -15,23 +15,33 @@
 </p>
 
 <p align="center">
+  <a href="#一个控制台统管所有编码-agent">多运行时</a> ·
   <a href="#快速安装">快速安装</a> ·
   <a href="#多-agent-协同作战室">作战室</a> ·
   <a href="#captain-舰队总控">Captain</a> ·
   <a href="#任务看板与依赖编排">任务编排</a> ·
-  <a href="#一个控制台统管所有编码-agent">多运行时</a> ·
   <a href="#跨机器分布式执行">多机扩展</a> ·
   <a href="#架构总览">架构</a> ·
   <a href="#相关文档">文档</a>
 </p>
 
+---
+
+## 一个控制台，统管所有编码 Agent
+
+把不同的编码 Agent 拉进**同一个群聊**，让它们一起讨论方案、写代码、做审查与接力交付 —— 共享同一套任务看板、可视化产物、MCP 工具与审批门禁：
+
 <p align="center">
   <img
     src="public/screenshot-war-room.png"
-    alt="Eta 多 Agent 协同作战室：展示项目群组、@提及协作、任务卡 #42、内联产物卡片与右侧实时成员面板"
+    alt="Eta 群聊页面：展示 Claude Code、Codex、Antigravity 与 OpenCode 在同一个项目群里通过 @提及 实时协作，以及内联产物卡片与成员状态面板"
     width="900"
   />
 </p>
+
+- **内置 Eta Agent** —— 接上任意 API Key、订阅账号或私有端点即可开箱使用。
+- **主流编码 CLI（由 OAR 统一驱动）** —— **Claude Code**、**Codex**、**Antigravity**、**OpenCode**、**Pi**、**Grok Build** 与 **Qwen Code**。
+- **任意 [ACP](https://agentclientprotocol.com) Agent** —— 在任意机器上按需接入自定义或社区的 Agent Client Protocol 兼容 Agent。
 
 ---
 
@@ -94,7 +104,7 @@ docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token
 ### 上手前 60 秒
 
 1. **接入模型或本地 Agent：** 打开 **Settings → Model services**，使用设备码登录 ChatGPT/Codex 或 Grok 订阅，或填写 OpenAI / Anthropic / Gemini / 任意自定义端点 API Key；本机已安装的 **Claude Code**、**Codex**、**Antigravity**、**OpenCode**、**Pi** 和 **ACP** Agent 会自动识别。
-2. **组建专职小队：** 按职责创建不同角色的 Agent（例如 `Architect`、`Executor`、`Reviewer`），各自配置指令、模型与技能，再把它们拉入同一个项目群组。
+2. **组建多 Agent 项目群：** 把不同专长的编码 Agent（例如 `Claude Code`、`Codex`、`Antigravity`、`OpenCode` 或内置 Eta Agent）拉进同一个项目群组，各自配置指令、模型与技能。
 3. **派发 Worktree 隔离任务：** 在作战室 `@` 点名协同，或将工作送上任务看板 —— 每个任务都会签出独立的 `git worktree`（`eta/task-<N>`），实时上报进度并在完成后交付验收。
 
 ---
@@ -103,7 +113,7 @@ docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token
 
 把每个代码仓库都变成多人协同的工程作战室，让专职 Agent 与你在同一条时间线上自然配合：
 
-- **一室多角，分工协同：** 把架构师、执行者和审查者放进同一个项目群聊；用 `@` 点名指定成员，或设置默认 **Steward** 统一接管，Agent 之间也能主动互相交接任务。
+- **一室多角，分工协同：** 把 `Claude Code`、`Codex`、`Antigravity`、`OpenCode` 与内置 Eta Agent 放进同一个项目群聊；用 `@` 点名指定成员，或设置默认 **Steward** 统一接管，Agent 之间也能主动互相交接任务。
 - **并行推进，随时纠偏：** 多个 Agent 可以同时开工互不等待；运行途中随时插话引导方向，或先把下一条指令排进队列。
 - **决策与产出同屏直达：** 在对话流里直接确认任务草案、追踪实时任务卡进度，并一键打开 Agent 交付的交互式网页预览。
 
@@ -144,16 +154,6 @@ docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token
 - **可视化依赖编排：** 将复杂需求拆成子任务并连线设定前置依赖；上游任务进入验收或完成后自动放行下游 —— **Plan**（DAG 依赖图）、**Board**（看板）与 **List** 视图随时切换。
 - **带着完整上下文继续返工：** 验收任务时直接在任务下留言提出修改意见，Agent 会沿着同一份记忆无缝接着改，无需从头再来。
 - **执行全程透明可见：** 在任务卡片里直接查看工具执行记录、文件 Diff、终端输出与 Token 用量统计。
-
----
-
-## 一个控制台，统管所有编码 Agent
-
-在同一个群组里自由混编你顺手的运行时 —— 所有 Agent 共用同一套任务看板、可视化产物、MCP 工具与审批门禁：
-
-- **内置 Eta Agent** —— 接上任意 API Key、订阅账号或私有端点即可开箱使用。
-- **主流编码 CLI（由 OAR 统一驱动）** —— **Claude Code**、**Codex**、**Antigravity**、**OpenCode**、**Pi**、**Grok Build** 与 **Qwen Code**。
-- **任意 [ACP](https://agentclientprotocol.com) Agent** —— 在任意机器上按需接入自定义或社区的 Agent Client Protocol 兼容 Agent。
 
 ---
 
@@ -222,7 +222,7 @@ docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token
 eta-host upgrade
 ```
 
-`eta-host upgrade` 会自动校验 `SHA256SUMS`、等待正在执行的任务平滑收尾、将 `~/.eta/eta.sqlite` 备份至 `~/.eta/backups`、重启服务，并在新版本未能正常启动时自动回滚；已连接的 `eta-daemon` 节点会在重连时同步更新，桌面端与 Android 客户端同样可在 **Settings → Update** 完成升级。
+`eta-host upgrade` 会自动校验 `SHA256SUMS`、等待正在执行的任务平滑收尾、将 `~/.eta/eta.sqlite` 备份至 `~/.eta/backups`、重启服务，并在新版本未能正常启动时自动回滚；已连接的 `eta-daemon` 节点会在重连时同步更新。桌面端与 Android 客户端同样可在 **Settings → Update** 完成升级。
 
 ## 相关文档
 

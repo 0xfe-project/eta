@@ -15,23 +15,33 @@
 </p>
 
 <p align="center">
+  <a href="#any-coding-agent-one-control-plane">Agents</a> ·
   <a href="#install">Install</a> ·
   <a href="#multi-agent-war-rooms">War Rooms</a> ·
   <a href="#captain">Captain</a> ·
   <a href="#task-board--dependency-plans">Task Plans</a> ·
-  <a href="#any-coding-agent-one-control-plane">Agents</a> ·
   <a href="#ship-across-every-machine">Machines</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#documentation">Docs</a>
 </p>
 
+---
+
+## Any Coding Agent, One Control Plane
+
+Bring different coding agents into the **same group chat** so they can plan, code, review, and hand off work together — sharing one task board, visual artifacts, MCP tools, and approval gates:
+
 <p align="center">
   <img
     src="public/screenshot-war-room.png"
-    alt="Eta Multi-Agent War Room showing project groups, @mention collaboration, task card #42, inline benchmark artifact, and live member panel"
+    alt="Eta group chat with Claude Code, Codex, Antigravity, and OpenCode collaborating via @mentions alongside inline benchmark artifacts and live member status"
     width="900"
   />
 </p>
+
+- **Built-in Eta agent** — works out of the box with any API key, subscription, or local model.
+- **Major coding CLIs (powered by OAR)** — **Claude Code**, **Codex**, **Antigravity**, **OpenCode**, **Pi**, **Grok Build**, and **Qwen Code**.
+- **Any [ACP](https://agentclientprotocol.com) agent** — plug in custom or community Agent Client Protocol agents on any machine.
 
 ---
 
@@ -94,7 +104,7 @@ docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token
 ### First 60 Seconds
 
 1. **Connect models or local agents:** Open **Settings → Model services** to sign in with ChatGPT/Codex or Grok via device code, or paste OpenAI / Anthropic / Gemini / custom API keys. Any locally installed **Claude Code**, **Codex**, **Antigravity**, **OpenCode**, **Pi**, or **ACP** agent is discovered automatically.
-2. **Assemble a specialist group:** Create agents for distinct roles (`Architect`, `Executor`, `Reviewer`), give each its own instructions, model, and skills, and bring them into a project group.
+2. **Assemble a specialist group:** Add distinct coding agents (`Claude Code`, `Codex`, `Antigravity`, `OpenCode`, or built-in Eta agents) with tailored instructions, models, and skills into a shared project group.
 3. **Dispatch worktree-isolated tasks:** `@mention` teammates in the war room or promote work onto the Task Board — each task checks out its own `git worktree` (`eta/task-<N>`), tracks live progress, and reports back for your review.
 
 ---
@@ -103,7 +113,7 @@ docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token
 
 Turn every repository into a shared war room where specialist agents collaborate alongside you on one timeline:
 
-- **One room, specialized teammates:** Drop an Architect, Executor, and Reviewer into the same project chat; `@mention` whoever you need or designate a default **Steward**, and let agents hand work off to each other naturally.
+- **One room, specialized teammates:** Mix `Claude Code`, `Codex`, `Antigravity`, `OpenCode`, or built-in Eta agents in the same project chat; `@mention` whoever you need or designate a default **Steward**, and let agents hand work off to each other naturally.
 - **Parallel work, mid-flight steering:** Run multiple agents side by side without waiting; jump in mid-turn to steer a running agent onto a better path or queue your next instruction.
 - **Decisions and deliverables in one place:** Confirm task proposals, follow live progress cards, and open interactive web previews right inside the conversation.
 
@@ -144,16 +154,6 @@ Keep chat for alignment and move execution onto the **Task Board**, where every 
 - **Visual dependency plans:** Split big features into subtasks and chain dependencies so downstream steps start automatically when prerequisites hit review or finish — across **Plan** (DAG), **Board** (Kanban), and **List** views.
 - **Review with full memory intact:** Comment directly on a task in review to request tweaks; the agent continues in the same session without losing context.
 - **Full visibility on every run:** Follow live tool activity, file diffs, terminal output, and token rollups right on the task card.
-
----
-
-## Any Coding Agent, One Control Plane
-
-Mix your favorite runtimes inside the same group — every agent shares the same task board, visual artifacts, MCP tools, and approval gates:
-
-- **Built-in Eta agent** — works out of the box with any API key, subscription, or local model.
-- **Major coding CLIs (powered by OAR)** — **Claude Code**, **Codex**, **Antigravity**, **OpenCode**, **Pi**, **Grok Build**, and **Qwen Code**.
-- **Any [ACP](https://agentclientprotocol.com) agent** — plug in custom or community Agent Client Protocol agents on any machine.
 
 ---
 
