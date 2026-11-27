@@ -1,6 +1,6 @@
-# Everything pre-commit checks (bun run check:affected), for every pull request and
-# every push to main: squash merges, `--no-verify` and bots skip the hook. A release
-# runs it over the whole repository (release.yml).
+# Full verification (`bun run check:affected`), for every pull request and every
+# push to main; the local `pre-commit` hook only formats staged files with dprint.
+# A release runs it over the whole repository (release.yml).
 #
 # The check runs as four parts on runners of their own, because the TUI's and the
 # host's tests each take minutes and slow each other down on one 2-core runner. Together
@@ -108,9 +108,8 @@ jobs:
         if: ${{ steps.plan.outputs.run && (matrix.part == 'static' || matrix.part == 'rest') }}
         uses: ./.github/actions/setup-nsh
 
-      # Turborepo's Remote Cache (turbo.json's remoteCache), which development
-      # machines fill as they commit: a short-lived token for the Vercel team,
-      # through its OIDC policy for this repository.
+      # Turborepo's Remote Cache (turbo.json's remoteCache): a short-lived token
+      # for the Vercel team, through its OIDC policy for this repository.
       - name: Turborepo Remote Cache
         if: steps.plan.outputs.run
         uses: vercel/setup-turborepo-remote-cache-action@v1.1.0
