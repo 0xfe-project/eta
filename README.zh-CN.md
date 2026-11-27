@@ -11,16 +11,16 @@
 </h2>
 
 <p align="center">
-  在一个统一的多 Agent 协同作战室中调度 <strong>Claude Code</strong>、<strong>Codex</strong>、<strong>Antigravity</strong>、<strong>OpenCode</strong>、<strong>Pi</strong>、<strong>ACP</strong> 与 Eta 原生 Agent —— 配备基于 <code>git worktree</code> 与依赖 DAG 的任务看板、<strong>Captain</strong> 自治舰队总控、跨机器分布式执行以及全端原生客户端。
+  把 <strong>Claude Code</strong>、<strong>Codex</strong>、<strong>Antigravity</strong>、<strong>OpenCode</strong>、<strong>Pi</strong>、<strong>ACP</strong> 和原生 Eta Agent 拉进同一个协同作战室 —— 配备基于 <code>git worktree</code> 与依赖编排的任务看板、<strong>Captain</strong> 自治舰队总控、跨机器分布式执行，以及覆盖桌面、移动、Web 与终端的全端体验。
 </p>
 
 <p align="center">
   <a href="#快速安装">快速安装</a> ·
   <a href="#多-agent-协同作战室">作战室</a> ·
-  <a href="#captain自治舰队总控">Captain</a> ·
-  <a href="#任务看板git-worktree-隔离与依赖-dag">任务 DAG</a> ·
-  <a href="#多运行时控制平面">多运行时</a> ·
-  <a href="#多机舰队">多机扩展</a> ·
+  <a href="#captain-舰队总控">Captain</a> ·
+  <a href="#任务看板与依赖编排">任务编排</a> ·
+  <a href="#一个控制台统管所有编码-agent">多运行时</a> ·
+  <a href="#跨机器分布式执行">多机扩展</a> ·
   <a href="#架构总览">架构</a> ·
   <a href="#相关文档">文档</a>
 </p>
@@ -28,7 +28,7 @@
 <p align="center">
   <img
     src="public/screenshot-war-room.png"
-    alt="Eta 多 Agent 协同作战室：展示左侧项目群组、中间 @提及 协同与任务卡 #42、内联产物卡片及右侧上下文面板"
+    alt="Eta 多 Agent 协同作战室：展示项目群组、@提及协作、任务卡 #42、内联产物卡片与右侧实时成员面板"
     width="900"
   />
 </p>
@@ -41,7 +41,7 @@
 
 ### 方式一：原生客户端（桌面端 & 移动端，零终端即开即用）
 
-前往 [GitHub Releases](https://github.com/0xfe-project/eta/releases) 下载对应平台的安装包，打开后直接选择 **Run on this computer**（自动拉起并托管本机宿主）或 **Connect to an existing host**（连接已有宿主）。
+前往 [GitHub Releases](https://github.com/0xfe-project/eta/releases) 下载对应平台的安装包，打开后直接选择 **Run on this computer**（自动托管本地宿主）或 **Connect to an existing host**（连接已有宿主）。
 
 | 平台                          | 安装包                         | 说明                                                                                                       |
 | ----------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
@@ -52,11 +52,11 @@
 | **iOS** (15+)                 | `eta-ios.ipa`                  | 可通过 AltStore / Sideloadly 或自签证书安装                                                                |
 | **HarmonyOS**                 | `eta-harmonyos.hap`            | 安装至真机前请先使用个人开发者证书签名                                                                     |
 
-习惯浏览器或终端？所有 `eta-host` 均自带完整的 **Web UI**（默认端口 `:8787`），终端 **TUI**（`eta`）也通过同一条 `/ws` 管道连接；桌面端与 Android 客户端均支持在 **Settings → Update** 中接收带签名的 **应用内 / OTA 热更新**。
+习惯浏览器或终端？所有 `eta-host` 均自带完整的 **Web UI**（默认端口 `:8787`），独立的终端 **TUI**（`eta`）也让你在命令行中顺滑操控。桌面端与 Android 客户端还可在 **Settings → Update** 直接接收带签名的 **应用内 / OTA 热更新**。
 
 ### 方式二：常驻宿主（7×24 小时舰队与多设备协同）
 
-`eta-host` 是发布在 [Latest Releases](https://github.com/0xfe-project/eta/releases/latest) 的单文件可执行程序，集成了 Web 界面、本地会话引擎与子网关，全部状态保存在 `~/.eta`。
+`eta-host` 是发布在 [Latest Releases](https://github.com/0xfe-project/eta/releases/latest) 的单文件可执行程序，集成了 Web 界面与完整编排能力，全部数据保存在 `~/.eta`。
 
 **Linux（通过 Tailscale 部署 systemd 用户服务）：**
 
@@ -69,7 +69,7 @@ mv eta-host-linux-x64 ~/.local/share/eta/host/eta-host
 ```
 
 - 去掉 `--host tailscale` 则仅监听 `127.0.0.1`；无头服务器请执行 `loginctl enable-linger`，确保退出 SSH 后用户服务继续常驻。
-- 只要监听非回环地址，系统会自动开启 Bearer Token 门禁（密钥存于 `~/.eta/access-token`，权限 `0600`）。浏览器首次访问 `http://<this-machine>:8787/?token=<token>` 即可写入凭证，也可在设置中生成配对码连接手机或桌面客户端。
+- 监听非回环地址会自动开启 Bearer Token 门禁（密钥存于 `~/.eta/access-token`，权限 `0600`）。浏览器首次访问 `http://<this-machine>:8787/?token=<token>` 即可写入凭证，也可在设置中扫码配对桌面与手机端。
 - 想先免安装体验？直接在终端运行 `./eta-host-linux-x64` 即可。
 
 **macOS 与 Windows：**
@@ -93,139 +93,124 @@ docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token
 
 ### 上手前 60 秒
 
-1. **接入模型或本地运行时：** 在 **Settings → Model services** 通过设备码登录 ChatGPT/Codex 或 Grok 订阅，或填入 OpenAI / Anthropic / Gemini / 任意 OpenAI 兼容端点 API Key；本机已安装的 **Claude Code**、**Codex**、**Antigravity**、**OpenCode**、**Pi** 以及 **ACP** Agent（`~/.eta/acp.json`）会自动识别。
-2. **组建专职 Agent 小队：** 创建不同职责的 Agent（例如 `Architect`、`Executor`、`Reviewer`），分别指定运行时、模型、推理强度与插件，再将它们拉入同一个项目群组。
-3. **派发 Worktree 隔离任务：** 在作战室 `@` 点名协作，或将任务送上看板 —— 每个任务都会自动签出独立的 `git worktree`（`eta/task-<N>`），实时上报进度与 Token 消耗并在完成后交付验收。
+1. **接入模型或本地 Agent：** 打开 **Settings → Model services**，使用设备码登录 ChatGPT/Codex 或 Grok 订阅，或填写 OpenAI / Anthropic / Gemini / 任意自定义端点 API Key；本机已安装的 **Claude Code**、**Codex**、**Antigravity**、**OpenCode**、**Pi** 和 **ACP** Agent 会自动识别。
+2. **组建专职小队：** 按职责创建不同角色的 Agent（例如 `Architect`、`Executor`、`Reviewer`），各自配置指令、模型与技能，再把它们拉入同一个项目群组。
+3. **派发 Worktree 隔离任务：** 在作战室 `@` 点名协同，或将工作送上任务看板 —— 每个任务都会签出独立的 `git worktree`（`eta/task-<N>`），实时上报进度并在完成后交付验收。
 
 ---
 
 ## 多 Agent 协同作战室
 
-Eta 中的每个群组都是绑定项目工作目录的工程作战室，多位专职 Agent 在同一条有序时间线上与你实时配合：
+把每个代码仓库都变成多人协同的工程作战室，让专职 Agent 与你在同一条时间线上自然配合：
 
-- **`@mention` 精准点名与 Steward 接管：** `@Executor` 只会唤醒对应成员；未点名任何人的消息将自动路由给群组的 **Steward**（单成员群组则直接唤醒该成员）。Agent 之间也可通过 `mention` 工具异步交接上下文，发起方无需阻塞等待。
-- **防死循环唤醒预算：** 单条用户消息触发的 Agent 间连续唤醒链路受 **5 次唤醒预算**（`WAKE_BUDGET = 5`）约束，既保证自主接力协作，又彻底杜绝失控互相刷屏；你再次发言即刻重置计数。
-- **单会话串行，多 Agent 并行：** 每个 `(agent × conversation)` 拥有独立的持久化会话。不同 Agent 与不同群组之间完全并发运行，同时保证同一会话内严格串行 —— 并支持在生成过程中实时 **`steer`（中途插话纠偏）** 或 **`queue`（排队投递）**。
-- **增量水位线简报：** 每次唤醒仅推送该成员 `last_seq` 水位线之后的增量对话记录，避免无意义的全量重放。
-- **内联任务卡与产物预览：** 任务草案（`task_draft`）、实时任务卡（`task_card`）、工具步骤折叠窗以及 Agent 发布的交互式静态站点产物都会内联呈现在对应的消息回合中。
+- **一室多角，分工协同：** 把架构师、执行者和审查者放进同一个项目群聊；用 `@` 点名指定成员，或设置默认 **Steward** 统一接管，Agent 之间也能主动互相交接任务。
+- **并行推进，随时纠偏：** 多个 Agent 可以同时开工互不等待；运行途中随时插话引导方向，或先把下一条指令排进队列。
+- **决策与产出同屏直达：** 在对话流里直接确认任务草案、追踪实时任务卡进度，并一键打开 Agent 交付的交互式网页预览。
 
 ---
 
-## Captain：自治舰队总控
+## Captain 舰队总控
 
-**Captain** 是 Eta 内置的全局舰队总控官，拥有专属总控台、巡检队列与跨群组视野：
-
-- **巡检审查闭环：** 自动捕获阻塞任务、失败运行、离线守护节点与已收敛分配，在时间线生成结构化的 `<captain-review>` 审查卡片，问题不再无声沉没。
-- **跨群组任务调度：** Captain 通过 `dispatch_task` 向各项目的专职 Agent 派发与拆分任务（自身不抢占执行权），持续跟踪分配轮次与子树进度。
-- **审批门禁与收件箱：** 涉及新建 Agent、新建群组或新建定时例程（`create_agent`、`create_group`、`create_routine`）的提案及高危工具请求，会进入 **Pending Approvals** 与 **Inbox** 等待你的明确授权。
-- **定时例程（Routines）：** 支持按天、按周、按小时或 5 段式 `cron` 表达式周期性运行任务；Brief 变更自动保留历史版本，停机期间错过的触发不会雪崩式补跑，你对报告的反馈还能驱动下一次 Brief 自动修订。
+**Captain** 是你的自治舰队总管，帮你盯紧所有项目群组、远程机器与后台任务，不遗漏任何状态变化：
 
 <p align="center">
   <img
     src="public/screenshot-captain.png"
-    alt="Eta Captain 视图：展示巡检异常汇总卡片、跨机器任务派发 #51 以及定时例程待审批提案"
+    alt="Eta Captain 视图：展示舰队巡检汇总、任务 #51 派发卡片以及定时例程待审批提案"
     width="900"
   />
 </p>
 
+- **全局巡检，一眼掌握进度：** 自动汇总各个群组与机器上刚完成的交付、卡住的工作以及需要你拍板的事项。
+- **只管定目标，细节交给 Captain：** 说明你要的结果，Captain 会自行拆解任务、分发给合适的专职小队并全程跟进直到完成。
+- **关键变更始终由你批准：** 新建 Agent、群组或定时例程，以及执行高敏工具操作，都会先呈上清晰的审批卡片等你一键确认。
+- **定时例程（Routines）：** 把基准测试、每日巡检、变更摘要等周期性工程事务交给定时任务自动执行；看到报告后直接回复点评，就能让例程按你的要求不断迭代改进。
+
 ---
 
-## 任务看板、`git worktree` 隔离与依赖 DAG
+## 任务看板与依赖编排
 
-群聊负责对齐方案与决策，落地执行交给**任务看板** —— 每个任务都在独立会话与隔离工作区中推进：
+群聊用于快速对齐方案，正式实现则交给**任务看板** —— 每个任务都在独立隔离的工作区里干净推进：
 
 <p align="center">
   <img
     src="public/screenshot-tasks-dag.png"
-    alt="Eta 任务 Plan 视图：展示父子任务编排、依赖 DAG 曲线、关键路径与跨机器协同状态"
+    alt="Eta 任务 Plan 视图：展示父子任务拆解、依赖 DAG 曲线、关键路径与跨机器协同执行"
     width="900"
   />
 </p>
 
-- **自动 `git worktree` 隔离：** Git 项目下的任务默认采用 `workspace: worktree` 模式，在 `~/.eta/worktrees/<project-id>/task-<N>`（或对应远程节点）自动拉起分支 `eta/task-<N>`。多任务并行改动互不踩踏，主工作区始终保持干净。
-- **父子拆解与依赖 DAG：** 执行器可在运行中通过 `create_subtask` 拆分子任务并声明 `dependsOn` 依赖。前置任务未进入 `in_review`（或要求 `requireDone` 时未达 `done`）前，下游任务会自动等待，并在 **Plan** DAG 视图、**Board** 拖拽看板与 **List** 视图间实时同步。
-- **每机并发槽位与评论续跑：** 每台机器通过 `maxActiveRuns` 控制并发上限；当你在 `in_review` 或 `blocked` 任务下发表评论时，系统会在**同一任务会话**中排队拉起**续跑（continuation run）**，完整保留上下文记忆。
-- **全过程可观测与 Token 汇总：** 在任务详情页即可查看工具调用、代码 Diff、终端退出码、单次运行 Token 消耗及父子任务汇总。
+- **每个任务自带独立 `git worktree`：** 并行开发多个任务时各自拥有独立分支与工作目录（`eta/task-<N>`），绝不踩踏主工作区，也不会互相冲突。
+- **可视化依赖编排：** 将复杂需求拆成子任务并连线设定前置依赖；上游任务进入验收或完成后自动放行下游 —— **Plan**（DAG 依赖图）、**Board**（看板）与 **List** 视图随时切换。
+- **带着完整上下文继续返工：** 验收任务时直接在任务下留言提出修改意见，Agent 会沿着同一份记忆无缝接着改，无需从头再来。
+- **执行全程透明可见：** 在任务卡片里直接查看工具执行记录、文件 Diff、终端输出与 Token 用量统计。
 
 ---
 
-## 多运行时控制平面
+## 一个控制台，统管所有编码 Agent
 
-在同一个群组中自由混编最适合各自角色的编码运行时 —— Eta 统一接管工具中间件、审批策略、MCP 桥接与运行记录：
+在同一个群组里自由混编你顺手的运行时 —— 所有 Agent 共用同一套任务看板、可视化产物、MCP 工具与审批门禁：
 
-| 运行时                                     | 接入方式                                | 核心能力                                                                                                                        |
-| ------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| **原生 `eta`**                             | 内置内核（`eta-core`、`eta-harness`）   | 原生流式输出、上下文压缩、ESM 工具沙箱、实时 tok/s 速率、支持本机与跨机执行                                                     |
-| **Claude Code**                            | `@eta/runtime-oar`（`claude`）          | 原生 `--plugin-dir` 技能挂载、MCP 自动注入、会话恢复与用量统计                                                                  |
-| **Codex**                                  | `@eta/runtime-oar`（`codex`）           | 支持 ChatGPT/Codex 设备码登录或 API Key、技能注入与 MCP 桥接                                                                    |
-| **Antigravity**                            | `@eta/runtime-oar`（`antigravity`）     | 完整 OAR 会话编排与宿主 MCP 工具透传                                                                                            |
-| **OpenCode / Pi / Grok Build / Qwen Code** | `@eta/runtime-oar`                      | 自动发现本机已安装 CLI 运行时，统一标准化流式输出与用量记录                                                                     |
-| **ACP v1 Agent**                           | `@eta/runtime-acp`（`~/.eta/acp.json`） | 按机器接入任意基于 stdio 的 [Agent Client Protocol](https://agentclientprotocol.com) v1 Agent，支持 `session/resume` 与宿主 MCP |
-
-所有外部运行时均通过本地 HTTP MCP 服务（`eta`）接入 Eta 宿主工具（`mention`、`draft_task`、`create_subtask`、`publish_artifact`、`get_plugin_config` 等），支持工具列表热更新（`tools/list_changed`）与统一审批拦截。
+- **内置 Eta Agent** —— 接上任意 API Key、订阅账号或私有端点即可开箱使用。
+- **主流编码 CLI（由 OAR 统一驱动）** —— **Claude Code**、**Codex**、**Antigravity**、**OpenCode**、**Pi**、**Grok Build** 与 **Qwen Code**。
+- **任意 [ACP](https://agentclientprotocol.com) Agent** —— 在任意机器上按需接入自定义或社区的 Agent Client Protocol 兼容 Agent。
 
 ---
 
-## 多机舰队
+## 跨机器分布式执行
 
-通过轻量的 `eta-daemon` 单文件守护进程，将工作负载无缝扩展到构建机、GPU 工作站与远程 Linux 主机：
+通过轻量的 `eta-daemon`，把算力从随身笔记本平滑扩展到 Linux 构建机、GPU 工作站与远程服务器：
 
-- **主动外拨零入站端口：** 节点通过 WebSocket 主动外拨至主节点 `/machines/connect`，无需在工作机暴露公网端口或维护复杂的 SSH 密钥分发。
-- **一次性安装码 + 指纹核验：** 在 **Settings → Machines → Add a machine** 生成 24 小时有效的一次性安装码，在工作机运行 `eta-daemon setup <host-url> <install-code>` 并在控制台核对密钥指纹后批准上线。
-- **远程 Worktree、MCP 与插件同步：** 会话、本地 CLI 与 `~/.eta/acp.json` 直接运行在工作机本地；模型调用、MCP OAuth 凭证与插件文件则由主节点按哈希增量同步并统一代理。
-- **主节点统一分发升级：** 主节点内建多平台 daemon 产物，已配对并注册为服务的远程节点会在重连时自动跟随升级（`eta-daemon install-service`）。详见 [自托管指南](docs/self-hosting.md#more-machines-the-daemon)。
+- **无需开放入站端口：** 工作节点通过一次性密钥指纹核验后主动外拨连回主节点，免去防火墙开端口与 SSH 密钥分发的麻烦。
+- **在代码与硬件所在地直接运行：** Worktree 签出、编译测试和本机 CLI 都在目标机器原地执行，你只需在一个界面统管全部仓库。详见 [自托管指南](docs/self-hosting.md#more-machines-the-daemon)。
+- **远程节点免维护升级：** 配对注册为服务的守护节点会随主节点自动保持版本同步。
 
 ---
 
-## 全端原生客户端 + Web + TUI + OTA
+## 全端原生体验，随时随地指挥
 
-所有终端共享同一套 `/ws` 管道协议（`@eta/client-wire-proto`），没有多套接口漂移：
-
-- **原生桌面端（`macOS`、`Windows`、`Linux`）：** 基于 Native Shell 构建（`apps/client`），同时支持**本机托管模式**与**连接远程宿主**，并支持签名校验的应用内自动更新。
-- **原生移动端（`Android`、`iOS`、`HarmonyOS`）：** 随身查看作战室、任务看板与 Inbox 审批，支持扫码配对宿主；Android 端支持签名 OTA 热更新。
-- **内建 Web UI（`:8787`）：** 由 `eta-host` 直接提供静态站点服务，开箱即用。
-- **终端 TUI（`eta`）：** 基于 React + Ink 的全屏终端界面（`apps/tui`），支持临时宿主、连接常驻宿主及 `/install-service` 平滑移交。
+- **原生桌面端（`macOS`、`Windows`、`Linux`）：** 支持本机托管或连接远程宿主，提供签名校验的应用内自动更新。
+- **原生移动端（`Android`、`iOS`、`HarmonyOS`）：** 支持扫码配对，随时在手机上跟进作战室、验收任务与审批操作；Android 端支持签名 OTA 热更新。
+- **内置 Web UI（`:8787`）：** 由 `eta-host` 直接提供，打开浏览器即可使用。
+- **终端 TUI（`eta`）：** 为键盘流准备的极速终端界面，本地与远程宿主同样流畅。
 
 ---
 
 ## 架构总览
 
 ```text
-  桌面端原生应用 · 移动端原生应用 · Web UI (:8787) · 终端 TUI (eta)
-                               │
-        统一 WebSocket (/ws 管道)  +  HTTP (/up, /preview, /share)
-                               ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│  eta-host (apps/eta — 单 Bun 进程 + ~/.eta/eta.sqlite)               │
-│                                                                      │
-│  • 服务端底座 (packages/eta-server)：Target 注册表、增量状态推送、WS  │
-│  • 产品插件：agents, conversations, tasks, captain, routines,        │
-│    artifacts, inbox, machines, plugins, usage                        │
-│  • 模型网关 (CLIProxyAPI 子进程) 与网页搜索 (托管 SearXNG 子进程)    │
-│  • 本地运行时：原生 eta + OAR (Claude/Codex/…) + ACP stdio          │
-└──────────────────┬──────────────────────────────────┬────────────────┘
-                   │ WSS /machines/connect            │ HTTP（可选）
-                   ▼                                  ▼
-      eta-daemon 远程工作节点                  Memory Sidecar (apps/memory)
-      （远程 worktree、本地 CLI、MCP）         （Python + pgvector，按需启用）
+  原生桌面端 · 移动端 · Web UI (:8787) · 终端 TUI (eta)
+                           │
+                  实时 WebSocket + HTTP
+                           ▼
+┌───────────────────────────────────────────────────────────┐
+│  eta-host（单文件宿主 + ~/.eta/eta.sqlite）               │
+│                                                           │
+│  作战室 · Captain · 任务 DAG · 例程 · 产物 · 收件箱       │
+│  模型与订阅 · 插件市场 · 每 Agent 独立 MCP · 审批门禁     │
+└──────────────┬───────────────────────────────┬────────────┘
+               │ 工作节点安全连接              │ 可选
+               ▼                               ▼
+     eta-daemon 远程节点                  Memory Sidecar
+     （远程 worktree、本地 CLI、MCP）      （语义记忆增强）
 ```
 
 ---
 
-## 插件、每 Agent 独立 MCP、沙箱产物与审批门禁
+## 插件、MCP 与交互式产物
 
-- **Agent Plugins 1.0.0 生态：** 支持加载本地插件目录（`~/.eta/plugins/`）、锁定提交哈希的 Git 插件（`{ repo, rev, path }`）以及 **Composio** 连接器市场。插件密钥通过 AES-256-GCM `seal` 加密持久化，注入 `PLUGIN_ROOT`/`PLUGIN_DATA`，读取留痕审计，并由 `redactionMiddleware` 在写入模型上下文与日志前自动脱敏。
-- **每 Agent 独立 MCP 与集中 OAuth：** 自动合并插件、`~/.eta/mcp.json` 与项目 `.mcp.json`，支持惰性建连与按需暴露直连工具；远程 HTTP MCP 的 OAuth 2.0 PKCE 授权集中在主节点完成，刷新的 Token 自动安全中继至远程工作节点。
-- **沙箱化交互产物（Artifacts）：** Agent 可调用 `publish_artifact` 发布交互式 HTML/CSS/JS/React 报告、基准看板或 SPA。所有预览均运行在无 `allow-same-origin` 的隔离 iframe 中（一小时有效签名预览路径 `/preview/...`），并支持多版本管理、公开分享链接（`/share/...`）与 ZIP 打包下载。
-- **自动锁门与工具审批：** 监听非回环地址即自动启用 `0600` Token 门禁；高敏工具通过工具审批清单与 `akhook` 声明式规则在 **Inbox** 拦截确认后再执行。
+- **插件与连接器生态：** 支持从本地目录、Git 仓库或 **Composio** 市场一键接入技能与工具，敏感配置全程加密保存。
+- **按 Agent 独立配置 MCP：** 为不同角色分配专属 MCP 工具，远程服务的 OAuth 登录态集中托管，跨机器工作也无需重复授权。
+- **可交互可视化产物（Artifacts）：** Agent 可以直接发布交互式 HTML/React 报告、性能看板与原型页面，支持应用内安全预览、ZIP 打包下载以及可随时撤销的公开分享链接。
+- **关键节点由你把关：** 对敏感工具启用审批门禁，无论在电脑前还是手机上，都能随时回答 Agent 的提问或放行操作。
 
 ---
 
 ## 而且，完全自托管、100% 属于你
 
-- **一个二进制，一个 SQLite 文件：** 所有 Agent 配置、任务图谱、审批记录与加密凭证都保存在 `~/.eta/eta.sqlite`，会话日志以纯文本 JSONL 存放在同级目录；复制 `$HOME/.eta` 即可完成整套迁移或备份，无需额外数据库。
-- **100% BYOK，无任何账号锁定：** 直接使用你自己的 API Key、ChatGPT/Codex 或 Grok 订阅，或指向私有集群端点；没有席位费、没有积分抽水、没有云端黑盒。
-- **全程白盒可观测：** 每一次推理过程、工具入参、文件 Diff、Token 消耗与密钥读取审计都落在你自己的数据库与时间线里。
+- **一个二进制，一个 SQLite 文件：** 全部 Agent、任务、审批、例程与加密凭证都存在 `~/.eta/eta.sqlite`，会话记录以可读文本保存；复制 `$HOME/.eta` 即可整套备份或迁移。
+- **100% BYOK，无任何锁定：** 自带 API Key、ChatGPT/Codex 或 Grok 订阅，或者指向私有集群端点；没有席位费、没有积分抽水、没有云端黑盒。
+- **全过程透明：** 每一步思考、每一次工具调用、文件改动与 Token 消耗都完整保留在你自己的数据库与时间线里。
 
 ---
 
@@ -237,7 +222,7 @@ Eta 中的每个群组都是绑定项目工作目录的工程作战室，多位�
 eta-host upgrade
 ```
 
-升级流程会自动校验 `SHA256SUMS`、等待在途 Agent 回合平滑排空、将 `~/.eta/eta.sqlite` 备份至 `~/.eta/backups`、重启服务，并在新版本未能通过 `/up` 健康检查时自动回滚；已连接的 `eta-daemon` 节点会在重连时同步更新。桌面端与 Android 客户端同样可在 **Settings → Update** 通过签名渠道完成更新。
+`eta-host upgrade` 会自动校验 `SHA256SUMS`、等待正在执行的任务平滑收尾、将 `~/.eta/eta.sqlite` 备份至 `~/.eta/backups`、重启服务，并在新版本未能正常启动时自动回滚；已连接的 `eta-daemon` 节点会在重连时同步更新，桌面端与 Android 客户端同样可在 **Settings → Update** 完成升级。
 
 ## 相关文档
 

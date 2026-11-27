@@ -11,16 +11,16 @@
 </h2>
 
 <p align="center">
-  Orchestrate multi-agent war rooms combining <strong>Claude Code</strong>, <strong>Codex</strong>, <strong>Antigravity</strong>, <strong>OpenCode</strong>, <strong>Pi</strong>, <strong>ACP</strong>, and native Eta agents — backed by a <code>git worktree</code> task board with dependency DAGs, autonomous <strong>Captain</strong> coordination, multi-machine execution, and native apps across every screen.
+  Put <strong>Claude Code</strong>, <strong>Codex</strong>, <strong>Antigravity</strong>, <strong>OpenCode</strong>, <strong>Pi</strong>, <strong>ACP</strong>, and native Eta agents in the same room — backed by a <code>git worktree</code> task board with dependency plans, an autonomous <strong>Captain</strong>, remote worker machines, and native apps across desktop, mobile, web, and terminal.
 </p>
 
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="#multi-agent-war-rooms">War Rooms</a> ·
-  <a href="#captain-autonomous-fleet-coordinator">Captain</a> ·
-  <a href="#task-board-git-worktrees--dependency-dags">Task DAGs</a> ·
-  <a href="#multi-runtime-control-plane">Runtimes</a> ·
-  <a href="#multi-machine-fleet">Machines</a> ·
+  <a href="#captain">Captain</a> ·
+  <a href="#task-board--dependency-plans">Task Plans</a> ·
+  <a href="#any-coding-agent-one-control-plane">Agents</a> ·
+  <a href="#ship-across-every-machine">Machines</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#documentation">Docs</a>
 </p>
@@ -28,7 +28,7 @@
 <p align="center">
   <img
     src="public/screenshot-war-room.png"
-    alt="Eta Multi-Agent War Room showing sidebar groups, @mention handoffs, task card #42, inline benchmark artifact, and live member telemetry"
+    alt="Eta Multi-Agent War Room showing project groups, @mention collaboration, task card #42, inline benchmark artifact, and live member panel"
     width="900"
   />
 </p>
@@ -41,22 +41,22 @@ Start with a native desktop or mobile app in seconds, or deploy `eta-host` on an
 
 ### Option 1 — Native Apps (Desktop & Mobile — zero-terminal start)
 
-Download the app for your device from [GitHub Releases](https://github.com/0xfe-project/eta/releases), launch it, and choose **Run on this computer** (bundles and manages the local host automatically) or **Connect to an existing host**.
+Download the app for your device from [GitHub Releases](https://github.com/0xfe-project/eta/releases), launch it, and choose **Run on this computer** (manages the local host automatically) or **Connect to an existing host**.
 
 | Platform                      | Package                        | Notes                                                                                                                 |
 | ----------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | **macOS** (Apple Silicon)     | `eta-desktop-darwin-arm64.dmg` | Drag to Applications; run `xattr -dr com.apple.quarantine /Applications/eta.app` before first launch (unsigned build) |
 | **Windows** (x64)             | `eta-desktop-windows-x64.zip`  | Extract and launch `Eta.exe`                                                                                          |
 | **Linux** (x64)               | `eta-desktop-linux-x64.tar.gz` | Extract app bundle and launch                                                                                         |
-| **Android** (8+, arm64/armv7) | `eta-android.apk`              | Sideload APK; connects via URL or QR code pairing                                                                     |
+| **Android** (8+, arm64/armv7) | `eta-android.apk`              | Sideload APK; pair via host URL or QR code                                                                            |
 | **iOS** (15+)                 | `eta-ios.ipa`                  | Sideload via AltStore / Sideloadly or re-sign with your team profile                                                  |
 | **HarmonyOS**                 | `eta-harmonyos.hap`            | Sign with your developer certificate before installing on device                                                      |
 
-Prefer a browser or terminal? Every host serves the full **Web UI** on port `:8787`, and the standalone terminal **TUI** (`eta`) connects over the same `/ws` pipe. Desktop and Android clients also receive signed **in-app / OTA updates** directly under **Settings → Update**.
+Prefer a browser or terminal? Every host serves the full **Web UI** on port `:8787`, and the standalone terminal **TUI** (`eta`) gives you full control from the shell. Desktop and Android apps also receive signed **in-app / OTA updates** under **Settings → Update**.
 
 ### Option 2 — Always-On Host (24/7 fleets & multi-device access)
 
-`eta-host` is a single self-contained binary on [Latest Releases](https://github.com/0xfe-project/eta/releases/latest) that serves the Web UI, runs local sessions, manages child gateways, and stores all state in `~/.eta`.
+`eta-host` is a single self-contained binary on [Latest Releases](https://github.com/0xfe-project/eta/releases/latest) that serves the Web UI, runs agent sessions, and stores everything in `~/.eta`.
 
 **Linux (systemd user service over Tailscale):**
 
@@ -68,8 +68,8 @@ mv eta-host-linux-x64 ~/.local/share/eta/host/eta-host
 ~/.local/share/eta/host/eta-host install-service --host tailscale
 ```
 
-- Omit `--host tailscale` to bind `127.0.0.1` only. On headless servers, run `loginctl enable-linger` so the user service stays active after logout.
-- Binding any non-loopback address enables an automatic bearer token gate (`~/.eta/access-token`, mode `0600`). Open `http://<this-machine>:8787/?token=<token>` once in your browser or pair mobile/desktop clients from Settings.
+- Omit `--host tailscale` to listen on `127.0.0.1` only. On headless servers, run `loginctl enable-linger` so the user service stays active after logout.
+- Listening beyond localhost turns on an automatic token gate (`~/.eta/access-token`, mode `0600`). Open `http://<this-machine>:8787/?token=<token>` once in your browser or pair desktop and mobile clients from Settings.
 - Want a quick trial without installing a service? Run `./eta-host-linux-x64` directly in a terminal.
 
 **macOS & Windows:**
@@ -82,7 +82,7 @@ xattr -d com.apple.quarantine eta-host-darwin-arm64
 ./eta-host-darwin-arm64 install-service --host tailscale
 ```
 
-On Windows, download `eta-host-windows-x64.exe` and run `eta-host-windows-x64.exe install-service` in an Administrator terminal to register a native Windows service under your user account (so agents inherit your local `git`, `gh`, `claude`, and `codex` logins).
+On Windows, download `eta-host-windows-x64.exe` and run `eta-host-windows-x64.exe install-service` in an Administrator terminal to register a Windows service under your account (so agents inherit your `git`, `gh`, `claude`, and `codex` logins).
 
 **Docker Compose:**
 
@@ -93,46 +93,44 @@ docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token
 
 ### First 60 Seconds
 
-1. **Connect models or runtimes:** Open **Settings → Model services** to sign in with ChatGPT/Codex or Grok via device code, or paste OpenAI / Anthropic / Gemini / OpenAI-compatible API keys. Locally installed **Claude Code**, **Codex**, **Antigravity**, **OpenCode**, **Pi**, and **ACP** agents (`~/.eta/acp.json`) are discovered automatically.
-2. **Assemble a specialist group:** Create agents for distinct roles (`Architect`, `Executor`, `Reviewer`), assign each its runtime, model, thinking level, and plugins, and invite them into a project group.
-3. **Dispatch worktree-isolated tasks:** Mention agents in the war room or promote work onto the Task Board — each task checks out its own `git worktree` (`eta/task-<N>`), tracks live tokens and progress, and reports back for your review.
+1. **Connect models or local agents:** Open **Settings → Model services** to sign in with ChatGPT/Codex or Grok via device code, or paste OpenAI / Anthropic / Gemini / custom API keys. Any locally installed **Claude Code**, **Codex**, **Antigravity**, **OpenCode**, **Pi**, or **ACP** agent is discovered automatically.
+2. **Assemble a specialist group:** Create agents for distinct roles (`Architect`, `Executor`, `Reviewer`), give each its own instructions, model, and skills, and bring them into a project group.
+3. **Dispatch worktree-isolated tasks:** `@mention` teammates in the war room or promote work onto the Task Board — each task checks out its own `git worktree` (`eta/task-<N>`), tracks live progress, and reports back for your review.
 
 ---
 
 ## Multi-Agent War Rooms
 
-Conversations in Eta are project-scoped engineering war rooms where specialist agents collaborate alongside you on a single ordered timeline:
+Turn every repository into a shared war room where specialist agents collaborate alongside you on one timeline:
 
-- **`@mention` routing & Steward handoffs:** Addressing `@Executor` wakes only `Executor`; messages without mentions route to the group's **Steward** (or to the sole member in 1-on-1 groups). Agents hand work to each other asynchronously using `mention`, without blocking their own turn.
-- **Anti-loop wake budgets:** Automated agent-to-agent mention chains from a single user message are capped by a **5-wake budget** (`WAKE_BUDGET = 5`), preventing runaway ping-pong loops while resetting as soon as you reply.
-- **Serial per session, parallel across agents:** Each `(agent × conversation)` pair maintains its own persistent session. Multiple agents work concurrently across conversations or within the same group while each session stays strictly serialized — with **live `steer`** (inject course corrections mid-turn) and **`queue`** delivery.
-- **Incremental context briefings:** Every wake-up delivers only messages after that participant's `last_seq` watermark rather than replaying the full group transcript.
-- **Inline task cards & artifacts:** Proposals (`task_draft`), live task cards (`task_card`), tool steps, and published static web apps render directly inside the turn that produced them.
+- **One room, specialized teammates:** Drop an Architect, Executor, and Reviewer into the same project chat; `@mention` whoever you need or designate a default **Steward**, and let agents hand work off to each other naturally.
+- **Parallel work, mid-flight steering:** Run multiple agents side by side without waiting; jump in mid-turn to steer a running agent onto a better path or queue your next instruction.
+- **Decisions and deliverables in one place:** Confirm task proposals, follow live progress cards, and open interactive web previews right inside the conversation.
 
 ---
 
-## Captain: Autonomous Fleet Coordinator
+## Captain
 
-**Captain** is Eta's built-in fleet supervisor — an always-available coordinator with its own dedicated view, supervisor review queue, and cross-group visibility:
-
-- **Supervisor review loop:** Automatically surfaces stalled tasks, failed runs, offline daemons, and settled assignments in structured `<captain-review>` cards so failures never die silently.
-- **Cross-group task dispatch:** Captain coordinates specialists across groups via `dispatch_task` without taking on execution itself, tracking assignment rounds and subtask rollups.
-- **Approval gates & Inbox:** Sensitive proposals (`create_agent`, `create_group`, `create_routine`) and tool questions wait in structured **Pending Approvals** cards and the **Inbox** before taking effect.
-- **Scheduled Routines:** Run recurring checks (`daily`, `weekly`, `hourly`, or 5-field `cron` expressions) with versioned briefs, missed-run safety (never backfills bursts after downtime), and feedback-driven brief revision.
+**Captain** is your autonomous fleet coordinator — watching every group, machine, and background run so nothing falls through the cracks:
 
 <p align="center">
   <img
     src="public/screenshot-captain.png"
-    alt="Eta Captain view showing supervisor review observations, cross-group task dispatch #51, and Pending Approvals card for a scheduled routine"
+    alt="Eta Captain view showing fleet review observations, dispatched task #51, and a pending approval card for a scheduled routine"
     width="900"
   />
 </p>
 
+- **A supervisor watching your whole fleet:** Surfaces what finished, what stalled, and what needs your decision across every group and machine.
+- **Delegate outcomes, not busywork:** Tell Captain the goal; it breaks work down, dispatches tasks to the right specialist groups, and tracks them to completion.
+- **You stay in command:** Creating new agents, groups, or routines — and running sensitive tools — waits for your one-click approval.
+- **Scheduled Routines:** Put recurring engineering tasks (benchmarks, audits, digests, nightly checks) on a schedule and refine them simply by replying to their reports.
+
 ---
 
-## Task Board, `git worktree`s & Dependency DAGs
+## Task Board & Dependency Plans
 
-Chat stays for discussion; implementation moves to the **Task Board**, where every task executes in its own isolated session and workspace:
+Keep chat for alignment and move execution onto the **Task Board**, where every task runs in its own clean workspace:
 
 <p align="center">
   <img
@@ -142,90 +140,77 @@ Chat stays for discussion; implementation moves to the **Task Board**, where eve
   />
 </p>
 
-- **Automatic `git worktree` isolation:** Tasks on git projects default to `workspace: worktree`, creating branch `eta/task-<N>` under `~/.eta/worktrees/<project-id>/task-<N>` (or on the target daemon machine) so agents never dirty your primary checkout and parallel tasks never clash.
-- **Parent/subtask staging & dependency DAGs:** Agents break large efforts into subtasks (`create_subtask`) and wire `dependsOn` edges. Dependent tasks wait automatically until prerequisites reach `in_review` (or `done` when `requireDone` is set), visualized as a step-by-step **Plan** DAG alongside **Board** (drag-and-drop Kanban) and **List** views.
-- **Per-machine concurrency & continuation runs:** Each machine enforces its `maxActiveRuns` slot limit. Leaving a comment on an `in_review` or `blocked` task immediately queues a **continuation run** inside the exact same task session, preserving full working memory.
-- **Live execution timelines & token rollups:** Inspect live tool calls, file diffs, terminal exit codes, per-run token usage, and subtask token rollups without leaving the board.
+- **Isolated `git worktree` per task:** Spin up parallel coding tasks in automatic worktrees (`eta/task-<N>`) without branch conflicts or dirtying your main checkout.
+- **Visual dependency plans:** Split big features into subtasks and chain dependencies so downstream steps start automatically when prerequisites hit review or finish — across **Plan** (DAG), **Board** (Kanban), and **List** views.
+- **Review with full memory intact:** Comment directly on a task in review to request tweaks; the agent continues in the same session without losing context.
+- **Full visibility on every run:** Follow live tool activity, file diffs, terminal output, and token rollups right on the task card.
 
 ---
 
-## Multi-Runtime Control Plane
+## Any Coding Agent, One Control Plane
 
-Mix best-in-class coding runtimes side by side inside the same group — Eta unifies tool middleware, approvals, MCP tools, and transcripts across every adapter:
+Mix your favorite runtimes inside the same group — every agent shares the same task board, visual artifacts, MCP tools, and approval gates:
 
-| Runtime                                    | Integration                                 | Highlights                                                                                                                     |
-| ------------------------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Native `eta`**                           | Built-in kernel (`eta-core`, `eta-harness`) | Full streaming, compaction, ESM tool realm, live tok/s telemetry, local & remote execution                                     |
-| **Claude Code**                            | `@eta/runtime-oar` (`claude`)               | Native `--plugin-dir` skill loading, MCP injection, session resume, usage tracking                                             |
-| **Codex**                                  | `@eta/runtime-oar` (`codex`)                | Device-code ChatGPT/Codex auth or API keys, skill briefing, MCP bridging                                                       |
-| **Antigravity**                            | `@eta/runtime-oar` (`antigravity`)          | Full OAR session orchestration with host MCP tool bridging                                                                     |
-| **OpenCode / Pi / Grok Build / Qwen Code** | `@eta/runtime-oar`                          | Auto-discovered local CLI runtimes with shared transcript & usage normalization                                                |
-| **ACP v1 Agents**                          | `@eta/runtime-acp` (`~/.eta/acp.json`)      | Bring any stdio [Agent Client Protocol](https://agentclientprotocol.com) v1 agent per machine with `session/resume` & host MCP |
-
-Both external runtime adapters expose Eta's built-in tools (`mention`, `draft_task`, `create_subtask`, `publish_artifact`, `get_plugin_config`, etc.) over a local HTTP MCP server (`eta`) with live `tools/list_changed` updates and centralized approval enforcement.
+- **Built-in Eta agent** — works out of the box with any API key, subscription, or local model.
+- **Major coding CLIs (powered by OAR)** — **Claude Code**, **Codex**, **Antigravity**, **OpenCode**, **Pi**, **Grok Build**, and **Qwen Code**.
+- **Any [ACP](https://agentclientprotocol.com) agent** — plug in custom or community Agent Client Protocol agents on any machine.
 
 ---
 
-## Multi-Machine Fleet
+## Ship Across Every Machine
 
-Scale from a laptop to build servers, GPU workstations, and remote Linux boxes using `eta-daemon`:
+Scale from a laptop to Linux build servers, GPU workstations, and remote boxes with `eta-daemon`:
 
-- **Outbound-dialing architecture:** Daemons dial out over WebSocket (`/machines/connect`) to your primary `eta-host` — no inbound firewall ports or SSH key distribution required on worker machines.
-- **Fingerprint pairing:** Generate a 24-hour one-time install code under **Settings → Machines → Add a machine**, run `eta-daemon setup <host-url> <install-code>`, and approve the matching cryptographic key fingerprint.
-- **Remote worktrees, MCP & plugin sync:** Sessions run locally on the worker machine (with remote `git worktree`s, local CLI runtimes, and machine-local `~/.eta/acp.json`), while model calls, OAuth MCP credentials, and plugin bundles sync transparently from the primary node.
-- **One-click daemon upgrades:** The primary host bundles daemon builds across platforms and updates connected workers automatically (`eta-daemon install-service`). See [Self-hosting](docs/self-hosting.md#more-machines-the-daemon).
+- **Zero inbound ports:** Worker machines dial out to your host after one-time fingerprint approval — no firewall openings or SSH key shuffling required.
+- **Execute where the code and hardware live:** Worktrees, builds, and local CLIs run directly on the target machine while you manage every repo from one workspace. See [Self-hosting](docs/self-hosting.md#more-machines-the-daemon).
+- **Zero-touch worker upgrades:** Paired service daemons update automatically alongside your primary host.
 
 ---
 
-## Native Clients Everywhere + Web + TUI + OTA
+## Every Screen, Always in Sync
 
-Every Eta surface connects to the same `/ws` pipe protocol (`@eta/client-wire-proto`) with zero REST drift:
-
-- **Native Desktop (`macOS`, `Windows`, `Linux`):** Built with Native Shell (`apps/client`), supporting both embedded local host mode and remote Tailscale/HTTPS hosts, plus signed in-app auto-updates.
-- **Mobile (`Android`, `iOS`, `HarmonyOS`):** Full war room, task board, Inbox approvals, and QR code host pairing — plus signed OTA bundle updates on Android.
-- **Web UI (`:8787`):** Served directly out of `eta-host` with zero external build steps.
-- **Terminal TUI (`eta`):** React + Ink terminal client (`apps/tui`) with temporary or resident host management and `/install-service` handoff.
+- **Native Desktop (`macOS`, `Windows`, `Linux`):** Embedded local host mode or connect to remote hosts, with signed in-app auto-updates.
+- **Native Mobile (`Android`, `iOS`, `HarmonyOS`):** Monitor war rooms, review task deliverables, and approve actions on the go with QR code pairing — plus signed OTA updates on Android.
+- **Built-in Web UI (`:8787`):** Instant browser access served straight from `eta-host`.
+- **Terminal TUI (`eta`):** Fast, keyboard-first terminal interface for local or remote hosts.
 
 ---
 
 ## Architecture
 
 ```text
-  Native Desktop · Mobile · Web (:8787) · Terminal TUI (eta)
-                           │
-        One WebSocket (/ws pipe)  +  HTTP (/up, /preview, /share)
-                           ▼
+  Native Desktop · Mobile · Web UI (:8787) · Terminal TUI (eta)
+                               │
+                     Real-Time WebSocket + HTTP
+                               ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  eta-host (apps/eta — single Bun process + ~/.eta/eta.sqlite)    │
+│  eta-host (Single Binary + ~/.eta/eta.sqlite)                    │
 │                                                                  │
-│  • Server Floor (packages/eta-server): targets, state diffs, WS  │
-│  • Product Plugins: agents, conversations, tasks, captain,       │
-│    routines, artifacts, inbox, machines, plugins, usage          │
-│  • LLM Gateway (CLIProxyAPI child) & Web Search (managed SearXNG)│
-│  • Local Runtimes: native eta + OAR (Claude/Codex/…) + ACP stdio │
+│  War Rooms · Captain · Task DAGs · Routines · Artifacts · Inbox  │
+│  Models & Subscriptions · Plugins · Per-Agent MCP · Approvals    │
 └──────────────┬──────────────────────────────────┬────────────────┘
-               │ WSS /machines/connect            │ HTTP (optional)
+               │ Outbound Worker Link             │ Optional
                ▼                                  ▼
-   eta-daemon worker nodes                 Memory Sidecar (apps/memory)
-   (remote worktrees, local CLIs, MCP)     (Python + pgvector, optional)
+   eta-daemon Worker Nodes                   Memory Sidecar
+   (Remote worktrees, local CLIs, MCP)       (Semantic memory)
 ```
 
 ---
 
-## Plugins, MCP, Sandboxed Artifacts & Approval Gates
+## Plugins, MCP & Visual Artifacts
 
-- **Agent Plugins 1.0.0:** Install local plugins (`~/.eta/plugins/`), commit-pinned Git plugins (`{ repo, rev, path }`), or **Composio** integrations. Secrets are AES-256-GCM `seal`ed in SQLite, injected via `PLUGIN_ROOT`/`PLUGIN_DATA`, audited on read, and automatically redacted (`redactionMiddleware`) from model logs and transcripts.
-- **Per-Agent MCP with Centralized OAuth:** Load servers from plugins, `~/.eta/mcp.json`, or project `.mcp.json` with lazy connections, optional direct tool promotion, and centralized OAuth 2.0 PKCE login on the primary node that relays refreshed tokens to remote daemons.
-- **Sandboxed Visual Artifacts:** Agents call `publish_artifact` to ship interactive HTML/CSS/JS/React reports, benchmarks, and SPAs. Previews run in sandboxed iframes without `allow-same-origin` behind expiring capability URLs (`/preview/...`), with one-click versioned public shares (`/share/...`) and ZIP downloads.
-- **Security & Approval Gates:** Any non-loopback bind automatically turns on the `0600` bearer token gate; sensitive tool calls pause in the **Inbox** via tool approval lists and declarative `akhook` rules before execution.
+- **Plugins & integrations:** Add skills and tools from local folders, Git repositories, or the **Composio** marketplace, with encrypted secret storage.
+- **Per-agent MCP:** Configure MCP servers per agent with one-click OAuth sign-in that carries seamlessly to remote machines.
+- **Interactive Visual Artifacts:** Agents publish live HTML/React reports, dashboards, and prototypes you can safely preview in-app, download as a ZIP, or share via a revocable link.
+- **Human-in-the-loop approvals:** Gate sensitive tools and answer agent questions from desktop or phone whenever your judgment is needed.
 
 ---
 
 ## And Yes — 100% Self-Hosted & Yours
 
-- **One binary, one SQLite file:** Your entire state — agents, tasks, approvals, routine briefs, and encrypted credentials — lives in `~/.eta/eta.sqlite` beside plain JSONL session transcripts. Back up or move everything with `$HOME/.eta`.
-- **100% BYOK, zero lock-in:** Bring your own API keys, ChatGPT/Codex or Grok subscriptions, or private OpenAI-compatible endpoints. No seats, no credits, no cloud black box.
-- **Full observability:** Every turn, reasoning block, tool call, diff, token count, and secret audit lands on your own timeline and database.
+- **One binary, one SQLite file:** Your entire state — agents, tasks, approvals, routine briefs, and encrypted credentials — lives in `~/.eta/eta.sqlite` beside plain JSONL transcripts. Move or back up everything with `$HOME/.eta`.
+- **100% BYOK, zero lock-in:** Use your own API keys, ChatGPT/Codex or Grok subscriptions, or private endpoints. No seats, no credits, no cloud black box.
+- **Full transparency:** Every turn, reasoning block, tool call, diff, and token count lives in your own database and timeline.
 
 ---
 
@@ -237,7 +222,7 @@ Update from **Settings → Update** in the UI or via CLI:
 eta-host upgrade
 ```
 
-`eta-host upgrade` verifies `SHA256SUMS`, drains active agent runs, backs up `~/.eta/eta.sqlite` to `~/.eta/backups`, restarts the service, and rolls back automatically if the new build fails `/up` health checks. Connected `eta-daemon` workers follow on reconnect. Desktop and Android clients update from **Settings → Update** via signed OTA channels.
+`eta-host upgrade` verifies `SHA256SUMS`, waits for running tasks, backs up `~/.eta/eta.sqlite` to `~/.eta/backups`, restarts the service, and rolls back automatically if the new build fails to start. Connected `eta-daemon` workers update on reconnect, and desktop/Android clients update via **Settings → Update**.
 
 ## Documentation
 
