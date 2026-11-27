@@ -165,8 +165,6 @@ export function ConversationArtifacts(props: {
             empty={{ title: uiText("noArtifactsYet") }}
             style={{
               paddingHorizontal: space[12],
-              paddingTop: 0,
-              paddingBottom: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
             }}
