@@ -92,11 +92,5 @@ export default {
         "jsqr",
       ],
     },
-    "apps/mobile": {
-      // `nsh` builds it: the entries are named in its commands.
-      entry: ["App.tsx", "DevApp.tsx", "src/**/*.test.tsx"],
-      // The Native Shell runtime provides them; nothing installs them.
-      ignoreDependencies: ["nsh", "websocket"],
-    },
   },
 } satisfies KnipConfig;

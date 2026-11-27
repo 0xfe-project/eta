@@ -100,15 +100,6 @@
     "apps/memory": {
       "name": "@eta/memory",
     },
-    "apps/mobile": {
-      "name": "@eta/mobile",
-      "version": "0.1.0",
-      "dependencies": {
-        "@eta/client-contracts": "*",
-        "@eta/client-wire-proto": "*",
-        "blobatar": "^2.7.0",
-      },
-    },
     "apps/tui": {
       "name": "@eta/tui",
       "version": "0.1.0",
@@ -622,8 +613,6 @@
     "@eta/mcp": ["@eta/mcp@workspace:packages/eta-mcp"],
 
     "@eta/memory": ["@eta/memory@workspace:apps/memory"],
-
-    "@eta/mobile": ["@eta/mobile@workspace:apps/mobile"],
 
     "@eta/places": ["@eta/places@workspace:packages/eta-places"],
 
