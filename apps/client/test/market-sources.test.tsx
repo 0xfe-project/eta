@@ -11,6 +11,7 @@ test("the first frame already lists every source's kept entries, with their upda
 
 test("a source's own read replaces only its part; the source that has not answered keeps its entries", async () => {
   const app = await open("./fixtures/market-sources-split.tsx", OPEN);
+  await app.press("label:Resolve Alpha");
   await app.waitFor("text:alpha-new");
   expect(app.shows("alpha-old")).toBe(false);
   expect(app.shows("beta-kept")).toBe(true);

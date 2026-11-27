@@ -83,14 +83,20 @@ test("a pasted file is a block where the caret is, kept with its chat, sent as a
   expect(screen(app)).toContain('sent ["alpha","see  please","queue",[');
 });
 
+// The test's own directory, as a file manager names it (`import.meta.url` is `asset:` here;
+// on Windows `asset://D:\...` needs forward slashes and three slashes so the drive letter is not the host).
+const fileUrl = (path: string) => {
+  const base = import.meta.url
+    .replaceAll("\\", "/")
+    .replace(/^asset:\/\/([a-z]:)/i, "asset:///$1");
+  return `file://${new URL(path, base).pathname}`;
+};
+
 test("files a file manager copied or dropped are read from their file: URLs and sent", async () => {
   const app = await fixture();
-  // The test's own directory, as a file manager names it (`import.meta.url` is `asset:` here).
-  const uri = (path: string) =>
-    `file://${new URL(path, import.meta.url).pathname}`;
-  await app.paste(input, { uris: [uri("fixtures/pixel.png")] });
+  await app.paste(input, { uris: [fileUrl("fixtures/pixel.png")] });
   await app.waitFor("label:View picture pixel.png · 0.0 KB");
-  await app.dropFiles(input, [uri("composer-fixture.tsx")]);
+  await app.dropFiles(input, [fileUrl("composer-fixture.tsx")]);
   await app.waitFor("label:File composer-fixture.tsx");
   expect(screen(app)).not.toContain("can't attach");
   await app.keyboard.press("enter");
@@ -100,7 +106,7 @@ test("files a file manager copied or dropped are read from their file: URLs and 
 test("a copied folder is refused, and its block says why", async () => {
   const app = await fixture();
   // As Finder copies a folder: its URL ends with a slash.
-  const folder = `file://${new URL("fixtures/", import.meta.url).pathname}`;
+  const folder = fileUrl("fixtures/");
   await app.paste(input, { uris: [folder] });
   const why = "fixtures is a folder. Attach the files in it instead.";
   const block = `label:Can't attach fixtures: ${why}`;

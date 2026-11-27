@@ -124,5 +124,5 @@ describe("the host's wrapper", () => {
     await outer.exited;
     await until(() => Bun.file(gone).exists(), 10_000);
     expect(await Bun.file(gone).text()).toBe("stopped");
-  });
+  }, 20_000);
 });

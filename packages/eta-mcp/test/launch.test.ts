@@ -473,13 +473,22 @@ describe("in the manager", () => {
     const fixture = fileURLToPath(
       new URL("./fixtures/stdio-server.ts", import.meta.url),
     );
-    // A package whose executable is a shell script starting the fake server; npx itself could not
-    // run it (it would go to the network for a package that does not exist).
+    // A package whose executable is a script starting the fake server (via bun); npx itself
+    // could not run it (it would go to the network for a package that does not exist).
     const bin = npxPackage("mgr", "fake-mcp-pkg", {
-      bin: "run.sh",
-      shebang: "#!/bin/sh",
+      bin: "run.mjs",
+      shebang: "#!/usr/bin/env node",
     });
-    writeFileSync(bin, `#!/bin/sh\nexec bun ${fixture} "$@"\n`);
+    writeFileSync(
+      bin,
+      [
+        "#!/usr/bin/env node",
+        'import { spawnSync } from "node:child_process";',
+        `const result = spawnSync("bun", [${JSON.stringify(fixture)}, ...process.argv.slice(2)], { stdio: "inherit" });`,
+        "process.exit(result.status ?? 1);",
+        "",
+      ].join("\n"),
+    );
     const h = await setup({
       resolvers: {
         npmCacheDir: () => join(root, "npm"),

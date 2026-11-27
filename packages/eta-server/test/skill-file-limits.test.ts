@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { SkillFiles } from "../src/skill-files";
 let home: string, files: SkillFiles;
@@ -175,10 +176,13 @@ it("permission failures are not empty lists and read-only documents cannot be sa
   } finally {
     await chmod(path, 0o644);
   }
-  await chmod(join(home, ".agents/skills"), 0);
-  try {
-    await expect(call("list", {})).rejects.toThrow(/EACCES|EPERM/);
-  } finally {
-    await chmod(join(home, ".agents/skills"), 0o755);
+  if (process.platform !== "win32") {
+    // Windows NTFS ignores POSIX mode 0 on directories for reading entries.
+    await chmod(join(home, ".agents/skills"), 0);
+    try {
+      await expect(call("list", {})).rejects.toThrow(/EACCES|EPERM/);
+    } finally {
+      await chmod(join(home, ".agents/skills"), 0o755);
+    }
   }
 });

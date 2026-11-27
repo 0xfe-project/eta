@@ -5,6 +5,7 @@ import type { AcpAgentConfig } from "@eta/client-contracts";
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
 import { isAgentRuntime } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { acpServers } from "../src/delegate";
@@ -76,7 +77,9 @@ describe("acp.json", () => {
     expect(file.read()).toEqual([]);
     file.write([agent]);
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ agents: [agent] });
-    expect(statSync(path).mode & 0o777).toBe(0o600);
+    // Windows does not preserve POSIX 0o600 mode bits on files.
+    if (process.platform !== "win32")
+      expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(file.get("gemini")).toEqual(agent);
   });
 

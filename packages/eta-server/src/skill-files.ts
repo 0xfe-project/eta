@@ -292,7 +292,7 @@ export class SkillFiles {
           fail("depth_limit", path);
         const page = await this.#directory(path, args.offset ?? 0);
         const keys = page.entries.map((e) =>
-          relative(detail.skill, join(path, e.path)),
+          relative(detail.skill, join(path, e.path)).split(sep).join("/"),
         );
         const additional = keys.filter((k) => !detail.entries.has(k));
         if (detail.entries.size + additional.length > LIMIT.entries)
@@ -568,7 +568,7 @@ export class SkillFiles {
         if (!info.isDirectory() && !info.isFile())
           fail("link_or_special_file", path);
         const item: SkillFileEntry = {
-          path: relative(skill, path),
+          path: relative(skill, path).split(sep).join("/"),
           kind: info.isDirectory() ? "directory" : "file",
           size: info.size,
         };

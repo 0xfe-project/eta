@@ -18,7 +18,7 @@ export async function until(
   predicate: () => boolean | Promise<boolean>,
   // Long enough for a loaded Windows machine (every package's tests run at once); a wait that is
   // going to succeed does not wait for it.
-  timeoutMs = process.platform === "win32" ? 25_000 : 15_000,
+  timeoutMs = process.platform === "win32" ? 45_000 : 15_000,
 ): Promise<void> {
   const started = Date.now();
   while (!(await predicate())) {

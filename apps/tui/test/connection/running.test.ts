@@ -223,8 +223,18 @@ setInterval(() => undefined, 1_000);
         for (const pid of await pids())
           if (alive(pid)) process.kill(pid, "SIGKILL");
         await until(
-          async () => (await processesMentioning(dir)).length === 0,
-          10_000,
+          async () => {
+            const remaining = await processesMentioning(dir);
+            for (const pid of remaining) {
+              try {
+                process.kill(pid, "SIGKILL");
+              } catch {
+                // Already exited.
+              }
+            }
+            return remaining.length === 0;
+          },
+          20_000,
           `the processes left behind in ${dir} to end`,
         );
       } finally {

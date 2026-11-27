@@ -12,6 +12,25 @@ import { cleanupAll, setup, tool } from "./helpers/harness";
 
 afterEach(cleanupAll);
 
+/** Bun's `rm` ignores `maxRetries` on Windows EBUSY, so retry brief locks explicitly. */
+async function removeWithRetry(path: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rm(path, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (
+        process.platform !== "win32" ||
+        (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") ||
+        attempt >= 20
+      )
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
 const spec = { tools: [tool("ping", { behavior: "counter" })] };
 
 function text(result: {
@@ -485,8 +504,8 @@ describe("the child process", () => {
       const inConfig = await probe(h2, { cwd: configured }, sessionDir);
       expect(await inConfig.read("cwd")).toBe(await realpath(configured));
     } finally {
-      await rm(sessionDir, { recursive: true, force: true });
-      await rm(configured, { recursive: true, force: true });
+      await removeWithRetry(sessionDir);
+      await removeWithRetry(configured);
     }
   });
 

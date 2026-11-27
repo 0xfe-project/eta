@@ -41,6 +41,8 @@ const transcript = (managed: ManagedSession): string[] =>
     .transcript()
     .map((message) => `${message.role}:${textOf(message)}`);
 
+const CWD = realpathSync(tmpdir());
+
 const managers: SessionManager[] = [];
 afterEach(async () => {
   for (const manager of managers.splice(0)) await manager.closeAll();
@@ -101,7 +103,7 @@ const stateOf = (managed: ManagedSession) => {
 describe("a session on an ACP agent", () => {
   it("publishes the ACP pair while billing stays unknown, then records field coverage", async () => {
     const { manager } = setup();
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     await run(managed, "[usage:none]");
     const view = () => managed.session.view.snapshot().sections;
     expect(view().context).toMatchObject({
@@ -126,7 +128,7 @@ describe("a session on an ACP agent", () => {
 
   it("keeps a silent prompt's explicit zeros and a later gap in coverage", async () => {
     const { manager } = setup();
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     const spend = () => managed.session.view.snapshot().sections.spend;
     await run(
       managed,
@@ -145,7 +147,7 @@ describe("a session on an ACP agent", () => {
 
   it("streams the agent's turn into the journal as an eta turn", async () => {
     const { manager, agent } = setup();
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     const deltas: string[] = [];
     const events: string[] = [];
     const on = kernelOn(managed.session.kernel.ctx);
@@ -181,12 +183,12 @@ describe("a session on an ACP agent", () => {
     expect(managed.meta.runtimeSession).toMatch(/^fake-/);
     expect(
       agent.log().find((entry) => entry.method === "session/new"),
-    ).toMatchObject({ cwd: "/tmp", mcpServers: [] });
+    ).toMatchObject({ cwd: CWD, mcpServers: [] });
   });
 
   it("tells a tool call as a call and its result, with the agent's last word on it", async () => {
     const { manager } = setup();
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     await run(managed, "first");
     const tools: string[] = [];
     const on = kernelOn(managed.session.kernel.ctx);
@@ -228,7 +230,7 @@ describe("a session on an ACP agent", () => {
   it("sets the agent to the session's model and thinking level", async () => {
     const { manager, agent } = setup();
     const managed = await manager.create({
-      cwd: "/tmp",
+      cwd: CWD,
       runtime: "acp.fake",
       model: "acp.fake:model-b",
     });
@@ -251,7 +253,7 @@ describe("a session on an ACP agent", () => {
 
   it("hands a system prompt to an agent that takes one", async () => {
     const { manager } = setup({ env: { FAKE_ACP_SYSTEM_PROMPT: "1" } });
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     await run(managed, "state");
     expect(stateOf(managed).systemPrompt).toContain(
       "In this conversation you are Probe.",
@@ -261,11 +263,11 @@ describe("a session on an ACP agent", () => {
 
   it("says why when the agent cannot be started, or is not configured", async () => {
     const { manager } = setup({ command: "/nonexistent/acp-agent" });
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     const failed = await run(managed, "hello");
     expect(failed.status).toBe("failed");
     expect(failed.error).toContain("/nonexistent/acp-agent is not installed");
-    const other = await manager.create({ cwd: "/tmp", runtime: "acp.gone" });
+    const other = await manager.create({ cwd: CWD, runtime: "acp.gone" });
     const unconfigured = await run(other, "hello");
     expect(unconfigured.error).toMatch(
       /the ACP agent gone is not configured on this machine \(.*acp\.json\)/,
@@ -274,7 +276,7 @@ describe("a session on an ACP agent", () => {
 
   it("says a sign-in is needed, and where to do it", async () => {
     const { manager } = setup({ env: { FAKE_ACP_AUTH: "1" } });
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     const failed = await run(managed, "hello");
     expect(failed.status).toBe("failed");
     expect(failed.error).toMatch(/Fake Agent is not signed in.*terminal/);
@@ -311,7 +313,7 @@ describe("the host's tools", () => {
         ],
       },
     );
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     expect((await run(managed, "put it on the board")).status).toBe(
       "completed",
     );
@@ -347,7 +349,7 @@ describe("the host's tools", () => {
         ],
       },
     );
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     await run(managed, "put it on the board");
     const result = managed.session.journaling
       .transcript()
@@ -370,7 +372,7 @@ describe("the host's tools", () => {
       execute: () => ({ content: [{ type: "text", text: "pinned" }] }),
     } as unknown as KernelTool;
     const { manager, agent } = setup({}, { sessionTools: () => [note, pin] });
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     await run(managed, "listing");
     expect(transcript(managed).at(-1)).toBe(
       'assistant:tools: note write a note on the board {"text":{"type":"string"}} | pin pin a note {}',
@@ -423,7 +425,7 @@ describe("the host's tools", () => {
 describe("a permission request", () => {
   it("is allowed at once, this once, and nobody is asked", async () => {
     const { manager, agent, asked } = setup();
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     expect((await run(managed, "write it")).status).toBe("completed");
     // Not the session's ask channel, so not the Inbox either.
     expect(asked).toEqual([]);
@@ -449,7 +451,7 @@ describe("a permission request", () => {
     const { manager, agent, asked } = setup({
       autoAllow: false,
     } as Partial<AcpAgentConfig>);
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     expect((await run(managed, "write it")).status).toBe("completed");
     expect(asked).toEqual([]);
     expect(
@@ -461,7 +463,7 @@ describe("a permission request", () => {
 describe("a permission request after the turn has ended", () => {
   it("is answered cancelled, and nobody is asked", async () => {
     const { manager, agent, asked } = setup();
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     expect((await run(managed, "late")).status).toBe("completed");
     // The turn is over: only now does the agent ask.
     writeFileSync(join(agent.dir, "late.go"), "");
@@ -495,7 +497,7 @@ describe("where the agent's process starts", () => {
 describe("cancelling and losing the agent", () => {
   it("cancels the agent's turn, and the session goes on after", async () => {
     const { manager, agent } = setup();
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     const running = run(managed, "a slow one");
     await until(
       () => agent.log().some((entry) => entry.method === "session/prompt"),
@@ -525,7 +527,7 @@ describe("cancelling and losing the agent", () => {
 
   it("starts another process and resumes the agent's session when the process was killed", async () => {
     const { manager, agent, warnings } = setup();
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     await run(managed, "one");
     const pid = agent.log()[0]!.pid;
     process.kill(pid, "SIGKILL");
@@ -538,7 +540,7 @@ describe("cancelling and losing the agent", () => {
 
   it("fails the run the agent died under, and picks up on the next", async () => {
     const { manager } = setup();
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     const failed = await run(managed, "die now");
     expect(failed.status).toBe("failed");
     expect(failed.error).toContain("Fake Agent failed");
@@ -548,7 +550,7 @@ describe("cancelling and losing the agent", () => {
 
   it("resumes when the session is closed and opened again", async () => {
     const { manager, agent } = setup();
-    const created = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const created = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     await run(created, "one");
     await manager.close(created.meta.id);
     await until(
@@ -568,7 +570,7 @@ describe("cancelling and losing the agent", () => {
         { runtimeIdle: policy },
       );
       const managed = await manager.create({
-        cwd: "/tmp",
+        cwd: CWD,
         runtime: "acp.fake",
       });
       await run(managed, "one");
@@ -586,7 +588,7 @@ describe("cancelling and losing the agent", () => {
       { env: { FAKE_ACP_CAPS: "none" } },
       { runtimeIdle: { idleMs: 60_000, maxResident: 0, everyMs: 3_600_000 } },
     );
-    const managed = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     await run(managed, "one");
     expect(await manager.sweepRuntimes(Date.now() + 120_000)).toEqual([]);
     await run(managed, "state");
@@ -595,7 +597,7 @@ describe("cancelling and losing the agent", () => {
 
   it("loads where the agent cannot resume, and drops the replay", async () => {
     const { manager } = setup({ env: { FAKE_ACP_CAPS: "load" } });
-    const created = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const created = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     await run(created, "one");
     await manager.close(created.meta.id);
     const reopened = (await manager.session(created.meta.id))!;
@@ -607,7 +609,7 @@ describe("cancelling and losing the agent", () => {
 
   it("starts a new agent session where it can do neither, and says so", async () => {
     const { manager, warnings } = setup({ env: { FAKE_ACP_CAPS: "none" } });
-    const created = await manager.create({ cwd: "/tmp", runtime: "acp.fake" });
+    const created = await manager.create({ cwd: CWD, runtime: "acp.fake" });
     await run(created, "one");
     const before = created.meta.runtimeSession;
     await manager.close(created.meta.id);

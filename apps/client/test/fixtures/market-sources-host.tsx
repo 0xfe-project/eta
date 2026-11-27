@@ -73,6 +73,7 @@ export function mountSources(mode: "split" | "fail" | "reopen") {
     const host = createHost();
     host.state.update((state) => ({ ...state, status: "open" }));
     const open = signal(true);
+    let resolveAlpha: (() => void) | undefined;
     const stub = Object.assign(host, {
       call: (
         _target: string,
@@ -85,11 +86,15 @@ export function mountSources(mode: "split" | "fail" | "reopen") {
             ? new Promise<MarketCatalog>(() => undefined)
             : Promise.resolve(kept);
         }
-        // Alpha answers a little later, so the first frame is what the host kept.
-        if (args?.source === A)
-          return new Promise<MarketCatalog>((done) =>
-            setTimeout(() => done({ proxy: "", sources: [alphaFresh] }), 2000),
-          );
+        // In split mode Alpha stays pending until the test presses "Resolve Alpha",
+        // so slow test startup never races the first frame.
+        if (args?.source === A) {
+          return mode === "split"
+            ? new Promise<MarketCatalog>((done) => {
+                resolveAlpha = () => done({ proxy: "", sources: [alphaFresh] });
+              })
+            : Promise.resolve({ proxy: "", sources: [alphaFresh] });
+        }
         if (args?.source === B)
           return mode === "fail"
             ? Promise.reject(new Error("down"))
@@ -114,6 +119,15 @@ export function mountSources(mode: "split" | "fail" | "reopen") {
             size={28}
             onPress={() => open.set(!open())}
           />
+          <If when={mode === "split"}>
+            <Button
+              label="Resolve Alpha"
+              tone="plain"
+              labelVariant="body"
+              size={28}
+              onPress={() => resolveAlpha?.()}
+            />
+          </If>
           <If when={open()} else={<Label>closed</Label>}>
             <Market
               onSettings={() => {}}

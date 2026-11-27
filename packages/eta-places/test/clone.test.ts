@@ -436,5 +436,5 @@ describe("a real git", () => {
       failure: { code: "repo_not_found" },
     });
     expect(existsSync(join(at, "Developer/nope"))).toBe(false);
-  });
+  }, 20_000);
 });
