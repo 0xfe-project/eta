@@ -1,7 +1,7 @@
 import type { SlashCommand } from "../src/extensions/types";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { renderCommandDocs } from "../scripts/gen-docs";
 import { extensions } from "../src/extensions.gen";
 import { createRegistry } from "../src/extensions/registry";

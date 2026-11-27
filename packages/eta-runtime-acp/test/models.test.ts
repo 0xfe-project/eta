@@ -3,7 +3,7 @@
  * `ultra` included and never turned into `max`; one it does not offer goes as nothing.
  */
 import { thinkingLevelsFor } from "@eta/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { acpModels, effortFor } from "../src/models";
 
 describe("effortFor on an ACP agent", () => {

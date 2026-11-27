@@ -6,7 +6,7 @@
  */
 import type { BoardTaskDetail, BoardTaskView } from "@eta/client-contracts";
 import type { KernelTool } from "@eta/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { world } from "./support/world";
 
 async function setup() {

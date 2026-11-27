@@ -7,7 +7,7 @@
  * action differs — the memory line for a project that already has a note and one
  * that does not.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   renderPlatformBlock,
   renderRuntimePlatformBlock,

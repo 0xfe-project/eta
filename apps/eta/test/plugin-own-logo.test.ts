@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadPlugin } from "@eta/daemon";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { readOwnLogo } from "../src/plugins/logo";
 
 const PNG = Buffer.from([

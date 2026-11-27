@@ -1,5 +1,5 @@
 /** How the composer's text is cut into display rows, and how offsets map to cells and back. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { layoutRows } from "../../src/ext/conversation/composer/text-layout";
 
 const rowTexts = (text: string, columns: number) =>

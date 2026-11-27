@@ -16,7 +16,7 @@ import type { SessionRuntime, SessionRuntimes } from "../src/runtimes";
 import { DEFAULT_COMPACTION_SETTINGS } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { SESSION_ACTIONS, sessionsPlugin } from "../src/bundled/sessions";
 import { SessionManager } from "../src/manager";
 import { MemorySessionStore } from "../src/memory-store";
@@ -462,13 +462,11 @@ describe("compacting on demand", () => {
         };
       },
     };
-    const models = fakeModels([
-      ...[1, 2, 3, 4].map((turn) =>
+    const models = fakeModels([1, 2, 3, 4].map((turn) =>
         assistantMessage({
           content: [{ type: "text", text: `answer ${turn}` }],
         }),
-      ),
-    ]);
+      ));
     const h = await harness(models, { compaction: summarizer });
     await h.load();
     const { session } = (await h.call("sessions", "create", {

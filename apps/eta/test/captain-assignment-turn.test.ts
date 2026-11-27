@@ -4,7 +4,7 @@
  * another agent with "assignee", and a question it asks is the user's to see in the Inbox.
  */
 import type { InteractionView } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { call, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";

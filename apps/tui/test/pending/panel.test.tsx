@@ -2,7 +2,7 @@
  * The panel of waiting items and conversations: what each line says and in what order, moving
  * through it and scrolling, what Enter does on each kind of line, and Esc.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { HANG } from "../../../eta/test/support/models";
 import { until } from "../support/temp";
 import { KEYS, plain } from "../ui-support/render";

@@ -1,5 +1,5 @@
 import { Context } from "cordis";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { kernelEmit, kernelOn } from "../src/types/events";
 
 describe("the event bus", () => {

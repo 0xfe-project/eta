@@ -11,7 +11,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { FileSessionStore, JOURNAL_FILE, META_FILE } from "../src/file-store";
 import { SessionManager } from "../src/manager";
 

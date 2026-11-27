@@ -1,5 +1,5 @@
 /** OSC 52: the bytes written to put text on the terminal's clipboard. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { copyToClipboard } from "../../src/ext/conversation/transcript/clipboard";
 
 function written(

@@ -1,7 +1,7 @@
 /** The HTTP side of the host: the built web, `/up` and `/version`. */
 import { connect as dial } from "node:net";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { embedResources, resource, resourceNames } from "../src/resources";
 import { connect } from "./support/client";
 import { fakeWeb, testHost } from "./support/host";

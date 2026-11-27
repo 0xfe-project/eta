@@ -6,7 +6,7 @@ import type { HostProgram } from "../src/connection/types";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import process from "node:process";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it } from "xmas:test";
 import { createConnectionController } from "../src/connection/controller";
 import { extensions } from "../src/extensions.gen";
 import { createRegistry } from "../src/extensions/registry";

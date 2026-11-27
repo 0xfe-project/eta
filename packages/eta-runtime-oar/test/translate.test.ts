@@ -10,7 +10,7 @@
 import type { Event, EventBody } from "@botiverse/oar";
 import type { AgentMessage } from "@eta/core";
 import type { OarToolResultDetails, TranslatorTarget } from "../src/translate";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { HostCalls } from "../src/host-calls";
 import { Translator } from "../src/translate";
 

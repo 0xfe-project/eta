@@ -13,7 +13,7 @@ import type { Database } from "bun:sqlite";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AcpConfigFile, acpRuntimeId } from "@eta/runtime-acp";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { AcpService } from "../src/acp/service";
 import {
   applyMigrations,

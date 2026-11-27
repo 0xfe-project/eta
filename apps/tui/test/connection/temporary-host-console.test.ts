@@ -8,7 +8,7 @@
  */
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { script } from "../support/fake-programs";
 import { childEnv, SOURCE_HOST } from "../support/host";
 import { tempDir } from "../support/temp";

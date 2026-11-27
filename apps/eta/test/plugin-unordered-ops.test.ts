@@ -3,7 +3,7 @@
  * lookups that may wait on the network and that no earlier call of the connection has to come
  * before. Everything else stays in arrival order, which is the default.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { pluginsPlugin } from "../src/plugins/plugin";
 
 /** The ops the plugin registers, with the meta each was registered with. */

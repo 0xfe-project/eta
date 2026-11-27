@@ -11,7 +11,7 @@
 import type { StorageService } from "@eta/core/storage";
 import { SESSION_TIP, SessionLog } from "@eta/core/session";
 import { MemoryStorage, setValue, value } from "@eta/core/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 
 const userMsg = (text: string) => ({
   role: "user" as const,

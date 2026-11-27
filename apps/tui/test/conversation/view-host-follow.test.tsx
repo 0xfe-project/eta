@@ -14,7 +14,7 @@ import type { KernelModels } from "@eta/core";
 import type { TuiConfig } from "../../src/config/types";
 import type { RenderedApp } from "../ui-support/app";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { call, say } from "../../../eta/test/support/models";
 import { wireUrl } from "../../src/connection/address";
 import { Wire } from "../../src/connection/wire";

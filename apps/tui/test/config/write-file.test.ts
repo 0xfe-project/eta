@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { writeFileAtomically } from "../../src/config/write-file";
 import { tempDir } from "../support/temp";
 

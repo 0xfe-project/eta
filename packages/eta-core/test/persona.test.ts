@@ -1,6 +1,6 @@
 import type { PersonaCard } from "../src/types/persona";
 import { Context } from "cordis";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { PersonaService } from "../src/kernel/persona";
 import { kernelOn } from "../src/types/events";
 

@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { startHost } from "@eta/app/src/host";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { afterEach } from "vitest";
+import { afterEach } from "xmas:test";
 import { tempDir } from "./temp";
 
 const hosts = new Set<Host>();

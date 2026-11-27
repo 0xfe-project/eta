@@ -17,7 +17,7 @@ import type { KernelModels } from "@eta/core";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { buildModels } from "../src/providers/runtime";
 import { ProviderConfigStore } from "../src/providers/store";
 import { assembleServer } from "../src/server";

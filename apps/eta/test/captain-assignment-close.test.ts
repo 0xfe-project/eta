@@ -5,7 +5,7 @@
  * agent's questions from the Inbox, and keeping Captain's review watching it).
  */
 import type { InteractionView } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { call, gate, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";

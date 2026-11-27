@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "xmas:test";
 import { SkillFiles } from "../src/skill-files";
 let home: string, files: SkillFiles;
 const text = "---\ndescription: fixture\n---\n";

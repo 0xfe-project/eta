@@ -14,7 +14,7 @@ import type {
 } from "@eta/core";
 import type { Entry } from "@eta/core/session";
 import type { Usage } from "@eta/core/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   etaCompaction,
   planCompaction,

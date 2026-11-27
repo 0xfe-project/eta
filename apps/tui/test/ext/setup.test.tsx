@@ -6,7 +6,7 @@
 import type { AgentView } from "@eta/client-contracts";
 import type { WireState, WireStatus } from "../../src/connection/types";
 import type { HostRendered } from "../ext-support/render-with-host";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { createSetupExtension } from "../../src/ext/setup";
 import { needsSetup, readSetupFacts } from "../../src/ext/setup/first-run";
 import { fakeGoogle, GOOD_KEY } from "../ext-support/fake-upstreams";

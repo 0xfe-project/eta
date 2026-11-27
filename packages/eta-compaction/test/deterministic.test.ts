@@ -6,7 +6,7 @@
  * dropped, what gets truncated, and what gets labeled untrusted.
  */
 import type { AgentMessage } from "@eta/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   digestContext,
   dropToolPairs,

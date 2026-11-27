@@ -12,7 +12,7 @@ import type { TaskBoard } from "../src/tasks/board";
 import type { TaskRecord } from "../src/tasks/store";
 import { Buffer } from "node:buffer";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { DEFAULT_LIMITS } from "../src/artifacts/files";
 import { KINDS } from "../src/artifacts/kinds";
 import { htmlText, page, scopeOf } from "../src/artifacts/reading";

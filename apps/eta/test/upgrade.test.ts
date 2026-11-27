@@ -23,7 +23,7 @@ import {
   upstreamLabel,
 } from "@eta/releases";
 import { Database } from "bun:sqlite";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "xmas:test";
 import {
   applyMigrations,
   databasePath,

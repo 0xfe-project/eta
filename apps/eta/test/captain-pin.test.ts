@@ -6,7 +6,7 @@
  * two halves of that: whose tools are withheld, and the pin being narrowed back on the way in.
  */
 import type { OpenSession } from "@eta/harness";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   CAPTAIN_WITHHELD_TOOL_NAMES,
   repairCaptainToolPin,

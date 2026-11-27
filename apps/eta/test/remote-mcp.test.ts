@@ -13,7 +13,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { mcpServerKey, parseCredentialCall } from "@eta/daemon";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   createFakeAuthServer,
   MCP_URL,

@@ -1,5 +1,5 @@
 import type { FlowMachine, PlaceRef } from "../src";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   back,
   buildSuggestions,

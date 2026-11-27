@@ -4,7 +4,7 @@ import { writeFile } from "node:fs/promises";
  * their own capability, and nothing else is opened by that.
  */
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { tempDir, testHost } from "./support/host";
 
 const TOKEN = "a-long-enough-test-token";

@@ -9,7 +9,7 @@
  */
 
 import type { ServerFrame, StateSnapshot } from "../src/index";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "xmas:test";
 import { SERVER_FRAME_TYPES, stateDiff } from "../src/index";
 
 const message = (text: string) => ({

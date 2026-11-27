@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isAgentRuntime } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { acpServers } from "../src/delegate";
 import {
   acpAgentId,

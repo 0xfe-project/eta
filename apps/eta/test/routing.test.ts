@@ -3,7 +3,7 @@
  * member there is, else nobody (and the sender is told). Nobody is ever added to wake them.
  */
 import type { AgentView, ConversationSummary } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { HANG, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";

@@ -10,7 +10,7 @@ import type {
 } from "@eta/client-contracts";
 import type { ProposalKind, ProposalsDeps } from "../src/captain/proposals";
 import { captainProposalOf, isCaptainOutcome } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { CaptainProposals } from "../src/captain/proposals";
 
 interface Thing {

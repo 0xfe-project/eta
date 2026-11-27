@@ -4,7 +4,7 @@
  * after it, however late it arrives.
  */
 import type { AcpAgentView, AcpMachineList } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { AcpService } from "../src/acp/service";
 
 interface Pending {

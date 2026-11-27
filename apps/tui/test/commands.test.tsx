@@ -1,6 +1,6 @@
 /** The three commands the foundation ships: /help, /config and /install-service. */
 import type { LoadedConfig } from "../src/config/types";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { renderApp, TEST_PATHS, TEST_URL } from "./ui-support/app";
 import { loaded, testConfig } from "./ui-support/config";
 import { flush, KEYS, plain } from "./ui-support/render";

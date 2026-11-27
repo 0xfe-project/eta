@@ -2,7 +2,7 @@
  * The market's catalog cache against a local server that counts its requests: nothing reaches the
  * network. A "restart" is a second `Market` on the same database.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "xmas:test";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { githubProxy } from "../src/plugins/git";
 import { Market } from "../src/plugins/market";

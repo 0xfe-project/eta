@@ -3,7 +3,7 @@
  * interface on a real host, with their arguments: what the host holds afterwards, what the status
  * area says, and the tabs that open and close.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { CONVERSATION_VIEW } from "../../src/ext/conversation/kind";
 import { screenShows } from "../conversation/view-host-world";
 import { until } from "../support/temp";

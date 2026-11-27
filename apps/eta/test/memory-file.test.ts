@@ -3,7 +3,7 @@
  * them. The service and the disk are not involved.
  */
 import type { FileEntry } from "../src/captain/memory-file";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { parseMemoryFile, renderMemoryFile } from "../src/captain/memory-file";
 
 const PATH = "agents/ada/.eta/MEMORY.md";

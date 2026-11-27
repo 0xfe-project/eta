@@ -3,7 +3,7 @@
  * without one refuses the command as too old before anything is sent, and the /new examples a user
  * can type as they stand.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import artifacts from "../../src/ext/artifacts";
 import manage from "../../src/ext/manage";
 

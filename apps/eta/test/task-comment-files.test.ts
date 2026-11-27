@@ -10,7 +10,7 @@ import type { World } from "./support/world";
 import { Buffer } from "node:buffer";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { call, gate, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";

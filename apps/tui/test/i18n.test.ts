@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { chooseLocale } from "../src/i18n/locale";
 import { fillPlaceholders, placeholdersOf } from "../src/i18n/messages";
 

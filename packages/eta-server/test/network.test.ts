@@ -11,7 +11,7 @@
  */
 
 import type { NetworkCommand } from "../src/network";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   initializeNetwork,
   parseLinuxProxy,

@@ -5,7 +5,7 @@
 import type { ReactNode } from "react";
 import type { ListLine } from "../src/ext/pending/scroll-list";
 import { Box, Text, useWindowSize } from "ink";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { CheckList } from "../src/ext/kit/check-list";
 import { PickList } from "../src/ext/kit/pick-list";
 import { ScrollList } from "../src/ext/pending/scroll-list";

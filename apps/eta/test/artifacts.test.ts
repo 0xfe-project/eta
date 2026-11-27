@@ -13,7 +13,7 @@ import { createHmac } from "node:crypto";
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { unzipSync } from "fflate";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { PRINT_LISTENER } from "../src/artifacts/print";
 import { until } from "./support/client";
 import { call, say, scriptedModels } from "./support/models";

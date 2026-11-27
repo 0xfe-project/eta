@@ -5,7 +5,7 @@
  */
 import { toMcpEntries } from "@eta/daemon";
 import { ServerManager } from "@eta/mcp";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { testConnection } from "../src/plugins/test-server";
 
 const URL_ = "https://api.cursor.com/rest-mcp/google-drive/mcp";

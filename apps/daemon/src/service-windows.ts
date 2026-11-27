@@ -170,7 +170,7 @@ async function onceReleased(action: () => Promise<void>): Promise<void> {
 
 /** Windows hands a local account back as `.\\me`, and names the same one `COMPUTER\\me`. */
 function sameAccount(registered: string, account: string): boolean {
-  const local = /^\.\\/.test(registered);
+  const local = registered.startsWith('.\\');
   const name = (text: string): string =>
     (local ? text.slice(text.indexOf("\\") + 1) : text).toLowerCase();
   return name(registered) === name(account);

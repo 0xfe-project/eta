@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { logoLineColors } from "../src/ui/logo";
 
 describe("logoLineColors", () => {

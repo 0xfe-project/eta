@@ -10,7 +10,7 @@ import type { World } from "./support/world";
 import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { createOarRuntimes } from "@eta/runtime-oar";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
 

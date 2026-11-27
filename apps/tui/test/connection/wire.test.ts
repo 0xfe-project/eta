@@ -4,7 +4,7 @@
  * on demand (a patch, an unreadable frame).
  */
 import type { WireSocket } from "../../src/connection/wire";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { wireUrl } from "../../src/connection/address";
 import { Wire, WireError } from "../../src/connection/wire";
 import { baseUrl, closedPort, closeHost, testHost } from "../support/host";

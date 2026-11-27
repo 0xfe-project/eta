@@ -15,7 +15,7 @@
 import type { AssistantMessage } from "@eta/core";
 import { Kernel, Runner } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { RunPump } from "../src/index";
 
 const userMsg = (text: string) => ({

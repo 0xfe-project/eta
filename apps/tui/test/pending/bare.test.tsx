@@ -6,7 +6,7 @@
  */
 import type { InteractionView } from "@eta/client-contracts";
 import type { WireState } from "../../src/connection/types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { renderApp } from "../ui-support/app";
 import { fakeWire } from "../ui-support/fake-wire";
 import { flush, KEYS, plain } from "../ui-support/render";

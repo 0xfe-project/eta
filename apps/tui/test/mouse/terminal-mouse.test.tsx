@@ -6,7 +6,7 @@
 import { EventEmitter } from "node:events";
 import { render, Text, useInput } from "ink";
 import { useEffect, useState } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { useWheel } from "../../src/extensions/react";
 import { MOUSE_REPORTING_OFF } from "../../src/ui/mouse/reporting";
 import { createTerminalMouse } from "../../src/ui/mouse/terminal";

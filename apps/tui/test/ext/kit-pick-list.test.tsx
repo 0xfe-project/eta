@@ -8,7 +8,7 @@
  */
 import type { PickItem } from "../../src/ext/kit/pick-list";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { PickList } from "../../src/ext/kit/pick-list";
 import { LIST_KEYS } from "../ext-support/keys";
 import { renderKit } from "../ext-support/render-kit";

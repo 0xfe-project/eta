@@ -8,7 +8,7 @@
  * after turn is open-prompt.test.ts's "re-reads the adaptive blocks every
  * generation, and leaves the prefix alone".
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { DEFAULT_SYSTEM_PROMPT } from "../src/prompts";
 import {
   composeEtaSystemPrompt,

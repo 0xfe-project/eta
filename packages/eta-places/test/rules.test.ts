@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { PathRules } from "../src";
 
 const posix = new PathRules("posix", "/home/ada");

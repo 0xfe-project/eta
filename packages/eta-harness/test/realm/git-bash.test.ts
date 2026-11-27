@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { gitBashSetup } from "../../src/realm/host-modules";
 
 const GIT = "E:\\Git";

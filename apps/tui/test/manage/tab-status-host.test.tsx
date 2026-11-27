@@ -2,7 +2,7 @@
  * A conversation tab's done and failed marks on a real host: they come for a tab that is not in
  * front too, and go once the conversation is read.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { say } from "../../../eta/test/support/models";
 import { CONVERSATION_VIEW } from "../../src/ext/conversation/kind";
 import { screenShows } from "../conversation/view-host-world";

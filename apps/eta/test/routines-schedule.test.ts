@@ -4,7 +4,7 @@
  * is promised, which is mostly what happens on the two nights a year the clocks move.
  */
 import type { RoutineSchedule } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   checkSchedule,
   cronOf,

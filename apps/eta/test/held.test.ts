@@ -5,7 +5,7 @@
  */
 import type { SteerHeldResult } from "@eta/client-contracts";
 import type { World } from "./support/world";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { holdNextDelivery, uploadNote } from "./support/briefing";
 import { until } from "./support/client";
 import { gate, say, scriptedModels } from "./support/models";

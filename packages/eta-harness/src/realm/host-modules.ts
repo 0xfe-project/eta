@@ -11,7 +11,7 @@ import process from "node:process";
 
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { localWindowsProbe, windowsChildEnv, windowsShell } from "@eta/ssh";
-import { $, quote } from "zx";
+import { $, quote } from "xmas:shell";
 
 /**
  * The `node:*` half of a realm's surface, in two layers with different rules.
@@ -302,12 +302,10 @@ export function mountNodeGlobals(realm: Realm): void {
 }
 
 /**
- * `$`, from the lite build of zx.
+ * `$`, from `xmas:shell`, the runtime's own zx-shaped shell.
  *
- * The dependency is `zx@lite` — a separate published version (`8.8.5-lite`),
- * not a subpath of the full package: its `.` export is the core build, 130 KB
- * against 880 KB. What it exports is what a shell is for, so nothing is
- * wrapped and nothing is renamed; `$` is mounted as `$`.
+ * What it exports is what a shell is for, so nothing is wrapped and nothing
+ * is renamed; `$` is mounted as `$`.
  *
  * Worth stating what this does not do. A command's own reads, writes and
  * outbound calls happen on the far side of the seam, so none of them are
@@ -335,7 +333,7 @@ export function mountShell(realm: Realm, cwd?: string): void {
 /**
  * Git Bash for `$` on Windows, and the PATH its Unix tools need.
  *
- * zx runs `bash` from PATH, and on Windows that is `System32\bash.exe`: WSL, which has none of the
+ * The shell runs `bash` from PATH, and on Windows that is `System32\bash.exe`: WSL, which has none of the
  * host's programs, eats backslashes in paths and does not see the Windows environment. The probe is
  * the one `LocalTransport` uses, so there is a single answer to "where is Git's shell". It throws when
  * there is none; falling back to WSL would make every command quietly run on another machine.

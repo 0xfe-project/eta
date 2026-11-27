@@ -19,7 +19,7 @@ import type { AssembledServer } from "../src/server";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { assembleServer } from "../src/server";
 
 const roots: string[] = [];

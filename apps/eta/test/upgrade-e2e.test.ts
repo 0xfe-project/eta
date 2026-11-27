@@ -14,7 +14,7 @@ import type { Manifest } from "../../../scripts/upgrade-e2e/seed";
 import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { hasPrereleaseSwitch } from "../../../scripts/upgrade-e2e/button";
 import {
   leaveOutSystemData,

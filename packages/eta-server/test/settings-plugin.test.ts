@@ -11,7 +11,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context } from "cordis";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { settingsPlugin } from "../src/bundled/settings";
 import { SettingsStore } from "../src/settings";
 import { WireService } from "../src/wire-service";

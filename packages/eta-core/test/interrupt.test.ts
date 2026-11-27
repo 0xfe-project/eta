@@ -11,7 +11,7 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { AgentMessage } from "../src/index";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { Kernel, kernelOn, Runner } from "../src/index";
 
 const userMsg = (text: string) => ({

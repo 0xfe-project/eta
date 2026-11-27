@@ -7,7 +7,7 @@ import type { LlmCode } from "@eta/client-contracts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { LLM_CODES } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { WireError } from "../../src/connection/wire";
 import { callErrorText } from "../../src/ext/kit/errors";
 

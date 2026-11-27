@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { sessionsPlugin } from "../src/bundled/sessions";
 import { SessionManager } from "../src/manager";
 import { MemorySessionStore } from "../src/memory-store";

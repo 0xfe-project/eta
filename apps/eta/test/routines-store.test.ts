@@ -3,7 +3,7 @@
  * live in the schema and the statements, with no clock, no session and no socket in the way.
  */
 import type { Database } from "bun:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { RoutineStore, titleOf } from "../src/routines/store";
 

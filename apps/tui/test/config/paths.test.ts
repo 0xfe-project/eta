@@ -1,5 +1,5 @@
 import { posix, resolve, win32 } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { resolvePaths } from "../../src/config/paths";
 
 describe("resolvePaths", () => {

@@ -7,7 +7,7 @@
  * are about the ring itself: capacity, order, and what a filter means.
  */
 import { Context } from "cordis";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { createEventRing } from "../src/ring";
 import { WireService } from "../src/wire-service";
 

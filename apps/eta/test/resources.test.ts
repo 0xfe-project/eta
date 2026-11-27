@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { buildsIn, defaultBuilds } from "../src/machines/builds";
 import {
   embeddedFiles,

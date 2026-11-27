@@ -40,6 +40,7 @@ import type { DispatchOutcome, OpContext } from "./registry";
 import type { WireService } from "./wire-service";
 import { decodeClientFrame, encodeFrame } from "@eta/client-wire-proto";
 import { UnknownOpError } from "./registry";
+import { serve } from "xmas:server";
 
 /** What one connected client looks like to this file. */
 export interface Socket {
@@ -344,7 +345,7 @@ export function serveWire(
   );
   const peers = new Map<number, EndpointConnection>();
 
-  const server = Bun.serve<{
+  const server = serve<{
     socketId: number;
     endpoint?: { path: string; context: unknown };
   }>({

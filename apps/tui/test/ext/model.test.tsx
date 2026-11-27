@@ -5,7 +5,7 @@
 import type { HostOptions } from "@eta/app/src/host";
 import type { AgentRuntimeInfo, AgentView } from "@eta/client-contracts";
 import type { HostRendered } from "../ext-support/render-with-host";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import model from "../../src/ext/model";
 import { dataDirWith, hostAgents } from "../ext-support/host-data";
 import { recordCalls } from "../ext-support/host-wire";

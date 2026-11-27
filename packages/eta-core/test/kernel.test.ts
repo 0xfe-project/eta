@@ -1,5 +1,5 @@
 import { Context } from "cordis";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { GoalService, Kernel } from "../src/index";
 import { kernelOn } from "../src/types/events";
 

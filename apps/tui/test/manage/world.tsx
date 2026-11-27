@@ -15,7 +15,7 @@ import type { TuiState } from "../../src/config/types";
 import type { WireClient } from "../../src/connection/types";
 import type { Asked, Respond } from "../conversation/view-host-world";
 import type { RenderedApp } from "../ui-support/app";
-import { afterEach } from "vitest";
+import { afterEach } from "xmas:test";
 import { WireError } from "../../src/connection/wire";
 import { CONVERSATION_VIEW } from "../../src/ext/conversation/kind";
 import {

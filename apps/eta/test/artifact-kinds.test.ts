@@ -7,7 +7,7 @@ import type { ArtifactKinds } from "../src/artifacts/kinds";
 import type { ArtifactKind } from "../src/artifacts/kinds/kind";
 import { Buffer } from "node:buffer";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { DEFAULT_LIMITS } from "../src/artifacts/files";
 import { artifactKinds, KINDS } from "../src/artifacts/kinds";
 import { kind } from "../src/artifacts/kinds/kind";
@@ -75,9 +75,7 @@ async function bench(kinds: ArtifactKinds, db?: Database) {
   const artifacts = service(kinds);
   const get = (path: string, accept?: string) =>
     createArtifactRoutes(artifacts)(
-      new Request(`http://host${path}`, {
-        ...(accept === undefined ? {} : { headers: { accept } }),
-      }),
+      new Request(`http://host${path}`, (accept === undefined ? {} : { headers: { accept } })),
     ) as Promise<Response>;
   return { db: database_, artifacts, service, get };
 }

@@ -20,3 +20,7 @@ out/
 
 # Turborepo
 .turbo
+
+# xmas package store and lockfile
+.xmas/
+*.xmas-local

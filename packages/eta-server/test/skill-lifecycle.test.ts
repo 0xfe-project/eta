@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { expect, it } from "vitest";
+import { expect, it } from "xmas:test";
 import { SessionManager } from "../src/manager";
 import { MemorySessionStore } from "../src/memory-store";
 import { renderSkillsBlock } from "../src/skills";

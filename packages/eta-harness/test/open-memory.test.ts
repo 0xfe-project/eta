@@ -13,7 +13,7 @@ import type { KernelModels } from "@eta/core";
 import type { MemoryExtractionOutcome, MemoryFs } from "../src/memory";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { openSession } from "../src/open";
 
 const userMsg = (text: string) => ({

@@ -8,7 +8,7 @@
  */
 import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
 import { MODEL_SOURCES } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { catalogCompat } from "../src/providers/catalog";
 import { checkOf, listProviderModels } from "../src/providers/discovery";
 import {

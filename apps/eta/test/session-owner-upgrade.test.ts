@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
  * seed does have, cleared the way an old row is.
  */
 import { Database } from "bun:sqlite";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   heldIn,
   mentionKey,

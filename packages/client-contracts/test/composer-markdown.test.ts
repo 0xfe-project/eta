@@ -1,5 +1,5 @@
 import type { DocNode } from "../src/composer-doc";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { draftToDoc, serializeDoc } from "../src/composer-doc";
 import {
   docToMarkdown,

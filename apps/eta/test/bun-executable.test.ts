@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 /** Build commands must use Bun itself, not a shell wrapper that can reject quoted defines. */
 import process from "node:process";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { bunExecutable } from "../scripts/bun-executable";
 
 describe("bunExecutable", () => {

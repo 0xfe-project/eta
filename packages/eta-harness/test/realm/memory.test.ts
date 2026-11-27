@@ -4,7 +4,7 @@
  * goes through node:assert, which all three accept.
  */
 
-import type * as NodeTest from "vitest";
+import type * as NodeTest from "xmas:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

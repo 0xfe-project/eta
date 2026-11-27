@@ -12,7 +12,7 @@ import type { Usage } from "@earendil-works/pi-ai";
 import type { Entry } from "@eta/core/session";
 import { DEFAULT_COMPACTION_SETTINGS } from "@eta/core";
 import { assistantMessage } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   calculateContextTokens,
   DEFAULT_MAX_CONTEXT_TOKENS,

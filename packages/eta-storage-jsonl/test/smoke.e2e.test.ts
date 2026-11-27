@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { realModels, selectProvider } from "@eta/core/testing";
 import { runSmokeScenario } from "@eta/harness/testing";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "xmas:test";
 import { JsonlStorage } from "../src/index";
 
 const configPath = process.env.ETA_SMOKE_CONFIG;

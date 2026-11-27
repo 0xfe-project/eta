@@ -8,7 +8,7 @@ import type { Locale } from "../src/config/types";
 import { stripVTControlCharacters } from "node:util";
 import { Box, Text, useInput, useWindowSize } from "ink";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { PickList } from "../src/ext/kit/pick-list";
 import { ChoiceList } from "../src/ui/components/choice-list";
 import { LayerFrame } from "../src/ui/components/layer-frame";

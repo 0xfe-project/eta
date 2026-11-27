@@ -8,7 +8,7 @@
  */
 
 import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { createStateSender } from "../src/state-sender";
 
 function harness() {

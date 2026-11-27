@@ -11,7 +11,7 @@ import type { HostService } from "../src/upgrade/service";
 import { existsSync, realpathSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { releaseSource } from "../src/upgrade/command";
 import {
   savedPrerelease,

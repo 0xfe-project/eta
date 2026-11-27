@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SessionLog } from "@eta/core/session";
 import { value } from "@eta/core/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { JsonlStorage } from "../src/index";
 
 const here = fileURLToPath(new URL(".", import.meta.url));

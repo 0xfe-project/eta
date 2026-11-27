@@ -1,6 +1,6 @@
 import type { Entry, MessageEntry, NewEntry } from "@eta/core/session";
 import { EntryGraph, forkChain, selectBranchFork } from "@eta/core/session";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 
 const msg = (
   text: string,

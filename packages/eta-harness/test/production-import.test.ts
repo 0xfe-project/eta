@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { expect, it } from "vitest";
+import { expect, it } from "xmas:test";
 
 it("default harness import builds and loads no test code", () => {
   if (process.platform === "win32") return;

@@ -3,7 +3,7 @@
  * and replaced whole through `inbox.setApprovals`.
  */
 import type { ApprovalList } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import approvals from "../../src/ext/approvals";
 import { observeHost } from "../ext-support/host-observer";
 import { recordCalls } from "../ext-support/record-calls";

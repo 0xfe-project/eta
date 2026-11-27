@@ -104,7 +104,7 @@ export function resolveConfiguredModels(
   const resolved: EtaModelConfig[] = [];
   for (const model of models) {
     const known = providerModelDefinition(provider, model.id);
-    resolved.push({ ...(known ?? {}), ...model, id: model.id });
+    resolved.push({ ...known, ...model, id: model.id });
   }
   return resolved;
 }

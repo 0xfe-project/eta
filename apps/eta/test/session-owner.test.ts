@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "xmas:test";
 import * as owner from "../src/session-owner";
 
 const taskOfRun = (runId: string) => ({ r1: "t1" })[runId];

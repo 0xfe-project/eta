@@ -17,7 +17,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DaemonLink, DaemonNode } from "@eta/daemon";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { connect, until } from "./support/client";
 import { dropLink, machineView } from "./support/daemon";
 import { testHost } from "./support/host";

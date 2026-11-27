@@ -16,7 +16,7 @@
 
 import { MemoryStorage } from "@eta/core/storage";
 import { realModels, selectProvider } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { runSmokeScenario } from "../src/testing";
 
 const configPath = process.env.ETA_SMOKE_CONFIG;

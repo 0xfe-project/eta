@@ -11,7 +11,7 @@ import type {
 } from "@eta/client-contracts";
 import type { KernelTool } from "@eta/core";
 import type { Request } from "./support/models";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { HANG, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";

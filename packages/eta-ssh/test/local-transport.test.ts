@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { windowsChildEnv, windowsShell } from "../src/local-transport";
 
 const SCOOP = "D:\\Library\\scoop\\apps\\git\\current";

@@ -10,7 +10,7 @@ import { Buffer } from "node:buffer";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { GatewayModels } from "../src/llm/models";
 import { openLlm } from "../src/llm/runtime";
 import { until } from "./support/client";

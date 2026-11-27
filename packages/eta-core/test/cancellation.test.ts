@@ -10,7 +10,7 @@
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { Kernel, Runner } from "../src/index";
 import { kernelOn } from "../src/types/events";
 

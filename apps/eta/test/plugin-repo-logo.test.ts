@@ -5,7 +5,7 @@ import { Buffer } from "node:buffer";
  * A local fake server stands in for raw.githubusercontent.com; the real Cursor repository is not asked.
  */
 import http from "node:http";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { Logos, MAX_REPO_LOOKUPS } from "../src/plugins/logo";
 
 const PNG = Buffer.from([

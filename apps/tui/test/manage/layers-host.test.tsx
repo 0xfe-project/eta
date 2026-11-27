@@ -3,7 +3,7 @@
  * current steward marked, and the host's state after Enter.
  */
 import type { RenderedApp } from "../ui-support/app";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { screenShows } from "../conversation/view-host-world";
 import { until } from "../support/temp";
 import { KEYS, plain } from "../ui-support/render";

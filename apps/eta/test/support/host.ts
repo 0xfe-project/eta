@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { afterEach } from "vitest";
+import { afterEach } from "xmas:test";
 import { startHost } from "../../src/host";
 
 const roots: string[] = [];

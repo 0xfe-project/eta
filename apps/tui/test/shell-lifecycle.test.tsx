@@ -6,7 +6,7 @@ import type { ConnectionPhase } from "../src/connection/types";
 import type { Extension, PinnedTab } from "../src/extensions/types";
 import { Text, useInput } from "ink";
 import { useEffect } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { useAction, useShell } from "../src/extensions/react";
 import { renderApp, TEST_URL } from "./ui-support/app";
 import { flush, KEYS, plain } from "./ui-support/render";

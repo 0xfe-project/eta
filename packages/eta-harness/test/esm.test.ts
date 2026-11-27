@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Type } from "typebox";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { ESM_TOOL_NAMES } from "../src/esm";
 import { openSession } from "../src/open";
 import { Agent } from "../src/realm";

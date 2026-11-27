@@ -2,7 +2,7 @@
  * What ending eta guarantees beyond the happy path: a crash exits 1 whatever step of it throws,
  * and a program that has the terminal does not outlive eta.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { createShutdown } from "../src/ui/shutdown";
 
 type Step = "releaseTerminal" | "stop" | "killNow" | "unmount" | "writeError";

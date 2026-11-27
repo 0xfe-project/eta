@@ -1,5 +1,5 @@
 import type { ThinkingCatalog } from "../src";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   agentThinking,
   FALLBACK_LEVELS,

@@ -328,7 +328,7 @@ export class TaskRunner implements TaskRuns {
       live.stopped = "closing";
       live.handle?.abort();
     }
-    await Promise.allSettled([...this.#work]);
+    await Promise.allSettled(this.#work);
   }
 
   /** Runs the last process left going cannot be going: they end, failed. Before anything starts. */

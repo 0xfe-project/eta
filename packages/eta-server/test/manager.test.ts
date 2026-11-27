@@ -7,7 +7,7 @@
  */
 import { SessionLog } from "@eta/core/session";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { SessionManager } from "../src/manager";
 import { MemorySessionStore } from "../src/memory-store";
 

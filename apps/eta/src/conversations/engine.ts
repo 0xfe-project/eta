@@ -249,7 +249,7 @@ export class Engine {
       clearTimeout(running.deadline);
       running.handle.abort();
     }
-    await Promise.allSettled([...this.#chains.values()]);
+    await Promise.allSettled(this.#chains.values());
     this.#local.detach();
   }
 

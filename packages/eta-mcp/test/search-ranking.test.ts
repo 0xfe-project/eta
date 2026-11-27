@@ -2,7 +2,7 @@ import type { SearchEntry } from "../src/search-ranking";
 /**
  * Ranking, keywords, pagination, tool-name matching and suggestions.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { isToolAllowed, matchesToolPattern } from "../src/names";
 import { rankTools, resolveSearchKeywords } from "../src/search-ranking";
 

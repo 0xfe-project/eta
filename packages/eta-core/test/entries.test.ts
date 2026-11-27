@@ -1,5 +1,5 @@
 import type { Entry, EntryType, MessageEntry } from "../src/types/entries";
-import { describe, expectTypeOf, it } from "vitest";
+import { describe, expectTypeOf, it } from "xmas:test";
 
 describe("entry union", () => {
   it("the EntryType list and the Entry union name the same kinds", () => {

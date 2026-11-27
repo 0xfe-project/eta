@@ -20,7 +20,7 @@ import { chmod, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { PlaceError, Places } from "@eta/places";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { approve, startDaemon } from "./support/daemon";
 import { tempDir } from "./support/host";

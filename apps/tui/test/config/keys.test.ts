@@ -1,5 +1,5 @@
 import type { KeyBinding } from "../../src/config/types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { formatKeyBinding, parseKeyBinding } from "../../src/config/keys";
 import { NAMED_KEYS } from "../../src/config/types";
 

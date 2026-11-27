@@ -2,7 +2,7 @@
  * The session behind a member: made at its first wake, in the project's directory, as the agent
  * is configured, and brought in line when the agent is edited.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { say, scriptedModels } from "./support/models";
 import { world } from "./support/world";

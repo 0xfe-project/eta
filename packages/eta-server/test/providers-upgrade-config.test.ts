@@ -16,7 +16,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { buildProvider } from "../src/providers/runtime";
 import { ProviderConfigStore } from "../src/providers/store";
 

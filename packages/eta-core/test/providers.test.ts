@@ -1,6 +1,6 @@
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   askedThinking,
   kernelThinking,

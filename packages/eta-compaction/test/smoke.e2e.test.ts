@@ -21,7 +21,7 @@ import {
   selectProvider,
 } from "@eta/core/testing";
 import { openSession, RunPump } from "@eta/harness";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { etaCompaction } from "../src/index";
 
 const configPath = process.env.ETA_SMOKE_CONFIG;

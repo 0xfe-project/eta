@@ -1,5 +1,5 @@
 /** Finding text in the transcript's plain lines, and moving between the matches. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { findMatches } from "../../src/ext/conversation/transcript/search";
 
 describe("findMatches", () => {

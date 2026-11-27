@@ -22,7 +22,7 @@ import type { HostOptions } from "../src/host";
 import type { Answer, Request } from "./support/models";
 import { captainProposalOf } from "@eta/client-contracts";
 import { Database } from "bun:sqlite";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { databasePath } from "../src/db";
 import { PRIVATE_CLOSE, PRIVATE_OPEN } from "../src/routines/prompts";
 import { until } from "./support/client";

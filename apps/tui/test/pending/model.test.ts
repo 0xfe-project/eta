@@ -12,7 +12,7 @@ import type {
   InteractionView,
 } from "@eta/client-contracts";
 import type { WireState } from "../../src/connection/types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   itemConversationId,
   openTasks,

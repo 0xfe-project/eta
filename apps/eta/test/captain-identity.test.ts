@@ -7,7 +7,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { AgentStore } from "../src/agents/store";
 import { resolveNamed } from "../src/conversations/routing";
 import { databasePath } from "../src/db";

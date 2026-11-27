@@ -7,7 +7,7 @@ import { Buffer } from "node:buffer";
  * network.
  */
 import http from "node:http";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { IconCache } from "../src/plugins/icon-cache";
 import { Logos } from "../src/plugins/logo";

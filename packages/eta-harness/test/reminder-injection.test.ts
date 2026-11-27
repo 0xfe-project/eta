@@ -10,7 +10,7 @@
 import type { KernelTool } from "@eta/core";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { openSession } from "../src/open";
 import { STEP_REVIEW_PROMPT } from "../src/prompts";
 

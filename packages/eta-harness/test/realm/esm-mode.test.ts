@@ -6,7 +6,7 @@ import hostOs, { tmpdir } from "node:os";
 
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "xmas:test";
 import {
   Agent,
   mountGlobals,
@@ -531,15 +531,14 @@ describe("$", () => {
     expect(result.value).toEqual({ stdout: "hi", code: 0 });
   });
 
-  it("a failing command throws the way zx throws", async () => {
+  it("a failing command throws and names its exit code", async () => {
     if (process.platform === "win32") return;
     const agent = new Agent({ root });
     const script = "await $`exit 3`;\nexport default 0;";
     const error = (await agent
       .run(script, { identifier: join(root, "probe.js") })
       .catch((e: Error) => e)) as Error;
-    // Bun and Node word the same failure differently; both name the code.
-    expect(error.message).toMatch(/zx error|exit code:? 3/);
+    expect(error.message).toMatch(/exited with 3/);
   });
 
   it("the chained methods a prompt promises work inside the realm", async () => {

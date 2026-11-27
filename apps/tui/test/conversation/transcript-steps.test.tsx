@@ -9,7 +9,7 @@ import type {
 } from "../../src/ext/conversation/contract";
 import type { TranscriptUi } from "../../src/ext/conversation/transcript/ui";
 import { useState } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { layoutTranscript } from "../../src/ext/conversation/transcript/layout";
 import {
   lineOfPlace,

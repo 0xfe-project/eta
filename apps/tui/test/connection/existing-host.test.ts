@@ -14,7 +14,7 @@ import type {
 } from "../../src/connection/types";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { createConnectionController } from "../../src/connection/controller";
 import { script } from "../support/fake-programs";
 import { baseUrl, closedPort, closeHost, testHost } from "../support/host";

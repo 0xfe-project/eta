@@ -4,7 +4,7 @@
  */
 import type { AgentRuntimeInfo } from "@eta/client-contracts";
 import type { SessionRuntime, SessionRuntimeInput } from "../src/index";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { composeRuntimes } from "../src/index";
 
 const info = (id: string): AgentRuntimeInfo =>

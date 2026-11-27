@@ -17,7 +17,7 @@ import type { Rendered } from "../ui-support/render";
 import { writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import process from "node:process";
-import { afterEach } from "vitest";
+import { afterEach } from "xmas:test";
 import { loadConfig } from "../../src/config/load";
 import { resolvePaths } from "../../src/config/paths";
 import { ensureConfigFile } from "../../src/config/save";

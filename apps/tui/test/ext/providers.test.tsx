@@ -6,7 +6,7 @@
 import type { Host } from "@eta/app/src/host";
 import type { LlmConnection } from "@eta/client-contracts";
 import type { HostRendered } from "../ext-support/render-with-host";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import providers from "../../src/ext/providers";
 import {
   BAD_KEY,

@@ -2,7 +2,7 @@
  * The test host's model gateway: every connector that would log in to a provider on the internet
  * points at a local address unless a test gives it a fake, so no test reaches the provider.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { withHostWire } from "./ext-support/host-wire";
 import { offlineGateway, testHost, UNREACHABLE } from "./support/host";
 

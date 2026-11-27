@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { DEFAULT_CONFIG } from "../../src/config/defaults";
 import { ACTION_NAMES } from "../../src/config/types";
 

@@ -2,7 +2,7 @@
  * Turning the terminal's mouse reporting on and off: it follows the `mouse` setting, it is off
  * while a program has the terminal, and once eta ends it stays off.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   createMouseReporting,
   MOUSE_REPORTING_OFF,

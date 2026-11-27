@@ -3,7 +3,7 @@
  * this one module, so what passes here passes in both; the web's form has a test of its own that
  * it shows these same answers.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   agentLevel,
   agentLevels,

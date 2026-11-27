@@ -5,7 +5,7 @@
  * the look, and `settled` does.
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { AcpAdmin, createAcpRuntimes } from "../src/index";
 import { configFile, fakeAgent, until } from "./support";
 

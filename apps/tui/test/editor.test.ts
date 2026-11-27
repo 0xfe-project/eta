@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { editorLaunch } from "../src/ui/editor";
 
 const noProgram = () => null;

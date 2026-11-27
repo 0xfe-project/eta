@@ -7,7 +7,7 @@ import type { MachineView } from "@eta/client-contracts";
 import type { HostObserver } from "../ext-support/host-observer";
 import { MachineStore } from "@eta/app/src/machines/store";
 import { Tailscale } from "@eta/app/src/machines/tailscale";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import machines from "../../src/ext/machines";
 import { enrollUrl } from "../../src/ext/machines/address";
 import { observeHost } from "../ext-support/host-observer";

@@ -532,9 +532,7 @@ export function builtinViewContributions(
       name: "ask",
       project: () => {
         const ask = sources.ask();
-        return {
-          ...(ask?.pending === undefined ? {} : { pending: ask.pending }),
-        };
+        return (ask?.pending === undefined ? {} : { pending: ask.pending });
       },
       revision: () => signatureOf(sources.ask()?.pending ?? null),
     });

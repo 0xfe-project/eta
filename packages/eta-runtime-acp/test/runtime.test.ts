@@ -19,7 +19,7 @@ import process from "node:process";
 import { kernelOn } from "@eta/core";
 import { listenServed } from "@eta/runtime-kit/testing";
 import { MemorySessionStore, SessionManager } from "@eta/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { createAcpRuntimes } from "../src/index";
 import { configFile, fakeAgent, until } from "./support";
 

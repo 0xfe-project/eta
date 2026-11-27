@@ -1,5 +1,5 @@
 /** What happened to a question while no link was up is told to the primary when one is. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { Reports, UNREPORTED_LIMIT } from "../src/reports";
 
 /** A peer that only counts what it was told. */

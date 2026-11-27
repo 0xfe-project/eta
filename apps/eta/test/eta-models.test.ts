@@ -6,7 +6,7 @@
 import type { Database } from "bun:sqlite";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { explainRunError, missingModel } from "../src/agents/model";
 import {
   applyMigrations,

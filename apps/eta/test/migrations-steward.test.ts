@@ -10,7 +10,7 @@
 import type { Database } from "bun:sqlite";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { projectMachinesOf } from "../src/acp/service";
 import { AgentStore } from "../src/agents/store";
 import { CaptainMemory } from "../src/captain/memory";

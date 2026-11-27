@@ -1,6 +1,6 @@
 import type { GoalEntry } from "../src/types/entries";
 import { Context } from "cordis";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   ANTI_SPIN_LIMIT,
   applyGoalEntries,

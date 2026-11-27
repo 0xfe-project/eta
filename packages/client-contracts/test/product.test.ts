@@ -5,7 +5,7 @@ import type {
   MessageView,
   SendResult,
 } from "../src/index";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { agentOnlyChat } from "../src/index";
 
 const reply: MessageView = {

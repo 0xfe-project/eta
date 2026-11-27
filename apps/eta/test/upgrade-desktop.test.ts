@@ -5,7 +5,7 @@
 import type { ServiceStatus } from "@eta/daemon";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { findRunningHost, localOrigin, recordRunning } from "../src/running";
 import {
   DESKTOP_SERVICE_ENV,

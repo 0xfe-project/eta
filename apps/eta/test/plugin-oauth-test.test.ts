@@ -9,7 +9,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { mcpServerKey } from "@eta/daemon";
 import { createOAuthProvider } from "@eta/mcp";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   createFakeAuthServer,
   MCP_URL,

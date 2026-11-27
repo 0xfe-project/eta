@@ -14,7 +14,7 @@ import {
   serversConfig as serversConfigOf,
   toMcpEntries,
 } from "@eta/daemon";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { Plugins } from "../src/plugins/service";
 

@@ -5,7 +5,7 @@
 import type { TemporaryHost } from "../../src/connection/temporary-host";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { probeUp } from "../../src/connection/probe";
 import { launchTemporaryHost } from "../../src/connection/temporary-host";
 import { script } from "../support/fake-programs";

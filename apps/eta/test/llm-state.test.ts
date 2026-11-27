@@ -3,7 +3,7 @@
  * model's from the account's and its own; the agents' keys; the Codex credential file.
  */
 import type { AuthFileEntry, CooldownView } from "@cpajs/cpa/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { codexPlanName } from "../src/llm/codex";
 import {
   connectionReason,

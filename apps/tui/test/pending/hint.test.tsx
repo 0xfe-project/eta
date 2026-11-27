@@ -2,7 +2,7 @@
  * The conversation view's "waiting for your answer" line ends with the key that opens review
  * mode, as the settings bind it, and with nothing when it is unbound.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { testConfig } from "../ui-support/config";
 import { plain } from "../ui-support/render";
 import { screenShows, twoRooms } from "./world";

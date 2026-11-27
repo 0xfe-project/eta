@@ -1,5 +1,5 @@
 import type { ToolBlock } from "../src/run";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   childrenOf,
   exitCodeOf,

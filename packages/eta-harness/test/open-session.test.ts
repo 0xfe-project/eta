@@ -13,7 +13,7 @@ import type { StorageService } from "@eta/core/storage";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage, setValue, value } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { openSession, RunPump } from "../src/index";
 import { SESSION_CONFIG, TASKS_STATE } from "../src/testing";
 

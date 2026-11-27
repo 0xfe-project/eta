@@ -9,7 +9,7 @@ import type { Event, EventBody, TokenTotals } from "@botiverse/oar";
 import type { AgentMessage, AssistantMessage } from "@eta/core";
 import type { TranslatorTarget } from "../src/translate";
 import { reportedField, tokensReported } from "@eta/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { HostCalls } from "../src/host-calls";
 import { Translator } from "../src/translate";
 

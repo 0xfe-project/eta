@@ -2,7 +2,7 @@
  * What a group is called when nobody named it: the rule on its own. The path that applies it —
  * a real socket, a real project — is in routing.test.ts.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { defaultGroupName } from "../src/conversations/views";
 
 describe("the default name of a group", () => {

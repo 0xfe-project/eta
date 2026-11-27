@@ -9,7 +9,7 @@ import type {
   ProvidersView,
 } from "@eta/client-contracts";
 import type { Model } from "../../src/ext/kit/models";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { buildModels } from "../../src/ext/kit/models";
 
 function provider(

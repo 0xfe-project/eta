@@ -10,7 +10,7 @@ import type {
 } from "@eta/client-contracts";
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { gate, HANG, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { expect, it } from "vitest";
+import { expect, it } from "xmas:test";
 
 it("imports the production entry without test dependencies", () => {
   const output = execFileSync(

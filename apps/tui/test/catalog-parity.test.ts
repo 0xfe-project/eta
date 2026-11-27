@@ -7,7 +7,7 @@ import type { Localized, MessageCatalog } from "../src/extensions/types";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { extensions } from "../src/extensions.gen";
 import { placeholdersOf } from "../src/i18n/messages";
 

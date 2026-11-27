@@ -2,7 +2,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach } from "vitest";
+import { afterEach } from "xmas:test";
 
 const roots: string[] = [];
 

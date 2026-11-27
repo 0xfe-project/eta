@@ -1,6 +1,6 @@
 import type { MachineRecord } from "../src/machines/store";
 import type { ProjectRecord } from "../src/projects/store";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { SkillFileService } from "../src/skills/service";
 
 describe("skill target errors do not fall back", () => {

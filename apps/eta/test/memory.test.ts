@@ -6,7 +6,7 @@
 import type { MemoryView } from "@eta/client-contracts";
 import type { World } from "./support/world";
 import { MEMORY_ACTIONS } from "@eta/client-contracts";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { call, HANG, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";

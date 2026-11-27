@@ -4,7 +4,7 @@
  * file pins what each row means.
  */
 import { TASK_STATUSES } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   finished,
   isActive,

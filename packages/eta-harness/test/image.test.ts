@@ -9,7 +9,7 @@
  */
 
 import { Buffer } from "node:buffer";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { detectSupportedImageMimeType } from "../src/tools/image";
 
 /** One-pixel PNG (the smallest thing a provider will take). */

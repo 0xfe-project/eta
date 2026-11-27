@@ -2,7 +2,7 @@ import type { McpSink, McpToolInfo } from "../../src/realm/hooks";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { renderPlatformBlock } from "../../src/prompts/platform";
 import { Agent } from "../../src/realm/agent";
 

@@ -4,7 +4,7 @@
  */
 import type { TaskBoardSettings } from "@eta/client-contracts";
 import type { World } from "./support/world";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { SettingStore } from "../src/settings/store";
 import { TaskDraftExpirer } from "../src/tasks/draft-timeout";
 import { call, say, scriptedModels } from "./support/models";

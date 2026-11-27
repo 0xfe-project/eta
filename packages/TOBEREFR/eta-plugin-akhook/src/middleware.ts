@@ -151,7 +151,7 @@ export function akhookMiddleware(
           question: questionFor(name, args, hits),
           options: [ALLOW, DENY],
         },
-        { ...(call.signal === undefined ? {} : { signal: call.signal }) },
+        (call.signal === undefined ? {} : { signal: call.signal }),
       );
       if (
         (response.kind === "selection" &&

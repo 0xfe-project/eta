@@ -1,6 +1,6 @@
 /** Folded pastes: when a paste folds, how its placeholder behaves as one piece, and how it expands. */
 import type { ComposerState } from "../../src/ext/conversation/composer/state";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   deleteBackward,
   deleteForward,

@@ -4,7 +4,7 @@
  */
 import type { RenderedApp } from "./ui-support/app";
 import { stripVTControlCharacters } from "node:util";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { extensions } from "../src/extensions.gen";
 import { LIST_KEYS } from "./ext-support/keys";
 import { renderApp } from "./ui-support/app";

@@ -6,7 +6,7 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { renderWithHost } from "../ext-support/render-with-host";
 import { tempDir } from "../support/temp";
 

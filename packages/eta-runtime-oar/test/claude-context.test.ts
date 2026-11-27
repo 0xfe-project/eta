@@ -1,6 +1,6 @@
 import type { Event, RuntimeEventBody } from "@botiverse/oar";
 import type { RuntimeId } from "../src";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { HostCalls } from "../src/host-calls";
 import { Translator } from "../src/translate";
 

@@ -17,7 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { SessionManager } from "../src/manager";
 import { MemorySessionStore } from "../src/memory-store";
 import { SettingsStore } from "../src/settings";

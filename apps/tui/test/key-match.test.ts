@@ -1,6 +1,6 @@
 import type { Key } from "ink";
 import type { KeyBinding } from "../src/config/types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { matchesBinding } from "../src/ui/key-match";
 
 function key(flags: Partial<Key> = {}): Key {

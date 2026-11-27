@@ -5,7 +5,7 @@
  * Rendered with the settings and the language only, for the reason given in kit-pick-list.test.tsx.
  */
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { CheckList } from "../../src/ext/kit/check-list";
 import { LIST_KEYS } from "../ext-support/keys";
 import { renderKit } from "../ext-support/render-kit";

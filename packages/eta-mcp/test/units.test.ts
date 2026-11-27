@@ -7,7 +7,7 @@ import { writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "xmas:test";
 import { FAILURE_BACKOFF_MS, FailureTracker } from "../src/failure-backoff";
 import { schemaViolation } from "../src/json-schema";
 import { MetadataCache } from "../src/metadata-cache";

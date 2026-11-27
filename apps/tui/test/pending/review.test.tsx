@@ -3,7 +3,7 @@
  * or go meanwhile, how it ends, Esc, and going to an item's conversation.
  */
 import { stripVTControlCharacters } from "node:util";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "../support/temp";
 import { KEYS, plain, realDelay } from "../ui-support/render";
 import { askedFor, PENDING_KEYS, screenShows, tabBar, twoRooms } from "./world";

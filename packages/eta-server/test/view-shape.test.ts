@@ -18,7 +18,7 @@ import { stateDiff } from "@eta/client-wire-proto";
 import { MemoryStorage } from "@eta/core/storage";
 import { fakeModels } from "@eta/core/testing";
 import { openSession } from "@eta/harness";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 
 describe("the harness snapshot is what the wire says a view is", () => {
   it("assigns, reads by section name, and diffs", async () => {

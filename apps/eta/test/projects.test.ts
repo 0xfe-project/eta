@@ -9,7 +9,7 @@ import type {
 } from "@eta/client-contracts";
 import { writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { connect, until } from "./support/client";
 import { tempDir, testHost } from "./support/host";
 import { world } from "./support/world";

@@ -8,7 +8,7 @@ import { Buffer } from "node:buffer";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { tempDir } from "./support/host";
 import { call, say, scriptedModels } from "./support/models";
 import { remoteWorld } from "./support/remote";

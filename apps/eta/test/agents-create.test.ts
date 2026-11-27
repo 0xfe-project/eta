@@ -8,7 +8,7 @@ import type { AgentCreateDeps } from "../src/agents/create";
 import type { Plugins } from "../src/plugins/service";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import {
   checkAgentName,
   checkNewAgent,

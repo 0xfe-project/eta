@@ -15,7 +15,7 @@ import { Runner } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { journaledKernel } from "@eta/harness/testing";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "xmas:test";
 import { JsonlStorage } from "../src/index";
 
 let dir = "";

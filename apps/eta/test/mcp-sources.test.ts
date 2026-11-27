@@ -7,7 +7,7 @@ import type { McpConfigSource } from "@eta/mcp";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { McpHost } from "@eta/daemon";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { tempDir } from "./support/host";
 
 const hosts: McpHost[] = [];

@@ -7,7 +7,7 @@ import type { Dirent } from "node:fs";
 import * as nodeFsModule from "node:fs";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { execa } from "execa";
+import { spawn } from "node:child_process";
 
 export type EntryKind = "directory" | "file" | "link-directory" | "link-other";
 
@@ -151,29 +151,60 @@ export type PlaceRunner = (
 const MAX_OUTPUT = 4 * 1024 * 1024;
 
 /**
- * Programs run with `execa`: no shell, the deadline and the cancel signal kill the process, a
+ * Programs run with `node:child_process`: no shell, the deadline and the cancel signal kill the process, a
  * program that is not on the PATH is told apart, and output beyond a few megabytes is cut.
  */
-export const nodeRunner: PlaceRunner = async (command, args, options = {}) => {
-  const result = await execa(command, args, {
-    reject: false,
-    stdin: "ignore",
-    windowsHide: true,
-    maxBuffer: MAX_OUTPUT,
-    ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-    ...(options.env === undefined ? {} : { env: options.env }),
-    ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
-    ...(options.signal === undefined ? {} : { cancelSignal: options.signal }),
+export const nodeRunner: PlaceRunner = (command, args, options = {}) =>
+  new Promise<RunResult>((resolve) => {
+    const child = spawn(command, [...args], {
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      env: { ...process.env, ...options.env },
+    });
+    let stdout = "";
+    let stderr = "";
+    let missing = false;
+    let aborted = false;
+    let timedOut = false;
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (code: number) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onAbort);
+      resolve({
+        code,
+        stdout,
+        stderr,
+        ...(missing ? { missing: true } : {}),
+        ...(aborted ? { aborted: true } : {}),
+        ...(timedOut ? { timedOut: true } : {}),
+      });
+    };
+    const onAbort = () => {
+      aborted = true;
+      child.kill("SIGKILL");
+    };
+    const take = (current: string, chunk: Buffer): string =>
+      current.length >= MAX_OUTPUT ? current : current + chunk.toString("utf8").slice(0, MAX_OUTPUT - current.length);
+    child.stdout?.on("data", (chunk: Buffer) => (stdout = take(stdout, chunk)));
+    child.stderr?.on("data", (chunk: Buffer) => (stderr = take(stderr, chunk)));
+    child.stdin?.end();
+    child.on("error", (error: NodeJS.ErrnoException) => {
+      if (/ENOENT/.test(String(error.code ?? error.message))) missing = true;
+      else stderr += String(error.message);
+      finish(1);
+    });
+    child.on("close", (code: number | null) => finish(code ?? 1));
+    if (options.timeoutMs !== undefined) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        child.kill("SIGKILL");
+      }, options.timeoutMs);
+    }
+    if (options.signal?.aborted) onAbort();
+    else options.signal?.addEventListener("abort", onAbort, { once: true });
   });
-  return {
-    code: result.exitCode ?? 1,
-    stdout: String(result.stdout ?? ""),
-    stderr: String(result.stderr ?? ""),
-    ...(result.code === "ENOENT" ? { missing: true } : {}),
-    ...(result.isCanceled ? { aborted: true } : {}),
-    ...(result.timedOut ? { timedOut: true } : {}),
-  };
-};
 
 /** Whether a program's complaint is about the network. */
 export function classifyNetwork(stderr: string): "network" | undefined {

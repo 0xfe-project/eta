@@ -5,7 +5,7 @@
  * stays the text alone, blocks included as the plain text they stand for.
  */
 import type { World } from "./support/world";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { world } from "./support/world";
 

@@ -11,7 +11,7 @@ import type { ManagedSession } from "@eta/server";
 import { createRuntimeRegistry, UnsupportedOptionError } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { MemorySessionStore, SessionManager } from "@eta/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { createOarRuntimes, RUNTIME_IDS } from "../src/index";
 
 const tick = async (ms = 20) =>

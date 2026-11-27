@@ -30,7 +30,7 @@ import { scriptedRuntime } from "@botiverse/oar/testing";
 import { kernelEmit, kernelOn } from "@eta/core";
 import { listenServed, listServed } from "@eta/runtime-kit/testing";
 import { MemorySessionStore, SessionManager } from "@eta/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { createOarRuntimes } from "../src/index";
 
 const textOf = (message: AgentMessage): string =>

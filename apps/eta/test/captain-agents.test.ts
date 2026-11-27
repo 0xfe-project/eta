@@ -21,7 +21,7 @@ import type { World } from "./support/world";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { captainProposalOf, isCaptainOutcome } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { agentHome } from "../src/agents/store";
 import { availableModels } from "../src/captain/tools";
 import { until } from "./support/client";

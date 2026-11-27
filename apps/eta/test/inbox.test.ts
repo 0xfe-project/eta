@@ -8,7 +8,7 @@ import type { SessionMeta } from "@eta/server";
 import type { NewInteraction } from "../src/inbox/store";
 import type { World } from "./support/world";
 import { AskRegistry } from "@eta/harness";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { HISTORY_LIMIT, Inbox } from "../src/inbox/inbox";
 import { InteractionStore } from "../src/inbox/store";

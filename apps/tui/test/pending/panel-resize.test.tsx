@@ -2,7 +2,7 @@
  * The pending panel open while the terminal gets shorter: its lines take the new room, the frame
  * does not scroll as a whole, and ↓ moves only the cursor.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { flush, KEYS, plain } from "../ui-support/render";
 import { screenShows, twoRooms } from "./world";
 

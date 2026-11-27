@@ -6,7 +6,7 @@
 import type { LayerHandle } from "../../src/extensions/types";
 import { Text } from "ink";
 import { useState } from "react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "xmas:test";
 import { useTarget } from "../../src/ext/kit/wire-hooks";
 import { testCommands } from "../ext-support/commands";
 import { renderWithHost } from "../ext-support/render-with-host";

@@ -4,7 +4,7 @@
  */
 import type { TargetState, WireState } from "../../src/connection/types";
 import type { ShellContext } from "../../src/extensions/types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { SetupLayer } from "../../src/ext/setup/setup-layer";
 import { RunningShellContext } from "../../src/extensions/react";
 import { renderKit } from "../ext-support/render-kit";

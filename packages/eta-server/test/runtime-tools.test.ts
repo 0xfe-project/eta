@@ -10,7 +10,7 @@
 import type { KernelTool, RunDelegate, ToolCallInfo } from "@eta/core";
 import type { SessionRuntimes } from "../src/runtimes";
 import { fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { SessionManager } from "../src/manager";
 import { MemorySessionStore } from "../src/memory-store";
 

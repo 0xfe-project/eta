@@ -12,7 +12,7 @@ import type {
 import type { WireClient } from "../../src/connection/types";
 import type { Feed } from "../../src/ext/conversation/feed/store";
 import { assistantMessage } from "@eta/core/testing";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import {
   call,
   gate,

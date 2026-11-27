@@ -2,7 +2,7 @@
  * The desktop app is released from the same repository under `desktop-v*` tags. A host takes only
  * `v*` ones, whatever GitHub calls the latest release.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { isHostTag, newestHost, nextPage, Releases } from "../src/releases";
 
 interface Listed {

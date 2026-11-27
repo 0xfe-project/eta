@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
  * cancel, a redirect, the verifier matching the challenge, and the token staying out of every
  * answer.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   CursorLogin,
   cursorLoginAllowed,

@@ -10,7 +10,7 @@
  */
 import type { Entry } from "@eta/core/session";
 import { Buffer } from "node:buffer";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   branchMessages,
   firstHit,

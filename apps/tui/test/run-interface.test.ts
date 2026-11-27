@@ -5,7 +5,7 @@
 import type { ProcessLaunch } from "../src/ui/editor";
 import type { InterfaceHooks, TerminalProgram } from "../src/ui/run-interface";
 import { EventEmitter } from "node:events";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import {
   createMouseReporting,
   MOUSE_REPORTING_OFF,

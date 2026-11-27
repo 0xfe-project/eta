@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { summarizeArgs } from "../src/tool-shape";
 
 describe("工具调用的一句话摘要", () => {

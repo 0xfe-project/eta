@@ -7,7 +7,7 @@ import { Buffer } from "node:buffer";
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "xmas:test";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { githubProxy, normalizeProxy, viaProxy } from "../src/plugins/git";
 import {

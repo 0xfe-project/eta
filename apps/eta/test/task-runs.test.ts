@@ -18,7 +18,7 @@ import { existsSync } from "node:fs";
 import { readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { DaemonLink, DaemonNode } from "@eta/daemon";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { loadMigrations, statementsOf } from "../src/db";
 import { streamActivityCoversPoll } from "../src/tasks/runner";
 import { connect, until } from "./support/client";
@@ -72,14 +72,10 @@ async function room(
 ) {
   const { models, requests } = scriptedModels(respond);
   const w = await world({ models });
-  const ada = await w.agent("Ada", {
-    ...(options.instructions === undefined
+  const ada = await w.agent("Ada", (options.instructions === undefined
       ? {}
-      : { instructions: options.instructions }),
-  });
-  const project = await w.project({
-    ...(options.dir === undefined ? {} : { path: options.dir }),
-  });
+      : { instructions: options.instructions }));
+  const project = await w.project((options.dir === undefined ? {} : { path: options.dir }));
   const group = await w.group(project.id, [ada.id], "login");
   await w.watch(group.id);
   return { w, ada, project, group, requests };

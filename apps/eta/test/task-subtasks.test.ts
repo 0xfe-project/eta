@@ -12,7 +12,7 @@ import type {
 import type { GraphEdge, GraphTask } from "../src/tasks/graph";
 import type { Request } from "./support/models";
 import type { World } from "./support/world";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { TaskGraph } from "../src/tasks/graph";
 import { until } from "./support/client";
 import { tempDir } from "./support/host";

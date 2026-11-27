@@ -11,7 +11,7 @@ import type { World } from "./support/world";
 import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { createOarRuntimes } from "@eta/runtime-oar";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { machineView } from "./support/daemon";
 import { tempDir } from "./support/host";

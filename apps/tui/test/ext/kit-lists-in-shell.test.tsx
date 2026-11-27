@@ -5,7 +5,7 @@
 import type { ReactNode } from "react";
 import type { LayerHandle, ShellContext } from "../../src/extensions/types";
 import { Text, useInput } from "ink";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { CheckList } from "../../src/ext/kit/check-list";
 import { PickList } from "../../src/ext/kit/pick-list";
 import { TextPrompt } from "../../src/ext/kit/text-prompt";

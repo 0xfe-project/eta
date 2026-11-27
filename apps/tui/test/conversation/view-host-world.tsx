@@ -15,7 +15,7 @@ import type {
 import type { TuiState } from "../../src/config/types";
 import type { WireClient } from "../../src/connection/types";
 import type { RenderedApp } from "../ui-support/app";
-import { afterEach } from "vitest";
+import { afterEach } from "xmas:test";
 import { scriptedModels } from "../../../eta/test/support/models";
 import { wireUrl } from "../../src/connection/address";
 import { Wire } from "../../src/connection/wire";

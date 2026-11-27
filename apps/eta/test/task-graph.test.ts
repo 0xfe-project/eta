@@ -18,7 +18,7 @@ import type { World } from "./support/world";
 import { execFileSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { TaskGraph } from "../src/tasks/graph";
 import { until } from "./support/client";

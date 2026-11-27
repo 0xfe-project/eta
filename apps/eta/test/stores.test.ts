@@ -3,7 +3,7 @@
  * the schema and the statements, with no socket and no session in the way.
  */
 import type { Database } from "bun:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { AgentStore } from "../src/agents/store";
 import { ConversationStore } from "../src/conversations/store";
 import { Timeline } from "../src/conversations/timeline";

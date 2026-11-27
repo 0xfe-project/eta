@@ -1,6 +1,6 @@
 import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { ensureConfigFile, saveConnection } from "../../src/config/save";
 import { tempDir } from "../support/temp";
 

@@ -1,7 +1,7 @@
 import type { KernelTool, ToolMiddleware } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
 import type { SessionMeta } from "@eta/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { combineSessionHooks } from "../src/session-hooks";
 
 const meta = { id: "s1", createdAt: 0, cwd: "/tmp" } as SessionMeta;

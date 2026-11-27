@@ -3,7 +3,7 @@
  * effort words are read through a list that does not have it, and pi-ai has no word for it.
  */
 import { thinkingLevelsFor } from "@eta/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { GatewayModels } from "../src/llm/models";
 
 describe("the gateway's models", () => {

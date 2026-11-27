@@ -8,7 +8,7 @@
  */
 import type { ServerFrame } from "@eta/client-wire-proto";
 import { Context } from "cordis";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { WireService } from "../src/wire-service";
 
 interface Harness {

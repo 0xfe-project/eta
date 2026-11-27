@@ -9,7 +9,7 @@
  */
 
 import type { CallFrame } from "@eta/client-wire-proto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { createTargetRegistry, UnknownOpError } from "../src/registry";
 
 const context = { reply: () => undefined };

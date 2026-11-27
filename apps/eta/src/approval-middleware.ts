@@ -32,9 +32,7 @@ export function approvalMiddleware(
             question: `Approve running ${name}?`,
             options: ["allow", "deny"],
           },
-          {
-            ...(call.signal === undefined ? {} : { signal: call.signal }),
-          },
+          (call.signal === undefined ? {} : { signal: call.signal }),
         );
         const approved =
           (answer.kind === "selection" &&

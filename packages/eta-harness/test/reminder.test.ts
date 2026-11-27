@@ -10,7 +10,7 @@
 import type { AssistantMessage } from "@eta/core";
 import { Kernel, kernelEmit, kernelOn, Runner } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { DEFAULT_REMINDER_INTERVAL, TaskReminderService } from "../src/index";
 
 /** What the runner reports for a context: no parts, all zeroes. */

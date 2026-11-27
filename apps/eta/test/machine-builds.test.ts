@@ -17,7 +17,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
 import { DaemonLink, DaemonNode, enroll } from "@eta/daemon";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { platformOf } from "../src/machines/install";
 import { MachineStore } from "../src/machines/store";
 import { Tailscale } from "../src/machines/tailscale";

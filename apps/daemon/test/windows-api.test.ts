@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { callFailed } from "../src/windows-api";
 
 describe("a failed Windows call", () => {

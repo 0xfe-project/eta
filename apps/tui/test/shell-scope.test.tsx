@@ -7,7 +7,7 @@ import type { UpgradeBusy } from "@eta/client-contracts";
 import type { ConnectionPhase } from "../src/connection/types";
 import type { Extension, ShellContext } from "../src/extensions/types";
 import { Text } from "ink";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { renderApp, TEST_URL } from "./ui-support/app";
 import { loaded, testConfig } from "./ui-support/config";
 import { fakeWire } from "./ui-support/fake-wire";

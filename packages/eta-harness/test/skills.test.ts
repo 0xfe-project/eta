@@ -11,7 +11,7 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "xmas:test";
 import { formatSkillInvocation } from "../src/prompt-blocks";
 import { loadSkills, loadSourcedSkills } from "../src/skills";
 

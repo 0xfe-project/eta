@@ -1,5 +1,5 @@
 import type { ContextReading } from "../src";
-import { expect, it } from "vitest";
+import { expect, it } from "xmas:test";
 import { displayContext, displaySpend } from "../src";
 const sample: ContextReading = {
   source: "acp",

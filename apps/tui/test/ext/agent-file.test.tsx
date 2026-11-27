@@ -3,7 +3,7 @@
  * file the user saved — the fields, every problem with the key it is about, and what changed.
  */
 import type { AgentFields } from "../../src/ext/agent/agent-file";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { parseDocument } from "yaml";
 import {
   changedFields,

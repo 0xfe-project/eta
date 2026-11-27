@@ -3,7 +3,7 @@
  * asks which agent, against a real host.
  */
 import type { AgentView } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { findAgent } from "../../src/ext/kit/agents";
 
 function agent(id: string, name: string): AgentView {

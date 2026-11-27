@@ -4,7 +4,7 @@
  */
 import type { Database } from "bun:sqlite";
 import type { Plugins } from "../src/plugins/service";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { createAgent } from "../src/agents/create";
 import { ensureHome, homeOf, isAgentHome } from "../src/agents/home";
 import { agentHome, AgentStore } from "../src/agents/store";

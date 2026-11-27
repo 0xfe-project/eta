@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@eta/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { ActivityRecorder } from "../src/activity";
 
 const asked = (id: string, name: string, args: unknown): AgentMessage =>

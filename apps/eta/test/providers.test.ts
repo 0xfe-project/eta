@@ -6,7 +6,7 @@
 import type { ProvidersView, ServerFrame } from "@eta/client-contracts";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { connect, until } from "./support/client";
 import { testHost } from "./support/host";
 

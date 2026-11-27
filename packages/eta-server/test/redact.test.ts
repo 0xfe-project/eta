@@ -1,6 +1,6 @@
 /** What the session's tool results keep: `redactionMiddleware` on its own. */
 import type { Redaction } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { redactionMiddleware } from "../src/redact";
 
 const call = { turn: 1, toolCallId: "c" };

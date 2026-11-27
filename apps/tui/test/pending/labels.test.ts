@@ -2,7 +2,7 @@
  * A task's status word takes the colour the web app's mark has, in the theme's terminal colours.
  */
 import type { BoardTaskStatus } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { DEFAULT_CONFIG } from "../../src/config/defaults";
 import { statusColor } from "../../src/ext/pending/labels";
 

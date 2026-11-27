@@ -5,7 +5,7 @@
 import type { ConversationSummary } from "@eta/client-contracts";
 import type { KeyBinding } from "../../src/config/types";
 import type { ShellContext } from "../../src/extensions/types";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { conversationCommands } from "../../src/ext/conversation/commands";
 import { matchConversation } from "../../src/ext/conversation/open-match";
 import { renderApp } from "../ui-support/app";

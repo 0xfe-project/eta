@@ -2,7 +2,7 @@
  * Installing the resident host, with a script in place of `eta-host`: the real
  * `install-service` would install a service on this machine.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { installService } from "../../src/connection/install";
 import { fakeInstaller } from "../support/fake-programs";
 import { closedPort, testHost } from "../support/host";

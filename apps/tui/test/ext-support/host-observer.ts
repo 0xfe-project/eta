@@ -4,7 +4,7 @@
  */
 import type { Host } from "@eta/app/src/host";
 import type { Client } from "../../../eta/test/support/client";
-import { afterEach } from "vitest";
+import { afterEach } from "xmas:test";
 import { connect, until } from "../../../eta/test/support/client";
 
 const open = new Set<Client>();

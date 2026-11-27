@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { attributionHeaders } from "../src/providers/attribution";
 import { discoverModels } from "../src/providers/discovery";
 import { buildModels, withSessionHeader } from "../src/providers/runtime";

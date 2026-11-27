@@ -10,7 +10,7 @@ import type {
 } from "@eta/client-contracts";
 import type { World } from "./support/world";
 import { TASK_ACTIONS } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { connect, until } from "./support/client";
 import { tempDir, testHost } from "./support/host";
 import { world } from "./support/world";

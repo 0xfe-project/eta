@@ -1,7 +1,7 @@
 import type { MessageEntry } from "@eta/core/session";
 import { MemoryStorage, setValue, value } from "@eta/core/storage";
 import { storageContract } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 
 describe("storageService maintenance results", () => {
   it("maintenance results are plain data", async () => {

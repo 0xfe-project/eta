@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { billingRetryAt, isMonthDuration, LLM_CODES } from "../src/index";
 
 // What each code means and which params it carries: apps/eta/src/llm/problems.ts.

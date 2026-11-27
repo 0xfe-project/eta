@@ -2,7 +2,7 @@
  * Switching the steward, and what a woken agent is told: only what it has not seen.
  */
 import type { ConversationSummary } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { say, scriptedModels } from "./support/models";
 import { world } from "./support/world";

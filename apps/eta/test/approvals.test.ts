@@ -12,7 +12,7 @@ import type { World } from "./support/world";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { INBOX_ACTIONS } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { tempDir } from "./support/host";
 import { call, say, scriptedModels } from "./support/models";

@@ -1,7 +1,7 @@
 import type { ConfigProblem, TuiConfig } from "../../src/config/types";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { DEFAULT_CONFIG } from "../../src/config/defaults";
 import { loadConfig, parseConfig } from "../../src/config/load";
 import { THEME_PRESETS } from "../../src/config/presets";

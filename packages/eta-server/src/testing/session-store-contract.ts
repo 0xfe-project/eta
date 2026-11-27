@@ -8,7 +8,7 @@
  */
 
 import type { SessionListing, SessionMeta, SessionStore } from "../store";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 
 export interface SessionStoreContractHandle {
   store: SessionStore;

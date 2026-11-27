@@ -8,7 +8,7 @@ import type {
   MessageView,
   SendResult,
 } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   holdNextDelivery,
   uploadNote,

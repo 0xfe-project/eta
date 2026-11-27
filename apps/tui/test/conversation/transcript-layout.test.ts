@@ -5,7 +5,7 @@ import type {
   RenderOptions,
   TranscriptItem,
 } from "../../src/ext/conversation/contract";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { layoutTranscript } from "../../src/ext/conversation/transcript/layout";
 import { createRenderCache } from "../../src/ext/conversation/transcript/render-cache";
 import { testConfig } from "../ui-support/config";

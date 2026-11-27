@@ -3,7 +3,7 @@
  * the test result carries that header with no saved sign-in too. The fake records header names and
  * value lengths only; no value appears in any assertion.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { testConnection } from "../src/plugins/test-server";
 
 const CURSOR_URL = "https://api.cursor.com/rest-mcp/google-drive/mcp";

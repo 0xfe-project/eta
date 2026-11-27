@@ -7,7 +7,7 @@ import type { AgentUsage, UsageSections } from "@eta/client-contracts";
 import type { UsageEntry } from "../src/usage/store";
 import type { World } from "./support/world";
 import { USAGE_WINDOWS } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { UsageStore } from "../src/usage/store";
 import { until } from "./support/client";

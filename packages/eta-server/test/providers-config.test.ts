@@ -5,7 +5,7 @@
  * written through. None of them need a file: they are about what a kind means, what a model
  * declares, and which headers survive.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   applyProviderHeaders,
   effectiveModel,

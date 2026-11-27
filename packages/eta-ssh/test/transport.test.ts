@@ -10,7 +10,7 @@
 import type { SshTarget } from "../src/transport";
 import { Buffer } from "node:buffer";
 import { EventEmitter } from "node:events";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   hostKeyFingerprint,
   shellQuote,

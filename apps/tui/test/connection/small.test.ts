@@ -1,6 +1,6 @@
 import { nextRetryMs } from "@eta/client-contracts/wire";
 /** The small pure pieces of the connection layer. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { DEFAULT_TIMING, resolveTiming } from "../../src/connection/controller";
 import { TUI_VERSION } from "../../src/version";
 

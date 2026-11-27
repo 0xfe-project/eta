@@ -9,7 +9,7 @@
 import type { StorageService, StorageWrite } from "../storage/types";
 import type { MessageEntry } from "../types/entries";
 import type { Usage } from "../types/messages";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { setValue, value } from "../storage/types";
 import { emptyUsage } from "../types/usage";
 

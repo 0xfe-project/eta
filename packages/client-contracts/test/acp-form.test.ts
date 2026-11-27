@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { ANTIGRAVITY_ACP_AGENT } from "../src/acp";
 import {
   acpDraftOf,

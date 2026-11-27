@@ -9,7 +9,7 @@
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { openSession } from "../src/open";
 import { journaledKernel } from "../src/testing";
 import { createStepTools } from "../src/tools/tasks";

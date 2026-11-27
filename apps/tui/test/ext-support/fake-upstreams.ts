@@ -4,7 +4,7 @@
  * and OpenAI's device authorization. The gateway (CLIProxyAPI) itself is real.
  */
 import { Buffer } from "node:buffer";
-import { afterEach } from "vitest";
+import { afterEach } from "xmas:test";
 
 const servers: { stop: () => unknown }[] = [];
 

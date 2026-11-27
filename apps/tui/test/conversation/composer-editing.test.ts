@@ -1,6 +1,6 @@
 /** Editing the composer's text: typing, deleting and moving, by grapheme and by display column. */
 import type { ComposerState } from "../../src/ext/conversation/composer/state";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   breakLineAtBackslash,
   deleteBackward,

@@ -17,7 +17,7 @@ import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { CompactionService } from "@eta/harness";
 import { journaledKernel } from "@eta/harness/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { etaCompaction } from "../src/index";
 
 /**

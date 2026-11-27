@@ -1,6 +1,6 @@
 import { TaskService } from "@eta/core";
 import { Context } from "cordis";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { renderCurrentSteps } from "../src/index";
 function withTasks() {
   const ctx = new Context();

@@ -13,7 +13,7 @@ import type { Plugins } from "../src/plugins/service";
 import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { createOarRuntimes } from "@eta/runtime-oar";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { RemotePlace } from "../src/machines/remote-place";
 import { tempDir } from "./support/host";
 import { remoteWorld } from "./support/remote";

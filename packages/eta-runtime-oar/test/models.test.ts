@@ -6,7 +6,7 @@
  */
 import type { RuntimeCatalog } from "../src/catalog";
 import { thinkingLevelsFor } from "@eta/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { effortFor, runtimeModels } from "../src/models";
 
 const ULTRA = ["low", "medium", "high", "xhigh", "max", "ultra"];

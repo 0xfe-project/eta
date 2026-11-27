@@ -6,7 +6,7 @@ import type {
 } from "../../src/ext/conversation/composer/keys";
 import type { ComposerState } from "../../src/ext/conversation/composer/state";
 import type { SlashCommand } from "../../src/extensions/types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { menuOf } from "../../src/ext/conversation/composer/completion";
 import { insertText } from "../../src/ext/conversation/composer/editing";
 import { afterSend } from "../../src/ext/conversation/composer/history";

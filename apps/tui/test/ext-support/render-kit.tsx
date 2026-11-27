@@ -5,7 +5,7 @@
 import type { ReactElement } from "react";
 import type { Locale } from "../../src/config/types";
 import type { Rendered } from "../ui-support/render";
-import { afterEach } from "vitest";
+import { afterEach } from "xmas:test";
 import { ConfigContext } from "../../src/extensions/react";
 import { LocaleContext } from "../../src/i18n/react";
 import { testConfig } from "../ui-support/config";

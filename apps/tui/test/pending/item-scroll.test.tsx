@@ -2,7 +2,7 @@
  * A waiting question taller than its layer: ↑ ↓ move the answer cursor and nothing else, the layer
  * keeps the cursor's row in view, and Enter sends the row the cursor is on.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "../support/temp";
 import { KEYS, plain } from "../ui-support/render";
 import { askedFor, screenShows, twoRooms } from "./world";

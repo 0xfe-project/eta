@@ -3,7 +3,7 @@
  * what null means, in the interface language.
  */
 import type { AgentChoices } from "../../src/ext/agent/guide";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { agentFileGuide, GUIDE_LIST_LIMIT } from "../../src/ext/agent/guide";
 
 const CHOICES: AgentChoices = {

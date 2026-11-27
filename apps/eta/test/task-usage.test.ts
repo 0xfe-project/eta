@@ -21,7 +21,7 @@ import type { World } from "./support/world";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fakeAgent } from "@eta/runtime-acp/testing";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import {
   applyMigrations,
   databasePath,

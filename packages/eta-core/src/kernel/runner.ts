@@ -313,7 +313,7 @@ export class Runner {
 
   /** Resolves when every effect that already started has settled. */
   private cancellation(): Promise<void> {
-    return Promise.allSettled([...this.pendingEffects]).then(() => undefined);
+    return Promise.allSettled(this.pendingEffects).then(() => undefined);
   }
 
   /** Track an effect so an abort can wait for it. */

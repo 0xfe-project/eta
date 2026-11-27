@@ -7,7 +7,7 @@ import type { AgentRuntimeInfo, MessageView } from "@eta/client-contracts";
 import type { OarRuntimes } from "@eta/runtime-oar";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { call, say, scriptedModels } from "./support/models";
 import { remoteWorld, sessionOf } from "./support/remote";

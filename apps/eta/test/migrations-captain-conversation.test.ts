@@ -10,7 +10,7 @@ import type {
 } from "@eta/client-contracts";
 import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { agentHome, AgentStore } from "../src/agents/store";
 import { ConversationStore } from "../src/conversations/store";
 import { Timeline } from "../src/conversations/timeline";

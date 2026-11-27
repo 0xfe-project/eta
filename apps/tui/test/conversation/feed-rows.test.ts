@@ -1,6 +1,6 @@
 /** The rows a conversation's feed keeps: windows and older pages folded in, held ones left out. */
 import type { MessageView } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { foldWindow, visibleRows } from "../../src/ext/conversation/feed/rows";
 
 function row(seq: number, fields: Partial<MessageView> = {}): MessageView {

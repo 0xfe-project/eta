@@ -7,7 +7,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context } from "cordis";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it } from "xmas:test";
 import { providersPlugin } from "../src/bundled/providers";
 import { ProviderConfigStore } from "../src/providers/store";
 import { createConnection } from "../src/transport";

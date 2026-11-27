@@ -1,6 +1,6 @@
 /** The key section of `/help`: the fold key of a reply, and the mouse line as the settings have it. */
 import type { Locale } from "../src/config/types";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { renderApp } from "./ui-support/app";
 import { testConfig } from "./ui-support/config";
 import { flush, KEYS, plain } from "./ui-support/render";

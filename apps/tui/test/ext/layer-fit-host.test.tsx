@@ -6,7 +6,7 @@
 import type { AgentView, ProjectView } from "@eta/client-contracts";
 import type { HostRendered } from "../ext-support/render-with-host";
 import { stripVTControlCharacters } from "node:util";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import manage from "../../src/ext/manage";
 import model from "../../src/ext/model";
 import { createSetupExtension } from "../../src/ext/setup";

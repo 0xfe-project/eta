@@ -1,6 +1,6 @@
 /** What opens the composer's completion menu, what it lists, and what accepting an item writes. */
 import type { ComposerState } from "../../src/ext/conversation/composer/state";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   acceptCompletion,
   completionQuery,

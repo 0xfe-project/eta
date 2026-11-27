@@ -11,7 +11,7 @@ import type {
 } from "@eta/client-contracts";
 import type { TuiState as SavedState } from "../../src/config/types";
 import process from "node:process";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it } from "xmas:test";
 import { call, say, scriptedModels } from "../../../eta/test/support/models";
 import { wireUrl } from "../../src/connection/address";
 import { createConnectionController } from "../../src/connection/controller";

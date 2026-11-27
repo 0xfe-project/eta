@@ -2,7 +2,7 @@
  * `/tasks`: the open tasks in their order with their status, the count of closed ones, the empty
  * board, and what Enter opens for a task that waits and for one that does not.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { KEYS, plain } from "../ui-support/render";
 import { askedFor, PENDING_KEYS, screenShows, tabBar, twoRooms } from "./world";
 

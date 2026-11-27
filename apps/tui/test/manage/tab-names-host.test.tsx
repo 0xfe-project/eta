@@ -2,7 +2,7 @@
  * Two conversation tabs of the same name on a real host: the tab bar tells them apart by steward,
  * then by the start of the id, and follows a changed steward and a rename.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { CONVERSATION_VIEW } from "../../src/ext/conversation/kind";
 import { screenShows } from "../conversation/view-host-world";
 import { KEYS } from "../ui-support/render";

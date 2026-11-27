@@ -12,7 +12,7 @@ import { Buffer } from "node:buffer";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { repairTranscript } from "../src/index";
 
 const userText = (text: string) => ({

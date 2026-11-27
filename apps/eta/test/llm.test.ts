@@ -8,7 +8,7 @@
  */
 import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
 import type { LlmAccounts, LlmModel, LlmQuota } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { connect, until } from "./support/client";
 import { cpaExtraFor, fakeUpstream, MODEL } from "./support/fake-upstream";
 import { testHost } from "./support/host";

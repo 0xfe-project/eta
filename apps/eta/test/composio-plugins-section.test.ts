@@ -5,7 +5,7 @@
  * backend.composio.dev and a fake key; nothing reaches the network.
  */
 import { Buffer } from "node:buffer";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "xmas:test";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { Composio } from "../src/plugins/composio";
 import { CatalogCache } from "../src/plugins/market-cache";

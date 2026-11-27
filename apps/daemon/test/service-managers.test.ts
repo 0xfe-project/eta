@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "xmas:test";
 import { launchdManager, launchdRunner } from "../src/service-launchd";
 import { detachedRunner, serviceManager } from "../src/service-manager";
 import { systemdManager, systemdRunner } from "../src/service-systemd";

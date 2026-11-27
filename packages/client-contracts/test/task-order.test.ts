@@ -1,5 +1,5 @@
 import type { BoardTaskStatus, TaskRunStatus } from "../src/index";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { compareTaskRuns, runningFirst, taskRunRank } from "../src/index";
 
 interface Row {

@@ -16,7 +16,7 @@ import {
 } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { JournalingService } from "../src/index";
 import { journaledKernel, SESSION_CONFIG, TASKS_STATE } from "../src/testing";
 

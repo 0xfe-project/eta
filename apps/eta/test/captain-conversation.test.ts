@@ -8,7 +8,7 @@ import type {
   ConversationSummary,
   MemberView,
 } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { world } from "./support/world";
 

@@ -1,6 +1,6 @@
 import type { KernelTool } from "../src/kernel/tools";
 import { Context } from "cordis";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { ToolService } from "../src/kernel/tools";
 
 function withTools() {

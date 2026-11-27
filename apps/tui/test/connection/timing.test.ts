@@ -1,5 +1,5 @@
 /** A timing value written out as undefined counts as not given. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { DEFAULT_TIMING, resolveTiming } from "../../src/connection/controller";
 
 describe("resolveTiming with values set to undefined", () => {

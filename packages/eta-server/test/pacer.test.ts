@@ -8,7 +8,7 @@
  */
 
 import type { ServerFrame } from "@eta/client-wire-proto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { FramePacer } from "../src/pacer";
 
 /** A clock the test drives, so "how often" is a fact rather than a hope. */

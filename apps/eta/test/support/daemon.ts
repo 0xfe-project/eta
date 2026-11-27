@@ -9,7 +9,7 @@ import type { Identity, LinkState } from "@eta/daemon";
 import type { Host } from "../../src/host";
 import type { Client } from "./client";
 import { DaemonLink, DaemonNode, enroll } from "@eta/daemon";
-import { afterEach } from "vitest";
+import { afterEach } from "xmas:test";
 import { until } from "./client";
 import { tempDir } from "./host";
 

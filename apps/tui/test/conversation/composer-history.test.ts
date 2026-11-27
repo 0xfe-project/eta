@@ -1,5 +1,5 @@
 /** The composer's history: what a send records, and stepping back and forth through it. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { afterSend } from "../../src/ext/conversation/composer/history";
 import { pasteText } from "../../src/ext/conversation/composer/paste";
 import { emptyComposer } from "../../src/ext/conversation/composer/state";

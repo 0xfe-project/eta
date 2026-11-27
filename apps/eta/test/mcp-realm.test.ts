@@ -7,7 +7,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { tempDir, testHost } from "./support/host";
 
 const ECHO = fileURLToPath(new URL("./fixtures/mcp-echo.ts", import.meta.url));

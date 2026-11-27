@@ -8,7 +8,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { deflateSync } from "node:zlib";
 import { Database } from "bun:sqlite";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { AttachmentStore } from "../src/conversations/attachments";
 import { tempDir } from "./support/host";
 

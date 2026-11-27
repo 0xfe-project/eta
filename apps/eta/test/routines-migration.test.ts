@@ -3,7 +3,7 @@
  * and whatever a database already held (routines, briefs, runs, feedback) comes through the
  * rebuild with its links intact.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 
 const all = loadMigrations();

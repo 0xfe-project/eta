@@ -1,5 +1,5 @@
 /** Probes against real hosts: one open on loopback, one behind the token gate. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { checkAddress, probeToken, probeUp } from "../../src/connection/probe";
 import { baseUrl, closedPort, testHost } from "../support/host";
 

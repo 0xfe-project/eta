@@ -6,7 +6,7 @@ import { Buffer } from "node:buffer";
  */
 import http from "node:http";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { IconCache } from "../src/plugins/icon-cache";
 import { Logos, MAX_REPO_LOOKUPS } from "../src/plugins/logo";

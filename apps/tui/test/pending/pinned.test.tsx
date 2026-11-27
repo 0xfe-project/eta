@@ -3,7 +3,7 @@
  * attention while something waits, it opens the panel once, and a new item changes nothing else
  * on the screen.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { KEYS, plain } from "../ui-support/render";
 import { PENDING_KEYS, probe, screenShows, tabBar, twoRooms } from "./world";
 

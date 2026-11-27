@@ -1,5 +1,5 @@
 /** The link's rules, between two peers wired back to back: no socket, no host. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { LinkError, Peer } from "../src/link/peer";
 
 /** Two peers whose sends arrive at each other (on the next tick, like a socket). */

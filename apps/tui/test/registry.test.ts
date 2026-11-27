@@ -1,5 +1,5 @@
 import type { SlashCommand } from "../src/extensions/types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { parseCommandLine } from "../src/extensions/command-line";
 import { createRegistry } from "../src/extensions/registry";
 

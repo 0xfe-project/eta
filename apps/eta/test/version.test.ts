@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MIN_DESKTOP } from "@eta/client-contracts/desktop";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { tempDir } from "./support/host";
 
 const MAIN = fileURLToPath(new URL("../src/main.ts", import.meta.url));

@@ -1,7 +1,7 @@
 /** The host as a program, asked to stop the moment it says it is ready. */
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { tempDir } from "./support/host";
 
 const MAIN = fileURLToPath(new URL("../src/main.ts", import.meta.url));

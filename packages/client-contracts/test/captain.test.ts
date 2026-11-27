@@ -1,5 +1,5 @@
 import type { MessageView } from "../src/index";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { captainProposalOf, isCaptainOutcome } from "../src/index";
 
 const OPERATION = "6f1c2a3b-0d4e-4f5a-8b6c-7d8e9f0a1b2c";

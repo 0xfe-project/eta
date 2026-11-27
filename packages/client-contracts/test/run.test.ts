@@ -1,5 +1,5 @@
 import type { AgentMessage, ViewMessageRow } from "../src/index";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   groupBlocks,
   logBlocks,

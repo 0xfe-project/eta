@@ -12,7 +12,7 @@
 import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import type { Socket, TransportDeps } from "../src/transport";
 import { Context } from "cordis";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { createConnection, serveWire } from "../src/transport";
 import { WireService } from "../src/wire-service";
 

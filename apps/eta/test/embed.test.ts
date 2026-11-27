@@ -14,7 +14,7 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import process from "node:process";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   digestOf,
   embeddedModule,

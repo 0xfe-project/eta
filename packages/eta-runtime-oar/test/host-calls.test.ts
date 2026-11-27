@@ -11,7 +11,7 @@ import type { Event, EventBody, RawEvent } from "@botiverse/oar";
 import type { AgentMessage } from "@eta/core";
 import type { RuntimeId } from "../src/catalog";
 import type { TranslatorTarget } from "../src/translate";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { HostCalls } from "../src/host-calls";
 import { Translator } from "../src/translate";
 

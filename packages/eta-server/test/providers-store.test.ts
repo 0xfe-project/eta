@@ -9,7 +9,7 @@
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { ProviderConfigStore, revisionOf } from "../src/providers/store";
 
 const roots: string[] = [];

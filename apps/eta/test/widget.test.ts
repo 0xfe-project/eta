@@ -3,7 +3,7 @@
  * for; `show_widget` keeps the code in `details` whole, and sends back what stops it drawing.
  */
 import type { KernelTool } from "@eta/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { widgetSessionTools } from "../src/widget/tools";
 
 const tools = new Map(

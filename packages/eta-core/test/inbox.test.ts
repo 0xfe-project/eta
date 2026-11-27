@@ -9,7 +9,7 @@
 import type { ImageContent } from "@earendil-works/pi-ai";
 import type { QueuedItem } from "../src/index";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   Inbox,
   InvalidMessage,

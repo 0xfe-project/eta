@@ -5,7 +5,7 @@
  * Rendered with the settings and the language only, for the reason given in kit-pick-list.test.tsx.
  */
 import type { ComponentProps } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { TextPrompt } from "../../src/ext/kit/text-prompt";
 import { renderKit } from "../ext-support/render-kit";
 import { flush, KEYS, plain } from "../ui-support/render";

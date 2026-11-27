@@ -5,7 +5,7 @@
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { thirdPartyNotices, thirdPartyPackages } from "../scripts/notices";
 import { tempDir } from "./support/host";
 

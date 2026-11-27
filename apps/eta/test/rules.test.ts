@@ -3,7 +3,7 @@
  * agent is told.
  */
 import type { MessageView } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { briefing } from "../src/conversations/briefing";
 import {
   judgeMention,

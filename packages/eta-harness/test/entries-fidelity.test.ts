@@ -13,7 +13,7 @@ import { Kernel, kernelOn, Runner } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({

@@ -13,7 +13,7 @@ import type {
   ItemsInput,
   SessionLive,
 } from "../../src/ext/conversation/model/items";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { transcriptItems } from "../../src/ext/conversation/model/items";
 
 const ADA = { id: "agent-ada-0001", name: "Ada" };

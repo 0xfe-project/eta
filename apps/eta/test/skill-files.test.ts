@@ -8,7 +8,7 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { platform } from "node:os";
 import { join } from "node:path";
 import { Places } from "@eta/places";
-import { expect, it } from "vitest";
+import { expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { approve, dropLink, machineView, startDaemon } from "./support/daemon";
 import { tempDir } from "./support/host";

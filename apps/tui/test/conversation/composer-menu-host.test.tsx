@@ -2,7 +2,7 @@
  * The slash menu of a conversation's input in the whole interface, on a real host: every command
  * reachable with ↓, and the menu fitting the screen's height.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { extensions } from "../../src/extensions.gen";
 import { KEYS, plain } from "../ui-support/render";
 import { quietGroup, screenShows, WITHOUT_SETUP } from "./view-host-world";

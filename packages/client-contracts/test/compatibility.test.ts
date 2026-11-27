@@ -7,7 +7,7 @@ import type {
   SessionViewSections,
 } from "../src/index";
 import { encodeFrame } from "@eta/client-wire-proto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { stateSection } from "../src/index";
 
 const sections = {

@@ -5,7 +5,7 @@
 import type { AgentView, ArtifactView } from "@eta/client-contracts";
 import type { WireClient } from "../../src/connection/types";
 import type { RenderedApp } from "../ui-support/app";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { renderApp } from "../ui-support/app";
 import { fakeWire } from "../ui-support/fake-wire";
 import { KEYS, plain, realDelay } from "../ui-support/render";

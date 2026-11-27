@@ -1,5 +1,5 @@
 import { themeIds, themes } from "@eta/client-contracts/themes";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { parseConfig } from "../../src/config/load";
 import { THEME_PRESETS } from "../../src/config/presets";
 

@@ -6,7 +6,7 @@ import type { PlaceRunner, RunResult } from "../src";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { Places, SEARCH_LIMITS } from "../src";
 import { fakeFs } from "./fake-fs";
 

@@ -273,7 +273,7 @@ export function platformDts(
     "declare function view(path: string, options?: { start?: number; limit?: number }): Promise<string>;",
     "/** Replace exactly one occurrence of oldText; zero or several matches throw. */",
     "declare function edit(path: string, oldText: string, newText: string): Promise<void>;",
-    "/** zx lite, in the session cwd: await $`cmd`, .nothrow(), .quiet(), .timeout('5s'), .pipe(). */",
+    "/** xmas:shell, in the session cwd: await $`cmd`, .nothrow(), .quiet(), .timeout('5s'), .pipe(). */",
     "declare const $: any;",
   ].join("\n");
 }

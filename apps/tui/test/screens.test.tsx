@@ -1,6 +1,6 @@
 /** One screen per connection phase: what each says and what each key does. */
 import type { ConnectionPhase } from "../src/connection/types";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { renderApp, TEST_URL } from "./ui-support/app";
 import { testConfig } from "./ui-support/config";
 import { flush, KEYS, plain } from "./ui-support/render";

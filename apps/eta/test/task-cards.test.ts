@@ -9,7 +9,7 @@ import type {
   TaskCardData,
 } from "@eta/client-contracts";
 import type { World } from "./support/world";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { until } from "./support/client";
 import { call, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";

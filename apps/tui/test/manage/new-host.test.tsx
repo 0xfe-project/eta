@@ -12,7 +12,7 @@ import { chmod, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { Places } from "@eta/places";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { screenShows } from "../conversation/view-host-world";
 import { tempDir, until } from "../support/temp";
 import { KEYS, plain, realDelay } from "../ui-support/render";

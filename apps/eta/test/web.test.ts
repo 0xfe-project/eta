@@ -8,7 +8,7 @@ import type { Server } from "bun";
 import { channel } from "node:diagnostics_channel";
 import process from "node:process";
 import { AppError } from "@searxng-js/sex-scrape";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "xmas:test";
 import { sliceText, Web } from "../src/web/service";
 import { pageText, webSessionTools } from "../src/web/tools";
 import { call, say, scriptedModels } from "./support/models";

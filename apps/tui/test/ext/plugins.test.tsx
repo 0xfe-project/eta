@@ -6,7 +6,7 @@ import type { AgentView, PluginView } from "@eta/client-contracts";
 import type { HostObserver } from "../ext-support/host-observer";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import plugins from "../../src/ext/plugins";
 import { observeHost } from "../ext-support/host-observer";
 import { LIST_KEYS } from "../ext-support/keys";

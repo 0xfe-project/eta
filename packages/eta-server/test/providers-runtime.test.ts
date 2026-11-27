@@ -12,7 +12,7 @@
 import type { ProviderKind } from "@eta/client-contracts";
 import type { EtaProviderConfig } from "../src/providers/config-types";
 import { MODEL_SOURCES } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   providerModelCatalog,
   resolveConfiguredModels,

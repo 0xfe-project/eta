@@ -7,7 +7,7 @@
  * agent has it, the task creation fails immediately, with a list of available agents.
  */
 import type { Database } from "bun:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { AgentStore } from "../src/agents/store";
 import {
   applyMigrations,
