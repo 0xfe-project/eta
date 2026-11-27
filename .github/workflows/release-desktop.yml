@@ -186,6 +186,28 @@ jobs:
 
       - uses: ./.github/actions/setup-nsh
 
+      - name: Install Flatpak toolchain
+        if: matrix.target == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+
+      - name: Cache Flatpak GNOME 49 runtime
+        if: matrix.target == 'linux'
+        id: flatpak-runtime
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/flatpak
+          key: flatpak-gnome-49-x86_64-v1
+
+      - name: Set up Flathub remote and GNOME 49 runtime
+        if: matrix.target == 'linux'
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          if [[ "${{ steps.flatpak-runtime.outputs.cache-hit }}" != "true" ]]; then
+            flatpak install --user --noninteractive -y flathub org.gnome.Platform//49 org.gnome.Sdk//49
+          fi
+
       # A release key when the repository has one; nsh's debug key otherwise, which the notes say.
       - name: Android signing
         if: matrix.target == 'android'
@@ -317,6 +339,9 @@ jobs:
               export CARGO_INCREMENTAL=0
               args+=(--runtime-os openharmony --build "$ETA_CLIENT_BUILD")
               ;;
+            linux)
+              args+=(--format flatpak)
+              ;;
           esac
           bun run client:package "${args[@]}"
           case "$ETA_DESKTOP_TARGET" in
@@ -340,7 +365,23 @@ jobs:
               ;;
             linux)
               test -x "$out/Eta/nsh/eta-bootstrap"
+              test -f "$out/Eta.tar.gz"
+              test -f "$out/Eta.flatpak"
+              verify="$RUNNER_TEMP/flatpak-verify"
+              rm -rf "$verify"
+              FLATPAK_USER_DIR="$verify" flatpak install --user --no-deps --noninteractive -y "$out/Eta.flatpak"
+              FLATPAK_USER_DIR="$verify" flatpak info dev.eta.client
+              FLATPAK_USER_DIR="$verify" flatpak info --show-permissions dev.eta.client
+              app_files="$verify/app/dev.eta.client/current/active/files"
+              test -x "$app_files/lib/dev.eta.client/Eta"
+              test -x "$app_files/lib/dev.eta.client/nsh/eta-bootstrap"
+              test -L "$app_files/bin/Eta"
+              test -f "$app_files/share/applications/dev.eta.client.desktop"
+              test -f "$app_files/share/metainfo/dev.eta.client.metainfo.xml"
+              test -f "$app_files/share/icons/hicolor/256x256/apps/dev.eta.client.png"
+              rm -rf "$verify"
               cp "$out/Eta.tar.gz" "$RUNNER_TEMP/try/$DESKTOP"
+              cp "$out/Eta.flatpak" "$RUNNER_TEMP/try/eta-desktop-linux-x64.flatpak"
               ;;
             windows)
               test -f "$out/Eta/eta-bootstrap.exe"
@@ -401,8 +442,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$TAG" "$RUNNER_TEMP/try/$DESKTOP" --clobber
           shopt -s nullglob
+          test -f "$RUNNER_TEMP/try/$DESKTOP"
+          assets=("$RUNNER_TEMP/try"/*)
+          gh release upload "$TAG" "${assets[@]}" --clobber
           # The desktops' update archives (Eta-<version>-<os>-<arch>.*) and Android's OTA package.
           updates=("$RUNNER_TEMP/eta-desktop"/Eta-"$ETA_DESKTOP_VERSION"-* "$RUNNER_TEMP/eta-desktop"/*.nshpkg)
           if [[ -n $ETA_CLIENT_UPDATE_URL && ${#updates[@]} -gt 0 ]]; then
