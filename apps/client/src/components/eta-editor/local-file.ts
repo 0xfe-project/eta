@@ -63,6 +63,23 @@ export function nameOfUri(uri: string): string {
   }
 }
 
+interface LocalFileFs {
+  stat: (path: string) => Promise<{ isDirectory: () => boolean; size: number }>;
+  readFile: (path: string) => Promise<Uint8Array>;
+}
+
+const nativeFs: LocalFileFs = { stat, readFile };
+let localFs: LocalFileFs = nativeFs;
+
+/** Test hook: overrides `fs/promises` used by `readUri` and returns a restore callback. */
+export function setLocalFileFsForTest(fs: LocalFileFs): () => void {
+  const previous = localFs;
+  localFs = fs;
+  return () => {
+    localFs = previous;
+  };
+}
+
 /**
  * The file `uri` names, with its bytes; a folder, or a file larger than `limit`, unread. Rejects
  * when it cannot be read: missing, or outside what the app may read.
@@ -73,10 +90,10 @@ export async function readUri(
 ): Promise<{ kind: "file"; file: File } | { kind: "folder" | "tooLarge" }> {
   const name = nameOfUri(uri);
   const path = pathOfUri(uri);
-  const info = await stat(path);
+  const info = await localFs.stat(path);
   if (info.isDirectory()) return { kind: "folder" };
   if (info.size > limit) return { kind: "tooLarge" };
-  const bytes = await readFile(path);
+  const bytes = await localFs.readFile(path);
   return {
     kind: "file",
     file: new File([bytes], name, { type: typeByName(name) }),
