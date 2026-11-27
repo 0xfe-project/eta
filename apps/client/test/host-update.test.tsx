@@ -388,3 +388,19 @@ test("a machine whose update failed says why and can try again", async () => {
   await app.press("label:Try again");
   expect(app.texts()).toContain("Sent: machines.upgrade");
 });
+
+test("the whole 'Where updates come from' row opens and closes the source settings", async () => {
+  const app = await settings("update");
+  const row = "label:Where updates come from";
+  expect(app.count(row)).toBe(1);
+  expect(app.count("label:Advanced")).toBe(0);
+  expect(app.accessibility(row)?.expanded).toBe(false);
+
+  await app.press("text:Where updates come from");
+  expect(app.accessibility(row)?.expanded).toBe(true);
+  await app.waitFor("text:Updates from");
+
+  await app.press(row);
+  expect(app.accessibility(row)?.expanded).toBe(false);
+  expect(app.shows("text:Updates from")).toBe(false);
+});
