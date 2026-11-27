@@ -143,20 +143,39 @@ async function scriptedGeneration() {
   };
 }
 
-it("estimates a streaming generation at most once a second, then reports its measured rate", async () => {
+it("shows a first estimate a quarter second after the first output", async () => {
   await using run = await scriptedGeneration();
   run.frame(0, "a".repeat(4));
-  run.frame(500, "a".repeat(400));
+  run.frame(249, "a".repeat(40));
   expect(run.rate()).toBeNull();
-  // 200 estimated tokens one second after the first output.
-  run.frame(1000, "a".repeat(800));
+  // 10 estimated tokens 250 ms after the first output.
+  run.frame(250, "a".repeat(40));
+  expect(run.rate()).toEqual({ tokensPerSec: 40, basis: "estimate" });
+});
+
+it("waits as long as an estimate's own window before the next, at most a second", async () => {
+  await using run = await scriptedGeneration();
+  run.frame(0, "a".repeat(4));
+  run.frame(250, "a".repeat(200));
   expect(run.rate()).toEqual({ tokensPerSec: 200, basis: "estimate" });
-  run.frame(1999, "a".repeat(1600));
+  run.frame(499, "a".repeat(396));
   expect(run.rate()).toEqual({ tokensPerSec: 200, basis: "estimate" });
-  run.frame(2000, "a".repeat(2000));
+  run.frame(500, "a".repeat(600));
+  expect(run.rate()).toEqual({ tokensPerSec: 300, basis: "estimate" });
+  run.frame(999, "a".repeat(1000));
+  expect(run.rate()).toEqual({ tokensPerSec: 300, basis: "estimate" });
+  run.frame(1000, "a".repeat(1000));
   expect(run.rate()).toEqual({ tokensPerSec: 250, basis: "estimate" });
-  // 300 reported output tokens over the two seconds from first to last output.
-  run.end(2000, "a".repeat(2000), { ...emptyUsage(), output: 300 });
+  run.frame(1999, "a".repeat(1600));
+  expect(run.rate()).toEqual({ tokensPerSec: 250, basis: "estimate" });
+  run.frame(2000, "a".repeat(1600));
+  expect(run.rate()).toEqual({ tokensPerSec: 200, basis: "estimate" });
+  run.frame(2999, "a".repeat(2000));
+  expect(run.rate()).toEqual({ tokensPerSec: 200, basis: "estimate" });
+  run.frame(3000, "a".repeat(2400));
+  expect(run.rate()).toEqual({ tokensPerSec: 200, basis: "estimate" });
+  // 450 reported output tokens over the three seconds from first to last output.
+  run.end(3000, "a".repeat(2400), { ...emptyUsage(), output: 450 });
   expect(run.rate()).toEqual({ tokensPerSec: 150, basis: "measured" });
 });
 
@@ -170,9 +189,9 @@ it("shows no rate when a generation starts until its first estimate", async () =
   run.start();
   expect(run.rate()).toBeNull();
   run.frame(3000, "a".repeat(4));
-  run.frame(3999, "a".repeat(400));
+  run.frame(3249, "a".repeat(40));
   expect(run.rate()).toBeNull();
-  run.frame(4000, "a".repeat(800));
+  run.frame(3250, "a".repeat(200));
   expect(run.rate()).toEqual({ tokensPerSec: 200, basis: "estimate" });
 });
 

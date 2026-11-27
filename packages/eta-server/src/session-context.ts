@@ -83,7 +83,9 @@ interface SessionContextRecord {
 
 const CONTEXT_VALUE = value<SessionContextRecord>("eta.session-context");
 const WRITE_INTERVAL = 5_000;
-/** The shortest time between two estimates of a generation in flight. */
+/** How long after its first output a generation in flight gets its first estimate. */
+const FIRST_RATE_AFTER = 250;
+/** The longest wait between two estimates of a generation in flight. */
 const RATE_INTERVAL = 1_000;
 
 function sameMeasurement(a: ContextReading, b: ContextReading): boolean {
@@ -442,10 +444,10 @@ export async function attachSessionContext(
   let rate: GenerationRate | null = null;
   let firstOutputAt: number | undefined;
   let lastOutputAt = 0;
-  let estimatedAt = 0;
+  let nextEstimateAt = 0;
   const restart = () => {
     firstOutputAt = undefined;
-    estimatedAt = 0;
+    nextEstimateAt = 0;
     rate = null;
   };
   on("message:start", restart);
@@ -461,13 +463,17 @@ export async function attachSessionContext(
     const now = Date.now();
     lastOutputAt = now;
     if (firstOutputAt === undefined) {
-      firstOutputAt = estimatedAt = now;
+      firstOutputAt = now;
+      nextEstimateAt = now + FIRST_RATE_AFTER;
       return;
     }
-    if (now - estimatedAt < RATE_INTERVAL) return;
-    estimatedAt = now;
+    if (now < nextEstimateAt) return;
+    // Each estimate waits as long again as the window it was measured over, up to a
+    // second, so every new number rests on at least twice the output of the last one.
+    const window = now - firstOutputAt;
+    nextEstimateAt = now + Math.min(window, RATE_INTERVAL);
     rate = {
-      tokensPerSec: (estimateTokens(message) * 1000) / (now - firstOutputAt),
+      tokensPerSec: (estimateTokens(message) * 1000) / window,
       basis: "estimate",
     };
   });
