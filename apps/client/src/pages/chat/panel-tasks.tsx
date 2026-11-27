@@ -203,7 +203,6 @@ export function ContextTasks(props: {
           }
           style={{
             paddingHorizontal: space[12],
-            paddingTop: 0,
             borderBottomWidth: 1,
             borderColor: c().border,
           }}
