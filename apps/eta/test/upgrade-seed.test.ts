@@ -159,6 +159,7 @@ describe("the seeds a release upgrades", () => {
       "0064-task-attachments",
       "0065-external-runtime-bounds",
       "0066-remove-revoked-machines",
+      "0067-routine-triggers",
     ]);
   });
 
