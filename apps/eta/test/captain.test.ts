@@ -540,6 +540,10 @@ describe("captain assignment", () => {
     let runSystem = "";
     const { models } = scriptedModels((request) => {
       if (request.system.includes("In this task you are")) {
+        // Count run-start turns only: `finish_task` transitions the task to `in_review` during
+        // tool execution before the same run's trailing `toolResult` turn (`say("Finished.")`)
+        // may have been scheduled, so polling `status === "in_review"` otherwise races between
+        // 1 and 2 model requests. Paired with `board.detail(...)?.runs` having length 1 below.
         if (request.lastRole !== "toolResult") runCount += 1;
         runSystem = request.system;
         return request.lastRole === "toolResult"
