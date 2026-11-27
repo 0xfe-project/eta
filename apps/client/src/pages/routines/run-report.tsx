@@ -31,13 +31,14 @@ import {
 import { formatLocale, localizedText, uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { problemText } from "../../services/problem-text";
-import { reportBody, RoutineHistory } from "./history";
+import { reportBody, RoutineHistory, RunSourceBadge } from "./history";
 import {
   clockTime,
   feedTime,
   routineTime,
   runAgo,
   scheduleLabel,
+  triggerTargetLabel,
 } from "./schedule";
 
 interface RoutineReportProps {
@@ -127,7 +128,12 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
         ));
   const schedule = () =>
     [
-      scheduleLabel(props.routine.schedule),
+      props.routine.schedule !== null
+        ? scheduleLabel(props.routine.schedule)
+        : undefined,
+      props.routine.trigger
+        ? triggerTargetLabel(props.routine.trigger)
+        : undefined,
       props.run.status === "skipped"
         ? undefined
         : localizedText("run by Captain", "由 Captain 运行"),
@@ -168,7 +174,14 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
       <SmoothScroll style={grow} scrollbar={false}>
         <View style={{ padding: space[16], gap: space[16] }}>
           <View style={{ gap: space[8] }}>
-            <View style={{ ...row, gap: space[8] }}>
+            <View
+              style={{
+                ...row,
+                gap: space[8],
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
               <View
                 style={{
                   height: badgeHeight,
@@ -186,6 +199,7 @@ function PhoneRoutineFailure(props: RoutineReportProps) {
                   {status()}
                 </Label>
               </View>
+              <RunSourceBadge startedBy={props.run.startedBy} />
               <Label variant="caption" tone="muted">
                 {[`${runDay(props.run.startedAt)} ${time()}`, duration()]
                   .filter(Boolean)
@@ -415,9 +429,32 @@ export function RoutineReport(props: RoutineReportProps) {
                 : undefined),
             }}
           >
-            <Label variant="small" tone="muted">
-              {date()}
-            </Label>
+            <View
+              style={{
+                ...row,
+                gap: space[8],
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              <Label variant="small" tone="muted">
+                {date()}
+              </Label>
+              <RunSourceBadge startedBy={props.run.startedBy} />
+              <If
+                when={
+                  props.run.startedBy === "trigger"
+                    ? props.routine.trigger
+                    : undefined
+                }
+              >
+                {(entry) => (
+                  <Label variant="caption" tone="muted">
+                    {triggerTargetLabel(entry())}
+                  </Label>
+                )}
+              </If>
+            </View>
             <View
               style={{ gap: props.phone && failed() ? space[4] : space[8] }}
             >

@@ -1,4 +1,8 @@
-import type { RoutineSummary, RunView } from "@eta/client-contracts";
+import type {
+  RoutineSummary,
+  RunListing,
+  RunView,
+} from "@eta/client-contracts";
 import { View } from "nsh";
 import { colors, focusRing, Icon, Label, row } from "../../components";
 import { chatText, shownMentions } from "../../components/eta-editor";
@@ -7,7 +11,29 @@ import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useAgentMentions } from "../../services/agent-mentions";
 import { problemText } from "../../services/problem-text";
-import { clockDistance, feedTime, runHistory, scheduleLabel } from "./schedule";
+import { Badge } from "../../ui";
+import {
+  clockDistance,
+  feedTime,
+  runAgo,
+  runHistory,
+  runStartedByLabel,
+  scheduleLabel,
+  triggerModeLabel,
+  triggerStatusMeta,
+  triggerTargetLabel,
+} from "./schedule";
+
+export function RunSourceBadge(props: { startedBy: RunListing["startedBy"] }) {
+  return (
+    <Badge
+      label={runStartedByLabel(props.startedBy)}
+      tone={props.startedBy === "trigger" ? "blue" : "neutral"}
+      icon={props.startedBy === "trigger" ? "captain" : undefined}
+      size="caption"
+    />
+  );
+}
 
 export function RoutineHistory(props: {
   runs: RoutineSummary["runs"];
@@ -47,23 +73,62 @@ export function PhoneRoutineRow(props: {
   onOpen: () => void;
 }) {
   const c = colors();
+  const trigger = () => props.item.trigger ?? null;
   const failed = () => props.item.runs[0]?.status === "failed";
-  const status = () =>
-    props.paused
-      ? uiText("captainIsOff")
-      : !props.item.enabled
-        ? uiText("paused")
-        : props.item.nextRunAt
-          ? uiText("nextWithCount", {
-              clockDistance: clockDistance(props.item.nextRunAt!),
-            })
-          : uiText("noUpcomingRun");
+  const status = () => {
+    if (props.paused) return uiText("captainIsOff");
+    if (!props.item.enabled) return uiText("paused");
+    if (props.item.nextRunAt) {
+      return uiText("nextWithCount", {
+        clockDistance: clockDistance(props.item.nextRunAt),
+      });
+    }
+    const activeTrigger = trigger();
+    if (props.item.schedule === null && activeTrigger) {
+      if (activeTrigger.status === "error")
+        return uiText("triggerErrorSummary");
+      if (activeTrigger.status === "disabled")
+        return uiText("triggerStatusDisabled");
+      if (activeTrigger.lastEventAt) {
+        return uiText("triggerLastEvent", {
+          ago: runAgo(activeTrigger.lastEventAt),
+        });
+      }
+      return uiText("triggerListeningShort");
+    }
+    return uiText("noUpcomingRun");
+  };
+  const subtitleText = () => {
+    if (props.item.schedule !== null) {
+      return scheduleLabel(props.item.schedule);
+    }
+    const activeTrigger = trigger();
+    if (activeTrigger) {
+      return triggerTargetLabel(activeTrigger);
+    }
+    return scheduleLabel(null);
+  };
+  const descriptionText = () => {
+    const activeTrigger = trigger();
+    if (!activeTrigger) return subtitleText();
+    const mode = triggerModeLabel(
+      activeTrigger.mode,
+      activeTrigger.pollingIntervalMinutes,
+    );
+    return [
+      props.item.schedule !== null ? scheduleLabel(props.item.schedule) : "",
+      triggerTargetLabel(activeTrigger),
+      mode,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  };
 
   return (
     <View
       role="button"
       accessibilityLabel={props.item.name}
-      accessibilityDescription={`${scheduleLabel(props.item.schedule)} · ${status()}`}
+      accessibilityDescription={`${descriptionText()} · ${status()}`}
       onPress={props.onOpen}
       hoverStyle={{ backgroundColor: c().selected }}
       focusVisibleStyle={focusRing(c(), "inset")}
@@ -96,16 +161,83 @@ export function PhoneRoutineRow(props: {
             lines={1}
             style={{ flex: 1, minWidth: 0 }}
           >
-            {scheduleLabel(props.item.schedule)}
+            {subtitleText()}
           </Label>
           <Label
             variant="caption"
-            tone={props.paused ? "warningInk" : "muted"}
+            tone={
+              props.paused
+                ? "warningInk"
+                : props.item.enabled &&
+                    props.item.schedule === null &&
+                    trigger()?.status === "error"
+                  ? "red"
+                  : "muted"
+            }
             lines={1}
           >
             {status()}
           </Label>
         </View>
+        <If when={trigger()}>
+          {(entry) => (
+            <View style={{ gap: space[2] }}>
+              <If when={props.item.schedule !== null}>
+                <Label variant="caption" tone="muted" lines={1}>
+                  {triggerTargetLabel(entry())}
+                </Label>
+              </If>
+              <View
+                style={{
+                  ...row,
+                  gap: space[4],
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
+                <Badge
+                  label={triggerStatusMeta(entry().status).label}
+                  tone={triggerStatusMeta(entry().status).tone}
+                  size="caption"
+                />
+                <If
+                  when={triggerModeLabel(
+                    entry().mode,
+                    entry().pollingIntervalMinutes,
+                  )}
+                >
+                  {(modeText) => (
+                    <Badge label={modeText()} tone="neutral" size="caption" />
+                  )}
+                </If>
+                <If when={entry().fallbackReason}>
+                  {(reason) => (
+                    <Label
+                      variant="caption"
+                      tone="warningInk"
+                      lines={1}
+                      style={{ flex: 1, minWidth: 0 }}
+                    >
+                      {uiText("triggerFallbackNotice", { reason: reason() })}
+                    </Label>
+                  )}
+                </If>
+                <If when={entry().status === "error" && entry().lastError}>
+                  {(err) => (
+                    <Label
+                      variant="caption"
+                      tone="red"
+                      lines={1}
+                      style={{ flex: 1, minWidth: 0 }}
+                    >
+                      {err()}
+                    </Label>
+                  )}
+                </If>
+              </View>
+            </View>
+          )}
+        </If>
       </View>
       <If
         when={props.item.unseenFailures || failed() || props.item.unseenReports}
@@ -136,7 +268,6 @@ export function reportBody(run: RunView) {
     : report;
 }
 
-/** The newest report, in full, at the top of a routine's feed. */
 /** How much of the latest report its card shows before it is opened. */
 const reportPreviewHeight = 280;
 
@@ -155,9 +286,19 @@ export function LatestReportCard(props: {
   return (
     <View style={{ borderWidth: 1, borderColor: c().border }}>
       <View style={{ padding: inset(), gap: space[4] }}>
-        <Label variant="small" tone="muted">
-          {feedTime(props.run.startedAt)}
-        </Label>
+        <View
+          style={{
+            ...row,
+            gap: space[8],
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          <Label variant="small" tone="muted">
+            {feedTime(props.run.startedAt)}
+          </Label>
+          <RunSourceBadge startedBy={props.run.startedBy} />
+        </View>
         <View style={{ gap: space[8] }}>
           <Label variant="subtitle" weight={weight.strong}>
             {runTitle(props.run)}
@@ -265,9 +406,19 @@ export function EarlierReportCard(props: {
         height: missed() && !props.compact ? missedCardHeight : undefined,
       }}
     >
-      <Label variant="small" tone="muted">
-        {feedTime(props.run.startedAt)}
-      </Label>
+      <View
+        style={{
+          ...row,
+          gap: space[8],
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        <Label variant="small" tone="muted">
+          {feedTime(props.run.startedAt)}
+        </Label>
+        <RunSourceBadge startedBy={props.run.startedBy} />
+      </View>
       <If
         when={missed()}
         else={

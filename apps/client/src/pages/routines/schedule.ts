@@ -1,4 +1,11 @@
-import type { RoutineSchedule, RoutineSummary } from "@eta/client-contracts";
+import type {
+  RoutineSchedule,
+  RoutineSummary,
+  RoutineTrigger,
+  RoutineTriggerMode,
+  RoutineTriggerStatus,
+  RunTrigger,
+} from "@eta/client-contracts";
 import { formatLocale, localizedText, uiText } from "../../i18n";
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -326,4 +333,82 @@ export function upcomingTimes(
         )}`,
     )
     .join(", ")}…`;
+}
+
+export function providerLabel(provider: string) {
+  const trimmed = provider.trim();
+  if (!trimmed) return "";
+  if (/^[a-z0-9_-]+$/.test(trimmed)) {
+    return trimmed
+      .split(/[-_]+/)
+      .filter(Boolean)
+      .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+  return trimmed;
+}
+
+export function triggerTargetLabel(
+  trigger: Pick<RoutineTrigger, "provider" | "source" | "trigger">,
+) {
+  return `${trigger.provider} / ${trigger.source} / ${trigger.trigger}`;
+}
+
+export function triggerModeLabel(
+  mode: RoutineTriggerMode | null | undefined,
+  pollingIntervalMinutes?: number | null,
+) {
+  if (mode === "poll") {
+    return pollingIntervalMinutes
+      ? uiText("triggerPollingEvery", { minutes: pollingIntervalMinutes })
+      : uiText("triggerModePollShort");
+  }
+  if (mode === "webhook") return uiText("triggerModeWebhookShort");
+  return "";
+}
+
+export function triggerStatusMeta(status: RoutineTriggerStatus) {
+  switch (status) {
+    case "active":
+      return { tone: "green" as const, label: uiText("triggerStatusActive") };
+    case "disabled":
+      return {
+        tone: "neutral" as const,
+        label: uiText("triggerStatusDisabled"),
+      };
+    case "error":
+      return { tone: "red" as const, label: uiText("triggerStatusError") };
+  }
+}
+
+export function runStartedByLabel(startedBy: RunTrigger) {
+  switch (startedBy) {
+    case "trigger":
+      return uiText("runStartedByTrigger");
+    case "schedule":
+      return uiText("runStartedBySchedule");
+    case "user":
+      return uiText("runStartedByUser");
+  }
+}
+
+export function formatTriggerConfigSummary(
+  config: Record<string, unknown> | undefined,
+) {
+  if (!config) return "";
+  const entries = Object.entries(config).filter(
+    ([, value]) => value !== undefined && value !== null && value !== "",
+  );
+  if (!entries.length) return "";
+  return entries
+    .map(([key, value]) => {
+      const text =
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+          ? String(value)
+          : JSON.stringify(value);
+      return `${key}=${text}`;
+    })
+    .join(", ");
 }

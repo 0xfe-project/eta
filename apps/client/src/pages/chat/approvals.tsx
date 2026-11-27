@@ -2,6 +2,8 @@ import type {
   CaptainOperationView,
   InboxResponse,
   InteractionView,
+  RoutineSchedule,
+  RoutineTrigger,
 } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import {
@@ -24,6 +26,13 @@ import { StatusDot } from "../../components/status-dot";
 import { control, icon, opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { relativeTime, useHost } from "../../services/host";
+import {
+  formatTriggerConfigSummary,
+  scheduleFor,
+  scheduleLabel,
+  triggerModeLabel,
+  triggerTargetLabel,
+} from "../routines/schedule";
 
 /** A free answer's field; a proposal card's header and its fields' label column. */
 const answerWidth = 400;
@@ -287,7 +296,9 @@ function SheetProposal(props: {
             {(field) => (
               <View style={{ gap: space[4] }}>
                 <Caption text={uiText(field()[0])} />
-                <Label variant="small">{field()[1]}</Label>
+                <Label variant="small" style={{ minWidth: 0 }}>
+                  {field()[1]}
+                </Label>
               </View>
             )}
           </Each>
@@ -387,6 +398,76 @@ function proposalStatusBadge(
   }
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asRoutineSchedule(value: unknown): RoutineSchedule | null {
+  if (!isPlainRecord(value) || typeof value.kind !== "string") return null;
+  switch (value.kind) {
+    case "daily":
+      return typeof value.time === "string"
+        ? { kind: "daily", time: value.time }
+        : null;
+    case "weekly":
+      return typeof value.time === "string" && Array.isArray(value.days)
+        ? {
+            kind: "weekly",
+            time: value.time,
+            days: value.days.filter(
+              (day): day is number => typeof day === "number",
+            ),
+          }
+        : null;
+    case "hourly":
+      return typeof value.every === "number"
+        ? ({
+            kind: "hourly",
+            every: value.every,
+          } as RoutineSchedule)
+        : null;
+    case "cron":
+      return typeof value.cron === "string"
+        ? { kind: "cron", cron: value.cron }
+        : null;
+    default:
+      return null;
+  }
+}
+
+function asRoutineTrigger(value: unknown): RoutineTrigger | null {
+  if (!isPlainRecord(value)) return null;
+  if (
+    typeof value.provider !== "string" ||
+    typeof value.source !== "string" ||
+    typeof value.trigger !== "string"
+  ) {
+    return null;
+  }
+  return {
+    provider: value.provider,
+    source: value.source,
+    trigger: value.trigger,
+    accountId: typeof value.accountId === "string" ? value.accountId : null,
+    config: isPlainRecord(value.config) ? value.config : undefined,
+    mode: value.mode === "webhook" || value.mode === "poll" ? value.mode : null,
+    pollingIntervalMinutes:
+      typeof value.pollingIntervalMinutes === "number"
+        ? value.pollingIntervalMinutes
+        : null,
+  };
+}
+
+function formatProposalTrigger(trigger: RoutineTrigger): string {
+  const parts = [triggerTargetLabel(trigger)];
+  const mode = triggerModeLabel(trigger.mode, trigger.pollingIntervalMinutes);
+  if (mode) parts.push(mode);
+  if (trigger.accountId) parts.push(trigger.accountId);
+  const configSummary = formatTriggerConfigSummary(trigger.config);
+  if (configSummary) parts.push(configSummary);
+  return parts.join(" · ");
+}
+
 /** What a proposal of each kind will make, as label and value pairs. */
 function proposalFields(
   op: CaptainOperationView,
@@ -424,11 +505,27 @@ function proposalFields(
         ["proposalModel", text("model")],
         ["proposalRuntime", text("runtime")],
       ];
-    case "create_routine":
+    case "create_routine": {
+      const schedule = asRoutineSchedule(payload.schedule);
+      const trigger = asRoutineTrigger(payload.trigger);
+      const timezone = text("timezone");
+      const scheduleValue = schedule
+        ? timezone
+          ? scheduleFor(schedule, timezone)
+          : scheduleLabel(schedule)
+        : "";
+      const triggerValue = trigger ? formatProposalTrigger(trigger) : "";
+      const whenText =
+        text("scheduleText") ||
+        [scheduleValue, triggerValue].filter(Boolean).join(" + ");
       return [
-        ["proposalWhen", text("scheduleText")],
+        ["proposalWhen", whenText],
+        ["proposalSchedule", scheduleValue],
+        ["proposalTrigger", triggerValue],
+        ["proposalTimezone", timezone],
         ["proposalBrief", text("brief")],
       ];
+    }
     default:
       return [];
   }
@@ -856,7 +953,7 @@ function ProposalCard(props: { operation: CaptainOperationView }) {
                 >
                   {uiText(field()[0])}
                 </Label>
-                <Label variant="small" style={{ flex: 1 }}>
+                <Label variant="small" style={{ flex: 1, minWidth: 0 }}>
                   {field()[1]}
                 </Label>
               </View>

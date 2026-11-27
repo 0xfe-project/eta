@@ -57,6 +57,8 @@ export function Routines(props: {
   layout: Layout;
   initialId?: string;
   onCaptain: () => void;
+  onPlugins?: () => void;
+  onPluginSettings?: () => void;
   onBack?: () => void;
 }) {
   const agentMentions = useAgentMentions();
@@ -163,6 +165,8 @@ export function Routines(props: {
         tablet={tablet()}
         item={editing() === "edit" ? info() : undefined}
         brief={editing() === "edit" ? briefs()[0]?.text : undefined}
+        onPlugins={props.onPlugins}
+        onPluginSettings={props.onPluginSettings}
         onClose={() => editing.set(null)}
         onSave={select}
       />
