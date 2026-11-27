@@ -351,14 +351,18 @@ export class TriggerHub {
 
       // If the previous trigger was removed or replaced, drop its remote instance first (if unshared)
       // and retire any stale pending events from the old trigger definition.
-      // Same-provider inbound webhook edits keep their persisted URL token and secret intact.
+      // Same-provider inbound webhook edits keep their persisted URL token and secret intact,
+      // while leaving/deleting a disabled webhook still cleans up SettingStore credentials.
       if (
         prev !== undefined &&
         (input.triggerPatch === null || input.triggerPatch !== undefined)
       ) {
         this.#clearPendingOnTriggerChange(input.routineId);
+        const targetInstanceId =
+          prev.instanceId ??
+          (prev.provider === "webhook" ? `webhook:${prev.routineId}` : null);
         if (
-          prev.instanceId !== null &&
+          targetInstanceId !== null &&
           !(
             current !== undefined &&
             prev.provider === "webhook" &&
@@ -367,7 +371,7 @@ export class TriggerHub {
         )
           await this.#deleteUnshared(
             prev.provider,
-            prev.instanceId,
+            targetInstanceId,
             prev.routineId,
           );
       }
@@ -383,7 +387,9 @@ export class TriggerHub {
         (input.enabledAfter &&
           (current.status === "error" || current.instanceId === null));
       if (needSync) {
-        await this.#syncRoutine(input.routineId, input.enabledAfter, current);
+        await this.#syncRoutine(input.routineId, input.enabledAfter, current, {
+          forceProvision: input.triggerPatch !== undefined,
+        });
       }
       if (input.enabledAfter) this.drainSoon(input.routineId, 0);
     });
@@ -396,10 +402,15 @@ export class TriggerHub {
         clearTimeout(timer);
         this.#drainTimers.delete(previousTrigger.routineId);
       }
-      if (previousTrigger.instanceId !== null) {
+      const targetInstanceId =
+        previousTrigger.instanceId ??
+        (previousTrigger.provider === "webhook"
+          ? `webhook:${previousTrigger.routineId}`
+          : null);
+      if (targetInstanceId !== null) {
         await this.#deleteUnshared(
           previousTrigger.provider,
-          previousTrigger.instanceId,
+          targetInstanceId,
           previousTrigger.routineId,
         );
       }
@@ -464,6 +475,7 @@ export class TriggerHub {
     routineId: string,
     enabled: boolean,
     record: RoutineTriggerRecord,
+    options?: { forceProvision?: boolean },
   ): Promise<void> {
     const provider = this.#providers.get(record.provider);
     if (provider === undefined) {
@@ -500,7 +512,11 @@ export class TriggerHub {
           status: "disabled",
           lastError: null,
         });
-      } else if (record.instanceId !== null && record.status === "disabled") {
+      } else if (
+        !options?.forceProvision &&
+        record.instanceId !== null &&
+        record.status === "disabled"
+      ) {
         try {
           await provider.setEnabled(record.instanceId, true);
           this.#store.updateTriggerState(routineId, {

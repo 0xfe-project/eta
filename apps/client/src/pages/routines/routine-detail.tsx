@@ -124,6 +124,9 @@ function InboundWebhookPanel(props: {
     untracked(() => {
       secretVisible.set(false);
       customSecret.set("");
+      confirmRotate.set(false);
+      savingSecret.set(false);
+      rotating.set(false);
       if (provider !== "webhook") {
         requestSeq++;
         info.set(null);
@@ -152,15 +155,18 @@ function InboundWebhookPanel(props: {
   async function saveSecret() {
     const trimmed = customSecret().trim();
     if (!trimmed || savingSecret()) return;
+    const targetId = props.routine.id;
+    const seq = ++requestSeq;
     savingSecret.set(true);
     const updated = await host.action(() =>
       host.call<RoutineResults["webhookSetSecret"]>(
         "routines",
         "webhookSetSecret",
-        { routineId: props.routine.id, secret: trimmed },
+        { routineId: targetId, secret: trimmed },
       ),
     );
     savingSecret.set(false);
+    if (seq !== requestSeq || props.routine.id !== targetId) return;
     if (updated && typeof updated.path === "string") {
       info.set(updated);
       customSecret.set("");
@@ -170,13 +176,16 @@ function InboundWebhookPanel(props: {
 
   async function rotateCredentials() {
     if (rotating()) return;
+    const targetId = props.routine.id;
+    const seq = ++requestSeq;
     rotating.set(true);
     const updated = await host.action(() =>
       host.call<RoutineResults["webhookRotate"]>("routines", "webhookRotate", {
-        routineId: props.routine.id,
+        routineId: targetId,
       }),
     );
     rotating.set(false);
+    if (seq !== requestSeq || props.routine.id !== targetId) return;
     if (updated && typeof updated.path === "string") {
       info.set(updated);
       confirmRotate.set(false);

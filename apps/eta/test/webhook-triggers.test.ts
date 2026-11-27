@@ -360,6 +360,165 @@ describe("webhook trigger provider unit behavior", () => {
     );
     expect(afterDeleteResp?.status).toBe(404);
   });
+
+  it("rejects missing/tampered HMAC, enforces includeKeywords & default Authorization header, and sets truncated=true on >16k payloads", async () => {
+    const settings = makeMemorySettings();
+    const secretKey = randomBytes(32);
+    const events: IncomingTriggerEvent[] = [];
+
+    const hmacTrigger = {
+      provider: "webhook",
+      source: "http",
+      trigger: "WEBHOOK_RECEIVED",
+      mode: "webhook" as const,
+      config: {
+        authMode: "hmac-sha256",
+        includeKeywords: "deploy, release",
+      },
+    };
+    const headerTrigger = {
+      provider: "webhook",
+      source: "http",
+      trigger: "WEBHOOK_RECEIVED",
+      mode: "webhook" as const,
+      config: { authMode: "header" },
+    };
+
+    const provider = new WebhookTriggerProvider({
+      settings,
+      secretKey,
+      warn: () => undefined,
+    });
+    providers.push(provider);
+
+    provider.start({
+      bindings: () => [
+        {
+          routineId: "r-hmac",
+          enabled: true,
+          trigger: hmacTrigger,
+          instanceId: "webhook:r-hmac",
+        },
+        {
+          routineId: "r-hdr",
+          enabled: true,
+          trigger: headerTrigger,
+          instanceId: "webhook:r-hdr",
+        },
+      ],
+      onEvent: (event) => events.push(event),
+      onBindingsChanged: () => undefined,
+    });
+
+    await provider.provision({
+      routineId: "r-hmac",
+      trigger: hmacTrigger,
+      enabled: true,
+      existingInstanceId: null,
+    });
+    await provider.provision({
+      routineId: "r-hdr",
+      trigger: headerTrigger,
+      enabled: true,
+      existingInstanceId: null,
+    });
+
+    const hmacInfo = provider.info("r-hmac", hmacTrigger);
+    const hdrInfo = provider.info("r-hdr", headerTrigger);
+    expect(hdrInfo.headerName).toBe("Authorization");
+
+    // Missing HMAC signature header -> 401
+    const missingSigResp = await provider.route(
+      new Request(`http://localhost${hmacInfo.path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "deploy" }),
+      }),
+    );
+    expect(missingSigResp?.status).toBe(401);
+
+    // Valid signature computed for original body, sent with tampered body -> 401
+    const originalBody = JSON.stringify({ action: "deploy", env: "staging" });
+    const validSigForOriginal = `sha256=${hmacHex(hmacInfo.secret!, originalBody)}`;
+    const tamperedResp = await provider.route(
+      new Request(`http://localhost${hmacInfo.path}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-hub-signature-256": validSigForOriginal,
+        },
+        body: JSON.stringify({ action: "deploy", env: "production" }),
+      }),
+    );
+    expect(tamperedResp?.status).toBe(401);
+
+    // includeKeywords mismatch -> 202 { accepted: false, reason: "filtered" }
+    const mismatchBody = JSON.stringify({ action: "ping" });
+    const mismatchResp = await provider.route(
+      new Request(`http://localhost${hmacInfo.path}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-hub-signature-256": `sha256=${hmacHex(hmacInfo.secret!, mismatchBody)}`,
+        },
+        body: mismatchBody,
+      }),
+    );
+    expect(mismatchResp?.status).toBe(202);
+    expect(await mismatchResp?.json()).toEqual({
+      ok: true,
+      accepted: false,
+      reason: "filtered",
+    });
+
+    // Large JSON body (>16,000 chars, <256 KiB) -> accepted with truncated: true
+    const largeBody = JSON.stringify({
+      action: "deploy",
+      blob: "x".repeat(20_000),
+    });
+    const largeOkResp = await provider.route(
+      new Request(`http://localhost${hmacInfo.path}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-hub-signature-256": `sha256=${hmacHex(hmacInfo.secret!, largeBody)}`,
+        },
+        body: largeBody,
+      }),
+    );
+    expect(largeOkResp?.status).toBe(202);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.payload).toMatchObject({
+      truncated: true,
+      body: { _truncated: true },
+    });
+
+    // Default Authorization: Bearer <secret> header auth
+    const badBearer = await provider.route(
+      new Request(`http://localhost${hdrInfo.path}`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer wrong-secret",
+          "content-type": "text/plain",
+        },
+        body: "hi",
+      }),
+    );
+    expect(badBearer?.status).toBe(401);
+
+    const goodBearer = await provider.route(
+      new Request(`http://localhost${hdrInfo.path}`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${hdrInfo.secret!}`,
+          "content-type": "text/plain",
+        },
+        body: "hi",
+      }),
+    );
+    expect(goodBearer?.status).toBe(202);
+    expect(events).toHaveLength(2);
+  });
 });
 
 describe("inbound webhook end-to-end with eta-host", () => {
@@ -648,6 +807,216 @@ describe("inbound webhook end-to-end with eta-host", () => {
       w1.client.close();
       await w1.host.close();
       throw error;
+    }
+  });
+
+  it("regenerates/clears secret across pause -> authMode edit -> resume without calling webhookInfo, and cleans credentials on disabled delete/switch", async () => {
+    const dir = await tempDir("eta-webhook-regressions-");
+    const w = await world({
+      dataDir: dir,
+      captain: true,
+      routines: { timer: false, coalesceMs: 10 },
+    });
+    const origin = `http://127.0.0.1:${w.host.port}`;
+    const settings = new SettingStore(w.host.db);
+
+    try {
+      // Regression 1: enabled (none) -> pause -> edit to hmac-sha256 -> re-enable -> secret exists immediately
+      const { routine: r1 } = (await w.client.call("routines", "create", {
+        name: "Pause Edit Auth",
+        brief: "Watch deploys.",
+        schedule: null,
+        trigger: {
+          provider: "webhook",
+          source: "http",
+          trigger: "WEBHOOK_RECEIVED",
+          mode: "webhook",
+          config: { authMode: "none" },
+        },
+        timezone: "UTC",
+        enabled: true,
+      } satisfies RoutineArgs["create"])) as { routine: RoutineSummary };
+
+      const storedInitial = settings.get(`webhook.trigger.${r1.id}`) as {
+        sealedSecret: string | null;
+      };
+      expect(storedInitial.sealedSecret).toBeNull();
+
+      await w.client.call("routines", "update", {
+        routineId: r1.id,
+        enabled: false,
+      });
+      await w.client.call("routines", "update", {
+        routineId: r1.id,
+        trigger: {
+          provider: "webhook",
+          source: "http",
+          trigger: "WEBHOOK_RECEIVED",
+          mode: "webhook",
+          config: { authMode: "hmac-sha256" },
+        },
+      });
+      const enabledAgain = (await w.client.call("routines", "update", {
+        routineId: r1.id,
+        enabled: true,
+      })) as { routine: RoutineSummary };
+      expect(enabledAgain.routine.trigger?.status).toBe("active");
+
+      // Secret MUST already be persisted in SettingStore before webhookInfo is ever called.
+      const storedAfterHmac = settings.get(`webhook.trigger.${r1.id}`) as {
+        sealedSecret: string | null;
+      };
+      expect(storedAfterHmac.sealedSecret).not.toBeNull();
+
+      const infoAfter = (await w.client.call("routines", "webhookInfo", {
+        routineId: r1.id,
+      })) as WebhookTriggerInfo;
+      expect(infoAfter.secret).toMatch(/^[0-9a-f]{64}$/);
+
+      // Unauthenticated request returns 401; signed request returns 202.
+      expect(
+        (
+          await fetch(`${origin}${infoAfter.path}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: "{}",
+          })
+        ).status,
+      ).toBe(401);
+
+      const signedBody = JSON.stringify({ event: "deploy" });
+      expect(
+        (
+          await fetch(`${origin}${infoAfter.path}`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-hub-signature-256": `sha256=${hmacHex(infoAfter.secret!, signedBody)}`,
+            },
+            body: signedBody,
+          })
+        ).status,
+      ).toBe(202);
+
+      // Reverse: pause -> edit back to none -> re-enable clears sealedSecret and allows token-only POST
+      await w.client.call("routines", "update", {
+        routineId: r1.id,
+        enabled: false,
+      });
+      await w.client.call("routines", "update", {
+        routineId: r1.id,
+        trigger: {
+          provider: "webhook",
+          source: "http",
+          trigger: "WEBHOOK_RECEIVED",
+          mode: "webhook",
+          config: { authMode: "none" },
+        },
+        enabled: true,
+      });
+      const storedCleared = settings.get(`webhook.trigger.${r1.id}`) as {
+        sealedSecret: string | null;
+      };
+      expect(storedCleared.sealedSecret).toBeNull();
+      expect(
+        (
+          await fetch(`${origin}${infoAfter.path}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: signedBody,
+          })
+        ).status,
+      ).toBe(202);
+
+      // Regression 2a: enabled: false created -> webhookInfo -> deleted cleans SettingStore & returns 404
+      const { routine: rDisabledDelete } = (await w.client.call(
+        "routines",
+        "create",
+        {
+          name: "Disabled Delete",
+          brief: "Will be deleted before enabling.",
+          schedule: null,
+          trigger: {
+            provider: "webhook",
+            source: "http",
+            trigger: "WEBHOOK_RECEIVED",
+            mode: "webhook",
+            config: { authMode: "none" },
+          },
+          timezone: "UTC",
+          enabled: false,
+        } satisfies RoutineArgs["create"],
+      )) as { routine: RoutineSummary };
+      expect(rDisabledDelete.trigger?.instanceId).toBeNull();
+
+      const disabledInfo = (await w.client.call("routines", "webhookInfo", {
+        routineId: rDisabledDelete.id,
+      })) as WebhookTriggerInfo;
+      expect(
+        settings.get(`webhook.trigger.${rDisabledDelete.id}`),
+      ).toBeDefined();
+      const disabledResp = await fetch(`${origin}${disabledInfo.path}`, {
+        method: "POST",
+        body: "{}",
+      });
+      expect(disabledResp.status).toBe(202);
+      expect(await disabledResp.json()).toEqual({
+        ok: true,
+        accepted: false,
+        reason: "disabled",
+      });
+
+      await w.client.call("routines", "delete", {
+        routineId: rDisabledDelete.id,
+      });
+      expect(
+        settings.get(`webhook.trigger.${rDisabledDelete.id}`),
+      ).toBeUndefined();
+      expect(
+        (await fetch(`${origin}${disabledInfo.path}`, { method: "POST" }))
+          .status,
+      ).toBe(404);
+
+      // Regression 2b: enabled: false created -> webhookInfo -> switched to schedule-only cleans SettingStore & returns 404
+      const { routine: rDisabledSwitch } = (await w.client.call(
+        "routines",
+        "create",
+        {
+          name: "Disabled Switch",
+          brief: "Will switch to schedule.",
+          schedule: null,
+          trigger: {
+            provider: "webhook",
+            source: "http",
+            trigger: "WEBHOOK_RECEIVED",
+            mode: "webhook",
+            config: { authMode: "none" },
+          },
+          timezone: "UTC",
+          enabled: false,
+        } satisfies RoutineArgs["create"],
+      )) as { routine: RoutineSummary };
+      const switchInfo = (await w.client.call("routines", "webhookInfo", {
+        routineId: rDisabledSwitch.id,
+      })) as WebhookTriggerInfo;
+      expect(
+        settings.get(`webhook.trigger.${rDisabledSwitch.id}`),
+      ).toBeDefined();
+
+      await w.client.call("routines", "update", {
+        routineId: rDisabledSwitch.id,
+        schedule: { kind: "daily", time: "09:00" },
+        trigger: null,
+      });
+      expect(
+        settings.get(`webhook.trigger.${rDisabledSwitch.id}`),
+      ).toBeUndefined();
+      expect(
+        (await fetch(`${origin}${switchInfo.path}`, { method: "POST" })).status,
+      ).toBe(404);
+    } finally {
+      w.client.close();
+      await w.host.close();
     }
   });
 });

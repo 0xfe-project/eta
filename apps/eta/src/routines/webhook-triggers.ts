@@ -284,7 +284,28 @@ export class WebhookTriggerProvider implements TriggerProvider {
     };
   }
 
-  async setEnabled(_instanceId: string, _enabled: boolean): Promise<void> {
+  async setEnabled(instanceId: string, enabled: boolean): Promise<void> {
+    const routineId = routineIdOf(instanceId);
+    if (routineId !== null) {
+      const binding = this.#host
+        ?.bindings()
+        .find(
+          (item) =>
+            item.routineId === routineId && item.trigger.provider === this.id,
+        );
+      if (binding !== undefined) {
+        try {
+          const config = parseWebhookConfig(binding.trigger);
+          if (enabled || this.#loadUnsealedState(routineId) !== undefined) {
+            this.#ensureCredentials(routineId, config);
+          }
+        } catch (error) {
+          this.#warn(
+            `[eta] webhook binding ${routineId} has invalid config: ${errorMessage(error)}`,
+          );
+        }
+      }
+    }
     this.syncBindings();
   }
 
