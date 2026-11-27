@@ -12,8 +12,9 @@
  * plugin's directory is started through `sh`, and it has no sse (`toSessionServers`). eta's own
  * loop takes `@eta/mcp`'s entries, which keep their working directory and do speak sse, and a
  * remote server there signs in with OAuth unless the extension sends `Authorization`
- * (`toMcpEntries`). Names are `<plugin>-<server>`; one that two servers would share goes to the
- * first, and the other is left out and reported.
+ * (`toMcpEntries`). Names omit the repeated segment when normalized `<plugin>` and `<server>` match
+ * (except reserved names), otherwise `<plugin>-<server>`; one that two servers would share goes to
+ * the first, and the other is left out and reported.
  *
  * Skills reach a runtime in one of two ways. Claude Code takes them natively, as `--plugin-dir`; the
  * others have nothing per session, and hear of them in the system prompt. Claude Code is not given
@@ -169,9 +170,42 @@ function expand(text: string, root: string, data: string): string {
   );
 }
 
-/** A name a runtime takes for a server: unique across plugins, and letters, digits, `-` and `_`. */
+const sanitizeServerPart = (part: string): string =>
+  part.replace(/[^\w-]/g, "_");
+
+/**
+ * Single-segment names an installed plugin must not take when `<plugin>` and `<server>` match:
+ * the host's own MCP server (`eta`), the virtual Composio server (`composio`), and the
+ * `Object.prototype` names OAR refuses on every runtime. Lowercased for case-insensitive lookup.
+ */
+const RESERVED_SERVER_NAMES = new Set(
+  [
+    "eta",
+    "composio",
+    "__proto__",
+    "__defineGetter__",
+    "__defineSetter__",
+    "__lookupGetter__",
+    "__lookupSetter__",
+  ].map((name) => name.toLowerCase()),
+);
+
+/**
+ * A name a runtime takes for a server: letters, digits, `-` and `_`. Omits the repeated segment
+ * when normalized `<plugin>` and `<server>` match (case-insensitively), except for reserved names
+ * which keep `<plugin>-<server>`.
+ */
 export function sessionServerName(plugin: string, server: string): string {
-  return `${plugin}-${server}`.replace(/[^\w-]/g, "_");
+  const normalizedPlugin = sanitizeServerPart(plugin);
+  const normalizedServer = sanitizeServerPart(server);
+  const folded = normalizedPlugin.toLowerCase();
+  if (
+    normalizedPlugin !== "" &&
+    folded === normalizedServer.toLowerCase() &&
+    !RESERVED_SERVER_NAMES.has(folded)
+  )
+    return normalizedPlugin;
+  return `${normalizedPlugin}-${normalizedServer}`;
 }
 
 /** Whether an external runtime can attach this server. None that eta runs speaks legacy HTTP+SSE. */
@@ -180,7 +214,7 @@ export const serverSupported = (server: PluginServer): boolean =>
 
 /** A plugin's server with everything the machine decides filled in, before it takes a client's shape. */
 export type ResolvedServer = {
-  /** The name a client knows it by: `<plugin>-<server>`, see `sessionServerName`. */
+  /** The name a client knows it by: `<plugin>` when matching (unless reserved) or `<plugin>-<server>`, see `sessionServerName`. */
   name: string;
   plugin: string;
   server: string;
@@ -224,8 +258,8 @@ const clashReport = (clash: ServerNameClash): string =>
 
 /**
  * The names of these plugins' servers, in order, and the ones that lose theirs to an earlier
- * server: `a-b` + `c` and `a` + `b-c` meet, and so do two that differ only in what `_` replaced.
- * Nothing is overridden silently: the later one is out.
+ * server: `a-b` + `c` and `a` + `b-c` meet, `a-b` + `a-b` and `a` + `b` meet, and so do two that
+ * differ only in what `_` replaced. Nothing is overridden silently: the later one is out.
  */
 export function claimServerNames(
   plugins: readonly Pick<PluginPackage, "manifest" | "servers">[],

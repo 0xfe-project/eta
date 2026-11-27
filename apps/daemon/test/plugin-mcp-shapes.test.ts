@@ -415,6 +415,96 @@ describe("two servers that would share a name", () => {
       },
     ]);
   });
+
+  it("omits repeated segments in both shapes except for reserved names, and catches clashes across plugins", async () => {
+    const firecrawl = await plugin("firecrawl", {
+      firecrawl: { type: "streamable-http", url: "https://fc.example.com/mcp" },
+    });
+    const gdrive = await plugin("google-drive", {
+      "google-drive": {
+        type: "streamable-http",
+        url: "https://gd.example.com/mcp",
+      },
+    });
+    const dotted = await plugin("demo.plugin", {
+      demo_plugin: {
+        type: "streamable-http",
+        url: "https://dot.example.com/mcp",
+      },
+    });
+    const etaPlugin = await plugin("eta", {
+      eta: { type: "streamable-http", url: "https://eta.example.com/mcp" },
+    });
+    const composioPlugin = await plugin("composio", {
+      composio: {
+        type: "streamable-http",
+        url: "https://comp.example.com/mcp",
+      },
+    });
+    const a = await plugin("a", {
+      b: { type: "streamable-http", url: "https://a-b.example.com/mcp" },
+    });
+    const ab = await plugin("a-b", {
+      "a-b": { type: "streamable-http", url: "https://ab.example.com/mcp" },
+    });
+
+    const ordered = [
+      firecrawl,
+      gdrive,
+      dotted,
+      etaPlugin,
+      composioPlugin,
+      a,
+      ab,
+    ];
+    const warnings: string[] = [];
+    const resolved = resolvePluginServers(
+      ordered.map((loaded) => ({ plugin: loaded, config: {} })),
+      await temp(),
+      (warning) => warnings.push(warning),
+    );
+    expect(Object.keys(toMcpEntries(resolved))).toEqual([
+      "firecrawl",
+      "google-drive",
+      "demo_plugin",
+      "eta-eta",
+      "composio-composio",
+      "a-b",
+    ]);
+    expect(toMcpEntries(resolved)["a-b"]?.url).toBe(
+      "https://a-b.example.com/mcp",
+    );
+    expect(warnings).toEqual([
+      "[eta] plugin a-b: mcp.json: server a-b skipped: its name a-b is taken by server b of plugin a",
+    ]);
+
+    const extras = await runtimeExtras(
+      ordered.map((loaded) => ({
+        plugin: loaded,
+        hash: "c".repeat(64),
+        config: {},
+      })),
+      { dataDir: await temp(), runtime: "codex", warn: () => undefined },
+    );
+    expect(extras.mcpServers?.map((server) => server.name)).toEqual([
+      "firecrawl",
+      "google-drive",
+      "demo_plugin",
+      "eta-eta",
+      "composio-composio",
+      "a-b",
+    ]);
+
+    // And in reverse order, `a-b`/`a-b` takes `a-b` first and `a`/`b` is reported as clashing.
+    expect(claimServerNames([ab, a]).clashes).toEqual([
+      {
+        plugin: "a",
+        server: "b",
+        name: "a-b",
+        takenBy: { plugin: "a-b", server: "a-b" },
+      },
+    ]);
+  });
 });
 
 describe("a Cursor-hosted server the user gave a Cursor credential", () => {

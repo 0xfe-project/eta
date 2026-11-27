@@ -268,6 +268,67 @@ describe("servers no runtime takes", () => {
   });
 });
 
+describe("sessionServerName", () => {
+  it("omits the repeated segment when plugin and server names match", () => {
+    expect(sessionServerName("firecrawl", "firecrawl")).toBe("firecrawl");
+    expect(sessionServerName("google-drive", "google-drive")).toBe(
+      "google-drive",
+    );
+  });
+
+  it("matches case-insensitively and after normalizing invalid characters to _", () => {
+    expect(sessionServerName("Firecrawl", "firecrawl")).toBe("Firecrawl");
+    expect(sessionServerName("demo.plugin", "demo.plugin")).toBe("demo_plugin");
+    expect(sessionServerName("demo.plugin", "demo_plugin")).toBe("demo_plugin");
+    expect(sessionServerName("demo.plugin", "DEMO_PLUGIN")).toBe("demo_plugin");
+  });
+
+  it("keeps <plugin>-<server> when the normalized names differ", () => {
+    expect(sessionServerName("demo.plugin", "server")).toBe(
+      "demo_plugin-server",
+    );
+    expect(sessionServerName("composio", "gmail")).toBe("composio-gmail");
+  });
+
+  it.each([
+    ["eta", "eta", "eta-eta"],
+    ["ETA", "eta", "ETA-eta"],
+    ["composio", "composio", "composio-composio"],
+    ["Composio", "composio", "Composio-composio"],
+    ["__proto__", "__proto__", "__proto__-__proto__"],
+    [
+      "__defineGetter__",
+      "__defineGetter__",
+      "__defineGetter__-__defineGetter__",
+    ],
+    [
+      "__definegetter__",
+      "__defineGetter__",
+      "__definegetter__-__defineGetter__",
+    ],
+    [
+      "__defineSetter__",
+      "__defineSetter__",
+      "__defineSetter__-__defineSetter__",
+    ],
+    [
+      "__lookupGetter__",
+      "__lookupGetter__",
+      "__lookupGetter__-__lookupGetter__",
+    ],
+    [
+      "__lookupSetter__",
+      "__lookupSetter__",
+      "__lookupSetter__-__lookupSetter__",
+    ],
+  ])(
+    "keeps <plugin>-<server> for reserved name %s + %s",
+    (pluginName, serverName, expected) => {
+      expect(sessionServerName(pluginName, serverName)).toBe(expected);
+    },
+  );
+});
+
 describe("the data directory", () => {
   it("is made, and what it holds stays across a new call", async () => {
     const dataDir = await temp();
