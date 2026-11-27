@@ -44,7 +44,7 @@ function apply(state: State, params: string): void {
  * reverse video (`7`), whether or not a character follows it.
  */
 export function hasBackground(text: string): boolean {
-  // eslint-disable-next-line no-control-regex
+  // oxlint-disable-next-line no-control-regex
   for (const match of text.matchAll(/\u001B\[([0-9;]*)m/g)) {
     const state: State = {
       fg: undefined,

@@ -58,7 +58,7 @@ async function openOverSsh(
     "-t",
     target,
     "--",
-    // eslint-disable-next-line no-template-curly-in-string -- shell syntax for the remote shell
+    // oxlint-disable-next-line no-template-curly-in-string -- shell syntax for the remote shell
     "${EDITOR:-vi}",
     path,
   ]);

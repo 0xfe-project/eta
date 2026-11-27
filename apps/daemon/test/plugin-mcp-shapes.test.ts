@@ -1,4 +1,4 @@
-/* eslint-disable no-template-curly-in-string -- `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are the spec's literal placeholders */
+/* oxlint-disable no-template-curly-in-string -- `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are the spec's literal placeholders */
 /**
  * One resolution, two shapes: what an external runtime is given stays exactly what it was before
  * eta's own loop took plugin servers too, and what eta's loop gets keeps its working directory,
@@ -9,7 +9,7 @@ import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import {
   claimServerNames,
   loadPlugin,

@@ -80,7 +80,7 @@ export class AskRegistry {
         this.pending.delete(payload.questionId);
         this.deadlines.delete(payload.questionId);
         if (timer !== undefined) clearTimeout(timer);
-        // eslint-disable-next-line ts/no-use-before-define -- onAbort and settle call each other
+        // oxlint-disable-next-line ts/no-use-before-define -- onAbort and settle call each other
         options.signal?.removeEventListener("abort", onAbort);
         this.observe?.(action, payload);
         resolve(response);

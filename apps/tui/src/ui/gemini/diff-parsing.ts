@@ -17,7 +17,7 @@ export function parseDiffWithLineNumbers(diffContent: string): DiffLine[] {
   let currentOldLine = 0;
   let currentNewLine = 0;
   let inHunk = false;
-  // eslint-disable-next-line regexp/no-super-linear-backtracking -- one line of a diff at a time
+  // oxlint-disable-next-line regexp/no-super-linear-backtracking -- one line of a diff at a time
   const hunkHeaderRegex = /^@@ -(\d+),?\d* \+(\d+),?\d* @@/;
 
   for (const line of lines) {

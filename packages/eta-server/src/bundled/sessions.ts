@@ -959,7 +959,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
             if (session === undefined)
               throw new Error("sessions.archive needs a session");
             if (typeof archived !== "boolean") {
-              // eslint-disable-next-line unicorn/prefer-type-error -- keep the thrown class
+              // oxlint-disable-next-line unicorn/prefer-type-error -- keep the thrown class
               throw new Error("sessions.archive needs archived: true or false");
             }
             await service.setMeta(session, { archived });

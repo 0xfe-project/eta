@@ -13,7 +13,7 @@ import type {
 import type { TranscriptLayout } from "../../src/ext/conversation/transcript/layout";
 import { stripVTControlCharacters } from "node:util";
 import stringWidth from "string-width";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   agentColour,
   agentColourIndex,
@@ -36,7 +36,7 @@ const MAGENTA = "\u001B[35m";
 const FG_OFF = "\u001B[39m";
 const BOLD = "\u001B[1m";
 const BOLD_OFF = "\u001B[22m";
-// eslint-disable-next-line no-control-regex
+// oxlint-disable-next-line no-control-regex
 const SGR = /\u001B\[[\d;]*m/;
 
 const user = (key: string): TranscriptItem => ({

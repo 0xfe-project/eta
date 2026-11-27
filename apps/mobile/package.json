@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "nsh run DevApp.tsx --target ios",
     "ios": "scripts/package-ios.sh simulator",
-    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
+    "lint": "xmas ../../scripts/lint.ts .",
     "mobile:check": "nsh check",
     "mobile:test": "nsh test"
   },

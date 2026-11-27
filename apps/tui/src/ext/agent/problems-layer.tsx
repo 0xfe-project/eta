@@ -35,7 +35,7 @@ export function ProblemsLayer({
     <LayerFrame title={title} footer={t("problemsFooter")}>
       {problems.map((problem, index) => (
         // The same text can appear twice (a key written three times); the index tells them apart.
-        // eslint-disable-next-line react/no-array-index-key
+        // oxlint-disable-next-line react/no-array-index-key
         <Text key={index}>{problem}</Text>
       ))}
     </LayerFrame>

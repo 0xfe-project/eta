@@ -118,18 +118,6 @@ jobs:
         with:
           team: team_m0cGPvm66wsuOjDpnCrXUDPz
 
-      # dprint's compiled WASM plugins; only this part runs dprint.
-      - name: Cache dprint
-        if: matrix.part == 'static'
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/dprint
-          key: dprint-${{ runner.os }}-${{ hashFiles('dprint.json') }}
-          restore-keys: |
-            dprint-${{ runner.os }}-
-      - if: matrix.part == 'static'
-        run: bunx dprint check
-
       - name: Turbo
         id: turbo
         if: steps.plan.outputs.run

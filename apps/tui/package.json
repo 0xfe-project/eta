@@ -12,7 +12,7 @@
     "dev": "bun scripts/gen-extensions.ts && bun src/main.tsx",
     "docs": "bun scripts/gen-extensions.ts && bun scripts/gen-docs.ts",
     "typecheck": "bun scripts/gen-extensions.ts && bun check",
-    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
+    "lint": "xmas ../../scripts/lint.ts .",
     "test": "bun scripts/gen-extensions.ts && bun --bun vitest --run --passWithNoTests",
     "test:changed": "bun scripts/gen-extensions.ts && bun --bun vitest --run --passWithNoTests --changed HEAD"
   },

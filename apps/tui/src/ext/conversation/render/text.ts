@@ -27,7 +27,7 @@ export function formatSize(bytes: number): string {
   return `${Number(value.toFixed(1))} ${unit}`;
 }
 
-/* eslint-disable no-control-regex -- these match terminal control characters on purpose */
+/* oxlint-disable no-control-regex -- these match terminal control characters on purpose */
 // A string sequence's body stops at whatever could start or end another sequence and at a line
 // break, so a body that never ends is read once, up to that stop, and takes no line after it.
 const STRING_SEQUENCE =

@@ -30,7 +30,7 @@ const GREEN_BRIGHT = "\u001B[92m";
 const FG_OFF = "\u001B[39m";
 const BOLD = "\u001B[1m";
 const BOLD_OFF = "\u001B[22m";
-// eslint-disable-next-line no-control-regex
+// oxlint-disable-next-line no-control-regex
 const CONTROL_CHAR = /[\u0000-\u001F\u007F-\u009F]/;
 
 const author = (
@@ -634,7 +634,7 @@ describe("terminal codes in what is drawn", () => {
   // Colour codes are all a line may carry: anything else could move the cursor, set the clipboard
   // or reset the terminal.
   const SGR_ALL = new RegExp(`${ESC_}\\[[\\d;]*m`, "g");
-  // eslint-disable-next-line no-control-regex
+  // oxlint-disable-next-line no-control-regex
   const CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
 
   it.each(items)("leaves only colour codes in a drawn %s", (_kind, item) => {

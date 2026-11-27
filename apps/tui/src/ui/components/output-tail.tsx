@@ -17,7 +17,7 @@ export function OutputTail({ output }: { output: string }) {
     >
       {lines.map((line, index) => (
         // Lines repeat, and their order never changes while shown.
-        // eslint-disable-next-line react/no-array-index-key
+        // oxlint-disable-next-line react/no-array-index-key
         <Text key={index} color={inkColor(theme.muted)} wrap="truncate-end">
           {line === "" ? " " : line}
         </Text>

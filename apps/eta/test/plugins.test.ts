@@ -1,4 +1,4 @@
-/* eslint-disable no-template-curly-in-string -- `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are the spec's literal placeholders */
+/* oxlint-disable no-template-curly-in-string -- `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are the spec's literal placeholders */
 /**
  * Plugins, end to end through a real host: from a directory to what a session gets.
  *
@@ -37,7 +37,7 @@ import { join } from "node:path";
 import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { createOarRuntimes } from "@eta/runtime-oar";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import { databasePath, openDatabase } from "../src/db";
 import { connect, until } from "./support/client";
 import { tempDir, testHost } from "./support/host";

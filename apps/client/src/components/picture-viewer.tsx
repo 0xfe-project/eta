@@ -263,7 +263,7 @@ function LightboxDialog(props: {
                 }
               >
                 {/* At its own size the picture scrolls, from its top-left corner. */}
-                {/* eslint-disable-next-line no-restricted-syntax -- a pan area: it scrolls both ways, with the horizontal Scroll inside */}
+                {/* oxlint-disable-next-line no-restricted-syntax -- a pan area: it scrolls both ways, with the horizontal Scroll inside */}
                 <Scroll style={{ ...fill }} contentStyle={{ flexGrow: 1 }}>
                   <Scroll horizontal contentStyle={{ flexGrow: 1 }}>
                     <PictureImage

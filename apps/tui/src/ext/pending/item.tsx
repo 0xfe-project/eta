@@ -460,7 +460,7 @@ function QuestionBody({
       </Text>
       {rest.map((line, index) => (
         // Lines repeat, and their order never changes while shown.
-        // eslint-disable-next-line react/no-array-index-key
+        // oxlint-disable-next-line react/no-array-index-key
         <Text key={index} wrap="wrap">
           {line === "" ? " " : line}
         </Text>

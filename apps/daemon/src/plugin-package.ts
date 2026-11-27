@@ -1,4 +1,4 @@
-/* eslint-disable no-template-curly-in-string -- `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are the spec's literal placeholders */
+/* oxlint-disable no-template-curly-in-string -- `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are the spec's literal placeholders */
 /**
  * Reading an Agent Plugin (spec 1.0.0), the part the primary and a daemon share.
  *

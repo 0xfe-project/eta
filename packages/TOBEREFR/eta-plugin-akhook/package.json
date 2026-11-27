@@ -14,7 +14,7 @@
     "embed": "bun scripts/embed-presets.ts",
     "test": "bun --bun vitest --run --passWithNoTests",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "xmas ../../../scripts/lint.ts ."
   },
   "dependencies": {
     "@eta/core": "*",

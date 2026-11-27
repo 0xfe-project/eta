@@ -528,7 +528,7 @@ export function ExternalAgentForm(props: {
           </Label>
         </View>
       </If>
-      {/* eslint-disable-next-line no-restricted-syntax -- as on main since #776; not this change's */}
+      {/* oxlint-disable-next-line no-restricted-syntax -- as on main since #776; not this change's */}
       <Scroll style={props.phone ? grow : { flexShrink: 1 }} scrollbar={false}>
         <View
           style={{

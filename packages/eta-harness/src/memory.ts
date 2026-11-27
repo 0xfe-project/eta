@@ -95,7 +95,7 @@ export function parseMemory(text: string, target: MemoryFile): MemoryEntry[] {
       continue;
     }
     if (section === undefined) continue;
-    // eslint-disable-next-line regexp/no-super-linear-backtracking -- one trimmed line of a local file; a rewrite could change what matches
+    // oxlint-disable-next-line regexp/no-super-linear-backtracking -- one trimmed line of a local file; a rewrite could change what matches
     const item = /^-\s+(?:\[(\d+)\]\s+)?(.*)$/.exec(line.trim());
     if (item === null || item[2].length === 0) continue;
     // A duplicated number (a copy-pasted line) is renumbered, so ids stay unique.

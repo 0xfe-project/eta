@@ -253,7 +253,7 @@ function parseConverted(
       fullMatch.endsWith("`") &&
       fullMatch.length > INLINE_CODE_MARKER_LENGTH
     ) {
-      // eslint-disable-next-line regexp/no-super-linear-backtracking, regexp/no-misleading-capturing-group -- the match is one inline code span
+      // oxlint-disable-next-line regexp/no-super-linear-backtracking, regexp/no-misleading-capturing-group -- the match is one inline code span
       const codeMatch = fullMatch.match(/^(`+)(.+?)\1$/s);
       if (codeMatch?.[2]) styled = [plain(codeMatch[2], palette.accent)];
     } else if (

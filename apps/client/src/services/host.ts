@@ -71,7 +71,7 @@ export function defaultAddress(): HostAddress | null {
   if (platform.os !== "web") {
     if (!appInfo().development) return null;
     // NSH exposes environment metadata on the VM global.
-    // eslint-disable-next-line node/prefer-global/process
+    // oxlint-disable-next-line node/prefer-global/process
     const devHost = globalThis.process?.env?.ETA_HOST_ORIGIN;
     if (!devHost) return null;
     try {

@@ -117,7 +117,7 @@ export function TableRenderer({
         const fill = " ".repeat(Math.max(0, padding - spansWidth(cell)));
         return (
           // Columns never reorder, so the index names each.
-          // eslint-disable-next-line react/no-array-index-key
+          // oxlint-disable-next-line react/no-array-index-key
           <Text key={column}>
             {" "}
             <Spans spans={cell} />

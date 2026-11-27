@@ -1,0 +1,26 @@
+{
+  "lineWidth": 80,
+  "indentWidth": 2,
+  "quoteStyle": "double",
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/.xmas/**",
+    "**/.venv/**",
+    "**/out/**",
+    "**/dist/**",
+    "**/.output/**",
+    "**/.tanstack/**",
+    "**/.turbo/**",
+    "**/.nsh/**",
+    "**/*.gen.ts",
+    "packages/TOBEREFR/eta-plugin-akhook/presets/**",
+    "**/*-lock.json",
+    "bun.lock",
+    "**/uv.lock",
+    "**/var/**",
+    "**/.eta/**",
+    "test/upgrade-seed/**",
+    "**/test/fixtures/**/*.js",
+    "**/test/**/fixtures/**/*.js"
+  ]
+}

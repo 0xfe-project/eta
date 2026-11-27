@@ -1,4 +1,4 @@
-/* eslint-disable antfu/no-top-level-await, no-console -- the entry point of a program, not a module */
+/* oxlint-disable antfu/no-top-level-await, no-console -- the entry point of a program, not a module */
 import type { ServiceCommand } from "./service";
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";

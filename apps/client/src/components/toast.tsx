@@ -47,7 +47,7 @@ export function showToast(note: ToastNote) {
     (note.action || note.body ? TOAST_LONG_MS : TOAST_SHORT_MS);
   // At most three: the newest last, nearest the edge.
   toasts.update((all) => [...all.slice(-2), { ...note, id }]);
-  // eslint-disable-next-line e18e/prefer-timer-args -- NSH's test clock drops setTimeout's extra arguments.
+  // oxlint-disable-next-line e18e/prefer-timer-args -- NSH's test clock drops setTimeout's extra arguments.
   setTimeout(() => dismiss(id), duration);
 }
 

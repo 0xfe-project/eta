@@ -13,7 +13,7 @@ export const NO_LINES: Lines = { styled: [], plain: [] };
 /** Columns a line mark and the space after it take; wrapped and indented lines start this far in. */
 export const MARK_WIDTH = 2;
 
-// eslint-disable-next-line no-control-regex
+// oxlint-disable-next-line no-control-regex
 const SGR_AT_END = /(?:\u001B\[[\d;]*m)*$/;
 
 /**

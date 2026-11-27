@@ -104,7 +104,7 @@ async function setup(url: string, options: { needsSetup?: boolean } = {}) {
             type: "http",
             url,
             headers: {
-              // eslint-disable-next-line no-template-curly-in-string -- a plugin variable, not a template
+              // oxlint-disable-next-line no-template-curly-in-string -- a plugin variable, not a template
               "X-Api-Key": "${API_KEY}",
             },
           },

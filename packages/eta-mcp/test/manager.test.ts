@@ -353,7 +353,7 @@ describe("transports", () => {
               url: http.url,
               auth: "bearer",
               bearerToken: "secret",
-              // eslint-disable-next-line no-template-curly-in-string -- the library interpolates this
+              // oxlint-disable-next-line no-template-curly-in-string -- the library interpolates this
               headers: { "x-who": "${TOKEN_VAR}" },
             },
             bad: { url: http.url },
@@ -498,7 +498,7 @@ describe("the child process", () => {
         PATH: process.env.PATH ?? "",
       },
     });
-    // eslint-disable-next-line no-template-curly-in-string -- the library interpolates this
+    // oxlint-disable-next-line no-template-curly-in-string -- the library interpolates this
     const { read } = await probe(h, { env: { ADDED: "${FROM_HOST} there" } });
     expect(await read("env", { name: "HOST_SECRET" })).toBe("");
     expect(await read("env", { name: "ADDED" })).toBe("hello there");

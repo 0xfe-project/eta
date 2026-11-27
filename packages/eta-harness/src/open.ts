@@ -405,7 +405,7 @@ export async function openSession(
       : openEsmSession({
           kernel,
           models: options.models,
-          // eslint-disable-next-line ts/no-use-before-define -- read when a script runs, after assembly
+          // oxlint-disable-next-line ts/no-use-before-define -- read when a script runs, after assembly
           runner: () => runner,
           state: sessionStateKV(log, journaling),
           root: options.esm.root,
@@ -572,7 +572,7 @@ export async function openSession(
     ...(options.runner?.systemPrompt === undefined
       ? {
           systemPrompt: async () =>
-            // eslint-disable-next-line ts/no-use-before-define -- only read when a prompt is composed, after the assembly below
+            // oxlint-disable-next-line ts/no-use-before-define -- only read when a prompt is composed, after the assembly below
             composeEtaSystemPrompt(base, (await refreshPrompt()).state),
         }
       : {}),
@@ -633,7 +633,7 @@ export async function openSession(
     // What the view shows the Context panel: the last blocks a generation used, and
     // the size of what memory said. Both are reads of what already happened, so the
     // frame never waits on I/O.
-    // eslint-disable-next-line ts/no-use-before-define -- only read when a prompt is composed, after the assembly below
+    // oxlint-disable-next-line ts/no-use-before-define -- only read when a prompt is composed, after the assembly below
     memoryBox.chars = memoryBlock?.length ?? 0;
     return {
       ...(kernel.goal.current === undefined
@@ -673,7 +673,7 @@ export async function openSession(
     const state = await promptState();
     const blocks = etaPromptBlockChars(base, state);
     const sections = etaPromptSectionsDetailed(base, state);
-    // eslint-disable-next-line ts/no-use-before-define -- only read when a prompt is composed, after the assembly below
+    // oxlint-disable-next-line ts/no-use-before-define -- only read when a prompt is composed, after the assembly below
     if (revision === promptRevision) promptBox.value = { sections, ...blocks };
     return { state, sections, ...blocks };
   };
@@ -811,11 +811,9 @@ export async function openSession(
     ask: () =>
       ask === undefined
         ? undefined
-        : {
-            ...(ask.pendingAsks()[0] === undefined
+        : (ask.pendingAsks()[0] === undefined
               ? {}
               : { pending: ask.pendingAsks()[0] }),
-          },
     // Side threads and subagents are gone from the harness; the sections stay
     // empty until the view drops them.
     sideThread: () => [],

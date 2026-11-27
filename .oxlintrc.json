@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": [
+    ".xmas/**",
+    "**/.xmas/**",
+    "node_modules/**",
+    "**/node_modules/**",
+    "dist/**",
+    "**/dist/**"
+  ],
+  "env": {
+    "es2024": true,
+    "node": true
+  },
+  "rules": {
+    "no-unused-vars": "warn",
+    "no-console": "off"
+  }
+}

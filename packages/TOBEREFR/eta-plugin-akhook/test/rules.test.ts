@@ -351,7 +351,7 @@ rules:
 });
 
 function readInput(root: string): string {
-  // eslint-disable-next-line ts/no-require-imports -- a test helper
+  // oxlint-disable-next-line ts/no-require-imports -- a test helper
   return require("node:fs").readFileSync(
     join(root, "hooks", "decide.input"),
     "utf8",

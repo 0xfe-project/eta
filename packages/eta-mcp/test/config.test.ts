@@ -1,7 +1,7 @@
 /**
  * Config sources: parsing the standard shape, merging in order, and the hash that keys the cache.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "xmas:test";
 import {
   computeServerHash,
   parseMcpServers,
@@ -191,9 +191,9 @@ describe("computeServerHash", () => {
     ).toBe(hash);
   });
 
-  // eslint-disable-next-line no-template-curly-in-string -- the library interpolates these
+  // oxlint-disable-next-line no-template-curly-in-string -- the library interpolates these
   it("hashes what ${VAR} resolves to", () => {
-    // eslint-disable-next-line no-template-curly-in-string -- the library interpolates this
+    // oxlint-disable-next-line no-template-curly-in-string -- the library interpolates this
     const entry = { command: "node", env: { TOKEN: "${T}" } };
     expect(computeServerHash(entry, { T: "one" })).not.toBe(
       computeServerHash(entry, { T: "two" }),

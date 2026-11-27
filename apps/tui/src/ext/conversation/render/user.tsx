@@ -29,10 +29,10 @@ export function drawUser(item: UserItem, context: DrawContext): DrawnItem {
           {stretches.map((stretch, index) =>
             stretch.kind === "words" ? (
               // Stretches never reorder, so the index names each.
-              // eslint-disable-next-line react/no-array-index-key
+              // oxlint-disable-next-line react/no-array-index-key
               <Text key={index}>{stretch.text}</Text>
             ) : (
-              // eslint-disable-next-line react/no-array-index-key
+              // oxlint-disable-next-line react/no-array-index-key
               <Text key={index} color={colors.muted}>
                 {t("pasted", { lines: linesLabel(stretch.lines, t) })}
               </Text>

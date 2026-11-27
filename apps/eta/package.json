@@ -11,7 +11,7 @@
     "dev": "bun --watch src/main.ts --allow-origin http://127.0.0.1:${ETA_WEB_PORT:-3000}",
     "start": "bun src/main.ts",
     "typecheck": "bun check",
-    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
+    "lint": "xmas ../../scripts/lint.ts .",
     "test": "bun --bun vitest --run --passWithNoTests",
     "test:changed": "bun --bun vitest --run --passWithNoTests --changed HEAD"
   },

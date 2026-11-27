@@ -43,7 +43,7 @@ function renderHastNode(
     const colorToPassDown = elementColor ?? inheritedColor;
     return node.children.map((child: ElementContent, index: number) => (
       // Children of one node never reorder, so the index names each.
-      // eslint-disable-next-line react/no-array-index-key
+      // oxlint-disable-next-line react/no-array-index-key
       <Fragment key={index}>{renderHastNode(child, colorToPassDown)}</Fragment>
     ));
   }
@@ -51,7 +51,7 @@ function renderHastNode(
   if (node.type === "root") {
     if (node.children.length === 0) return null;
     return node.children.map((child: RootContent, index: number) => (
-      // eslint-disable-next-line react/no-array-index-key
+      // oxlint-disable-next-line react/no-array-index-key
       <Fragment key={index}>{renderHastNode(child, inheritedColor)}</Fragment>
     ));
   }
@@ -106,7 +106,7 @@ export function colorizeCode({
     <Box flexDirection="column" width={width}>
       {lines.map((line, index) => (
         // Lines never reorder, so the index names each.
-        // eslint-disable-next-line react/no-array-index-key
+        // oxlint-disable-next-line react/no-array-index-key
         <Box key={index} minHeight={1}>
           <Text color={defaultColor} wrap="wrap">
             {colorizeLine(line, language, defaultColor)}

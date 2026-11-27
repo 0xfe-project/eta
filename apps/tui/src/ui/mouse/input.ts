@@ -10,7 +10,7 @@ import { StringDecoder } from "node:string_decoder";
 const ESC = "\u001B";
 const PASTE_START = `${ESC}[200~`;
 const PASTE_END = `${ESC}[201~`;
-/* eslint-disable no-control-regex -- these match the terminal's ESC on purpose */
+/* oxlint-disable no-control-regex -- these match the terminal's ESC on purpose */
 // SGR coordinates (mode 1006): ESC [ < button ; column ; row, then M for a press, m for a release.
 const SGR_REPORT = /\u001B\[<(\d+);\d+;\d+(m)/iy;
 // The end of a read that can still grow into an SGR report: ESC, ESC [, ESC [ <, up to three numbers.

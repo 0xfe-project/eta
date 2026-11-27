@@ -1,4 +1,4 @@
-/* eslint-disable no-template-curly-in-string -- `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are the spec's literal placeholders */
+/* oxlint-disable no-template-curly-in-string -- `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are the spec's literal placeholders */
 /**
  * The spec's failure boundaries (§4.1, §5.2, §6.2, §7.1, §7.2.2, §8.1, §11.3): what rejects a
  * plugin, what turns one component type off, and what skips one entry and leaves the rest.
@@ -7,7 +7,7 @@ import * as fs from "node:fs/promises";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { loadPlugin, PluginError } from "../src";
 
 const PLUGIN = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";

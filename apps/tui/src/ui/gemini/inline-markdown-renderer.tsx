@@ -14,7 +14,7 @@ export function Spans({ spans }: { spans: readonly InlineSpan[] }) {
   return spans.map((span, index) => (
     <Text
       // The spans of one line never reorder, so the index names each.
-      // eslint-disable-next-line react/no-array-index-key
+      // oxlint-disable-next-line react/no-array-index-key
       key={index}
       color={span.color}
       bold={span.bold}

@@ -10,7 +10,7 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createOAuthProvider } from "@eta/mcp";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { Plugins } from "../src/plugins/service";
 import { testConnection } from "../src/plugins/test-server";
@@ -250,7 +250,7 @@ async function setup(url: string, claude = false) {
             type: "http",
             url,
             headers: {
-              // eslint-disable-next-line no-template-curly-in-string -- a plugin variable, not a template
+              // oxlint-disable-next-line no-template-curly-in-string -- a plugin variable, not a template
               "X-Api-Key": "${API_KEY}",
             },
           },

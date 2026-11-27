@@ -183,7 +183,7 @@ export class Realm {
    */
   parses(source: string): boolean {
     try {
-      // eslint-disable-next-line no-new -- constructing is the parse
+      // oxlint-disable-next-line no-new -- constructing is the parse
       new vm.SourceTextModule(source, { context: this.#context });
       return true;
     } catch (error) {

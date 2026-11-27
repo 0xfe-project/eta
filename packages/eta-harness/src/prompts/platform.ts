@@ -193,7 +193,7 @@ export interface RealmExample {
 }
 
 // The examples are scripts as text: their `${...}` is the realm's template, not ours.
-/* eslint-disable no-template-curly-in-string */
+/* oxlint-disable no-template-curly-in-string */
 export const REALM_EXAMPLES: RealmExample[] = [
   {
     title:
@@ -312,7 +312,7 @@ function realmLines(mcpServers: readonly string[]): string[] {
     '- A bare import (`import x from "some-package"`) installs that package from npm on first use. Before writing a helper, check whether a package already does it: a driver, a parser, a browser, an SDK.',
     "- For files use `search`, `view` and `edit`. Do not reach for `$` with cat/sed/grep to read or change a file.",
     "",
-    "Shell (`$`, zx):",
+    "Shell (`$`):",
     '- Every command gets a time limit that makes sense for it: `.timeout("5s")` for a quick lookup, minutes for a build or a test run. The only exception is a service you mean to leave running (a dev server, a watcher); start that without awaiting it and keep the handle on `eta.state` so you can `.kill()` it later.',
     "- `$` is not intercepted: what you run is what happens. Destructive commands are yours to judge.",
     "",

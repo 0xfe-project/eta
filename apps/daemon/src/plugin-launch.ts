@@ -1,4 +1,4 @@
-/* eslint-disable no-template-curly-in-string -- `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are the spec's literal placeholders */
+/* oxlint-disable no-template-curly-in-string -- `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are the spec's literal placeholders */
 /**
  * From a plugin's configuration to what a session is given, on the machine the session runs on.
  *
@@ -76,7 +76,7 @@ export function plainRemote(url: string): boolean {
     host === "localhost" ||
     host.endsWith(".localhost") ||
     host === "::1" ||
-    /^127\./.test(host)
+    host.startsWith('127.')
   );
 }
 export type ServersConfig = Record<string, ServerConfig>;

@@ -128,7 +128,7 @@ async function rejectionOf(
     if (token.length >= 3) text = text.split(token).join("***");
   }
   const body = text
-    // eslint-disable-next-line no-control-regex -- control characters are exactly what is dropped here
+    // oxlint-disable-next-line no-control-regex -- control characters are exactly what is dropped here
     .replace(/[\u0000-\u001F]+/g, " ")
     .trim()
     .slice(0, 200);

@@ -246,7 +246,7 @@ export function createFileSaver() {
         keep = platform.os === "android" && result.action === "shared";
       } else {
         // NSH exposes the storage directory on the VM global.
-        // eslint-disable-next-line node/prefer-global/process
+        // oxlint-disable-next-line node/prefer-global/process
         const dataDir = globalThis.process?.dataDir;
         if (!dataDir)
           throw new Error("No local file destination is available.");

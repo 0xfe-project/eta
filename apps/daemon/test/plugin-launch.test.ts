@@ -1,4 +1,4 @@
-/* eslint-disable no-template-curly-in-string -- `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are the spec's literal placeholders */
+/* oxlint-disable no-template-curly-in-string -- `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are the spec's literal placeholders */
 /** From a read plugin to what a runtime is given: §9's expansion, and the configuration going in. */
 import type { SessionMcpServer } from "@eta/client-contracts";
 import { readdirSync, realpathSync } from "node:fs";
@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "xmas:test";
 import {
   loadPlugin,
   pluginDataDir,

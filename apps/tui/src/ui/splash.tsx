@@ -21,7 +21,7 @@ export function SplashLogo({
       <Box flexDirection="column" flexShrink={0}>
         {LOGO_LINES.map((line, index) => (
           // The logo's lines are fixed; their position is their identity.
-          // eslint-disable-next-line react/no-array-index-key
+          // oxlint-disable-next-line react/no-array-index-key
           <Text key={index} color={colors[index]}>
             {line}
           </Text>

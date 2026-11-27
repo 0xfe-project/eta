@@ -353,7 +353,7 @@ export class SshCommandTransport implements SshTransport {
         if (settled) return;
         settled = true;
         if (timer !== undefined) clearTimeout(timer);
-        // eslint-disable-next-line ts/no-use-before-define -- onAbort and its cleanup call each other
+        // oxlint-disable-next-line ts/no-use-before-define -- onAbort and its cleanup call each other
         options.signal?.removeEventListener("abort", onAbort);
         resolve(result);
       };

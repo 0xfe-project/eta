@@ -15,7 +15,7 @@
     "test": "bun --bun vitest --run --passWithNoTests",
     "test:changed": "bun --bun vitest --run --passWithNoTests --changed HEAD",
     "typecheck": "bun check",
-    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
+    "lint": "xmas ../../scripts/lint.ts ."
   },
   "dependencies": {
     "@botiverse/oar": "0.128.1",

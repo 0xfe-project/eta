@@ -1,4 +1,4 @@
-/* eslint-disable no-console -- a command line */
+/* oxlint-disable no-console -- a command line */
 /** `eta-host upgrade`: its flags, what `--help` says, and an exit code. */
 import type { UpgradeOptions } from "./upgrade";
 import { homedir } from "node:os";

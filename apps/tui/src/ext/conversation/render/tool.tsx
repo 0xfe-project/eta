@@ -302,7 +302,7 @@ function drawPlan(
     <Box flexDirection="column">
       {items.map((step, index) => (
         // Steps never reorder within one call, so the index names each.
-        // eslint-disable-next-line react/no-array-index-key
+        // oxlint-disable-next-line react/no-array-index-key
         <Text key={index} wrap="wrap" color={context.colors.text}>
           {`${PLAN_BOXES[step.status] ?? "[ ]"} ${step.content}`}
         </Text>

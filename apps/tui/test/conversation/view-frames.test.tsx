@@ -42,7 +42,7 @@ const ADA_COLOUR = "\u001B[94m";
 const BEA_COLOUR = "\u001B[35m";
 const ANN_COLOUR = "\u001B[92m";
 const ACCENT = "\u001B[36m";
-// eslint-disable-next-line no-control-regex
+// oxlint-disable-next-line no-control-regex
 const SGR = /\u001B\[[\d;]*m/;
 
 function row(seq: number, patch: Partial<MessageView> = {}): MessageView {
@@ -245,7 +245,7 @@ describe("frames in a group conversation", () => {
       words.lastIndexOf(ADA_COLOUR),
     );
     expect(stripVTControlCharacters(inner).trim()).toBe("ada says done");
-    // eslint-disable-next-line no-control-regex
+    // oxlint-disable-next-line no-control-regex
     expect(inner.replace(/^\u001B\[39m/, "")).not.toMatch(SGR);
   });
 

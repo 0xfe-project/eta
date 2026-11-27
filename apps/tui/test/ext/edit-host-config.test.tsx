@@ -177,7 +177,7 @@ describe("/edit-host-config on a remote host", () => {
       "-t",
       "me@box",
       "--",
-      // eslint-disable-next-line no-template-curly-in-string -- shell syntax, left to the remote shell
+      // oxlint-disable-next-line no-template-curly-in-string -- shell syntax, left to the remote shell
       "${EDITOR:-vi}",
       "~/.eta/mcp.json",
     ]);

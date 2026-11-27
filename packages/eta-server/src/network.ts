@@ -116,7 +116,7 @@ export function parseMacProxy(text: string): SystemProxy {
         ? endpoint(value("HTTPSProxy"), value("HTTPSPort"))
         : undefined,
     bypass: bypass(
-      // eslint-disable-next-line regexp/no-super-linear-backtracking -- the OS's proxy listing; a rewrite could change what matches
+      // oxlint-disable-next-line regexp/no-super-linear-backtracking -- the OS's proxy listing; a rewrite could change what matches
       [...text.matchAll(/^\s*\d+\s*:\s*(.+)$/gm)].map((match) =>
         (match[1] ?? "").trim(),
       ),

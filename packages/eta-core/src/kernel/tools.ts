@@ -23,7 +23,7 @@ export interface KernelTool<TArgs = unknown, TResult = unknown> {
   description?: string;
   // A method, not a property: its parameters are checked bivariantly, which is
   // what lets `KernelTool<{ path: string }>` be stored as `KernelTool`.
-  // eslint-disable-next-line ts/method-signature-style
+  // oxlint-disable-next-line ts/method-signature-style
   execute(args: TArgs, call: ToolCallInfo): TResult | Promise<TResult>;
 }
 

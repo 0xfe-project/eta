@@ -81,7 +81,7 @@ export function gitRepoChain(cwd: string): string[] {
     } catch {
       /* no .gitmodules */
     }
-    // eslint-disable-next-line regexp/no-super-linear-backtracking -- a local .gitmodules; a rewrite could change what matches
+    // oxlint-disable-next-line regexp/no-super-linear-backtracking -- a local .gitmodules; a rewrite could change what matches
     for (const match of text.matchAll(/^\s*path\s*=\s*(.+)$/gm)) {
       const sub = resolve(base, (match[1] ?? "").trim());
       if (out.includes(sub)) continue;

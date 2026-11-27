@@ -12,7 +12,7 @@
     "build": "bun scripts/build.ts",
     "build:all": "bun scripts/build.ts --all",
     "typecheck": "bun check",
-    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
+    "lint": "xmas ../../scripts/lint.ts .",
     "test": "bun --bun vitest --run --passWithNoTests",
     "test:changed": "bun --bun vitest --run --passWithNoTests --changed HEAD"
   },

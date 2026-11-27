@@ -57,7 +57,7 @@ export class FailureTracker {
 /** One line, control characters gone, cut at a word. */
 function squash(text: string): string {
   const clean = text
-    // eslint-disable-next-line no-control-regex -- stripping them is the point
+    // oxlint-disable-next-line no-control-regex -- stripping them is the point
     .replace(/[\u0000-\u001F\u007F-\u009F]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
