@@ -4,7 +4,6 @@ import { Button, grow, Label, row, SmoothScroll } from "../../../components";
 import { control, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { clientUpdatable, clientUpdate } from "../../../services/client-update";
-import { useHost } from "../../../services/host";
 import { ClientAppUpdate } from "./client-app";
 import { ConfirmHostUpdate } from "./confirm-update";
 import { GroupHeading } from "./group-heading";
@@ -17,20 +16,9 @@ export function UpdateSettings(props: {
   onConnect: () => void;
   layout: Layout;
 }) {
-  const host = useHost();
   const phone = () => props.layout === "phone";
   const update = useHostUpdate();
-  const {
-    check,
-    checkedAt,
-    checkedLabel,
-    pending,
-    canRead,
-    active,
-    refresh,
-    connected,
-    error,
-  } = update;
+  const { checkedAt, checkedLabel, pending, canRead, active, refresh } = update;
   const app = clientUpdate;
   const hostCanCheck = () =>
     canRead() && (!pending() || pending() === "check") && !active();
@@ -51,6 +39,8 @@ export function UpdateSettings(props: {
             </Label>
           </If>
           <Button
+            icon="refresh"
+            spinIcon
             label={
               checkedAt() || app.checked()
                 ? uiText("checkAgain")
@@ -64,35 +54,11 @@ export function UpdateSettings(props: {
         </View>
       </GroupHeading>
       <SmoothScroll style={grow} scrollbar={false}>
-        <If
-          when={check()}
-          else={
-            <View style={{ padding: space[16], gap: space[8] }}>
-              <Label variant="small" tone="muted">
-                {!connected()
-                  ? uiText("reconnectToCheckForUpdates")
-                  : !host.can("upgrade.check")
-                    ? uiText("updatesAreUnavailableForThisHost")
-                    : pending()
-                      ? uiText("checkingForUpdates")
-                      : uiText("updateInformationUnavailable")}
-              </Label>
-              <If when={error()}>
-                <Label variant="small" tone="red">
-                  {error()}
-                </Label>
-              </If>
-              <If when={!connected() || !host.can("upgrade.check")}>
-                <Button
-                  label={uiText("changeHost")}
-                  onPress={props.onConnect}
-                />
-              </If>
-            </View>
-          }
-        >
-          <HostRelease update={update} phone={phone()} />
-        </If>
+        <HostRelease
+          update={update}
+          phone={phone()}
+          onConnect={props.onConnect}
+        />
         {/* The app updates itself whichever Host it is connected to. */}
         <If when={clientUpdatable}>
           <ClientAppUpdate phone={phone()} />

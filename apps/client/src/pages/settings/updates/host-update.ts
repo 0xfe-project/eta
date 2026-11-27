@@ -26,6 +26,20 @@ export function useHostUpdate() {
   const active = () => status()?.state === "running";
   const editable = () => connected() && !pending() && !active();
   const canRead = () => connected() && host.can("upgrade.check");
+  /** The channel menu takes a choice during a check, which the save waits for. */
+  const channelEditable = () =>
+    host.can("upgrade.setPrerelease") &&
+    !!check() &&
+    connected() &&
+    !active() &&
+    (!pending() || pending() === "check");
+  /** Why the Host's row has no release to tell, when it cannot have one. */
+  const unavailable = () =>
+    !connected()
+      ? uiText("updateHostNotConnected")
+      : !host.can("upgrade.check") && !check()
+        ? uiText("updatesAreUnavailableForThisHost")
+        : undefined;
   const failed = () =>
     ["failed", "rolled-back", "broken", "lost"].includes(status()?.state ?? "");
   /** The last upgrade, once it has ended, while it is recent enough to tell. */
@@ -60,23 +74,28 @@ export function useHostUpdate() {
     checkClock.set(now);
   }
 
+  /** The check under way, which a save waits for so its own answer comes last. */
+  let checking: Promise<void> | undefined;
   async function refresh() {
     if (!canRead() || pending()) return;
     error.set("");
     pending.set("check");
-    try {
-      await read();
-    } catch (problem) {
-      error.set(describeError(problem));
-    } finally {
-      pending.set("");
-    }
+    checking = read()
+      .catch((problem: unknown) => {
+        error.set(describeError(problem));
+      })
+      .finally(() => {
+        pending.set("");
+        checking = undefined;
+      });
+    await checking;
   }
 
   async function save<A extends "setPrerelease" | "setUpstream" | "setToken">(
     action: A,
     args: UpgradeArgs[A],
   ): Promise<boolean> {
+    if (checking) await checking;
     if (!editable() || !host.can(`upgrade.${action}`)) return false;
     error.set("");
     pending.set(action);
@@ -196,6 +215,8 @@ export function useHostUpdate() {
     connected,
     active,
     editable,
+    channelEditable,
+    unavailable,
     canRead,
     failed,
     result,

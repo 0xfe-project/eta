@@ -181,6 +181,12 @@ export const updatesMessages = {
   updatePreRelease: ["On a pre-release", "正在使用预发布版"],
   updateManual: ["Manual update", "需要手动更新"],
   updateUpToDate: ["Up to date", "已是最新版本"],
+  updateChecking: ["Checking…", "正在检查…"],
+  updateHostNotConnected: ["Not connected", "未连接"],
+  updateChannelUnsupported: [
+    "This Host can't change its channel",
+    "此主机不支持修改通道",
+  ],
   updateToVersion: ["Update to {{version}}", "更新到 {{version}}"],
   advanced: ["Advanced", "高级"],
   cancelUpdate: ["Cancel update", "取消更新"],
@@ -213,7 +219,6 @@ export const updatesMessages = {
   ],
   dismissAppUpdate: ["Not now", "稍后"],
   checkForUpdates: ["Check for updates", "检查更新"],
-  checkingForUpdates: ["Checking for updates…", "正在检查更新…"],
   desktopApp: ["Desktop app", "桌面应用"],
   desktopAppHere: ["Desktop app · this computer", "桌面应用 · 本机"],
   downloadingWithCount: [
@@ -238,10 +243,6 @@ export const updatesMessages = {
     "预发布版（-rc、-beta 等）可以更早体验新功能，也可能不稳定。切换回正式版时不会降级。",
   ],
   readFullReleaseNotes: ["Read full release notes", "阅读完整发布说明"],
-  reconnectToCheckForUpdates: [
-    "Reconnect to check for updates.",
-    "重新连接后即可检查更新。",
-  ],
   removeToken: ["Remove token", "移除令牌"],
   repositoryOrReleaseServer: [
     "Repository or release server",
@@ -260,14 +261,10 @@ export const updatesMessages = {
     "The token is stored on the Host and is used only for {{host}}. Use a token with read access to the releases.",
     "令牌保存在主机上，仅用于 {{host}}。令牌需要有读取发布版本的权限。",
   ],
-  updateInformationUnavailable: [
-    "Update information unavailable.",
-    "暂无更新信息。",
-  ],
   updateNow: ["Update now", "立即更新"],
   updatesAreUnavailableForThisHost: [
-    "Updates are unavailable for this Host.",
-    "此主机当前无法更新。",
+    "This Host can't check for updates",
+    "此主机不支持检查更新",
   ],
   updatesFrom: ["Updates from", "更新来源"],
   updateTheDesktopAppTo: [
