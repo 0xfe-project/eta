@@ -30,6 +30,7 @@ import type { DaemonBuilds } from "./machines/builds";
 import type { SshRunner } from "./machines/install";
 import type { MachineRecord } from "./machines/store";
 import type { Tailscale } from "./machines/tailscale";
+import type { RssFetch } from "./routines/rss-triggers";
 import type { SessionHooks } from "./session-hooks";
 import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
@@ -108,6 +109,7 @@ import { pluginSessionTools } from "./plugins/tools";
 import { projectsPlugin } from "./projects/plugin";
 import { ProjectStore } from "./projects/store";
 import { routinesPlugin } from "./routines/plugin";
+import { RssTriggerProvider } from "./routines/rss-triggers";
 import { INTERRUPTED, RoutineRunner } from "./routines/runner";
 import { Scheduler } from "./routines/scheduler";
 import { RoutineService } from "./routines/service";
@@ -180,6 +182,18 @@ export interface ComposioTuning {
   reconnectBaseMs?: number | undefined;
   reconnectMaxMs?: number | undefined;
   webSocket?: typeof WebSocket | undefined;
+}
+
+/** Test-only overrides for `RssTriggerProvider` polling and HTTP transport. */
+export interface RssTuning {
+  fetch?: RssFetch | undefined;
+  allowPrivateNetwork?: boolean | undefined;
+  timeoutMs?: number | undefined;
+  maxBytes?: number | undefined;
+  now?: (() => number) | undefined;
+  timer?: boolean | undefined;
+  backoffBaseMs?: number | undefined;
+  backoffMaxMs?: number | undefined;
 }
 
 /** What a test sets to move a reply's stop along; a real host leaves it alone. */
@@ -311,6 +325,8 @@ export function createProduct(options: {
   mcp?: McpTuning | undefined;
   /** Test tuning for Composio REST/WebSocket endpoints. */
   composio?: ComposioTuning | undefined;
+  /** Test tuning for built-in RSS / Atom / JSON Feed polling triggers. */
+  rss?: RssTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const captainOn = options.captain !== false;
@@ -519,6 +535,29 @@ export function createProduct(options: {
       ? {}
       : { maxBatch: options.routines.maxBatch }),
   });
+  const rssTriggers = new RssTriggerProvider({
+    settings: new SettingStore(db),
+    now: options.rss?.now ?? now,
+    timer: options.rss?.timer ?? options.routines?.timer ?? true,
+    warn,
+    ...(options.rss?.fetch === undefined ? {} : { fetch: options.rss.fetch }),
+    ...(options.rss?.allowPrivateNetwork === undefined
+      ? {}
+      : { allowPrivateNetwork: options.rss.allowPrivateNetwork }),
+    ...(options.rss?.timeoutMs === undefined
+      ? {}
+      : { timeoutMs: options.rss.timeoutMs }),
+    ...(options.rss?.maxBytes === undefined
+      ? {}
+      : { maxBytes: options.rss.maxBytes }),
+    ...(options.rss?.backoffBaseMs === undefined
+      ? {}
+      : { backoffBaseMs: options.rss.backoffBaseMs }),
+    ...(options.rss?.backoffMaxMs === undefined
+      ? {}
+      : { backoffMaxMs: options.rss.backoffMaxMs }),
+  });
+  triggerHub.register(rssTriggers);
   runner.setRunFinishedListener((routineId) =>
     triggerHub.onRunFinished(routineId),
   );
@@ -1098,8 +1137,10 @@ export function createProduct(options: {
       upgradeRoutes(request, dataDir),
     remote: router,
     endpoints: [hub.endpoint],
-    setPrivateNetwork: (privateNetwork) =>
-      web?.setPrivateNetwork(privateNetwork),
+    setPrivateNetwork: (privateNetwork) => {
+      web?.setPrivateNetwork(privateNetwork);
+      rssTriggers.setPrivateNetwork(privateNetwork);
+    },
     close: async () => {
       // The runs stop first: they work through the links and the session host.
       archiver.stop();

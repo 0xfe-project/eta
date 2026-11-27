@@ -338,6 +338,7 @@ export function upcomingTimes(
 export function providerLabel(provider: string) {
   const trimmed = provider.trim();
   if (!trimmed) return "";
+  if (trimmed.toLowerCase() === "rss") return "RSS";
   if (/^[a-z0-9_-]+$/.test(trimmed)) {
     return trimmed
       .split(/[-_]+/)

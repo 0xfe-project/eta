@@ -1392,7 +1392,7 @@ export function captainSessionTools(
       {
         provider: Type.String({
           description:
-            "Trigger provider id (e.g. 'composio'). Discover via list_triggers.",
+            "Trigger provider id (e.g. 'composio' or 'rss'). Discover via list_triggers.",
         }),
         source: Type.String({
           description: "External toolkit or source slug (e.g. 'github').",
@@ -1435,11 +1435,11 @@ export function captainSessionTools(
     const listTriggers = defineTool({
       name: "list_triggers",
       description:
-        "List available external event triggers from registered providers (such as Composio). Shows provider status and triggers with source toolkit, trigger slug, configSchema, payloadSchema, and active connected accounts. Call this before proposing a triggered routine.",
+        "List available external event triggers from registered providers (such as Composio and built-in RSS). Shows provider status and triggers with source toolkit, trigger slug, configSchema, payloadSchema, and active connected accounts. Call this before proposing a triggered routine.",
       parameters: Type.Object({
         provider: Type.Optional(
           Type.String({
-            description: "Filter by provider id, e.g. 'composio'",
+            description: "Filter by provider id, e.g. 'composio' or 'rss'",
           }),
         ),
         source: Type.Optional(

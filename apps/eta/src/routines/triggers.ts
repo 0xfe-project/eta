@@ -61,6 +61,8 @@ export interface TriggerProviderHost {
   bindings: () => TriggerBinding[];
   onEvent: (event: IncomingTriggerEvent) => void;
   onBindingsChanged: () => void;
+  onTriggerError?: (routineId: string, error: string) => void;
+  onTriggerRecovered?: (routineId: string) => void;
 }
 
 export interface TriggerProvider {
@@ -189,6 +191,41 @@ export class TriggerHub {
               `[eta] trigger provider ${provider.id} sync failed: ${errorText(error)}`,
             );
           });
+      },
+      onTriggerError: (routineId, error) => {
+        const routine = this.#store.get(routineId);
+        const current = this.#store.trigger(routineId);
+        if (
+          routine === undefined ||
+          !routine.enabled ||
+          current?.provider !== provider.id
+        ) {
+          return;
+        }
+        const message = errorText(error);
+        if (current.status === "error" && current.lastError === message) return;
+        this.#store.updateTriggerState(routineId, {
+          status: "error",
+          lastError: message,
+        });
+        this.#changed(routineId);
+      },
+      onTriggerRecovered: (routineId) => {
+        const routine = this.#store.get(routineId);
+        const current = this.#store.trigger(routineId);
+        if (
+          routine === undefined ||
+          !routine.enabled ||
+          current?.provider !== provider.id
+        ) {
+          return;
+        }
+        if (current.status !== "error" && current.lastError === null) return;
+        this.#store.updateTriggerState(routineId, {
+          status: "active",
+          lastError: null,
+        });
+        this.#changed(routineId);
       },
     });
   }

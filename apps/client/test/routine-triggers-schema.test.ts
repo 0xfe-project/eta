@@ -1,5 +1,6 @@
 import { expect, test } from "nsh/test";
 import { createLanguagePreference } from "../src/i18n";
+import { providerLabel } from "../src/pages/routines/schedule";
 import {
   buildTriggerConfigPayload,
   enumSelectionValue,
@@ -189,4 +190,10 @@ test("validateTriggerField and buildTriggerConfigPayload enforce schema constrai
     mode: "full",
     tags: ["bug", "urgent"],
   });
+});
+
+test("providerLabel formats built-in rss and other trigger provider ids", () => {
+  expect(providerLabel("rss")).toBe("RSS");
+  expect(providerLabel("composio")).toBe("Composio");
+  expect(providerLabel("custom_hook")).toBe("Custom Hook");
 });

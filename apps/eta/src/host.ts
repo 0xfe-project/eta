@@ -24,6 +24,7 @@ import type {
   Product,
   RepliesOptions,
   RoutinesOptions,
+  RssTuning,
   TasksOptions,
 } from "./product";
 import type { UpgradePluginOptions } from "./upgrade/plugin";
@@ -92,6 +93,8 @@ export interface HostOptions {
   mcp?: McpTuning;
   /** Test tuning for Composio trigger REST/WebSocket endpoints. */
   composio?: ComposioTuning;
+  /** Test tuning for built-in RSS / Atom / JSON Feed polling triggers. */
+  rss?: RssTuning;
   /** What a published site may hold; the defaults are for real use, a test makes them small. */
   artifactLimits?: Partial<SiteLimits> | undefined;
   /**
@@ -268,6 +271,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.upgrade === undefined ? {} : { upgrade: options.upgrade }),
       ...(options.mcp === undefined ? {} : { mcp: options.mcp }),
       ...(options.composio === undefined ? {} : { composio: options.composio }),
+      ...(options.rss === undefined ? {} : { rss: options.rss }),
     });
     const web = createWebRoutes(options.webDir);
     server = await assembleServer({

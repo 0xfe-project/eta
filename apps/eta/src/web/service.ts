@@ -201,19 +201,13 @@ export class Web {
    * read from the copy.
    */
   setPrivateNetwork(config: PrivateNetworkConfig | undefined): void {
-    const open =
-      config !== undefined && (config.loopback || config.allow.length > 0);
-    const key = JSON.stringify(
-      open ? { allow: config.allow, loopback: config.loopback } : undefined,
-    );
-    if (key === this.privateNetworkKey) return;
+    const next = privateNetworkAccessOf(config);
+    if (next.key === this.privateNetworkKey) return;
     const first = this.privateNetworkKey === JSON.stringify(undefined);
-    this.privateNetworkKey = key;
-    this.privateNetwork = open
-      ? { allow: [...config.allow], loopback: config.loopback }
-      : false;
+    this.privateNetworkKey = next.key;
+    this.privateNetwork = next.access;
     this.pages.clear();
-    if (!open) {
+    if (!next.open || config === undefined) {
       if (!first)
         this.options.warn(
           "[eta] web: private network: closed (web_fetch reaches public addresses only)",
@@ -365,12 +359,29 @@ export class Web {
   }
 }
 
+export function privateNetworkAccessOf(
+  config: PrivateNetworkConfig | undefined,
+): { access: PrivateNetworkAccess; key: string; open: boolean } {
+  const open =
+    config !== undefined && (config.loopback || config.allow.length > 0);
+  const key = JSON.stringify(
+    open ? { allow: config.allow, loopback: config.loopback } : undefined,
+  );
+  return {
+    open,
+    key,
+    access: open
+      ? { allow: [...config.allow], loopback: config.loopback }
+      : false,
+  };
+}
+
 /**
  * The library's refusal of a private address, said the way this host is configured: where the
  * user opens it (the settings page) instead of the library's own command-line flag, which a host
  * does not have. Everything else passes through as it was thrown.
  */
-function blockedHere(error: unknown): unknown {
+export function blockedHere(error: unknown): unknown {
   if (!AppError.isInstance(error) || error.code !== "PRIVATE_NETWORK_BLOCKED")
     return error;
   const details = (error.details ?? {}) as {
@@ -421,7 +432,7 @@ function pageOf(document: Document, url: string): CachedPage {
  * `.corp.internal` both cover `docs.corp.internal`), and an address literally; `*` is everything.
  * Networks (CIDR) in `NO_PROXY` are not matched.
  */
-function proxyFor(url: string): string | undefined {
+export function proxyFor(url: string): string | undefined {
   const proxy = proxyFromEnvironment();
   if (proxy === undefined) return undefined;
   let host: string;

@@ -443,10 +443,15 @@ describe("triggerHub catalog, lifecycle, and error isolation", () => {
     >("triggers", {});
     expect(catalog.triggers.map((i) => `${i.provider}:${i.trigger}`)).toEqual([
       "composio:GITHUB_COMMIT_EVENT",
+      "rss:RSS_NEW_ITEM",
       "webhook:HTTP_POST",
     ]);
     expect(catalog.providers).toContainEqual({
       provider: "composio",
+      status: "ready",
+    });
+    expect(catalog.providers).toContainEqual({
+      provider: "rss",
       status: "ready",
     });
     expect(catalog.providers).toContainEqual({
@@ -1007,7 +1012,7 @@ describe("captain list_triggers, propose_routine, and Option B plugin boundary",
     const rejected = await t.act<
       "triggers",
       { triggers: TriggerCatalogItem[]; providers: TriggerProviderStatus[] }
-    >("triggers", {});
+    >("triggers", { provider: "composio" });
     expect(rejected.triggers).toEqual([]);
     expect(rejected.providers).toEqual([
       {
