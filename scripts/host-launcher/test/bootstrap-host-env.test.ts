@@ -93,14 +93,30 @@ setTimeout(() => process.exit(0), 30_000);
   }
 }, 60_000);
 
+async function removeWithRetry(dir: string): Promise<void> {
+  const retryable = new Set(["EBUSY", "EPERM", "ENOTEMPTY"]);
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rm(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (
+        process.platform !== "win32" ||
+        !code ||
+        !retryable.has(code) ||
+        attempt >= 30
+      ) {
+        throw error;
+      }
+      await Bun.sleep(100);
+    }
+  }
+}
+
 afterAll(async () => {
   if (stubDir) {
-    await rm(stubDir, {
-      recursive: true,
-      force: true,
-      maxRetries: 20,
-      retryDelay: 100,
-    });
+    await removeWithRetry(stubDir);
   }
 });
 
@@ -167,12 +183,7 @@ async function launch({
     stop: async () => {
       child.kill();
       await child.exited;
-      await rm(home, {
-        recursive: true,
-        force: true,
-        maxRetries: 20,
-        retryDelay: 100,
-      });
+      await removeWithRetry(home);
     },
   };
 }

@@ -1,7 +1,10 @@
 import { expect, open, test } from "nsh/test";
 
 const input = "id:eta-editor";
-const fixture = (width = 720, options: { clipboard?: string } = {}) =>
+const fixture = (
+  width = 720,
+  options: { clipboard?: string; storage?: Record<string, string> } = {},
+) =>
   open("./composer-fixture.tsx", {
     platform: "macos",
     width,
@@ -84,20 +87,44 @@ test("a pasted file is a block where the caret is, kept with its chat, sent as a
 });
 
 // The test's own directory, as a file manager names it (`import.meta.url` is `asset:` here;
-// on Windows NSH parses `D:/a/...` into a single-letter host `asset://d/a/...` with the colon stripped).
-const fileUrl = (path: string) => {
+// on Windows NSH may encode or omit the drive prefix, so `resolveDrive` recovers it via `stat`).
+const parsedFilePath = (path: string) => {
   const base = import.meta.url
     .replaceAll("\\", "/")
     .replace(/^asset:\/\/([a-z]:)/i, "asset:///$1");
   const url = new URL(path, base);
-  const drive = /^[a-z]$/i.test(url.hostname)
-    ? `/${url.hostname.toUpperCase()}:`
-    : "";
-  return `file://${drive}${url.pathname}`;
+  const host = decodeURIComponent(url.hostname);
+  const drive = /^[a-z]:?$/i.test(host) ? `/${host[0]!.toUpperCase()}:` : "";
+  return `${drive}${url.pathname}`;
 };
 
+async function fixtureWithFileUrls(probeRelativePath: string) {
+  const probePath = parsedFilePath(probeRelativePath);
+  const app = await fixture(720, { storage: { probePath } });
+  await app.waitUntil(() =>
+    app
+      .texts()
+      .some(
+        (text) =>
+          text.startsWith("drive-prefix ") || text.startsWith("drive-error "),
+      ),
+  );
+  const err = app.texts().find((text) => text.startsWith("drive-error "));
+  if (err) {
+    throw new Error(
+      `could not locate ${probePath} (import.meta.url=${import.meta.url}): ${err}`,
+    );
+  }
+  const prefix = app
+    .texts()
+    .find((text) => text.startsWith("drive-prefix "))!
+    .slice("drive-prefix ".length);
+  const fileUrl = (path: string) => `file://${prefix}${parsedFilePath(path)}`;
+  return { app, fileUrl };
+}
+
 test("files a file manager copied or dropped are read from their file: URLs and sent", async () => {
-  const app = await fixture();
+  const { app, fileUrl } = await fixtureWithFileUrls("fixtures/pixel.png");
   await app.paste(input, { uris: [fileUrl("fixtures/pixel.png")] });
   await app.waitFor("label:View picture pixel.png · 0.0 KB");
   await app.dropFiles(input, [fileUrl("composer-fixture.tsx")]);
@@ -108,7 +135,7 @@ test("files a file manager copied or dropped are read from their file: URLs and 
 });
 
 test("a copied folder is refused, and its block says why", async () => {
-  const app = await fixture();
+  const { app, fileUrl } = await fixtureWithFileUrls("fixtures/");
   // As Finder copies a folder: its URL ends with a slash.
   const folder = fileUrl("fixtures/");
   await app.paste(input, { uris: [folder] });

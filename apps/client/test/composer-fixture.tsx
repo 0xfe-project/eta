@@ -1,5 +1,7 @@
 import type { MemberView, MessageView } from "@eta/client-contracts";
-import { mount, signal, Text, View, windowSize } from "nsh";
+import { stat } from "fs/promises";
+import { platform } from "os";
+import { mount, signal, Storage, Text, View, windowSize } from "nsh";
 import { Button } from "../src/components";
 import { NotificationHost } from "../src/components/notifications";
 import { Composer } from "../src/pages/chat/composer";
@@ -43,6 +45,53 @@ function Fixture() {
   const resultBlocks = signal("");
   const uploadNames = new Map<string, string>();
   const resultFiles = signal("");
+  const driveInfo = signal("");
+  void Storage.getItem("probePath").then(async (probePath) => {
+    if (!probePath) return;
+    if (platform() !== "windows" || /^\/[a-z]:\//i.test(probePath)) {
+      driveInfo.set("drive-prefix ");
+      return;
+    }
+    const letters = [
+      "D",
+      "C",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I",
+      "J",
+      "K",
+      "L",
+      "M",
+      "N",
+      "O",
+      "P",
+      "Q",
+      "R",
+      "S",
+      "T",
+      "U",
+      "V",
+      "W",
+      "X",
+      "Y",
+      "Z",
+      "A",
+      "B",
+    ];
+    let lastError = "no matching drive";
+    for (const letter of letters) {
+      try {
+        await stat(`${letter}:${probePath}`);
+        driveInfo.set(`drive-prefix /${letter}:`);
+        return;
+      } catch (error) {
+        lastError = String(error);
+      }
+    }
+    driveInfo.set(`drive-error ${lastError}`);
+  });
   const quote = signal<{ conversationId: string; text: string }>();
   Object.assign(host, {
     agent: (id: string) => ({ id, name: id }),
@@ -174,6 +223,7 @@ function Fixture() {
         <Text>{result()}</Text>
         <Text>{resultBlocks()}</Text>
         <Text>{resultFiles()}</Text>
+        <Text>{driveInfo()}</Text>
         <NotificationHost />
       </View>
     </Host.Provider>
