@@ -82,6 +82,7 @@ export class Scheduler {
     const fired: string[] = [];
     const live = new Set<string>();
     for (const routine of this.#store.enabled()) {
+      if (routine.schedule === null) continue;
       live.add(routine.id);
       const key = JSON.stringify([routine.schedule, routine.timezone]);
       const armed = this.#armed.get(routine.id);
@@ -116,6 +117,7 @@ export class Scheduler {
   }
 
   #after(routine: RoutineRecord, now: number): number {
+    if (routine.schedule === null) return Infinity;
     try {
       return nextRunAfter(routine.schedule, routine.timezone, now) ?? Infinity;
     } catch (error) {

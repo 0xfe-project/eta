@@ -72,6 +72,28 @@ const SET = /^[\w-]{1,100}(?:,[\w-]{1,100})*$/;
 /** The one server an agent gets, whatever toolkits stand behind it, so its tools keep their names. */
 const SERVER = "composio";
 
+/** A connected external account returned by `/api/v3/connected_accounts` (enough to bind triggers). */
+export interface ComposioConnectedAccount {
+  slug: string;
+  connectedAccountId: string;
+  authConfigId: string | null;
+}
+
+/** Structured error thrown by `Composio.triggerRequest` with `x-api-key` redacted. */
+export class ComposioTriggerError extends Error {
+  readonly status: number | null;
+  readonly code: string | null;
+  constructor(
+    message: string,
+    status: number | null,
+    code: string | null = null,
+  ) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export interface ComposioOptions {
   db: Database;
   /** The host's secret key (`loadSecretKey`). */
@@ -255,8 +277,11 @@ export class Composio {
   readonly #sessions = new Map<string, Session>();
   readonly #making = new Map<string, Promise<void>>();
   readonly #listeners: (() => void)[] = [];
+  readonly #triggerListeners: ((reason: "auth" | "accounts") => void)[] = [];
   /** Moves when the key goes, so a session still being made for the old one is thrown away. */
   #epoch = 0;
+  /** Moves whenever the key, enabled toggle, or trigger account context changes, so in-flight trigger ops abort. */
+  #triggerEpoch = 0;
   /** The toolkits that are connected or added, as the last `sync` said; unknown until then. */
   #wanted: Set<string> | undefined;
   /** What the agents have enabled, as toolkit names, one list for each agent (`demand`). */
@@ -296,7 +321,9 @@ export class Composio {
   setEnabled(enabled: boolean): void {
     if (enabled) this.#settings.delete(COMPOSIO_ENABLED_KEY);
     else this.#settings.set(COMPOSIO_ENABLED_KEY, false);
+    this.#triggerEpoch++;
     this.#notify();
+    this.#notifyTriggerContext("auth");
   }
 
   /* -------------------------------------------------------------------- key */
@@ -321,6 +348,8 @@ export class Composio {
     this.#configs.clear();
     this.#routed.clear();
     this.#dropAll();
+    this.#triggerEpoch++;
+    this.#notifyTriggerContext("auth");
   }
 
   clearKey(): void {
@@ -332,6 +361,8 @@ export class Composio {
     this.#configs.clear();
     this.#routed.clear();
     this.#dropAll();
+    this.#triggerEpoch++;
+    this.#notifyTriggerContext("auth");
   }
 
   /** The key, only for the header of a call to Composio. A row that does not open, or is no string, reads as no key. */
@@ -986,8 +1017,10 @@ export class Composio {
   async follow(): Promise<{ status: ComposioStatus; slugs: string[] }> {
     const read = await this.connected();
     // What was added needs no account, so it is wanted as well as what is connected.
-    if (read.status === "ready")
+    if (read.status === "ready") {
       void this.sync([...read.slugs, ...this.added()]).catch(() => undefined);
+      this.#notifyTriggerContext("accounts");
+    }
     return read;
   }
 
@@ -1024,6 +1057,7 @@ export class Composio {
       this.#wanted = new Set([...(this.#wanted ?? []), slug]);
       await this.#reconcile(key, known);
     }
+    this.#notifyTriggerContext("accounts");
     return { status: "ready" };
   }
 
@@ -1038,6 +1072,7 @@ export class Composio {
     if (rest.length === 0) this.#settings.delete(ADDED_KEY);
     else this.#settings.set(ADDED_KEY, rest);
     this.#dropToolkit(slug);
+    this.#notifyTriggerContext("accounts");
     return { removed: true };
   }
 
@@ -1080,6 +1115,9 @@ export class Composio {
           throw new Error("Composio did not confirm the delete");
         removed++;
       }
+      if (removed > 0) {
+        this.#notifyTriggerContext("accounts");
+      }
       this.#dropToolkit(slug);
       return { status: "ready", removed };
     } catch (error) {
@@ -1087,11 +1125,169 @@ export class Composio {
     }
   }
 
+  /**
+   * Active connected accounts of this host's user with `connectedAccountId` and `authConfigId`
+   * preserved for trigger provisioning (`POST /api/v3.1/trigger_instances/{slug}/upsert`).
+   */
+  async connectedAccounts(): Promise<{
+    status: ComposioStatus;
+    accounts: ComposioConnectedAccount[];
+  }> {
+    const key = this.#apiKey();
+    if (key === undefined) return { status: "needs_key", accounts: [] };
+    const user = this.#userId();
+    try {
+      const accounts: ComposioConnectedAccount[] = [];
+      for (const one of await this.#active(key)) {
+        if (
+          one.id === undefined ||
+          (one.user !== undefined && one.user !== user)
+        )
+          continue;
+        accounts.push({
+          slug: one.slug,
+          connectedAccountId: one.id,
+          authConfigId: one.authConfigId,
+        });
+      }
+      return { status: "ready", accounts };
+    } catch (error) {
+      return { status: this.#failure(error), accounts: [] };
+    }
+  }
+
+  /** Host-scoped Composio user id used across links, sessions, and triggers. */
+  userId(): string {
+    return this.#userId();
+  }
+
+  /** Configured API base URL (overridable in tests). */
+  baseUrl(): string {
+    return this.#base;
+  }
+
+  /** Monotonic counter bumped whenever API key, enabled state, or connected accounts move. */
+  triggerEpoch(): number {
+    return this.#triggerEpoch;
+  }
+
+  /** Subscribe to changes affecting triggers (`"auth"` rotates/clears key/toggle; `"accounts"` refreshes account list). */
+  onTriggerContextChange(
+    listener: (reason: "auth" | "accounts") => void,
+  ): () => void {
+    this.#triggerListeners.push(listener);
+    return () => {
+      const idx = this.#triggerListeners.indexOf(listener);
+      if (idx !== -1) this.#triggerListeners.splice(idx, 1);
+    };
+  }
+
+  #notifyTriggerContext(reason: "auth" | "accounts"): void {
+    for (const listener of [...this.#triggerListeners]) listener(reason);
+  }
+
+  /** Toolkit display names from the kept catalog cache (no HTTP call). */
+  cachedToolkitNames(): Map<string, string> {
+    const names = new Map<string, string>();
+    for (const one of this.#fromCache(this.source())?.toolkits ?? [])
+      names.set(one.slug, one.name);
+    return names;
+  }
+
+  /**
+   * Authenticated HTTP request for `ComposioTriggerProvider`, keeping `x-api-key` encapsulated
+   * inside `Composio` with uniform timeout, no-redirect, size-cap, and key-redaction protections.
+   */
+  async triggerRequest(
+    method: "GET" | "POST" | "PATCH" | "DELETE",
+    path: string,
+    options?: {
+      body?: unknown;
+      formBody?: string;
+      timeoutMs?: number;
+      redactErrorBody?: boolean;
+    },
+  ): Promise<unknown> {
+    const key = this.#apiKey();
+    if (key === undefined)
+      throw new ComposioTriggerError(
+        "Composio API key is not configured",
+        null,
+        "needs_key",
+      );
+    let result: { ok: boolean; status: number; bytes: Uint8Array };
+    try {
+      result = await this.#send(method, path, key, {
+        ...(options?.body === undefined ? {} : { jsonBody: options.body }),
+        ...(options?.formBody === undefined
+          ? {}
+          : { formBody: options.formBody }),
+        timeoutMs: options?.timeoutMs ?? this.#timeoutMs,
+        readErrorBytes: options?.redactErrorBody === true ? 0 : 8192,
+      });
+    } catch (error) {
+      if (error instanceof Refused)
+        throw new ComposioTriggerError(
+          this.#clean(error.message, key),
+          error.status,
+        );
+      throw new ComposioTriggerError(this.#clean(error, key), null);
+    }
+    if (!result.ok) {
+      let code: string | null = null;
+      let detail = "";
+      if (result.bytes.byteLength > 0) {
+        try {
+          const parsed = JSON.parse(
+            new TextDecoder().decode(result.bytes),
+          ) as unknown;
+          if (isPlain(parsed)) {
+            const err = isPlain(parsed.error) ? parsed.error : parsed;
+            if (typeof err.slug === "string") code = err.slug.slice(0, 80);
+            else if (typeof err.code === "string") code = err.code.slice(0, 80);
+            const rawMsg =
+              typeof err.message === "string"
+                ? err.message
+                : typeof parsed.message === "string"
+                  ? parsed.message
+                  : "";
+            const cleaned = this.#clean(rawMsg, key).trim();
+            if (cleaned !== "")
+              detail = `: ${cleaned.length > 200 ? `${cleaned.slice(0, 199)}…` : cleaned}`;
+          }
+        } catch {
+          // Ignore non-JSON error bodies.
+        }
+      }
+      throw new ComposioTriggerError(
+        `Composio answered HTTP ${result.status} (${method} ${path.split("?")[0]})${detail}`,
+        result.status,
+        code,
+      );
+    }
+    if (result.bytes.byteLength === 0) return {};
+    try {
+      return JSON.parse(new TextDecoder().decode(result.bytes)) as unknown;
+    } catch {
+      throw new ComposioTriggerError("Composio's answer is not JSON", null);
+    }
+  }
+
   /** The ACTIVE accounts of this host's user, page by page; a failure is thrown. */
-  async #active(
-    key: string,
-  ): Promise<{ slug: string; id: string | undefined; user: unknown }[]> {
-    const found: { slug: string; id: string | undefined; user: unknown }[] = [];
+  async #active(key: string): Promise<
+    {
+      slug: string;
+      id: string | undefined;
+      authConfigId: string | null;
+      user: unknown;
+    }[]
+  > {
+    const found: {
+      slug: string;
+      id: string | undefined;
+      authConfigId: string | null;
+      user: unknown;
+    }[] = [];
     let cursor: string | null = null;
     for (let page = 1; ; page++) {
       if (page > MAX_PAGES)
@@ -1112,13 +1308,21 @@ export class Composio {
       for (const item of body.items) {
         if (!isPlain(item) || item.status !== "ACTIVE") continue;
         const slug = isPlain(item.toolkit) ? item.toolkit.slug : undefined;
+        const authConfigRaw = isPlain(item.auth_config)
+          ? item.auth_config.id
+          : item.auth_config_id;
+        const authConfigId =
+          typeof authConfigRaw === "string" && SESSION_ID.test(authConfigRaw)
+            ? authConfigRaw
+            : null;
         if (typeof slug === "string" && SLUG.test(slug))
           found.push({
             slug,
             id:
-              typeof item.id === "string" && SLUG.test(item.id)
+              typeof item.id === "string" && SESSION_ID.test(item.id)
                 ? item.id
                 : undefined,
+            authConfigId,
             user: item.user_id,
           });
       }
@@ -1317,19 +1521,57 @@ export class Composio {
     key: string,
     body?: unknown,
   ): Promise<unknown> {
+    const result = await this.#send(method, path, key, {
+      ...(body === undefined ? {} : { jsonBody: body }),
+      timeoutMs: this.#timeoutMs,
+      readErrorBytes: 0,
+    });
+    if (!result.ok)
+      throw new Refused(
+        // Which call, so a failure can be told from the next one; the query is left out.
+        `Composio answered HTTP ${result.status} (${method} ${path.split("?")[0]})`,
+        result.status,
+      );
+    try {
+      return JSON.parse(new TextDecoder().decode(result.bytes)) as unknown;
+    } catch {
+      throw new Refused("Composio's answer is not JSON", null);
+    }
+  }
+
+  async #send(
+    method: "GET" | "POST" | "PATCH" | "DELETE",
+    path: string,
+    key: string,
+    options: {
+      jsonBody?: unknown;
+      formBody?: string;
+      timeoutMs: number;
+      readErrorBytes: number;
+    },
+  ): Promise<{ ok: boolean; status: number; bytes: Uint8Array }> {
+    const headers: Record<string, string> = {
+      accept: "application/json",
+      "x-api-key": key,
+    };
+    let requestBody: string | undefined;
+    if (options.jsonBody !== undefined) {
+      headers["content-type"] = "application/json";
+      requestBody = JSON.stringify(options.jsonBody);
+    } else if (options.formBody !== undefined) {
+      headers["content-type"] = "application/x-www-form-urlencoded";
+      requestBody = options.formBody;
+    }
+
     let response: Response;
     try {
       response = await fetch(this.#base + path, {
         method,
-        signal: AbortSignal.timeout(this.#timeoutMs),
+        signal: AbortSignal.timeout(options.timeoutMs),
         // The key is in this request; where a redirect would take it is not Composio's to decide.
         redirect: "error",
-        headers: {
-          accept: "application/json",
-          "x-api-key": key,
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        headers,
+        body: requestBody,
       });
     } catch (error) {
       const timedOut =
@@ -1337,18 +1579,28 @@ export class Composio {
         (error.name === "TimeoutError" || error.name === "AbortError");
       throw new Refused(
         timedOut
-          ? `Composio did not answer in ${this.#timeoutMs} ms`
+          ? `Composio did not answer in ${options.timeoutMs} ms`
           : "cannot reach Composio",
         null,
       );
     }
-    if (!response.ok)
-      throw new Refused(
-        // Which call, so a failure can be told from the next one; the query is left out.
-        `Composio answered HTTP ${response.status} (${method} ${path.split("?")[0]})`,
-        response.status,
-      );
-    if (Number(response.headers.get("content-length") ?? 0) > this.#maxBytes)
+    const maxRead = response.ok ? this.#maxBytes : options.readErrorBytes;
+    if (maxRead <= 0) {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // Ignore body cancel errors on rejected responses.
+      }
+      return {
+        ok: response.ok,
+        status: response.status,
+        bytes: new Uint8Array(0),
+      };
+    }
+    if (
+      response.ok &&
+      Number(response.headers.get("content-length") ?? 0) > maxRead
+    )
       throw this.#tooBig();
     const chunks: Uint8Array[] = [];
     let size = 0;
@@ -1358,23 +1610,22 @@ export class Composio {
         const part = await reader?.read();
         if (part === undefined || part.done) break;
         size += part.value.byteLength;
-        if (size > this.#maxBytes) {
+        if (size > maxRead) {
           await reader?.cancel();
-          throw this.#tooBig();
+          if (response.ok) throw this.#tooBig();
+          break;
         }
         chunks.push(part.value);
       }
     } catch (error) {
       if (error instanceof Refused) throw error;
-      throw new Refused("cannot read Composio's answer", null);
+      if (response.ok) throw new Refused("cannot read Composio's answer", null);
     }
-    try {
-      return JSON.parse(
-        new TextDecoder().decode(Buffer.concat(chunks)),
-      ) as unknown;
-    } catch {
-      throw new Refused("Composio's answer is not JSON", null);
-    }
+    return {
+      ok: response.ok,
+      status: response.status,
+      bytes: chunks.length === 0 ? new Uint8Array(0) : Buffer.concat(chunks),
+    };
   }
 
   #tooBig(): Refused {

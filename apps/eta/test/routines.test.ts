@@ -228,7 +228,9 @@ describe("the routines actions", () => {
       schedule: { kind: "hourly", every: 2 },
     });
     expect(t.sections(routine.id).briefs()).toHaveLength(2);
-    await until(() => t.sections(routine.id).info().schedule.kind === "hourly");
+    await until(
+      () => t.sections(routine.id).info().schedule?.kind === "hourly",
+    );
     await expect(
       t.act("update", { routineId: routine.id, timezone: "Nowhere/Land" }),
     ).rejects.toThrow(/unknown time zone/);

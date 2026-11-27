@@ -1,13 +1,20 @@
 /**
- * The routines' rows: the routine, the versions of its brief, its runs and the feedback on them.
+ * The routines' rows: the routine, the versions of its brief, its runs, the feedback on them,
+ * external trigger bindings (`routine_trigger`), and the coalescing event queue
+ * (`routine_trigger_event`).
  *
  * Two rules live in the schema because they must hold even when two callers race: a routine runs
  * once at a time (a partial unique index on the one running row) and a piece of feedback leads to
- * at most one brief version. The rest of what this file does is statements; when a thing happens
- * is the runner's and the clock's business, never this file's.
+ * at most one brief version. A third rule — event idempotency — lives in `UNIQUE(routine_id,
+ * event_id)`. The rest of what this file does is statements; when a thing happens is the runner's,
+ * the clock's, and the trigger hub's business, never this file's.
  */
 import type {
   RoutineSchedule,
+  RoutineTrigger,
+  RoutineTriggerMode,
+  RoutineTriggerStatus,
+  RoutineTriggerView,
   RunStatus,
   RunTrigger,
 } from "@eta/client-contracts";
@@ -16,11 +23,52 @@ import type { Database } from "bun:sqlite";
 export interface RoutineRecord {
   id: string;
   name: string;
-  schedule: RoutineSchedule;
+  schedule: RoutineSchedule | null;
   timezone: string;
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface RoutineTriggerRecord {
+  routineId: string;
+  provider: string;
+  source: string;
+  triggerSlug: string;
+  accountId: string | null;
+  config: Record<string, unknown>;
+  requestedMode: RoutineTriggerMode | null;
+  requestedPollingInterval: number | null;
+  instanceId: string | null;
+  effectiveMode: RoutineTriggerMode | null;
+  pollingInterval: number | null;
+  fallbackReason: string | null;
+  status: RoutineTriggerStatus;
+  lastError: string | null;
+  lastEventAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+type TriggerEventState =
+  | "pending"
+  | "dispatched"
+  | "done"
+  | "dropped"
+  | "expired";
+
+export interface TriggerEventRecord {
+  id: string;
+  routineId: string;
+  provider: string;
+  eventId: string;
+  instanceId: string | null;
+  triggerSlug: string;
+  occurredAt: number;
+  receivedAt: number;
+  payload: unknown;
+  state: TriggerEventState;
+  runId: string | null;
 }
 
 export interface BriefRecord {
@@ -69,11 +117,45 @@ export type RunOutcome =
 interface RoutineRow {
   id: string;
   name: string;
-  schedule: string;
+  schedule: string | null;
   timezone: string;
   enabled: number;
   created_at: number;
   updated_at: number;
+}
+
+interface TriggerRow {
+  routine_id: string;
+  provider: string;
+  source: string;
+  trigger_slug: string;
+  account_id: string | null;
+  config_json: string;
+  requested_mode: string | null;
+  requested_polling_interval: number | null;
+  instance_id: string | null;
+  effective_mode: string | null;
+  polling_interval: number | null;
+  fallback_reason: string | null;
+  status: string;
+  last_error: string | null;
+  last_event_at: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+interface TriggerEventRow {
+  id: string;
+  routine_id: string;
+  provider: string;
+  event_id: string;
+  instance_id: string | null;
+  trigger_slug: string;
+  occurred_at: number;
+  received_at: number;
+  payload_json: string;
+  state: string;
+  run_id: string | null;
 }
 
 interface BriefRow {
@@ -109,15 +191,91 @@ interface FeedbackRow {
   brief_version: number | null;
 }
 
+const DEFAULT_EVENT_TTL_MS = 24 * 60 * 60_000;
+
+const parseJsonObject = (raw: string): Record<string, unknown> => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+};
+
+const parseJsonValue = (raw: string): unknown => {
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return raw;
+  }
+};
+
 const routineOf = (row: RoutineRow): RoutineRecord => ({
   id: row.id,
   name: row.name,
-  // Written only through `parseSchedule`, so it reads back as what it was.
-  schedule: JSON.parse(row.schedule) as RoutineSchedule,
+  // Written only through `parseSchedule`, so it reads back as what it was (or null for trigger-only).
+  schedule:
+    row.schedule === null
+      ? null
+      : (JSON.parse(row.schedule) as RoutineSchedule),
   timezone: row.timezone,
   enabled: row.enabled === 1,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+});
+
+const triggerOf = (row: TriggerRow): RoutineTriggerRecord => ({
+  routineId: row.routine_id,
+  provider: row.provider,
+  source: row.source,
+  triggerSlug: row.trigger_slug,
+  accountId: row.account_id,
+  config: parseJsonObject(row.config_json),
+  requestedMode: row.requested_mode as RoutineTriggerMode | null,
+  requestedPollingInterval: row.requested_polling_interval,
+  instanceId: row.instance_id,
+  effectiveMode: row.effective_mode as RoutineTriggerMode | null,
+  pollingInterval: row.polling_interval,
+  fallbackReason: row.fallback_reason,
+  status: row.status as RoutineTriggerStatus,
+  lastError: row.last_error,
+  lastEventAt: row.last_event_at,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+const triggerViewOf = (record: RoutineTriggerRecord): RoutineTriggerView => ({
+  provider: record.provider,
+  source: record.source,
+  trigger: record.triggerSlug,
+  accountId: record.accountId,
+  config: record.config,
+  instanceId: record.instanceId,
+  mode: record.effectiveMode ?? record.requestedMode,
+  pollingIntervalMinutes:
+    record.pollingInterval ?? record.requestedPollingInterval,
+  fallbackReason: record.fallbackReason,
+  status: record.status,
+  lastError: record.lastError,
+  lastEventAt: record.lastEventAt,
+});
+
+const triggerEventOf = (row: TriggerEventRow): TriggerEventRecord => ({
+  id: row.id,
+  routineId: row.routine_id,
+  provider: row.provider,
+  eventId: row.event_id,
+  instanceId: row.instance_id,
+  triggerSlug: row.trigger_slug,
+  occurredAt: row.occurred_at,
+  receivedAt: row.received_at,
+  payload: parseJsonValue(row.payload_json),
+  state: row.state as TriggerEventState,
+  runId: row.run_id,
 });
 
 const briefOf = (row: BriefRow): BriefRecord => ({
@@ -196,7 +354,7 @@ export class RoutineStore {
       .map(routineOf);
   }
 
-  /** The ones on the clock. */
+  /** The ones that are turned on. */
   enabled(): RoutineRecord[] {
     return this.list().filter((routine) => routine.enabled);
   }
@@ -208,11 +366,12 @@ export class RoutineStore {
     return row === null ? undefined : routineOf(row);
   }
 
-  /** A routine and its first brief appear together or not at all. */
+  /** A routine and its first brief (and optional trigger) appear together or not at all. */
   create(input: {
     name: string;
     brief: string;
-    schedule: RoutineSchedule;
+    schedule: RoutineSchedule | null;
+    trigger?: RoutineTrigger | null;
     timezone: string;
     enabled: boolean;
   }): RoutineRecord {
@@ -227,50 +386,463 @@ export class RoutineStore {
         .run(
           id,
           input.name,
-          JSON.stringify(input.schedule),
+          input.schedule === null ? null : JSON.stringify(input.schedule),
           input.timezone,
           input.enabled ? 1 : 0,
           now,
           now,
         );
       this.#writeBrief(id, input.brief, null, now);
+      if (input.trigger !== undefined && input.trigger !== null)
+        this.#writeTrigger(id, input.trigger, now);
     })();
     return this.get(id)!;
   }
 
-  /** Change what was sent; `undefined` leaves a field. */
+  /** Change what was sent; `undefined` leaves a field, `null` clears schedule or trigger. */
   update(
     id: string,
     patch: {
       name?: string;
-      schedule?: RoutineSchedule;
+      schedule?: RoutineSchedule | null;
+      trigger?: RoutineTrigger | null;
       timezone?: string;
       enabled?: boolean;
     },
   ): RoutineRecord | undefined {
     const current = this.get(id);
     if (current === undefined) return undefined;
-    this.#db
-      .query(
-        `UPDATE routine SET name = ?, schedule = ?, timezone = ?, enabled = ?, updated_at = ?
-          WHERE id = ?`,
-      )
-      .run(
-        patch.name ?? current.name,
-        JSON.stringify(patch.schedule ?? current.schedule),
-        patch.timezone ?? current.timezone,
-        (patch.enabled ?? current.enabled) ? 1 : 0,
-        this.#now(),
-        id,
-      );
+    const now = this.#now();
+    const nextSchedule =
+      patch.schedule === undefined ? current.schedule : patch.schedule;
+    this.#db.transaction(() => {
+      this.#db
+        .query(
+          `UPDATE routine SET name = ?, schedule = ?, timezone = ?, enabled = ?, updated_at = ?
+            WHERE id = ?`,
+        )
+        .run(
+          patch.name ?? current.name,
+          nextSchedule === null ? null : JSON.stringify(nextSchedule),
+          patch.timezone ?? current.timezone,
+          (patch.enabled ?? current.enabled) ? 1 : 0,
+          now,
+          id,
+        );
+      if (patch.trigger === null) {
+        this.#db
+          .query("DELETE FROM routine_trigger WHERE routine_id = ?")
+          .run(id);
+      } else if (patch.trigger !== undefined) {
+        this.#writeTrigger(id, patch.trigger, now);
+      }
+    })();
     return this.get(id);
   }
 
-  /** The runs, the feedback and the briefs go with it. */
+  /** The runs, the feedback, the briefs, the trigger and queued events go with it. */
   remove(id: string): boolean {
     return (
       this.#db.query("DELETE FROM routine WHERE id = ?").run(id).changes > 0
     );
+  }
+
+  /* --------------------------------------------------------------- triggers */
+
+  trigger(routineId: string): RoutineTriggerRecord | undefined {
+    const row = this.#db
+      .query<TriggerRow, [string]>(
+        "SELECT * FROM routine_trigger WHERE routine_id = ?",
+      )
+      .get(routineId);
+    return row === null ? undefined : triggerOf(row);
+  }
+
+  triggerView(routineId: string): RoutineTriggerView | undefined {
+    const record = this.trigger(routineId);
+    return record === undefined ? undefined : triggerViewOf(record);
+  }
+
+  triggers(provider?: string): RoutineTriggerRecord[] {
+    if (provider === undefined)
+      return this.#db
+        .query<TriggerRow, []>(
+          "SELECT * FROM routine_trigger ORDER BY created_at, routine_id",
+        )
+        .all()
+        .map(triggerOf);
+    return this.#db
+      .query<TriggerRow, [string]>(
+        "SELECT * FROM routine_trigger WHERE provider = ? ORDER BY created_at, routine_id",
+      )
+      .all(provider)
+      .map(triggerOf);
+  }
+
+  updateTriggerState(
+    routineId: string,
+    patch: {
+      accountId?: string | null;
+      instanceId?: string | null;
+      effectiveMode?: RoutineTriggerMode | null;
+      pollingInterval?: number | null;
+      fallbackReason?: string | null;
+      status?: RoutineTriggerStatus;
+      lastError?: string | null;
+      lastEventAt?: number | null;
+    },
+  ): RoutineTriggerRecord | undefined {
+    const current = this.trigger(routineId);
+    if (current === undefined) return undefined;
+    const now = this.#now();
+    this.#db
+      .query(
+        `UPDATE routine_trigger
+            SET account_id = ?,
+                instance_id = ?,
+                effective_mode = ?,
+                polling_interval = ?,
+                fallback_reason = ?,
+                status = ?,
+                last_error = ?,
+                last_event_at = ?,
+                updated_at = ?
+          WHERE routine_id = ?`,
+      )
+      .run(
+        patch.accountId === undefined ? current.accountId : patch.accountId,
+        patch.instanceId === undefined ? current.instanceId : patch.instanceId,
+        patch.effectiveMode === undefined
+          ? current.effectiveMode
+          : patch.effectiveMode,
+        patch.pollingInterval === undefined
+          ? current.pollingInterval
+          : patch.pollingInterval,
+        patch.fallbackReason === undefined
+          ? current.fallbackReason
+          : patch.fallbackReason,
+        patch.status ?? current.status,
+        patch.lastError === undefined ? current.lastError : patch.lastError,
+        patch.lastEventAt === undefined
+          ? current.lastEventAt
+          : patch.lastEventAt,
+        now,
+        routineId,
+      );
+    return this.trigger(routineId);
+  }
+
+  countSharedInstance(
+    provider: string,
+    instanceId: string,
+    excludeRoutineId: string,
+    options?: { enabledOnly?: boolean },
+  ): number {
+    if (options?.enabledOnly === true) {
+      return (
+        this.#db
+          .query<{ n: number }, [string, string, string]>(
+            `SELECT COUNT(*) AS n
+               FROM routine_trigger t
+               JOIN routine r ON r.id = t.routine_id
+              WHERE t.provider = ? AND t.instance_id = ? AND t.routine_id <> ? AND r.enabled = 1`,
+          )
+          .get(provider, instanceId, excludeRoutineId)?.n ?? 0
+      );
+    }
+    return (
+      this.#db
+        .query<{ n: number }, [string, string, string]>(
+          `SELECT COUNT(*) AS n FROM routine_trigger
+            WHERE provider = ? AND instance_id = ? AND routine_id <> ?`,
+        )
+        .get(provider, instanceId, excludeRoutineId)?.n ?? 0
+    );
+  }
+
+  findTriggerRoutines(match: {
+    provider: string;
+    instanceId?: string | null;
+    routineId?: string | null;
+    source?: string | null;
+    triggerSlug?: string | null;
+    accountId?: string | null;
+  }): RoutineRecord[] {
+    if (match.routineId != null) {
+      const row = this.#db
+        .query<RoutineRow, [string, string]>(
+          `SELECT r.* FROM routine r
+             JOIN routine_trigger t ON t.routine_id = r.id
+            WHERE r.id = ? AND t.provider = ?`,
+        )
+        .get(match.routineId, match.provider);
+      return row === null ? [] : [routineOf(row)];
+    }
+    if (match.instanceId != null) {
+      return this.#db
+        .query<RoutineRow, [string, string]>(
+          `SELECT r.* FROM routine r
+             JOIN routine_trigger t ON t.routine_id = r.id
+            WHERE t.provider = ? AND t.instance_id = ?
+            ORDER BY r.created_at, r.id`,
+        )
+        .all(match.provider, match.instanceId)
+        .map(routineOf);
+    }
+    if (match.triggerSlug != null) {
+      return this.#db
+        .query<
+          RoutineRow,
+          [
+            string,
+            string,
+            string | null,
+            string | null,
+            string | null,
+            string | null,
+          ]
+        >(
+          `SELECT r.* FROM routine r
+             JOIN routine_trigger t ON t.routine_id = r.id
+            WHERE t.provider = ? AND t.trigger_slug = ?
+              AND (? IS NULL OR t.source = ?)
+              AND (? IS NULL OR t.account_id IS NULL OR t.account_id = ?)
+            ORDER BY r.created_at, r.id`,
+        )
+        .all(
+          match.provider,
+          match.triggerSlug,
+          match.source ?? null,
+          match.source ?? null,
+          match.accountId ?? null,
+          match.accountId ?? null,
+        )
+        .map(routineOf);
+    }
+    return [];
+  }
+
+  #writeTrigger(routineId: string, trigger: RoutineTrigger, now: number): void {
+    const existing = this.trigger(routineId);
+    this.#db
+      .query(
+        `INSERT INTO routine_trigger (
+           routine_id, provider, source, trigger_slug, account_id, config_json,
+           requested_mode, requested_polling_interval, instance_id, effective_mode,
+           polling_interval, fallback_reason, status, last_error, last_event_at,
+           created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 'disabled', NULL, ?, ?, ?)
+         ON CONFLICT(routine_id) DO UPDATE SET
+           provider = excluded.provider,
+           source = excluded.source,
+           trigger_slug = excluded.trigger_slug,
+           account_id = excluded.account_id,
+           config_json = excluded.config_json,
+           requested_mode = excluded.requested_mode,
+           requested_polling_interval = excluded.requested_polling_interval,
+           instance_id = NULL,
+           effective_mode = NULL,
+           polling_interval = NULL,
+           fallback_reason = NULL,
+           status = 'disabled',
+           last_error = NULL,
+           updated_at = excluded.updated_at`,
+      )
+      .run(
+        routineId,
+        trigger.provider,
+        trigger.source,
+        trigger.trigger,
+        trigger.accountId ?? null,
+        JSON.stringify(trigger.config ?? {}),
+        trigger.mode ?? null,
+        trigger.pollingIntervalMinutes ?? null,
+        existing?.lastEventAt ?? null,
+        existing?.createdAt ?? now,
+        now,
+      );
+  }
+
+  /* --------------------------------------------------------- trigger events */
+
+  enqueueTriggerEvent(input: {
+    routineId: string;
+    provider: string;
+    eventId: string;
+    instanceId: string | null;
+    triggerSlug: string;
+    occurredAt: number;
+    payloadJson: string;
+    ttlMs: number;
+    maxPending: number;
+  }): { inserted: boolean; expired: number; dropped: number } {
+    const now = this.#now();
+    const id = crypto.randomUUID();
+    return this.#db.transaction(() => {
+      const inserted =
+        this.#db
+          .query(
+            `INSERT INTO routine_trigger_event (
+               id, routine_id, provider, event_id, instance_id, trigger_slug,
+               occurred_at, received_at, payload_json, state, run_id
+             )
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL)
+             ON CONFLICT(routine_id, event_id) DO NOTHING`,
+          )
+          .run(
+            id,
+            input.routineId,
+            input.provider,
+            input.eventId,
+            input.instanceId,
+            input.triggerSlug,
+            input.occurredAt,
+            now,
+            input.payloadJson,
+          ).changes > 0;
+      if (!inserted) return { inserted: false, expired: 0, dropped: 0 };
+
+      this.#db
+        .query(
+          "UPDATE routine_trigger SET last_event_at = ?, updated_at = ? WHERE routine_id = ?",
+        )
+        .run(now, now, input.routineId);
+
+      const expired = this.#expirePending(input.routineId, now - input.ttlMs);
+      const pending = this.#db
+        .query<{ id: string }, [string]>(
+          `SELECT id FROM routine_trigger_event
+            WHERE routine_id = ? AND state = 'pending'
+            ORDER BY occurred_at DESC, received_at DESC, rowid DESC`,
+        )
+        .all(input.routineId);
+      let dropped = 0;
+      if (pending.length > input.maxPending) {
+        const overflow = pending.slice(input.maxPending);
+        const markDropped = this.#db.query(
+          "UPDATE routine_trigger_event SET state = 'dropped' WHERE id = ? AND state = 'pending'",
+        );
+        for (const row of overflow) dropped += markDropped.run(row.id).changes;
+      }
+      return { inserted: true, expired, dropped };
+    })();
+  }
+
+  claimTriggerBatch(input: {
+    routineId: string;
+    ttlMs: number;
+    maxBatch: number;
+  }):
+    | { run: RunRecord; events: TriggerEventRecord[]; droppedCount: number }
+    | undefined {
+    const now = this.#now();
+    return this.#db.transaction(() => {
+      this.#expirePending(input.routineId, now - input.ttlMs);
+      const pending = this.#db
+        .query<TriggerEventRow, [string]>(
+          `SELECT * FROM routine_trigger_event
+            WHERE routine_id = ? AND state = 'pending'
+            ORDER BY occurred_at ASC, received_at ASC, rowid ASC`,
+        )
+        .all(input.routineId);
+      if (pending.length === 0) return undefined;
+
+      const run = this.startRun(input.routineId, "trigger");
+      if (run === undefined) return undefined;
+
+      let batch = pending;
+      if (pending.length > input.maxBatch) {
+        const overflow = pending.slice(0, pending.length - input.maxBatch);
+        const markDropped = this.#db.query(
+          "UPDATE routine_trigger_event SET state = 'dropped' WHERE id = ? AND state = 'pending'",
+        );
+        for (const row of overflow) markDropped.run(row.id);
+        batch = pending.slice(-input.maxBatch);
+      }
+
+      const droppedCount =
+        this.#db
+          .query<{ n: number }, [string]>(
+            `SELECT COUNT(*) AS n FROM routine_trigger_event
+              WHERE routine_id = ? AND state = 'dropped' AND run_id IS NULL`,
+          )
+          .get(input.routineId)?.n ?? 0;
+
+      const markDispatched = this.#db.query(
+        "UPDATE routine_trigger_event SET state = 'dispatched', run_id = ? WHERE id = ?",
+      );
+      for (const row of batch) markDispatched.run(run.id, row.id);
+
+      if (droppedCount > 0) {
+        this.#db
+          .query(
+            `UPDATE routine_trigger_event SET run_id = ?
+              WHERE routine_id = ? AND state = 'dropped' AND run_id IS NULL`,
+          )
+          .run(run.id, input.routineId);
+      }
+
+      return {
+        run,
+        events: batch.map(triggerEventOf),
+        droppedCount,
+      };
+    })();
+  }
+
+  pendingTriggerRoutines(ttlMs = DEFAULT_EVENT_TTL_MS): string[] {
+    const cutoff = this.#now() - ttlMs;
+    return this.#db
+      .query<{ routine_id: string }, [number]>(
+        `SELECT DISTINCT e.routine_id
+           FROM routine_trigger_event e
+           JOIN routine r ON r.id = e.routine_id
+          WHERE e.state = 'pending' AND e.received_at >= ? AND r.enabled = 1
+          ORDER BY e.received_at, e.routine_id`,
+      )
+      .all(cutoff)
+      .map((row) => row.routine_id);
+  }
+
+  triggerEventsOfRoutine(routineId: string): TriggerEventRecord[] {
+    return this.#db
+      .query<TriggerEventRow, [string]>(
+        `SELECT * FROM routine_trigger_event
+          WHERE routine_id = ?
+          ORDER BY occurred_at ASC, received_at ASC, rowid ASC`,
+      )
+      .all(routineId)
+      .map(triggerEventOf);
+  }
+
+  triggerEventsOfRun(runId: string): TriggerEventRecord[] {
+    return this.#db
+      .query<TriggerEventRow, [string]>(
+        `SELECT * FROM routine_trigger_event
+          WHERE run_id = ? AND state IN ('dispatched', 'done')
+          ORDER BY occurred_at ASC, received_at ASC, rowid ASC`,
+      )
+      .all(runId)
+      .map(triggerEventOf);
+  }
+
+  #expirePending(routineId: string, cutoff: number): number {
+    return this.#db
+      .query(
+        `UPDATE routine_trigger_event SET state = 'expired'
+          WHERE routine_id = ? AND state = 'pending' AND received_at < ?`,
+      )
+      .run(routineId, cutoff).changes;
+  }
+
+  expireAllPending(routineId: string): number {
+    return this.#db
+      .query(
+        `UPDATE routine_trigger_event SET state = 'expired'
+          WHERE routine_id = ? AND state = 'pending'`,
+      )
+      .run(routineId).changes;
   }
 
   /* ---------------------------------------------------------------- briefs */
@@ -403,30 +975,56 @@ export class RoutineStore {
    * End a run. Only a run that is still going can end: the second of two endings (a `finish` and
    * a timeout) is dropped, and says so by returning nothing.
    */
-  finishRun(runId: string, outcome: RunOutcome): RunRecord | undefined {
+  finishRun(
+    runId: string,
+    outcome: RunOutcome,
+    options?: { keepTriggerEventsPending?: boolean; eventTtlMs?: number },
+  ): RunRecord | undefined {
     const report = outcome.status === "sent" ? present(outcome.report) : null;
     const title =
       outcome.status === "sent" && report !== null
         ? (present(outcome.title) ?? titleOf(report))
         : null;
-    const changes = this.#db
-      .query(
-        `UPDATE routine_run SET status = ?, finished_at = ?, title = ?, report = ?, handoff = ?, error = ?
-          WHERE id = ? AND status = 'running'`,
-      )
-      .run(
-        outcome.status === "sent" && report === null
-          ? "no_news"
-          : outcome.status,
-        this.#now(),
-        title,
-        report,
-        // A run that failed after leaving a note still leaves it: the next run reads it.
-        present(outcome.handoff),
-        outcome.status === "failed" ? outcome.error : null,
-        runId,
-      ).changes;
-    return changes === 0 ? undefined : this.run(runId);
+    const now = this.#now();
+    return this.#db.transaction(() => {
+      const changes = this.#db
+        .query(
+          `UPDATE routine_run SET status = ?, finished_at = ?, title = ?, report = ?, handoff = ?, error = ?
+            WHERE id = ? AND status = 'running'`,
+        )
+        .run(
+          outcome.status === "sent" && report === null
+            ? "no_news"
+            : outcome.status,
+          now,
+          title,
+          report,
+          // A run that failed after leaving a note still leaves it: the next run reads it.
+          present(outcome.handoff),
+          outcome.status === "failed" ? outcome.error : null,
+          runId,
+        ).changes;
+      if (changes === 0) return undefined;
+      if (options?.keepTriggerEventsPending === true) {
+        const cutoff = now - (options.eventTtlMs ?? DEFAULT_EVENT_TTL_MS);
+        this.#db
+          .query(
+            `UPDATE routine_trigger_event
+                SET state = CASE WHEN received_at >= ? THEN 'pending' ELSE 'expired' END,
+                    run_id = NULL
+              WHERE run_id = ? AND state = 'dispatched'`,
+          )
+          .run(cutoff, runId);
+      } else {
+        this.#db
+          .query(
+            `UPDATE routine_trigger_event SET state = 'done'
+              WHERE run_id = ? AND state = 'dispatched'`,
+          )
+          .run(runId);
+      }
+      return this.run(runId);
+    })();
   }
 
   run(id: string): RunRecord | undefined {
@@ -529,16 +1127,56 @@ export class RoutineStore {
 
   /**
    * Runs a dead process left running end here, as failures that say why. Nothing is running them
-   * and a row that said `running` forever would refuse every run after it. Returns their routines.
+   * and a row that said `running` forever would refuse every run after it. Also restores any
+   * `dispatched` trigger events belonging to interrupted runs (that are still within TTL) back to
+   * `pending` so the queue never gets wedged across restarts. Returns the affected routine ids.
    */
-  recover(reason: string): string[] {
-    const rows = this.#db
-      .query<{ routine_id: string }, [string, number]>(
-        `UPDATE routine_run SET status = 'failed', error = ?, finished_at = ?
-          WHERE status = 'running' RETURNING routine_id`,
-      )
-      .all(reason, this.#now());
-    return [...new Set(rows.map((row) => row.routine_id))];
+  recover(reason: string, eventTtlMs = DEFAULT_EVENT_TTL_MS): string[] {
+    const now = this.#now();
+    const cutoff = now - eventTtlMs;
+    return this.#db.transaction(() => {
+      const rows = this.#db
+        .query<{ routine_id: string }, [string, number]>(
+          `UPDATE routine_run SET status = 'failed', error = ?, finished_at = ?
+            WHERE status = 'running' RETURNING routine_id`,
+        )
+        .all(reason, now);
+
+      // Reclaim dispatched events of runs interrupted by a crash or shutdown (unless expired).
+      this.#db
+        .query(
+          `UPDATE routine_trigger_event
+              SET state = CASE WHEN received_at >= ? THEN 'pending' ELSE 'expired' END,
+                  run_id = NULL
+            WHERE state = 'dispatched'
+              AND (
+                run_id IS NULL
+                OR EXISTS (
+                  SELECT 1 FROM routine_run rr
+                   WHERE rr.id = routine_trigger_event.run_id
+                     AND rr.status = 'failed'
+                     AND rr.error = ?
+                )
+              )`,
+        )
+        .run(cutoff, reason);
+
+      // Any remaining dispatched events pointing at a run that already settled normally become done.
+      this.#db
+        .query(
+          `UPDATE routine_trigger_event
+              SET state = 'done'
+            WHERE state = 'dispatched'
+              AND NOT EXISTS (
+                SELECT 1 FROM routine_run rr
+                 WHERE rr.id = routine_trigger_event.run_id
+                   AND rr.status = 'running'
+              )`,
+        )
+        .run();
+
+      return [...new Set(rows.map((row) => row.routine_id))];
+    })();
   }
 
   /* ---------------------------------------------------------------- feedback */

@@ -1,5 +1,6 @@
 /**
- * Routines: work Captain does on a schedule, and the reports it leaves.
+ * Routines: work Captain does on a schedule or when an external event trigger fires, and the
+ * reports it leaves.
  *
  * Two kinds of target. `routines` is eager and publishes the `list` section, a summary of every
  * routine with its latest runs, and `status`, whether Captain is on to run them; every routine is
@@ -10,7 +11,8 @@
  * no view here and never reaches a client: the next run's prompt is the only thing that reads it.
  *
  * Times are epoch milliseconds. A schedule is one of the four shapes the page offers, read in the
- * routine's own time zone; the next run is computed from it, never stored.
+ * routine's own time zone; the next run is computed from it, never stored. A routine may also (or
+ * instead) attach an external event `trigger` handled by a registered `TriggerProvider`.
  */
 import type { CallFrame } from "@eta/client-wire-proto";
 
@@ -47,6 +49,78 @@ export type RoutineSchedule =
 export const HOURLY_STEPS = [1, 2, 3, 4, 6, 8, 12] as const;
 export type HourlyStep = (typeof HOURLY_STEPS)[number];
 
+/** Delivery mode for an external event trigger. */
+export type RoutineTriggerMode = "webhook" | "poll";
+
+/** Runtime state of a routine's attached external trigger instance. */
+export type RoutineTriggerStatus = "active" | "disabled" | "error";
+
+/**
+ * Input configuration for a routine's external event trigger (multi-provider).
+ * For Composio: `provider: "composio"`, `source: "<toolkitSlug>"`, `trigger: "<TRIGGER_SLUG>"`.
+ */
+export interface RoutineTrigger {
+  /** Provider id, e.g. `"composio"`. */
+  provider: string;
+  /** Source / toolkit inside the provider, e.g. `"github"` or `"gmail"`. */
+  source: string;
+  /** Trigger type slug, e.g. `"GITHUB_COMMIT_EVENT"`. */
+  trigger: string;
+  /** Connected account id when targeting a specific connection; resolved when omitted. */
+  accountId?: string | null;
+  /** Trigger-specific configuration matching the catalog item's `configSchema`. */
+  config?: Record<string, unknown>;
+  /** Preferred delivery mode when the trigger supports more than one. */
+  mode?: RoutineTriggerMode | null;
+  /** Polling interval in minutes (for poll-capable triggers). */
+  pollingIntervalMinutes?: number | null;
+}
+
+/** Persisted & runtime view of a routine's attached external trigger. */
+export interface RoutineTriggerView extends RoutineTrigger {
+  accountId: string | null;
+  config: Record<string, unknown>;
+  /** Remote instance id (e.g. `ti_...`), null before provisioning or when errored. */
+  instanceId: string | null;
+  mode: RoutineTriggerMode | null;
+  pollingIntervalMinutes: number | null;
+  /** Reason if the provider fell back from webhook to polling. */
+  fallbackReason: string | null;
+  status: RoutineTriggerStatus;
+  lastError: string | null;
+  lastEventAt: number | null;
+}
+
+/** One connected account available for a trigger source. */
+export interface TriggerCatalogAccount {
+  id: string;
+  label?: string | null;
+}
+
+/** An available trigger type returned by `routines.triggers`. */
+export interface TriggerCatalogItem {
+  provider: string;
+  source: string;
+  sourceName: string;
+  trigger: string;
+  name: string;
+  description: string;
+  instructions?: string | null;
+  modes: RoutineTriggerMode[];
+  requiresWebhookSetup?: boolean;
+  configSchema: Record<string, unknown>;
+  payloadSchema: Record<string, unknown>;
+  accounts: TriggerCatalogAccount[];
+  version?: string | null;
+}
+
+/** Health/configuration status of one registered trigger provider. */
+export interface TriggerProviderStatus {
+  provider: string;
+  status: "ready" | "needs_key" | "key_rejected" | "disabled" | "error";
+  error?: string | null;
+}
+
 /**
  * Where a run stands. It ends `sent` (it reported), `no_news` (it looked and had nothing new) or
  * `failed` (`error` says why). `skipped` never ran: its time came while Captain was off, and
@@ -54,8 +128,8 @@ export type HourlyStep = (typeof HOURLY_STEPS)[number];
  */
 export type RunStatus = "running" | "sent" | "no_news" | "failed" | "skipped";
 
-/** Who started a run: the clock, or a person who pressed "run now". */
-export type RunTrigger = "schedule" | "user";
+/** Who started a run: the clock, a person who pressed "run now", or an external event trigger. */
+export type RunTrigger = "schedule" | "user" | "trigger";
 
 /** A run as the lists show it: no report, no feedback. */
 export interface RunListing {
@@ -106,10 +180,11 @@ export interface BriefView {
 export interface RoutineInfo {
   id: string;
   name: string;
-  schedule: RoutineSchedule;
+  schedule: RoutineSchedule | null;
+  trigger?: RoutineTriggerView | null;
   timezone: string;
   enabled: boolean;
-  /** When the clock runs it next; null while it is paused or has no further time. */
+  /** When the clock runs it next; null while it is paused, has no schedule, or has no further time. */
   nextRunAt: number | null;
   /** Feedback on one of its runs is being made into a new brief. */
   revising: boolean;
@@ -164,6 +239,7 @@ export const ROUTINE_ACTIONS = [
   "seen",
   "feedback",
   "restoreBrief",
+  "triggers",
 ] as const;
 export type RoutineAction = (typeof ROUTINE_ACTIONS)[number];
 
@@ -171,14 +247,16 @@ export interface RoutineFields {
   name: string;
   /** What each run is asked to do. Becomes version 1 of the brief. */
   brief: string;
-  schedule: RoutineSchedule;
+  /** At least one of `schedule` or `trigger` must be provided. */
+  schedule: RoutineSchedule | null;
+  trigger?: RoutineTrigger | null;
   /** An IANA zone, for example `Asia/Shanghai`. */
   timezone: string;
 }
 
 /** Valid requests from a client. The server still validates untrusted JSON at runtime. */
 export interface RoutineArgs {
-  /** On the clock from the moment it exists, unless `enabled` is false. */
+  /** On the clock / trigger from the moment it exists, unless `enabled` is false. */
   create: RoutineFields & { enabled?: boolean };
   /** A `brief` that differs from the newest version is written as the next one. */
   update: { routineId: string } & Partial<RoutineFields> & {
@@ -194,6 +272,13 @@ export interface RoutineArgs {
   feedback: { routineId: string; runId: string; text: string };
   /** Writes an old version's text as the newest one. */
   restoreBrief: { routineId: string; version: number };
+  /** Lists aggregated available trigger types across registered trigger providers. */
+  triggers: {
+    provider?: string;
+    source?: string;
+    query?: string;
+    refresh?: boolean;
+  };
 }
 export interface RoutineResults {
   create: { routine: RoutineSummary };
@@ -204,6 +289,10 @@ export interface RoutineResults {
   seen: { routine: RoutineSummary };
   feedback: { feedback: FeedbackView };
   restoreBrief: { brief: BriefView };
+  triggers: {
+    triggers: TriggerCatalogItem[];
+    providers?: TriggerProviderStatus[];
+  };
 }
 export type RoutineCall = {
   [A in RoutineAction]: Omit<CallFrame, "target" | "action" | "args"> & {

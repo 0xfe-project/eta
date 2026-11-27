@@ -1,6 +1,6 @@
 import type { CallFrame } from "@eta/client-wire-proto";
 import type { AgentRuntime, ConversationSummary, MessageView } from "./product";
-import type { RoutineSchedule } from "./routines";
+import type { RoutineSchedule, RoutineTrigger } from "./routines";
 import type { BoardTaskDetail, BoardTaskStatus } from "./tasks";
 
 export const CAPTAIN_ACTIONS = [
@@ -179,9 +179,10 @@ export interface CaptainRoutineProposal {
   messageId: string;
   name: string;
   brief: string;
-  schedule: RoutineSchedule;
+  schedule: RoutineSchedule | null;
+  trigger?: RoutineTrigger | null;
   timezone: string;
-  /** The schedule as a person reads it, in English: "every Mon at 09:00". */
+  /** The schedule / trigger as a person reads it, in English: "every Mon at 09:00". */
   scheduleText: string;
 }
 

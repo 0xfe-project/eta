@@ -46,9 +46,13 @@ export function infoOf(deps: ViewDeps, routine: RoutineRecord): RoutineInfo {
     id: routine.id,
     name: routine.name,
     schedule: routine.schedule,
+    trigger: store.triggerView(routine.id) ?? null,
     timezone: routine.timezone,
     enabled: routine.enabled,
-    nextRunAt: routine.enabled ? nextRunOf(deps, routine) : null,
+    nextRunAt:
+      routine.enabled && routine.schedule !== null
+        ? nextRunOf(deps, routine)
+        : null,
     revising: store.pendingFeedback(routine.id).length > 0,
     unseenReports: unseen.reports,
     unseenFailures: unseen.failures,
@@ -103,8 +107,9 @@ export function briefsOf(deps: ViewDeps, routineId: string): BriefView[] {
   return deps.store.briefs(routineId).map((brief) => briefViewOf(deps, brief));
 }
 
-/** When the clock runs the routine next; null when its schedule has no further time. */
+/** When the clock runs the routine next; null when it has no schedule or no further time. */
 function nextRunOf(deps: ViewDeps, routine: RoutineRecord): number | null {
+  if (routine.schedule === null) return null;
   try {
     return nextRunAfter(routine.schedule, routine.timezone, deps.now()) ?? null;
   } catch {

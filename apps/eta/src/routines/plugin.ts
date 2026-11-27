@@ -1,16 +1,19 @@
 /**
- * The `routines` plugin: the register of what Captain runs on a schedule, and what to do with it.
+ * The `routines` plugin: the register of what Captain runs on a schedule or external trigger, and
+ * what to do with it.
  *
  * The list is eager (a client draws its routines from `hello`), with `status`, whether Captain is
  * on to run them. Each routine is a target of its own with its brief versions and its runs. The
- * clock and the runs are not here, and neither are the rules of a routine (`service.ts`): this file
- * is the surface in front of them. A run's handoff is in no section: it is the next run's alone.
+ * clock, the trigger hub, and the runs are not here, and neither are the rules of a routine
+ * (`service.ts`): this file is the surface in front of them. A run's handoff is in no section: it
+ * is the next run's alone.
  */
 import type { RoutineSummary } from "@eta/client-contracts";
 import type { RoutineRunner } from "./runner";
 import type { Scheduler } from "./scheduler";
 import type { RoutineService } from "./service";
 import type { RoutineRecord } from "./store";
+import type { TriggerHub } from "./triggers";
 import type { ViewDeps } from "./views";
 import { Args, productPlugin, publish } from "../wire";
 import {
@@ -27,6 +30,7 @@ export interface RoutinesDeps extends ViewDeps {
   service: RoutineService;
   runner: RoutineRunner;
   scheduler: Scheduler;
+  triggers?: TriggerHub | undefined;
   /** Say that a routine's state moved (and the list, always). */
   changed: (routineId: string) => void;
 }
@@ -34,7 +38,7 @@ export interface RoutinesDeps extends ViewDeps {
 const MAX_FEEDBACK = 4_000;
 
 export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
-  const { store, service, runner, scheduler } = deps;
+  const { store, service, runner, scheduler, triggers } = deps;
 
   const existing = (id: string): RoutineRecord => service.existing(id);
   const summary = (routine: RoutineRecord): RoutineSummary =>
@@ -67,6 +71,7 @@ export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
 
       runner.attach(ctx.sessions);
       scheduler.start();
+      triggers?.start();
 
       const offs = [
         publish(
@@ -79,38 +84,41 @@ export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
           { eager: true },
         ),
 
-        wire.handle("routines", "create", (call) => {
+        wire.handle("routines", "create", async (call) => {
           const args = new Args(call);
-          const routine = service.create({
+          const raw = (call.args ?? {}) as Record<string, unknown>;
+          const routine = await service.create({
             name: args.string("name"),
             brief: args.string("brief"),
-            schedule: (call.args as Record<string, unknown>).schedule,
+            schedule: raw.schedule === undefined ? null : raw.schedule,
+            ...(raw.trigger === undefined ? {} : { trigger: raw.trigger }),
             timezone: args.string("timezone"),
             enabled: args.optionalBoolean("enabled") ?? true,
           });
           return { result: { routine: summary(routine) } };
         }),
 
-        wire.handle("routines", "update", (call) => {
+        wire.handle("routines", "update", async (call) => {
           const args = new Args(call);
-          const raw = call.args as Record<string, unknown>;
+          const raw = (call.args ?? {}) as Record<string, unknown>;
           const name = args.optionalString("name");
           const brief = args.optionalString("brief");
           const timezone = args.optionalString("timezone");
           const enabled = args.optionalBoolean("enabled");
-          const routine = service.update(args.string("routineId"), {
+          const routine = await service.update(args.string("routineId"), {
             ...(name === undefined ? {} : { name }),
             ...(brief === undefined ? {} : { brief }),
             ...(timezone === undefined ? {} : { timezone }),
             ...(raw.schedule === undefined ? {} : { schedule: raw.schedule }),
+            ...(raw.trigger === undefined ? {} : { trigger: raw.trigger }),
             ...(enabled === undefined ? {} : { enabled }),
           });
           return { result: { routine: summary(routine) } };
         }),
 
-        wire.handle("routines", "delete", (call) => {
+        wire.handle("routines", "delete", async (call) => {
           const id = new Args(call).string("routineId");
-          service.remove(id);
+          await service.remove(id);
           return { result: { routineId: id } };
         }),
 
@@ -173,16 +181,38 @@ export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
             result: { brief: briefViewOf(deps, brief) },
           };
         }),
+
+        wire.handle(
+          "routines",
+          "triggers",
+          async (call) => {
+            const args = new Args(call);
+            const provider = args.optionalString("provider");
+            const source = args.optionalString("source");
+            const query = args.optionalString("query");
+            const refresh = args.optionalBoolean("refresh");
+            return {
+              result: await service.triggers({
+                ...(provider === undefined ? {} : { provider }),
+                ...(source === undefined ? {} : { source }),
+                ...(query === undefined ? {} : { query }),
+                ...(refresh === undefined ? {} : { refresh }),
+              }),
+            };
+          },
+          { unordered: true },
+        ),
       ];
-      return () => {
+      return async () => {
         scheduler.stop();
+        await triggers?.stop();
         service.created = undefined;
         service.removed = undefined;
         for (const off of offs.splice(0)) off();
         for (const off of details.values()) off();
         details.clear();
         // The plugin is going: what is running is told to stop, and the dispose waits for it.
-        return runner.detach();
+        await runner.detach();
       };
     },
     applied,

@@ -98,6 +98,7 @@ import { MachinePlaces, wireFailure } from "./places/on-machine";
 import { placesPlugin } from "./places/plugin";
 import { PlaceStore } from "./places/store";
 import { Composio } from "./plugins/composio";
+import { ComposioTriggerProvider } from "./plugins/composio-triggers";
 import { IconCache } from "./plugins/icon-cache";
 import { Market } from "./plugins/market";
 import { CatalogCache } from "./plugins/market-cache";
@@ -111,6 +112,7 @@ import { INTERRUPTED, RoutineRunner } from "./routines/runner";
 import { Scheduler } from "./routines/scheduler";
 import { RoutineService } from "./routines/service";
 import { RoutineStore } from "./routines/store";
+import { TriggerHub } from "./routines/triggers";
 import { loadSecretKey } from "./secret";
 import { combineSessionHooks } from "./session-hooks";
 import {
@@ -154,6 +156,30 @@ export interface RoutinesOptions {
   reviseTimeoutMs?: number;
   /** False leaves the timer off, and the scheduler looks at the clock only when told to. */
   timer?: boolean;
+  /** Coalescing delay in milliseconds before draining new trigger events. */
+  coalesceMs?: number;
+  /** Retention window for buffered trigger events while Captain or the routine slot is busy. */
+  eventTtlMs?: number;
+  /** Per-routine backlog limit for pending trigger events. */
+  maxPendingPerRoutine?: number;
+  /** Maximum events merged into a single routine run prompt. */
+  maxBatch?: number;
+}
+
+/** Test-only overrides for `Composio` REST/WebSocket trigger integration. */
+export interface ComposioTuning {
+  baseUrl?: string | undefined;
+  pusherUrl?: string | undefined;
+  timeoutMs?: number | undefined;
+  maxBytes?: number | undefined;
+  now?: (() => number) | undefined;
+  catalogTtlMs?: number | undefined;
+  activityTimeoutMs?: number | undefined;
+  pongTimeoutMs?: number | undefined;
+  chunkTimeoutMs?: number | undefined;
+  reconnectBaseMs?: number | undefined;
+  reconnectMaxMs?: number | undefined;
+  webSocket?: typeof WebSocket | undefined;
 }
 
 /** What a test sets to move a reply's stop along; a real host leaves it alone. */
@@ -184,11 +210,12 @@ export interface Product {
   readonly captainSupervisor: CaptainSupervisor;
   /** The routines' clock; `tick()` makes it look. */
   readonly scheduler: Scheduler;
-  /** The routines: their rows and rules (`service.store`), and the runs Captain does. */
+  /** The routines: their rows and rules (`service.store`), trigger hub, and the runs Captain does. */
   readonly routines: {
     readonly store: RoutineStore;
     readonly runner: RoutineRunner;
     readonly service: RoutineService;
+    readonly triggers: TriggerHub;
   };
   /** Every feature's per-session hooks, combined into the one set the session manager takes. */
   readonly sessionHooks: Required<SessionHooks>;
@@ -282,6 +309,8 @@ export function createProduct(options: {
    * (the library's fetch, pointed at a fake authorization server, and its manager).
    */
   mcp?: McpTuning | undefined;
+  /** Test tuning for Composio REST/WebSocket endpoints. */
+  composio?: ComposioTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const captainOn = options.captain !== false;
@@ -350,8 +379,8 @@ export function createProduct(options: {
   // The routines: their rows, the runs that carry them out and the clock that starts the runs.
   const now = options.routines?.now ?? Date.now;
   const routines = new RoutineStore(db, now);
-  // A run the last process left going is not going now.
-  routines.recover(INTERRUPTED);
+  // A run the last process left going is not going now; reclaim non-expired trigger events back to pending.
+  routines.recover(INTERRUPTED, options.routines?.eventTtlMs);
   const routinesChanged = (routineId: string): void => {
     wire?.pushNow("routines");
     wire?.pushNow(`routines.${routineId}`);
@@ -375,6 +404,9 @@ export function createProduct(options: {
     now,
     timeoutMs: options.routines?.timeoutMs,
     reviseTimeoutMs: options.routines?.reviseTimeoutMs,
+    ...(options.routines?.eventTtlMs === undefined
+      ? {}
+      : { eventTtlMs: options.routines.eventTtlMs }),
     changed: routinesChanged,
     warn,
     captain: {
@@ -467,9 +499,33 @@ export function createProduct(options: {
     timer: options.routines?.timer ?? true,
     warn,
   });
+  const triggerHub = new TriggerHub({
+    store: routines,
+    runner,
+    captainStatus: routineStatus,
+    now,
+    changed: routinesChanged,
+    warn,
+    ...(options.routines?.coalesceMs === undefined
+      ? {}
+      : { coalesceMs: options.routines.coalesceMs }),
+    ...(options.routines?.eventTtlMs === undefined
+      ? {}
+      : { eventTtlMs: options.routines.eventTtlMs }),
+    ...(options.routines?.maxPendingPerRoutine === undefined
+      ? {}
+      : { maxPendingPerRoutine: options.routines.maxPendingPerRoutine }),
+    ...(options.routines?.maxBatch === undefined
+      ? {}
+      : { maxBatch: options.routines.maxBatch }),
+  });
+  runner.setRunFinishedListener((routineId) =>
+    triggerHub.onRunFinished(routineId),
+  );
   const routineService = new RoutineService({
     store: routines,
     scheduler,
+    triggers: triggerHub,
     now,
     changed: routinesChanged,
   });
@@ -792,7 +848,10 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("captain"),
   });
   later.captainSupervisor = captainSupervisor;
-  captainChangeObserver = () => captainSupervisor.requestTick();
+  captainChangeObserver = () => {
+    captainSupervisor.requestTick();
+    triggerHub.captainChanged();
+  };
   board.onChange(() => {
     captain.refreshAssignments();
     captainSupervisor.requestTick();
@@ -1018,7 +1077,12 @@ export function createProduct(options: {
     captain,
     captainSupervisor,
     scheduler,
-    routines: { store: routines, runner, service: routineService },
+    routines: {
+      store: routines,
+      runner,
+      service: routineService,
+      triggers: triggerHub,
+    },
     sessionHooks,
     memoryEnabledFor: (meta) => captain.memoryEnabled(meta),
     baseSystemPromptFor: () => captain.basePrompt(),
@@ -1041,6 +1105,7 @@ export function createProduct(options: {
       archiver.stop();
       draftExpirer.stop();
       captainSupervisor.stop();
+      await triggerHub.stop();
       taskSteps.stop();
       await taskRunner.detach();
       hub.close();
@@ -1100,10 +1165,55 @@ export function createProduct(options: {
         key: secretKey,
         settings: new SettingStore(db),
         cache: catalogCache,
+        ...(options.composio?.baseUrl === undefined
+          ? {}
+          : { baseUrl: options.composio.baseUrl }),
+        ...(options.composio?.timeoutMs === undefined
+          ? {}
+          : { timeoutMs: options.composio.timeoutMs }),
+        ...(options.composio?.maxBytes === undefined
+          ? {}
+          : { maxBytes: options.composio.maxBytes }),
+        ...(options.composio?.now === undefined
+          ? {}
+          : { now: options.composio.now }),
       });
       // A connected toolkit is a plugin of the agents; the sessions behind them are made from what
       // Composio says is connected, without holding up the start.
       plugins.setVirtual(composio);
+      triggerHub.register(
+        new ComposioTriggerProvider({
+          composio,
+          ...(options.composio?.pusherUrl === undefined
+            ? {}
+            : { pusherUrl: options.composio.pusherUrl }),
+          ...(options.composio?.webSocket === undefined
+            ? {}
+            : { webSocket: options.composio.webSocket }),
+          ...(options.composio?.now === undefined
+            ? {}
+            : { now: options.composio.now }),
+          ...(options.composio?.catalogTtlMs === undefined
+            ? {}
+            : { catalogTtlMs: options.composio.catalogTtlMs }),
+          ...(options.composio?.activityTimeoutMs === undefined
+            ? {}
+            : { activityTimeoutMs: options.composio.activityTimeoutMs }),
+          ...(options.composio?.pongTimeoutMs === undefined
+            ? {}
+            : { pongTimeoutMs: options.composio.pongTimeoutMs }),
+          ...(options.composio?.chunkTimeoutMs === undefined
+            ? {}
+            : { chunkTimeoutMs: options.composio.chunkTimeoutMs }),
+          ...(options.composio?.reconnectBaseMs === undefined
+            ? {}
+            : { reconnectBaseMs: options.composio.reconnectBaseMs }),
+          ...(options.composio?.reconnectMaxMs === undefined
+            ? {}
+            : { reconnectMaxMs: options.composio.reconnectMaxMs }),
+          warn,
+        }),
+      );
       void composio.follow().catch(() => undefined);
       server.mount(
         "plugins",
@@ -1347,6 +1457,7 @@ export function createProduct(options: {
             service: routineService,
             runner,
             scheduler,
+            triggers: triggerHub,
             now,
             changed: routinesChanged,
           },
