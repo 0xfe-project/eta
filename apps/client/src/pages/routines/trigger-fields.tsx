@@ -358,6 +358,7 @@ function TriggerSearchSelect(props: {
         paddingTop: space[8],
         paddingBottom: space[4],
       }}
+      itemClass={`focus:bg-[${c().selected}]`}
       itemStyle={{
         minHeight: props.phone
           ? sheetRowHeight
@@ -387,6 +388,11 @@ function TriggerSearchSelect(props: {
         const chosen = item.value === props.value;
         return (
           <View
+            testID={`trigger-search-item-${item.value}`}
+            hoverStyle={
+              canHover ? { backgroundColor: c().selected } : undefined
+            }
+            activeStyle={{ backgroundColor: c().selected }}
             style={{
               ...row,
               flex: 1,
@@ -737,6 +743,38 @@ export function TriggerSection(props: {
       Boolean(props.accountId) &&
       !accounts().some((account) => account.id === props.accountId));
 
+  const sourceInCatalog = () =>
+    Boolean(props.source) &&
+    props.triggers.some(
+      (item) =>
+        item.provider === props.provider && item.source === props.source,
+    );
+
+  const showSourceSelect = () =>
+    Boolean(props.provider) &&
+    (sourceChoices().length > 1 ||
+      (props.editingExisting &&
+        (props.catalogLoaded || Boolean(props.catalogError)) &&
+        Boolean(props.source) &&
+        !sourceInCatalog()));
+
+  const triggerInCatalog = () =>
+    Boolean(props.triggerSlug) &&
+    props.triggers.some(
+      (item) =>
+        item.provider === props.provider &&
+        item.source === props.source &&
+        item.trigger === props.triggerSlug,
+    );
+
+  const showTriggerSelect = () =>
+    Boolean(props.provider && props.source) &&
+    (triggerChoices().length > 1 ||
+      (props.editingExisting &&
+        (props.catalogLoaded || Boolean(props.catalogError)) &&
+        Boolean(props.triggerSlug) &&
+        !triggerInCatalog()));
+
   const missingInCatalog = () =>
     props.catalogLoaded &&
     !props.catalogLoading &&
@@ -861,7 +899,7 @@ export function TriggerSection(props: {
             />
           </View>
 
-          <If when={props.provider && sourceChoices().length > 0}>
+          <If when={showSourceSelect()}>
             <View style={{ gap: space[4] }}>
               <Label
                 variant="small"
@@ -884,9 +922,7 @@ export function TriggerSection(props: {
             </View>
           </If>
 
-          <If
-            when={props.provider && props.source && triggerChoices().length > 0}
-          >
+          <If when={showTriggerSelect()}>
             <View style={{ gap: space[4] }}>
               <Label
                 variant="small"
@@ -1063,7 +1099,7 @@ export function TriggerSection(props: {
           </Label>
           <Field
             label={uiText("triggerPollingInterval")}
-            placeholder="5"
+            placeholder={props.provider === "rss" ? "15" : "5"}
             value={props.pollingIntervalText}
             invalid={Boolean(props.pollingError)}
             onChange={props.onChangePollingInterval}

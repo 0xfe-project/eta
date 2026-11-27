@@ -215,6 +215,12 @@ export function RoutineEditor(props: {
     triggerConfig.set({});
     triggerDrafts.set({});
     triggerTouched.set({});
+
+    const provider = triggerProvider();
+    const matched = catalogTriggers().filter(
+      (item) => item.provider === provider && item.source === source,
+    );
+    if (matched.length === 1) selectTriggerItem(matched[0]!);
   }
 
   function selectTriggerItem(item: TriggerCatalogItem) {

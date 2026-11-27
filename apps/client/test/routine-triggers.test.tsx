@@ -1,6 +1,8 @@
 import { expect, open, test } from "nsh/test";
+import { palette } from "../src/components/theme";
 
 const fixture = "./fixtures/routine-triggers.tsx";
+const rgba = (hex: string) => `${hex.toLowerCase()}ff`;
 
 test("list rows and details render event-only, event+schedule, fallbackReason, and error states", async () => {
   const app = await open(fixture, {
@@ -296,4 +298,140 @@ test("Captain create_routine proposal cards show schedule, trigger, and schedule
   expect(
     app.shows("text:composio / github / GITHUB_RELEASE_EVENT · poll · 15m"),
   ).toBe(true);
+});
+
+test("single-option channel (RSS) auto-selects trigger, folds redundant selects, and shows 15m polling placeholder", async () => {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "en-US",
+  });
+  await app.waitFor("label:New routine");
+  await app.press("label:New routine");
+  await app.waitFor("label:Event trigger");
+
+  await app.type("label:Name", "Release Blog Feed");
+  await app.type("label:Brief", "Summarize new feed posts.");
+  await app.press("label:Event trigger");
+
+  await app.waitFor("label:Channel");
+  await app.press("label:Channel");
+  await app.waitFor("label:RSS");
+  await app.press("label:RSS");
+
+  // Single source + single trigger are auto-selected and their redundant selectors stay hidden.
+  await app.waitFor("text:New feed item");
+  expect(app.shows("text:RSS_NEW_ITEM")).toBe(true);
+  expect(app.shows("label:App / source")).toBe(false);
+  expect(app.shows("label:Trigger event")).toBe(false);
+
+  // Feed URL, keywords, and polling interval (default placeholder "15") render directly.
+  await app.waitFor("label:Feed URL");
+  expect(app.shows("label:Include keywords")).toBe(true);
+  expect(app.shows("label:Exclude keywords")).toBe(true);
+  expect(app.shows("label:Polling interval (minutes)")).toBe(true);
+  expect(app.shows("text:15")).toBe(true);
+  expect(app.layout("text:15")).toEqual(
+    app.layout("label:Polling interval (minutes)"),
+  );
+
+  await app.type("label:Feed URL", "https://example.com/feed.xml");
+  await app.press("label:Create");
+  await app.waitFor("text:Release Blog Feed");
+
+  const createLine = app.texts().find((t) => t.startsWith("Create:")) ?? "";
+  const payload = JSON.parse(createLine.slice("Create:".length)) as {
+    trigger: {
+      provider: string;
+      source: string;
+      trigger: string;
+      mode: string;
+      pollingIntervalMinutes: number | null;
+      config: Record<string, unknown>;
+    };
+  };
+  expect(payload.trigger).toEqual({
+    provider: "rss",
+    source: "feed",
+    trigger: "RSS_NEW_ITEM",
+    accountId: null,
+    mode: "poll",
+    pollingIntervalMinutes: null,
+    config: { url: "https://example.com/feed.xml" },
+  });
+});
+
+test("multi-option selects stay visible, TriggerSearchSelect highlights on hover, and stale edit keeps fallback selects", async () => {
+  const c = palette("light", "default");
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "en-US",
+  });
+  await app.waitFor("label:New routine");
+  await app.press("label:New routine");
+  await app.waitFor("label:Event trigger");
+  await app.press("label:Event trigger");
+
+  await app.waitFor("label:Channel");
+  await app.press("label:Channel");
+  await app.waitFor("label:Composio");
+  await app.press("label:Composio");
+
+  // Multi-source provider shows App / source; hovering an item highlights it.
+  await app.waitFor("label:App / source");
+  await app.press("label:App / source");
+  await app.waitFor("id:trigger-search-item-slack");
+  expect(
+    app.viewStyle("id:trigger-search-item-slack")?.backgroundColor ?? null,
+  ).toBeNull();
+  await app.hover("id:trigger-search-item-slack");
+  expect(app.viewStyle("id:trigger-search-item-slack")?.backgroundColor).toBe(
+    rgba(c.selected),
+  );
+
+  // Selecting single-trigger source (Slack) auto-selects its trigger and hides Trigger event.
+  await app.press("label:Slack");
+  await app.waitFor("text:New Slack message");
+  expect(app.shows("label:App / source")).toBe(true);
+  expect(app.shows("label:Trigger event")).toBe(false);
+  expect(app.shows("label:Slack channel")).toBe(true);
+
+  // Switching to multi-trigger source (GitHub) shows Trigger event, hovers items, and uses "5" placeholder.
+  await app.press("label:App / source");
+  await app.waitFor("label:GitHub");
+  await app.press("label:GitHub");
+  await app.waitFor("label:Trigger event");
+  await app.press("label:Trigger event");
+  await app.waitFor("id:trigger-search-item-GITHUB_RELEASE_EVENT");
+  expect(
+    app.viewStyle("id:trigger-search-item-GITHUB_RELEASE_EVENT")
+      ?.backgroundColor ?? null,
+  ).toBeNull();
+  await app.hover("id:trigger-search-item-GITHUB_RELEASE_EVENT");
+  expect(
+    app.viewStyle("id:trigger-search-item-GITHUB_RELEASE_EVENT")
+      ?.backgroundColor,
+  ).toBe(rgba(c.selected));
+  await app.press("label:Release Published");
+  await app.waitFor("label:Polling interval (minutes)");
+  expect(app.shows("text:5")).toBe(true);
+  expect(app.layout("text:5")).toEqual(
+    app.layout("label:Polling interval (minutes)"),
+  );
+  await app.press("label:Cancel");
+
+  // Editing an existing routine whose saved source/trigger is absent from current catalog keeps fallback selects.
+  await app.press("label:Scenario: stale_catalog");
+  await app.press("label:Commit Watcher");
+  await app.waitFor("label:Routine actions");
+  await app.press("label:Routine actions");
+  await app.press("label:Edit");
+  await app.waitFor(
+    "text:This trigger is not in the current catalog; saved settings are kept.",
+  );
+  expect(app.shows("label:App / source")).toBe(true);
+  expect(app.shows("label:Trigger event")).toBe(true);
 });

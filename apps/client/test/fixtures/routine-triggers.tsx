@@ -22,7 +22,8 @@ type CatalogScenario =
   | "disabled"
   | "error"
   | "empty"
-  | "partial_empty";
+  | "partial_empty"
+  | "stale_catalog";
 
 const catalogItems: TriggerCatalogItem[] = [
   {
@@ -82,6 +83,63 @@ const catalogItems: TriggerCatalogItem[] = [
     configSchema: {},
     payloadSchema: {},
     accounts: [{ id: "ca_work", label: "Work GitHub" }],
+  },
+  {
+    provider: "composio",
+    source: "slack",
+    sourceName: "Slack",
+    trigger: "SLACK_NEW_MESSAGE",
+    name: "New Slack message",
+    description: "Fires when a message is posted in a Slack channel.",
+    modes: ["webhook"],
+    configSchema: {
+      type: "object",
+      required: ["channel"],
+      properties: {
+        channel: { type: "string", title: "Slack channel" },
+      },
+    },
+    payloadSchema: {},
+    accounts: [{ id: "sl_work", label: "Work Slack" }],
+  },
+  {
+    provider: "rss",
+    source: "feed",
+    sourceName: "RSS / Atom / JSON Feed",
+    trigger: "RSS_NEW_ITEM",
+    name: "New feed item",
+    description:
+      "Triggers when a new entry is published to an RSS 2.0, Atom 1.0, or JSON Feed 1.1 feed.",
+    modes: ["poll"],
+    configSchema: {
+      type: "object",
+      required: ["url"],
+      properties: {
+        url: {
+          type: "string",
+          format: "uri",
+          title: "Feed URL",
+          description: "RSS 2.0, Atom 1.0, or JSON Feed 1.1 URL (http/https).",
+          examples: ["https://example.com/feed.xml"],
+        },
+        includeKeywords: {
+          type: "string",
+          title: "Include keywords",
+          description:
+            "Optional comma-separated keywords (case-insensitive). Item title or summary must match at least one.",
+          examples: ["release, security"],
+        },
+        excludeKeywords: {
+          type: "string",
+          title: "Exclude keywords",
+          description:
+            "Optional comma-separated keywords (case-insensitive). Skip items matching any keyword.",
+          examples: ["sponsored, digest"],
+        },
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
   },
   {
     provider: "webhook",
@@ -395,6 +453,7 @@ function Fixture() {
       const providers: Record<CatalogScenario, TriggerProviderStatus[]> = {
         ready: [
           { provider: "composio", status: "ready" },
+          { provider: "rss", status: "ready" },
           { provider: "webhook", status: "ready" },
         ],
         needs_key: [{ provider: "composio", status: "needs_key" }],
@@ -418,6 +477,7 @@ function Fixture() {
           { provider: "composio", status: "ready" },
           { provider: "webhook", status: "ready" },
         ],
+        stale_catalog: [{ provider: "composio", status: "ready" }],
       };
       return {
         triggers:
@@ -425,7 +485,9 @@ function Fixture() {
             ? catalogItems
             : mode === "partial_empty"
               ? catalogItems.filter((item) => item.provider === "webhook")
-              : [],
+              : mode === "stale_catalog"
+                ? catalogItems.filter((item) => item.source === "slack")
+                : [],
         providers: providers[mode],
       };
     }
@@ -569,6 +631,10 @@ function Fixture() {
               <Button
                 label="Scenario: partial_empty"
                 onPress={() => scenario.set("partial_empty")}
+              />
+              <Button
+                label="Scenario: stale_catalog"
+                onPress={() => scenario.set("stale_catalog")}
               />
               <Button
                 label="Hide controls"
