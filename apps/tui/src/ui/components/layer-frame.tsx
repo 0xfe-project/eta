@@ -2,7 +2,14 @@ import type { DOMElement } from "ink";
 import type { ReactNode, RefObject } from "react";
 import type { CursorPlace, LayerSpace } from "./layer-space";
 import { Box, measureElement, Text, useBoxMetrics, useInput } from "ink";
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  use,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   LINES_PER_WHEEL_STEP,
   useInputActive,
@@ -75,6 +82,16 @@ function useContentScroll(hidden: number): {
   return { top, scrollBy, reveal, currentTop };
 }
 
+/** Whether `node` is still attached inside `ancestor`. */
+function isDescendantOf(node: DOMElement, ancestor: DOMElement): boolean {
+  let current: DOMElement | undefined = node;
+  while (current !== undefined) {
+    if (current === ancestor) return true;
+    current = current.parentNode;
+  }
+  return false;
+}
+
 /** Where a cursor is in a frame's content, and the rows the frame shows and hides, as laid out. */
 function measureCursor(
   place: CursorPlace,
@@ -84,6 +101,12 @@ function measureCursor(
   const viewNode = viewRef.current;
   const contentNode = contentRef.current;
   if (place.node === null || viewNode === null || contentNode === null)
+    return undefined;
+  if (
+    place.node.yogaNode === undefined ||
+    contentNode.yogaNode === undefined ||
+    !isDescendantOf(place.node, contentNode)
+  )
     return undefined;
   const viewRows = measureElement(viewNode).height;
   if (viewRows <= 0) return undefined;
@@ -117,6 +140,7 @@ function useCursorFollow(
   held: boolean;
   hold: () => () => void;
   follow: (place: CursorPlace) => void;
+  clear: (node: DOMElement | null) => void;
   showAgain: () => void;
   inView: () => boolean;
 } {
@@ -131,6 +155,10 @@ function useCursorFollow(
   const follow = useCallback(
     (place: CursorPlace) => {
       placeRef.current = place;
+      if (place.node === null) {
+        shownRef.current = undefined;
+        return;
+      }
       const where = measureCursor(place, viewRef, contentRef);
       if (where === undefined) return;
       const shown = `${place.cursor}:${where.at}:${place.rows}:${where.viewRows}`;
@@ -146,6 +174,12 @@ function useCursorFollow(
     },
     [viewRef, contentRef, reveal],
   );
+  const clear = useCallback((node: DOMElement | null) => {
+    if (placeRef.current !== undefined && placeRef.current.node === node) {
+      placeRef.current = undefined;
+      shownRef.current = undefined;
+    }
+  }, []);
   const showAgain = useCallback(() => {
     shownRef.current = undefined;
     if (placeRef.current !== undefined) follow(placeRef.current);
@@ -158,10 +192,10 @@ function useCursorFollow(
     const top = currentTop();
     return where.at >= top && where.at < top + where.viewRows;
   }, [viewRef, contentRef, currentTop]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (placeRef.current !== undefined) follow(placeRef.current);
   });
-  return { held: holders > 0, hold, follow, showAgain, inView };
+  return { held: holders > 0, hold, follow, clear, showAgain, inView };
 }
 
 /**
@@ -239,6 +273,7 @@ function ScrollingFrame({ title, footer, children }: FrameProps) {
       scrolls,
       holdCursor: cursor.hold,
       reveal: cursor.follow,
+      clearCursor: cursor.clear,
       cursorInView: cursor.inView,
       showCursor: cursor.showAgain,
     }),
@@ -249,6 +284,7 @@ function ScrollingFrame({ title, footer, children }: FrameProps) {
       scrolls,
       cursor.hold,
       cursor.follow,
+      cursor.clear,
       cursor.inView,
       cursor.showAgain,
     ],

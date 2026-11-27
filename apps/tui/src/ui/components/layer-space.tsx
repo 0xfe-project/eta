@@ -4,7 +4,7 @@
 
 import type { DOMElement } from "ink";
 import type { RefObject } from "react";
-import { createContext, use, useEffect, useRef } from "react";
+import { createContext, use, useEffect, useLayoutEffect, useRef } from "react";
 
 /**
  * Rows of a `LayerFrame` that are not its content: the border above and below, the title, the
@@ -62,6 +62,8 @@ export interface LayerSpace {
    * otherwise leaves the frame alone, so PageUp and PageDown can move away from it.
    */
   reveal: (place: CursorPlace) => void;
+  /** Clears the cursor position when the box that reported it unmounts. */
+  clearCursor: (node: DOMElement | null) => void;
   /** Whether the cursor's first row shows, as of the last scroll. */
   cursorInView: () => boolean;
   /** Scrolls the frame to show the cursor. */
@@ -138,15 +140,27 @@ export function useLayerCursor(
 ): LayerCursor {
   const space = use(LayerSpaceContext);
   const ref = useRef<DOMElement>(null);
+  const lastNodeRef = useRef<DOMElement | null>(null);
   const holdCursor = space?.holdCursor;
-  useEffect(() => holdCursor?.(), [holdCursor]);
+  const clearCursor = space?.clearCursor;
+  useLayoutEffect(() => {
+    const release = holdCursor?.();
+    return () => {
+      release?.();
+      clearCursor?.(lastNodeRef.current);
+      lastNodeRef.current = null;
+    };
+  }, [holdCursor, clearCursor]);
   const reveal = space?.reveal;
-  // After every render: the cursor moves with the part's own state.
-  useEffect(() => {
-    reveal?.({ node: ref.current, offset, rows, cursor });
+  // After every commit: the cursor moves with the part's own state.
+  useLayoutEffect(() => {
+    const node = ref.current;
+    lastNodeRef.current = node;
+    reveal?.({ node, offset, rows, cursor });
   });
   const takeAction = () => {
-    if (space === undefined || space.cursorInView()) return true;
+    if (space === undefined || !space.scrolls || space.cursorInView())
+      return true;
     space.showCursor();
     return false;
   };

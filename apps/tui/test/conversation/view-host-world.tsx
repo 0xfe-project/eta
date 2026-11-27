@@ -213,14 +213,14 @@ export async function quietGroup(
   return { ...world, ada, ben, project, group };
 }
 
-export function screenShows(
+export async function screenShows(
   r: RenderedApp,
   text: string | ((screen: string) => boolean),
   timeoutMs = 20_000,
 ): Promise<void> {
   const holds =
     typeof text === "string" ? (s: string) => s.includes(text) : text;
-  return until(
+  await until(
     async () => {
       await flush();
       return holds(plain(r));
@@ -228,6 +228,7 @@ export function screenShows(
     timeoutMs,
     `the screen to show ${String(text)}`,
   );
+  await flush();
 }
 
 /** The calls of one op the interface made, oldest first. */

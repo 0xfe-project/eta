@@ -4,7 +4,8 @@
  */
 import type { ReactNode } from "react";
 import type { ListLine } from "../src/ext/pending/scroll-list";
-import { Box, Text, useWindowSize } from "ink";
+import { Box, Text, useInput, useWindowSize } from "ink";
+import { useEffect, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { CheckList } from "../src/ext/kit/check-list";
 import { PickList } from "../src/ext/kit/pick-list";
@@ -12,6 +13,7 @@ import { ScrollList } from "../src/ext/pending/scroll-list";
 import { ChoiceList } from "../src/ui/components/choice-list";
 import { LayerFrame } from "../src/ui/components/layer-frame";
 import {
+  gateAllows,
   LayerAreaContext,
   useActionGate,
 } from "../src/ui/components/layer-space";
@@ -285,5 +287,144 @@ describe("a cursor in a frame as tall as its content", () => {
     expect(rows(r)).toContain("1. Choice 0");
     await r.press(KEYS.enter);
     expect(chosen).toEqual([7]);
+  });
+});
+
+function TwoStepLayer({
+  advance,
+  extraLines = 0,
+}: {
+  advance: Promise<void>;
+  extraLines?: number;
+}) {
+  const [step, setStep] = useState<"where" | "who">("where");
+  const [checked, setChecked] = useState(true);
+  const [confirmed, setConfirmed] = useState(0);
+  const gate = useActionGate();
+  useEffect(() => {
+    void advance.then(() => setStep("who"));
+  }, [advance]);
+  useInput((input, key) => {
+    if (step !== "who") return;
+    if (input === " ") {
+      if (gateAllows(gate)) setChecked((c) => !c);
+    } else if (key.return) {
+      if (gateAllows(gate)) setConfirmed((n) => n + 1);
+    }
+  });
+  const extra = Array.from({ length: extraLines }, (_, i) => (
+    <Text key={`after-${i}`}>{`After ${i}`}</Text>
+  ));
+  if (step === "who") {
+    return (
+      <LayerFrame title="New" footer="Esc">
+        <Text>Who</Text>
+        <Box flexDirection="column">
+          <RowList
+            rows={[
+              { key: "a0", label: `${checked ? "[x]" : "[ ]"} Ada` },
+              { key: "a1", label: "[ ] Ben" },
+            ]}
+            cursor={0}
+            height={5}
+            gate={gate}
+          />
+        </Box>
+        <Text>{`Confirmed: ${confirmed}`}</Text>
+        {extra}
+      </LayerFrame>
+    );
+  }
+  return (
+    <LayerFrame title="New" footer="Esc">
+      <Text>Where</Text>
+      <Text>Filter</Text>
+      <Box flexDirection="column">
+        <RowList
+          rows={[{ key: "w0", label: "Search" }]}
+          cursor={0}
+          height={5}
+          gate={gate}
+        />
+      </Box>
+      {extra}
+    </LayerFrame>
+  );
+}
+
+function createAdvance(): { promise: Promise<void>; resolve: () => void } {
+  let resolve = () => {};
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+async function commitAsyncStep(resolveAdvance: () => void) {
+  resolveAdvance();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+describe("switching between two row lists inside a reused layer frame", () => {
+  it("accepts Space right after switching steps in a fitting frame before passive effects flush", async () => {
+    const advance = createAdvance();
+    const r = renderKit(
+      <LayerAreaContext value>
+        <Box flexDirection="column" height={16}>
+          <TwoStepLayer advance={advance.promise} />
+        </Box>
+      </LayerAreaContext>,
+      { columns: 40, rows: 16 },
+    );
+    await settle();
+    expect(markedRow(r)).toBe("Search");
+    await commitAsyncStep(advance.resolve);
+    expect(plain(r)).toContain("Who");
+    await r.press(" ");
+    expect(markedRow(r)).toBe("[ ] Ada");
+  });
+
+  it("accepts Enter right after switching steps in a fitting frame before passive effects flush", async () => {
+    const advance = createAdvance();
+    const r = renderKit(
+      <LayerAreaContext value>
+        <Box flexDirection="column" height={16}>
+          <TwoStepLayer advance={advance.promise} />
+        </Box>
+      </LayerAreaContext>,
+      { columns: 40, rows: 16 },
+    );
+    await settle();
+    await commitAsyncStep(advance.resolve);
+    expect(plain(r)).toContain("Who");
+    await r.press(KEYS.enter);
+    expect(plain(r)).toContain("Confirmed: 1");
+  });
+
+  it("accepts Space right after switching steps in a scrolling frame and preserves PageDown gating", async () => {
+    const advance = createAdvance();
+    const r = renderKit(
+      <LayerAreaContext value>
+        <Box flexDirection="column" height={9}>
+          <TwoStepLayer advance={advance.promise} extraLines={5} />
+        </Box>
+      </LayerAreaContext>,
+      { columns: 40, rows: 9 },
+    );
+    await settle();
+    expect(markedRow(r)).toBe("Search");
+    await commitAsyncStep(advance.resolve);
+    expect(plain(r)).toContain("Who");
+    await r.press(" ");
+    expect(markedRow(r)).toBe("[ ] Ada");
+
+    await r.press(LIST_KEYS.pageDown);
+    expect(markedRow(r)).toBeUndefined();
+    await r.press(" ");
+    expect(markedRow(r)).toBe("[ ] Ada");
+    await r.press(" ");
+    expect(markedRow(r)).toBe("[x] Ada");
   });
 });
