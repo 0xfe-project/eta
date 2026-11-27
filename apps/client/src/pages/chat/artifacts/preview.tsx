@@ -67,7 +67,25 @@ export function ArtifactPreview(props: {
   const host = useHost();
   const c = colors();
   const phone = () => props.layout === "phone";
-  const printsInFrame = platform.os === "web";
+  /**
+   * How the version shows:
+   * - `frame` (the browser): an `html` page around a sandboxed iframe; Export PDF asks the frame
+   *   to print itself (`eta:print`).
+   * - `direct` (macOS, Windows, Linux): the web view navigates to the `/preview/` page itself, as a
+   *   browser tab would. The host's `Content-Security-Policy: sandbox` keeps it in an opaque
+   *   origin all the same. Export PDF runs `print()` in the page: the system's print dialog.
+   * - `render` (the phones): the app fetches the page and renders it in its own document, which
+   *   also rasterizes it for Export PDF.
+   */
+  const mode: "frame" | "direct" | "render" =
+    platform.os === "web"
+      ? "frame"
+      : platform.os === "macos" ||
+          platform.os === "windows" ||
+          platform.os === "linux"
+        ? "direct"
+        : "render";
+  const printsInFrame = mode !== "render";
   const version = signal(
     props.initialVersion ?? props.artifact.versions[0]?.number,
   );
@@ -201,8 +219,12 @@ export function ArtifactPreview(props: {
 
   async function exportPdf() {
     if (downloading()) return;
-    if (printsInFrame) {
+    if (mode === "frame") {
       frame?.postMessage("eta:print");
+      return;
+    }
+    if (mode === "direct") {
+      frame?.injectJavaScript("print()");
       return;
     }
     const capture = pdfCapture();
@@ -505,11 +527,21 @@ export function ArtifactPreview(props: {
             }
           >
             {(link) =>
-              !printsInFrame ? (
+              mode === "render" ? (
                 <ArtifactPdfPreview
                   url={link()}
                   onCapture={pdfCapture.set}
                   onError={problem.set}
+                />
+              ) : mode === "direct" ? (
+                <WebView
+                  src={link().href}
+                  incognito
+                  style={grow}
+                  ref={(node) => {
+                    frame = node;
+                  }}
+                  onError={(error) => problem.set(error)}
                 />
               ) : (
                 <WebView
