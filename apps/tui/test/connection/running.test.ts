@@ -41,9 +41,9 @@ async function processesMentioning(text: string): Promise<number[]> {
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:ETA_TEST_MENTION) } | ForEach-Object { $_.ProcessId }",
+        "Get-CimInstance Win32_Process -Property ProcessId,CommandLine | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:ETA_TEST_MENTION) } | ForEach-Object { $_.ProcessId }",
       ],
-      { env, timeout: 25_000 },
+      { env, timeout: 45_000 },
     );
     return stdout
       .split(/\r?\n/)
@@ -219,24 +219,18 @@ setInterval(() => undefined, 1_000);
         .filter((pid) => pid > 0);
     // Also when the test times out, which skips the rest of its body.
     onTestFinished(async () => {
-      try {
-        const killed = new Set<number>();
-        const killAll = (targets: number[]) => {
-          for (const pid of targets) {
-            killed.add(pid);
-            try {
-              if (alive(pid)) process.kill(pid, "SIGKILL");
-            } catch {
-              // Already exited.
-            }
+      const killed = new Set<number>();
+      const killAll = (targets: number[]) => {
+        for (const pid of targets) {
+          killed.add(pid);
+          try {
+            if (alive(pid)) process.kill(pid, "SIGKILL");
+          } catch {
+            // Already exited.
           }
-        };
-        killAll(await pids());
-        await until(
-          () => [...killed].every((pid) => !alive(pid)),
-          10_000,
-          "the recorded orphan processes to end",
-        );
+        }
+      };
+      const sweepRemaining = async () => {
         const remaining = await processesMentioning(dir);
         if (remaining.length > 0) {
           killAll(remaining);
@@ -246,8 +240,23 @@ setInterval(() => undefined, 1_000);
             `the processes left behind in ${dir} to end`,
           );
         }
+      };
+      try {
+        killAll(await pids());
+        await until(
+          () => [...killed].every((pid) => !alive(pid)),
+          10_000,
+          "the recorded orphan processes to end",
+        );
+        if (process.platform !== "win32" || killed.size < pidFiles.length) {
+          await sweepRemaining();
+        }
       } finally {
-        await removeWithRetry(dir);
+        await removeWithRetry(dir).catch(async (error: unknown) => {
+          if (process.platform !== "win32") throw error;
+          await sweepRemaining();
+          await removeWithRetry(dir);
+        });
       }
     });
     const orphanScript = join(dir, "orphan.ts");
