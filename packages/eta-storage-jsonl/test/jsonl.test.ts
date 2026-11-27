@@ -526,6 +526,9 @@ describe("jsonlStorage — fsync discipline", () => {
 });
 
 describe("jsonlStorage — lifecycle", () => {
+  interface ClosableHandle {
+    close: () => Promise<void>;
+  }
   it("refuses writes after close and is idempotent", async () => {
     const handle = await openStorage(nextPath("closed"));
     await handle.storage.close();
@@ -546,5 +549,145 @@ describe("jsonlStorage — lifecycle", () => {
     ]);
     await handle.dispose();
     expect(jsonLines(await readText(path))).toHaveLength(1);
+  });
+
+  it("opens a single append handle across concurrent commits and closes it cleanly", async () => {
+    const probe = await open(join(dir, "handle-probe-concurrent"), "w");
+    const proto = Object.getPrototypeOf(probe) as {
+      write: (...args: unknown[]) => Promise<unknown>;
+    };
+    const origWrite = proto.write;
+    await probe.close();
+
+    const written = new Set<ClosableHandle>();
+    const closed = new Set<ClosableHandle>();
+    proto.write = async function patchedWrite(
+      this: ClosableHandle,
+      ...args: unknown[]
+    ) {
+      if (!written.has(this)) {
+        written.add(this);
+        const origClose = this.close.bind(this);
+        this.close = async () => {
+          closed.add(this);
+          return origClose();
+        };
+      }
+      return origWrite.apply(this, args);
+    };
+    try {
+      const path = nextPath("concurrent-commits");
+      const storage = await JsonlStorage.open(path);
+      await Promise.all(
+        ["a", "b", "c", "d", "e"].map((id) =>
+          storage.commit([{ kind: "entry", entry: messageEntry(id, id) }]),
+        ),
+      );
+      await storage.close();
+      expect(written.size).toBe(1);
+      expect(closed.size).toBe(1);
+      expect([...written][0]).toBe([...closed][0]);
+
+      const replayed = await openStorage(path);
+      expect(
+        (await replayed.storage.scanEntries({})).map((entry) => entry.id),
+      ).toEqual(["a", "b", "c", "d", "e"]);
+      await replayed.dispose();
+    } finally {
+      proto.write = origWrite;
+    }
+  });
+
+  it("closes the append handle when commit races with close", async () => {
+    const probe = await open(join(dir, "handle-probe-race"), "w");
+    const proto = Object.getPrototypeOf(probe) as {
+      write: (...args: unknown[]) => Promise<unknown>;
+    };
+    const origWrite = proto.write;
+    await probe.close();
+
+    const written = new Set<ClosableHandle>();
+    const closed = new Set<ClosableHandle>();
+    let onFirstWrite: (() => void) | undefined;
+    proto.write = async function patchedWrite(
+      this: ClosableHandle,
+      ...args: unknown[]
+    ) {
+      if (!written.has(this)) {
+        written.add(this);
+        const origClose = this.close.bind(this);
+        this.close = async () => {
+          closed.add(this);
+          return origClose();
+        };
+      }
+      onFirstWrite?.();
+      return origWrite.apply(this, args);
+    };
+    try {
+      for (let i = 0; i < 10; i += 1) {
+        const storage = await JsonlStorage.open(nextPath(`race-${i}`));
+        const [commitResult] = await Promise.allSettled([
+          storage.commit([{ kind: "entry", entry: messageEntry("a", "hi") }]),
+          storage.close(),
+        ]);
+        await expect(storage.commit([])).rejects.toThrow("closed");
+        if (commitResult.status === "rejected") {
+          expect(String(commitResult.reason)).toContain("closed");
+        }
+        for (const h of written) expect(closed.has(h)).toBe(true);
+        written.clear();
+        closed.clear();
+      }
+
+      // Deterministic overlap: `close()` starts while an active `write()` is in progress.
+      const overlap = await JsonlStorage.open(nextPath("race-overlap"));
+      let closePromise: Promise<void> | undefined;
+      onFirstWrite = () => {
+        onFirstWrite = undefined;
+        closePromise = overlap.close();
+      };
+      await overlap.commit([{ kind: "entry", entry: messageEntry("b", "ok") }]);
+      await closePromise!;
+      expect(written.size).toBe(1);
+      expect(closed.size).toBe(1);
+      expect([...written][0]).toBe([...closed][0]);
+    } finally {
+      proto.write = origWrite;
+    }
+  });
+
+  it("still closes the handle when sync fails during close", async () => {
+    const probe = await open(join(dir, "handle-probe-sync"), "w");
+    const proto = Object.getPrototypeOf(probe) as {
+      sync: () => Promise<void>;
+    };
+    const origSync = proto.sync;
+    await probe.close();
+
+    const storage = await JsonlStorage.open(nextPath("sync-fail-close"), {
+      fsyncOnCommit: false,
+    });
+    await storage.commit([
+      { kind: "entry", entry: messageEntry("a", "dirty") },
+    ]);
+
+    let closeCalls = 0;
+    proto.sync = async function patchedSync(this: {
+      close: () => Promise<void>;
+    }) {
+      const origClose = this.close.bind(this);
+      this.close = async () => {
+        closeCalls += 1;
+        return origClose();
+      };
+      throw new Error("sync boom");
+    };
+    try {
+      await expect(storage.close()).rejects.toThrow("sync boom");
+      expect(closeCalls).toBe(1);
+    } finally {
+      proto.sync = origSync;
+    }
   });
 });

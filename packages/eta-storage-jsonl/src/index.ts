@@ -70,6 +70,9 @@ export class JsonlStorage implements StorageService {
   private readonly options: JsonlStorageOptions;
   private readonly state = new InMemoryStorageState();
   private handle: Awaited<ReturnType<typeof open>> | undefined;
+  private opening: Promise<Awaited<ReturnType<typeof open>>> | undefined;
+  private closing: Promise<void> | undefined;
+  private readonly pendingWrites = new Set<Promise<unknown>>();
   private dirty = false;
   private closed = false;
   private journalBytes = 0;
@@ -144,17 +147,25 @@ export class JsonlStorage implements StorageService {
   /** Apply one atomic batch: assign seqs, append one line, fsync. */
   async commit(writes: StorageWrite[]): Promise<CommitResult> {
     this.assertOpen();
-    const result = this.state.commit(writes);
-    const line = `${JSON.stringify({ w: writes, t: result.timestamp } satisfies JournalLine)}\n`;
-    const handle = await this.appendHandle();
-    await handle.write(line);
-    this.dirty = true;
-    if (this.options.fsyncOnCommit !== false) {
-      await handle.sync();
-      this.dirty = false;
+    const write = (async () => {
+      const handle = await this.appendHandle();
+      const result = this.state.commit(writes);
+      const line = `${JSON.stringify({ w: writes, t: result.timestamp } satisfies JournalLine)}\n`;
+      await handle.write(line);
+      this.dirty = true;
+      if (this.options.fsyncOnCommit !== false) {
+        await handle.sync();
+        this.dirty = false;
+      }
+      this.journalBytes += new TextEncoder().encode(line).length;
+      return result;
+    })();
+    this.pendingWrites.add(write);
+    try {
+      return await write;
+    } finally {
+      this.pendingWrites.delete(write);
     }
-    this.journalBytes += new TextEncoder().encode(line).length;
-    return result;
   }
 
   async getEntries(ids: string[]): Promise<Map<string, Entry>> {
@@ -278,10 +289,15 @@ export class JsonlStorage implements StorageService {
   }
 
   async close(): Promise<void> {
-    if (this.closed) return;
-    await this.flush();
-    await this.closeHandle();
     this.closed = true;
+    this.closing ??= (async () => {
+      if (this.opening !== undefined) {
+        await this.opening.catch(() => undefined);
+      }
+      await Promise.allSettled([...this.pendingWrites]);
+      await this.closeHandle();
+    })();
+    await this.closing;
   }
 
   private async writeAtomic(content: string): Promise<void> {
@@ -301,18 +317,38 @@ export class JsonlStorage implements StorageService {
   }
 
   private async appendHandle(): Promise<Awaited<ReturnType<typeof open>>> {
-    if (this.handle === undefined) this.handle = await open(this.path, "a");
-    return this.handle;
+    this.assertOpen();
+    if (this.handle !== undefined) return this.handle;
+    this.opening ??= open(this.path, "a")
+      .then(async (opened) => {
+        if (this.closed) {
+          await opened.close();
+          throw new Error("JsonlStorage: closed");
+        }
+        this.handle = opened;
+        return opened;
+      })
+      .finally(() => {
+        this.opening = undefined;
+      });
+    return this.opening;
   }
 
   private async closeHandle(): Promise<void> {
-    if (this.handle === undefined) return;
-    if (this.dirty) {
-      await this.handle.sync();
-      this.dirty = false;
+    if (this.opening !== undefined) {
+      await this.opening.catch(() => undefined);
     }
-    await this.handle.close();
+    const handle = this.handle;
+    if (handle === undefined) return;
     this.handle = undefined;
+    try {
+      if (this.dirty) {
+        await handle.sync();
+        this.dirty = false;
+      }
+    } finally {
+      await handle.close();
+    }
   }
 
   private assertOpen(): void {

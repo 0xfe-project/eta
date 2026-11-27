@@ -43,7 +43,7 @@ async function processesMentioning(text: string): Promise<number[]> {
         "-Command",
         "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:ETA_TEST_MENTION) } | ForEach-Object { $_.ProcessId }",
       ],
-      { env },
+      { env, timeout: 25_000 },
     );
     return stdout
       .split(/\r?\n/)
@@ -220,23 +220,32 @@ setInterval(() => undefined, 1_000);
     // Also when the test times out, which skips the rest of its body.
     onTestFinished(async () => {
       try {
-        for (const pid of await pids())
-          if (alive(pid)) process.kill(pid, "SIGKILL");
-        await until(
-          async () => {
-            const remaining = await processesMentioning(dir);
-            for (const pid of remaining) {
-              try {
-                process.kill(pid, "SIGKILL");
-              } catch {
-                // Already exited.
-              }
+        const killed = new Set<number>();
+        const killAll = (targets: number[]) => {
+          for (const pid of targets) {
+            killed.add(pid);
+            try {
+              if (alive(pid)) process.kill(pid, "SIGKILL");
+            } catch {
+              // Already exited.
             }
-            return remaining.length === 0;
-          },
-          20_000,
-          `the processes left behind in ${dir} to end`,
+          }
+        };
+        killAll(await pids());
+        await until(
+          () => [...killed].every((pid) => !alive(pid)),
+          10_000,
+          "the recorded orphan processes to end",
         );
+        const remaining = await processesMentioning(dir);
+        if (remaining.length > 0) {
+          killAll(remaining);
+          await until(
+            () => [...killed].every((pid) => !alive(pid)),
+            10_000,
+            `the processes left behind in ${dir} to end`,
+          );
+        }
       } finally {
         await removeWithRetry(dir);
       }
