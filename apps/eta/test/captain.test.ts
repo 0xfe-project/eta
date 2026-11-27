@@ -1153,6 +1153,127 @@ describe("captain controls", () => {
     ).toBeUndefined();
   });
 
+  it("reviews a blocked task once until it enters blocked again", async () => {
+    const { w } = await captainWorld();
+    const ada = await w.agent("Ada");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id], "blocked-review");
+    const actor = { kind: "agent", agentId: ada.id } as const;
+    const task = w.host.product.board.create(
+      {
+        title: "Waiting for a decision",
+        conversationId: group.id,
+        workspace: "local",
+        status: "todo",
+      },
+      actor,
+    );
+    const reviews = () =>
+      w.host.product.captain.store
+        .reviews()
+        .filter(
+          (review) =>
+            review.kind === "task_blocked" && review.taskId === task.id,
+        );
+
+    w.host.product.board.update(task.id, { status: "blocked" }, actor);
+    w.host.product.captainSupervisor.tick();
+    expect(reviews()).toHaveLength(1);
+
+    // The old key used this timestamp; do not let the next edit share its millisecond.
+    await until(
+      () => Date.now() > w.host.product.board.find(task.id)!.updatedAt,
+    );
+    w.host.product.board.comment(task.id, "Still waiting.", actor);
+    w.host.product.board.update(
+      task.id,
+      { description: "The blocker has not changed." },
+      actor,
+    );
+    w.host.product.captainSupervisor.tick();
+    expect(reviews()).toHaveLength(1);
+
+    w.host.product.board.update(task.id, { status: "todo" }, actor);
+    w.host.product.board.update(task.id, { status: "blocked" }, actor);
+    w.host.product.captainSupervisor.tick();
+    expect(reviews()).toHaveLength(2);
+  });
+
+  it("reviews a task created blocked only once across later edits", async () => {
+    const { w } = await captainWorld();
+    const ada = await w.agent("Ada");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id], "created-blocked");
+    const actor = { kind: "agent", agentId: ada.id } as const;
+    const task = w.host.product.board.create(
+      {
+        title: "Blocked from the start",
+        conversationId: group.id,
+        workspace: "local",
+        status: "blocked",
+      },
+      actor,
+    );
+    const reviews = () =>
+      w.host.product.captain.store
+        .reviews()
+        .filter(
+          (review) =>
+            review.kind === "task_blocked" && review.taskId === task.id,
+        );
+
+    w.host.product.captainSupervisor.tick();
+    expect(reviews()).toHaveLength(1);
+    await until(
+      () => Date.now() > w.host.product.board.find(task.id)!.updatedAt,
+    );
+    w.host.product.board.update(
+      task.id,
+      { description: "More context, same blocker." },
+      actor,
+    );
+    w.host.product.captainSupervisor.tick();
+    expect(reviews()).toHaveLength(1);
+  });
+
+  it("reviews a legacy blocked task without activity only once", async () => {
+    const { w } = await captainWorld();
+    const ada = await w.agent("Ada");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id], "legacy-blocked");
+    const actor = { kind: "agent", agentId: ada.id } as const;
+    const task = w.host.product.board.create(
+      {
+        title: "Legacy blocked task",
+        conversationId: group.id,
+        workspace: "local",
+        status: "blocked",
+      },
+      actor,
+    );
+    w.host.db.query("DELETE FROM task_activity WHERE task_id = ?").run(task.id);
+    const reviews = () =>
+      w.host.product.captain.store
+        .reviews()
+        .filter(
+          (review) =>
+            review.kind === "task_blocked" && review.taskId === task.id,
+        );
+
+    w.host.product.captainSupervisor.tick();
+    expect(reviews()).toHaveLength(1);
+    await until(
+      () => Date.now() > w.host.product.board.find(task.id)!.updatedAt,
+    );
+    w.host.product.board.update(
+      task.id,
+      { description: "A later edit." },
+      actor,
+    );
+    w.host.product.captainSupervisor.tick();
+    expect(reviews()).toHaveLength(1);
+  });
+
   it("marks an inactive task stuck and reserves proactive wake events", async () => {
     const { w } = await captainWorld();
     const ada = await w.agent("Ada");
