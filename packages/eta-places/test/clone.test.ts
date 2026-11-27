@@ -18,18 +18,93 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { classifyCloneFailure, Places } from "../src";
 import { fakeFs } from "./fake-fs";
 
 const exec = promisify(execFile);
+const hostOs = process.platform;
+const isWin = hostOs === "win32";
+const hostDisplay = (sub: string): string =>
+  isWin ? `~\\${sub.replaceAll("/", "\\")}` : `~/${sub}`;
+
+let winFakeGitPromise: Promise<string> | undefined;
+let winFakeGitDir: string | undefined;
+
+async function winFakeGit(): Promise<string> {
+  winFakeGitPromise ??= (async () => {
+    winFakeGitDir = await realpath(await mkdtemp(join(tmpdir(), "eta-git-")));
+    const script = join(winFakeGitDir, "fake-git.js");
+    const binary = join(winFakeGitDir, "fake-git.exe");
+    await writeFile(
+      script,
+      `import { mkdirSync, appendFileSync, writeFileSync } from "node:fs";
+const args = process.argv.slice(2);
+const log = process.env.FAKE_GIT_LOG;
+if (log) {
+  writeFileSync(log, args.join("\\n") + (args.length ? "\\n" : ""));
+  appendFileSync(log, \`PROMPT=\${process.env.GIT_TERMINAL_PROMPT ?? ""}\\n\`);
+}
+const target = args.at(-1);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+switch (process.env.FAKE_GIT_MODE) {
+  case "hang":
+    process.stderr.write("Receiving objects:   5% (1/20)\\r");
+    if (target) mkdirSync(target, { recursive: true });
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+    break;
+  case "auth":
+    process.stderr.write("fatal: Authentication failed for 'https://github.com/a/b.git/'\\n");
+    process.exit(128);
+  default:
+    process.stderr.write(\`Cloning into \${target}...\\n\`);
+    await sleep(100);
+    process.stderr.write("Receiving objects:  10% (1/10)\\r");
+    await sleep(100);
+    process.stderr.write("Receiving objects: 100% (10/10)\\n");
+    await sleep(100);
+    process.stderr.write("Resolving deltas:  50% (1/2)\\r");
+    if (target) mkdirSync(target, { recursive: true });
+}
+`,
+    );
+    await exec("bun", ["build", "--compile", script, "--outfile", binary]);
+    return binary;
+  })();
+  return await winFakeGitPromise;
+}
 
 const made: string[] = [];
+
+/** Retries brief directory locks left just after a child process exits on Windows. */
+async function removeWithRetry(path: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rm(path, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (
+        !isWin ||
+        (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") ||
+        attempt >= 20
+      )
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
 afterEach(async () => {
   delete process.env.FAKE_GIT_MODE;
-  for (const dir of made.splice(0))
-    await rm(dir, { recursive: true, force: true });
+  delete process.env.FAKE_GIT_LOG;
+  for (const dir of made.splice(0)) await removeWithRetry(dir);
+});
+afterAll(async () => {
+  if (winFakeGitDir !== undefined) await removeWithRetry(winFakeGitDir);
 });
 
 async function home(): Promise<string> {
@@ -44,8 +119,12 @@ async function home(): Promise<string> {
  * `auth` fails the way an unauthenticated HTTPS clone does.
  */
 async function fakeGit(dir: string): Promise<{ binary: string; log: string }> {
-  const binary = join(dir, "fake-git");
   const log = join(dir, "git.log");
+  if (isWin) {
+    process.env.FAKE_GIT_LOG = log;
+    return { binary: await winFakeGit(), log };
+  }
+  const binary = join(dir, "fake-git");
   await writeFile(
     binary,
     `#!/bin/sh
@@ -86,7 +165,7 @@ describe("git's progress", () => {
     const { binary, log } = await fakeGit(at);
     const places = new Places({
       home: at,
-      os: "linux",
+      os: hostOs,
       run: gh(),
       git: binary,
     });
@@ -101,7 +180,7 @@ describe("git's progress", () => {
     );
     expect(done).toEqual({
       path: join(at, "Hello-World"),
-      display: "~/Hello-World",
+      display: hostDisplay("Hello-World"),
     });
     expect(events).toContainEqual({ phase: "receiving", percent: 10 });
     expect(events).toContainEqual({ phase: "receiving", percent: 100 });
@@ -116,7 +195,7 @@ describe("what is cloned, and how", () => {
   it("takes owner/repo by HTTPS or SSH, and gh's protocol and login when gh found it", async () => {
     const at = await home();
     const { binary, log } = await fakeGit(at);
-    const typed = new Places({ home: at, os: "linux", run: gh(), git: binary });
+    const typed = new Places({ home: at, os: hostOs, run: gh(), git: binary });
     await typed.clone({
       op: "clone",
       url: "octocat/Spoon-Knife",
@@ -137,7 +216,7 @@ describe("what is cloned, and how", () => {
     );
     const viaGh = new Places({
       home: at,
-      os: "linux",
+      os: hostOs,
       run: gh("https"),
       git: binary,
     });
@@ -151,7 +230,7 @@ describe("what is cloned, and how", () => {
     expect(asked).toContain("credential.helper=!gh auth git-credential");
     const viaGhSsh = new Places({
       home: at,
-      os: "linux",
+      os: hostOs,
       run: gh("ssh"),
       git: binary,
     });
@@ -171,7 +250,7 @@ describe("what is cloned, and how", () => {
     const { binary } = await fakeGit(at);
     const places = new Places({
       home: at,
-      os: "linux",
+      os: hostOs,
       run: gh(),
       git: binary,
     });
@@ -224,7 +303,7 @@ describe("a clone that does not finish", () => {
     process.env.FAKE_GIT_MODE = "hang";
     const places = new Places({
       home: at,
-      os: "linux",
+      os: hostOs,
       run: gh(),
       git: binary,
     });
@@ -282,7 +361,7 @@ describe("a clone that does not finish", () => {
     process.env.FAKE_GIT_MODE = "auth";
     const places = new Places({
       home: at,
-      os: "linux",
+      os: hostOs,
       run: gh(),
       git: binary,
     });
@@ -300,7 +379,7 @@ describe("a clone that does not finish", () => {
     const at = await home();
     const places = new Places({
       home: at,
-      os: "linux",
+      os: hostOs,
       run: gh(),
       git: join(at, "no-git"),
     });
@@ -336,20 +415,20 @@ describe("a real git", () => {
       "one",
     ]);
     await mkdir(join(at, "Developer"));
-    const places = new Places({ home: at, os: "linux" });
+    const places = new Places({ home: at, os: hostOs });
     const done = await places.clone({
       op: "clone",
-      url: `file://${origin}`,
+      url: pathToFileURL(origin).href,
       target: "~/Developer/copy",
     });
-    expect(done.display).toBe("~/Developer/copy");
+    expect(done.display).toBe(hostDisplay("Developer/copy"));
     expect(existsSync(join(at, "Developer/copy/README.md"))).toBe(true);
     expect((await places.list("~/Developer")).entries).toMatchObject([
       { name: "copy", git: true },
     ]);
     const failed = await places.serve({
       op: "clone",
-      url: `file://${join(at, "nope")}`,
+      url: pathToFileURL(join(at, "nope")).href,
       target: "~/Developer/nope",
     });
     expect(failed).toMatchObject({

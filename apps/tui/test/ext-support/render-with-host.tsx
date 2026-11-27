@@ -29,10 +29,10 @@ import { baseUrl, closedPort, closeHost, testHost } from "../support/host";
 import { tempDir } from "../support/temp";
 import { flush, KEYS, plain, realDelay, renderInk } from "../ui-support/render";
 
-const DEFAULT_WAIT_MS = 10_000;
+const DEFAULT_WAIT_MS = process.platform === "win32" ? 20_000 : 10_000;
 // Well inside the 30 s test timeout (vitest.config.ts), so a failed connection reports its screen
 // instead of vitest's bare timeout.
-const CONNECT_WAIT_MS = 15_000;
+const CONNECT_WAIT_MS = process.platform === "win32" ? 20_000 : 15_000;
 const POLL_MS = 10;
 /** How long the command input may take to show a pasted line, and to clear it after Enter. */
 const INPUT_WAIT_MS = 2_000;

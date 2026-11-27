@@ -10,6 +10,8 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import process from "node:process";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { Places } from "@eta/places";
 import { describe, expect, it } from "vitest";
@@ -20,6 +22,9 @@ import { askedStarting, enter, manageWorld, statusLine, tabBar } from "./world";
 
 const TITLE = "New conversation";
 const exec = promisify(execFile);
+const hostOs = process.platform;
+const tilde = (sub: string) =>
+  hostOs === "win32" ? `~\\${sub.replaceAll("/", "\\")}` : `~/${sub}`;
 
 /** Whether the layer's title line shows; the home screen's `/new` hint carries the same words. */
 function showsLayer(screen: string): boolean {
@@ -70,7 +75,7 @@ async function placesWorld() {
   for (const dir of ["app/.git", "lib", ".secret", "proj"])
     await mkdir(join(work, dir), { recursive: true });
   const w = await manageWorld(undefined, {
-    places: new Places({ home, os: "linux" }),
+    places: new Places({ home, os: hostOs }),
   });
   const proj = (
     await w.raw.call<{ project: ProjectView }>("projects", "create", {
@@ -196,7 +201,7 @@ describe("/new, the ways", () => {
     const before = w.conversations().length;
     await enter(r, "/new");
     await way(r, "Search directories");
-    await search(r, "proj", "~/work/proj");
+    await search(r, "proj", tilde("work/proj"));
     await r.press(KEYS.enter); // into the second step
     await screenShows(r, "steward");
     await r.press(KEYS.escape); // back to the first, as it was
@@ -222,8 +227,8 @@ describe("/new, searching", () => {
     const before = w.conversations().length;
     await enter(r, "/new");
     await way(r, "Search directories");
-    await screenShows(r, "~/work/proj");
-    expect(lineWith(r, "~/work/proj")).toContain("project");
+    await screenShows(r, tilde("work/proj"));
+    expect(lineWith(r, tilde("work/proj"))).toContain("project");
     await r.press(KEYS.enter);
     await until(
       () => newConversations(w, before).length === 1,
@@ -251,7 +256,7 @@ describe("/new, searching", () => {
     await w.agentsArrived(1);
     await enter(r, "/new");
     await way(r, "Search directories");
-    await search(r, "lib", "~/work/lib");
+    await search(r, "lib", tilde("work/lib"));
     await r.press(KEYS.enter);
     await until(
       () => askedStarting(w.wire, "conversations.create").length === 1,
@@ -302,7 +307,7 @@ describe("/new, browsing", () => {
     await screenShows(r, "work");
     await r.press(KEYS.down);
     await r.press(KEYS.enter);
-    await screenShows(r, "~/work");
+    await screenShows(r, tilde("work"));
     await screenShows(r, "lib");
     expect(lineWith(r, "app")).toContain("git");
     expect(lineWith(r, "proj")).toContain("project");
@@ -313,7 +318,8 @@ describe("/new, browsing", () => {
     await screenShows(r, (screen) => !screen.includes(" lib"));
   }, 60_000);
 
-  it.skipIf(process.getuid?.() === 0)(
+  // POSIX chmod 0o000 does not revoke directory read permission on Windows NTFS or when running as root.
+  it.skipIf(hostOs === "win32" || process.getuid?.() === 0)(
     "says why a directory cannot be read, and ← goes back to the one that could",
     async () => {
       const { w, work } = await placesWorld();
@@ -338,7 +344,7 @@ describe("/new, browsing", () => {
         // Back in work/, as it was left: filtered to `lo`.
         await screenShows(r, (screen) => !screen.includes("No permission"));
         expect(lineWith(r, "› lo")).toBe("› lo");
-        await screenShows(r, "~/work");
+        await screenShows(r, tilde("work"));
       } finally {
         await chmod(join(work, "locked"), 0o755);
       }
@@ -362,7 +368,7 @@ describe("/new, browsing", () => {
     await screenShows(r, (screen) => !screen.includes("proj"));
     await r.press(KEYS.down); // lib, past "Use this directory"
     await r.press(KEYS.enter);
-    await screenShows(r, "~/work/lib");
+    await screenShows(r, tilde("work/lib"));
     await r.press(KEYS.enter); // use it
     await until(
       () => newConversations(w, before).length === 1,
@@ -473,12 +479,12 @@ describe("/new, a new directory", () => {
     await enter(r, "/new");
     await way(r, "New directory");
     await screenShows(r, "Where should the new directory go?");
-    await search(r, "~/wo", "~/work");
-    while (cursorRow(r) !== "~/work") await r.press(KEYS.down);
+    await search(r, "~/wo", tilde("work"));
+    while (cursorRow(r) !== tilde("work")) await r.press(KEYS.down);
     await r.press(KEYS.enter);
-    await screenShows(r, "Name of the new directory in ~/work");
+    await screenShows(r, `Name of the new directory in ${tilde("work")}`);
     await r.type("fresh");
-    await screenShows(r, "Create ~/work/fresh");
+    await screenShows(r, `Create ${tilde("work/fresh")}`);
     await r.press(KEYS.enter);
     await until(
       () => askedStarting(w.wire, "conversations.create").length === 1,
@@ -514,7 +520,7 @@ describe("/new, cloning", () => {
       return { code: 0, stdout: "", stderr: "" };
     };
     const w = await manageWorld(undefined, {
-      places: new Places({ home, os: "linux", run }),
+      places: new Places({ home, os: hostOs, run }),
     });
     await w.agent("Ada");
     const r = await w.showHome();
@@ -551,13 +557,13 @@ describe("/new, cloning", () => {
     await enter(r, "/new");
     await way(r, "Clone from GitHub");
     await screenShows(r, "Search repositories, or paste a URL or owner/repo");
-    await r.type(`file://${origin}`);
+    await r.type(pathToFileURL(origin).href);
     await screenShows(r, "origin-repo");
     await r.press(KEYS.enter);
     await screenShows(r, "Clone origin-repo into…");
     // Where the last clone went, or ~/Developer the first time: the first line.
-    await screenShows(r, "~/Developer/origin-repo");
-    expect(cursorRow(r)).toBe("~/Developer/origin-repo");
+    await screenShows(r, tilde("Developer/origin-repo"));
+    expect(cursorRow(r)).toBe(tilde("Developer/origin-repo"));
     await r.press(KEYS.enter);
     await until(
       () => askedStarting(w.wire, "conversations.create").length === 1,
@@ -758,7 +764,7 @@ describe("/new, starting", () => {
     expect(tabBar(r)).not.toContain("1:");
     // Chosen again: the project made the first time is the one used.
     await way(r, "Search directories");
-    await search(r, "~/work/lib", "~/work/lib");
+    await search(r, "~/work/lib", tilde("work/lib"));
     await r.press(KEYS.enter);
     await until(
       () => newConversations(w, before).length === 1,
@@ -850,7 +856,8 @@ describe("/new, an agent's own workspace", () => {
     const w = await manageWorld();
     const ada = await w.agent("Ada");
     await w.agent("Ben");
-    const r = await w.showHome();
+    // Wide enough for the full `Open ${ada.home}` path row without `truncate-end`.
+    const r = await w.showHome({ columns: 240, rows: 30 });
     await w.agentsArrived(2);
     await enter(r, "/new");
     await way(r, "Search directories");

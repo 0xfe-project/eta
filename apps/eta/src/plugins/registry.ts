@@ -156,6 +156,7 @@ export class PluginRegistry {
       [...entries.values()].map((entry) => [
         entry.name,
         entry.hash,
+        entry.source,
         entry.problem,
         entry.plugin?.reports,
       ]),

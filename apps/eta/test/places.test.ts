@@ -18,6 +18,7 @@ import * as nodeFs from "node:fs";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { PlaceError, Places } from "@eta/places";
 import { describe, expect, it } from "vitest";
@@ -62,12 +63,17 @@ const programs =
     return { code: 127, stdout: "", stderr: "", missing: true };
   };
 
+const hostOs = process.platform;
+const isWin = hostOs === "win32";
+const hostDisplay = (sub = ""): string =>
+  sub === "" ? "~" : isWin ? `~\\${sub.replaceAll("/", "\\")}` : `~/${sub}`;
+
 /** A primary whose home is a temporary directory. */
 async function primaryWorld(options: { run?: PlaceRunner; git?: string } = {}) {
   const home = await realpath(await tempDir("eta-places-home-"));
   const places = new Places({
     home,
-    os: "linux",
+    os: hostOs,
     ...(options.run === undefined ? {} : { run: options.run }),
     ...(options.git === undefined ? {} : { git: options.git }),
   });
@@ -96,7 +102,7 @@ describe("places on the primary", () => {
       path: "~/Developer",
     });
     expect(listing).toMatchObject({
-      display: "~/Developer",
+      display: hostDisplay("Developer"),
       crumbs: [{ name: "~" }, { name: "Developer" }],
     });
     expect(listing.entries.map((e) => [e.name, e.git, e.projectId])).toEqual([
@@ -105,18 +111,18 @@ describe("places on the primary", () => {
     ]);
     const found = await call<PlaceSearchResult>(w, "search", { query: "eta" });
     expect(found.matches[0]).toMatchObject({
-      display: "~/Developer/eta",
+      display: hostDisplay("Developer/eta"),
       projectId: project.id,
       git: true,
     });
-    expect(project.display).toBe("~/Developer/eta");
+    expect(project.display).toBe(hostDisplay("Developer/eta"));
   });
 
   it("makes a directory, and says why it cannot", async () => {
     const { w, home } = await primaryWorld();
     expect(await call(w, "mkdir", { parent: "~", name: "fresh" })).toEqual({
       path: join(home, "fresh"),
-      display: "~/fresh",
+      display: hostDisplay("fresh"),
     });
     expect(existsSync(join(home, "fresh"))).toBe(true);
     expect(
@@ -140,7 +146,7 @@ describe("places on the primary", () => {
     const { w, home } = await primaryWorld({ run: programs("signed_out") });
     const before = await call<PlaceCapabilities>(w, "capabilities", {});
     expect(before).toMatchObject({
-      flavor: "posix",
+      flavor: isWin ? "win32" : "posix",
       home,
       git: true,
       gh: "signed_out",
@@ -153,7 +159,7 @@ describe("places on the primary", () => {
       (await call<PlaceCapabilities>(w, "capabilities", {})).cloneParent,
     ).toEqual({
       path: join(home, "Developer"),
-      display: "~/Developer",
+      display: hostDisplay("Developer"),
     });
     // The last clone's parent, once there was one.
     await mkdir(join(home, "src"));
@@ -165,7 +171,7 @@ describe("places on the primary", () => {
     expect(
       (await call<PlaceCapabilities>(w, "capabilities", {})).cloneParent
         .display,
-    ).toBe("~/src");
+    ).toBe(hostDisplay("src"));
     expect(await call(w, "repos", { query: "eta" })).toEqual({
       available: false,
       reason: "gh_signed_out",
@@ -183,7 +189,7 @@ describe("projects.create, by the machine's rules", () => {
     })) as ProjectResults["create"];
     expect(made.project).toMatchObject({
       path: join(home, "code"),
-      display: "~/code",
+      display: hostDisplay("code"),
       name: "code",
     });
     await expect(
@@ -196,7 +202,11 @@ describe("projects.create, by the machine's rules", () => {
       w.client.call("projects", "create", { path: "~/file" }),
     ).rejects.toThrow(/not a directory/);
     expect(
-      await problem(w.client.call("projects", "create", { path: "C:\\Users" })),
+      await problem(
+        w.client.call("projects", "create", {
+          path: isWin ? "/home/ada" : "C:\\Users",
+        }),
+      ),
     ).toBe("invalid");
     // Making it is using it.
     await until(
@@ -216,8 +226,8 @@ describe("recent places", () => {
     expect(
       recentOf(w, primaryId(w)).map((p) => [p.display, p.projectId]),
     ).toEqual([
-      ["~/b", null],
-      ["~/a", project.id],
+      [hostDisplay("b"), null],
+      [hostDisplay("a"), project.id],
     ]);
   });
 
@@ -243,10 +253,10 @@ describe("recent places", () => {
     });
     await until(() => recentOf(w, machineId).length === 4);
     expect(recentOf(w, machineId).map((p) => p.display)).toEqual([
-      "~/now",
-      "~/web-1",
-      "~/both",
-      "~/phone-1",
+      hostDisplay("now"),
+      hostDisplay("web-1"),
+      hostDisplay("both"),
+      hostDisplay("phone-1"),
     ]);
   });
 });
@@ -273,12 +283,12 @@ describe("cloning on the primary", () => {
     ]);
     await mkdir(join(home, "src"));
     const { clone } = await call<{ clone: CloneView }>(w, "clone", {
-      url: `file://${origin}`,
+      url: pathToFileURL(origin).href,
       parent: "~/src",
     });
     expect(clone).toMatchObject({
       status: "running",
-      target: { display: "~/src/origin" },
+      target: { display: hostDisplay("src/origin") },
     });
     const done = () =>
       w.client
@@ -289,11 +299,13 @@ describe("cloning on the primary", () => {
     expect(
       (await call<PlaceCapabilities>(w, "capabilities", {})).cloneParent
         .display,
-    ).toBe("~/src");
-    expect(recentOf(w, primaryId(w))[0]?.display).toBe("~/src/origin");
+    ).toBe(hostDisplay("src"));
+    expect(recentOf(w, primaryId(w))[0]?.display).toBe(
+      hostDisplay("src/origin"),
+    );
     // Into a directory that is there now: refused by the machine.
     const again = await call<{ clone: CloneView }>(w, "clone", {
-      url: `file://${origin}`,
+      url: pathToFileURL(origin).href,
       parent: "~/src",
     });
     await until(
@@ -312,12 +324,29 @@ describe("cloning on the primary", () => {
   it("stops a clone when cancelled", async () => {
     // A git that says how far it got, then waits to be stopped.
     const bin = await tempDir("eta-places-git-");
-    const git = join(bin, "git");
-    await writeFile(
-      git,
-      `#!/bin/sh\nprintf 'Receiving objects:  20%% (2/10)\\r' >&2\nexec sleep 60\n`,
-    );
-    await chmod(git, 0o755);
+    let git: string;
+    if (isWin) {
+      const script = join(bin, "git.js");
+      git = join(bin, "git.exe");
+      await writeFile(
+        script,
+        'process.stderr.write("Receiving objects:  20% (2/10)\\r");\nsetInterval(() => {}, 1000);\n',
+      );
+      await exec(process.execPath, [
+        "build",
+        "--compile",
+        script,
+        "--outfile",
+        git,
+      ]);
+    } else {
+      git = join(bin, "git");
+      await writeFile(
+        git,
+        `#!/bin/sh\nprintf 'Receiving objects:  20%% (2/10)\\r' >&2\nexec sleep 60\n`,
+      );
+      await chmod(git, 0o755);
+    }
     const run = programs();
     const { w } = await primaryWorld({ run, git });
     const { clone } = await call<{ clone: CloneView }>(w, "clone", {
@@ -347,7 +376,7 @@ describe("places on a remote machine", () => {
     w.client.subscribe("places");
     const daemonHome = await realpath(await tempDir("eta-daemon-home-"));
     const daemon = await startDaemon(w.host, w.client, {
-      node: { places: new Places({ home: daemonHome, os: "linux" }) },
+      node: { places: new Places({ home: daemonHome, os: hostOs }) },
     });
     await approve(w.client, daemon);
     const machineId = daemon.machineId;
@@ -361,7 +390,7 @@ describe("places on a remote machine", () => {
       query: "remote",
     });
     expect(found.matches).toMatchObject([
-      { display: "~/work/remote-repo", git: true },
+      { display: hostDisplay("work/remote-repo"), git: true },
     ]);
     expect(
       await call(w, "mkdir", {
@@ -371,7 +400,7 @@ describe("places on a remote machine", () => {
       }),
     ).toEqual({
       path: join(daemonHome, "work/made-here"),
-      display: "~/work/made-here",
+      display: hostDisplay("work/made-here"),
     });
     expect(existsSync(join(daemonHome, "work/made-here"))).toBe(true);
 
@@ -394,7 +423,7 @@ describe("places on a remote machine", () => {
     ]);
     const { clone } = await call<{ clone: CloneView }>(w, "clone", {
       machineId,
-      url: `file://${origin}`,
+      url: pathToFileURL(origin).href,
       parent: "~/work",
       name: "copy",
     });
@@ -414,7 +443,7 @@ describe("places on a remote machine", () => {
     expect(made.project).toMatchObject({
       machineId,
       path: join(daemonHome, "work/copy"),
-      display: "~/work/copy",
+      display: hostDisplay("work/copy"),
     });
 
     await daemon.stop();

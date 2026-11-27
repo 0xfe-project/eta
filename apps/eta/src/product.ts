@@ -1047,6 +1047,7 @@ export function createProduct(options: {
       mirrors.detach();
       plugins.close();
       await mcp.close();
+      await captainAudit.close();
       await web?.close();
     },
     async mount(server) {

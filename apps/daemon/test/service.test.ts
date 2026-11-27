@@ -67,9 +67,12 @@ describe("the service definition", () => {
     expect(installedEnv({})).toEqual({});
     // What `bun run` put in front is the checkout's, and a directory named twice is one.
     expect(
-      installedEnv({
-        PATH: "/repo/node_modules/.bin:/home/node_modules/.bin:/usr/bin:/bin:/usr/bin",
-      }),
+      installedEnv(
+        {
+          PATH: "/repo/node_modules/.bin:/home/node_modules/.bin:/usr/bin:/bin:/usr/bin",
+        },
+        ":",
+      ),
     ).toEqual({ PATH: "/usr/bin:/bin" });
   });
 
@@ -80,18 +83,19 @@ describe("the service definition", () => {
       args: [],
       env: { PATH: "C:\\bin;C:\\Git\\cmd" },
     };
+    const home = process.platform === "win32" ? "C:\\Users\\u" : "/Users/u";
     const { content, path } = serviceDefinition(
       { program: "C:\\eta\\eta-host.exe", args: ["--port", "8790"] },
       "win32",
-      "/Users/u",
+      home,
       host,
     );
-    expect(path).toBe("/Users/u/.eta/service/io.eta.host.json");
+    expect(path).toBe(join(home, ".eta", "service", "io.eta.host.json"));
     expect(JSON.parse(content)).toEqual({
       argv: ["C:\\eta\\eta-host.exe", "--port", "8790"],
       env: host.env,
-      log: "/Users/u/.eta/service/io.eta.host.log",
-      state: "/Users/u/.eta/service/io.eta.host.state.json",
+      log: join(home, ".eta", "service", "io.eta.host.log"),
+      state: join(home, ".eta", "service", "io.eta.host.state.json"),
       once: false,
     });
   });

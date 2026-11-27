@@ -6,7 +6,7 @@ import type { Exec, ServiceUnit } from "../src/service";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { launchdManager, launchdRunner } from "../src/service-launchd";
 import { detachedRunner, serviceManager } from "../src/service-manager";
@@ -241,7 +241,12 @@ describe("launchd", () => {
   });
 
   it("starts what is not loaded by bootstrap, and what is by kickstart", async () => {
-    const plist = join(home, "Library", "LaunchAgents", "io.eta.host.plist");
+    const plist = posix.join(
+      home,
+      "Library",
+      "LaunchAgents",
+      "io.eta.host.plist",
+    );
     const { calls, run } = recorder({
       "launchctl print": [new Error("113"), "loaded"],
     });
@@ -549,6 +554,15 @@ describe("windows", () => {
     expect(calls.join("\n")).not.toContain("revoke");
   });
 
+  it("refuses to remove a service directory that is not an absolute .eta/service path", async () => {
+    const { api, calls } = fakeWindows();
+    const manager = windowsManager(unit, { ...options(api), home: "" });
+    await expect(manager.uninstall(program)).rejects.toThrow(
+      /unexpected service directory/,
+    );
+    expect(calls).toEqual([]);
+  });
+
   it("explains a refused stop: another account is what that means", async () => {
     const { api } = fakeWindows();
     const refusing = {
@@ -625,12 +639,20 @@ describe("windows", () => {
 });
 
 describe("choosing", () => {
+  const windows = {
+    worker: {
+      name: "io.eta.host-upgrade",
+      description: "eta host upgrade",
+    },
+  };
+
   it("gives this computer one, and the daemon none on Windows", () => {
     const original = Object.getOwnPropertyDescriptor(process, "platform");
     try {
       Object.defineProperty(process, "platform", { value: "win32" });
       expect(() => serviceManager(unit)).toThrow(/no service support on win32/);
       expect(() => detachedRunner()).toThrow(/win32/);
+      expect(serviceManager(unit, windows).name).toBe("io.eta.host");
     } finally {
       Object.defineProperty(
         process,
@@ -638,6 +660,6 @@ describe("choosing", () => {
         original as PropertyDescriptor,
       );
     }
-    expect(serviceManager(unit).name).toBe("io.eta.host");
+    expect(serviceManager(unit, windows).name).toBe("io.eta.host");
   });
 });

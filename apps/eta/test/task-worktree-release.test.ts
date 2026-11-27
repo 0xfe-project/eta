@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
 import { LocalTransport } from "@eta/ssh";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { prepareWorktree, removeWorktree } from "../src/tasks/workspace";
@@ -33,32 +34,40 @@ const make = () =>
   });
 
 describe("removeWorktree", () => {
-  it("removes a clean worktree and keeps its branch", async () => {
-    const made = await make();
-    expect(existsSync(made.path)).toBe(true);
-    const said = await removeWorktree(transport, {
-      projectPath: join(dir, "repo"),
-      path: made.path,
-    });
-    expect(said).toBe("removed");
-    expect(existsSync(made.path)).toBe(false);
-    expect(
-      await sh(`cd '${join(dir, "repo")}' && git branch --list eta/task-7`),
-    ).toContain("eta/task-7");
-    // A task brought back finds its branch again.
-    expect(existsSync((await make()).path)).toBe(true);
-  });
+  it(
+    "removes a clean worktree and keeps its branch",
+    async () => {
+      const made = await make();
+      expect(existsSync(made.path)).toBe(true);
+      const said = await removeWorktree(transport, {
+        projectPath: join(dir, "repo"),
+        path: made.path,
+      });
+      expect(said).toBe("removed");
+      expect(existsSync(made.path)).toBe(false);
+      expect(
+        await sh(`cd '${join(dir, "repo")}' && git branch --list eta/task-7`),
+      ).toContain("eta/task-7");
+      // A task brought back finds its branch again.
+      expect(existsSync((await make()).path)).toBe(true);
+    },
+    process.platform === "win32" ? 60_000 : undefined,
+  );
 
-  it("leaves a worktree with uncommitted work", async () => {
-    const made = await make();
-    await writeFile(join(made.path, "wip.txt"), "unsaved");
-    const said = await removeWorktree(transport, {
-      projectPath: join(dir, "repo"),
-      path: made.path,
-    });
-    expect(said).toBe("kept");
-    expect(existsSync(join(made.path, "wip.txt"))).toBe(true);
-  });
+  it(
+    "leaves a worktree with uncommitted work",
+    async () => {
+      const made = await make();
+      await writeFile(join(made.path, "wip.txt"), "unsaved");
+      const said = await removeWorktree(transport, {
+        projectPath: join(dir, "repo"),
+        path: made.path,
+      });
+      expect(said).toBe("kept");
+      expect(existsSync(join(made.path, "wip.txt"))).toBe(true);
+    },
+    process.platform === "win32" ? 60_000 : undefined,
+  );
 
   it("says absent when there is nothing to remove", async () => {
     expect(
