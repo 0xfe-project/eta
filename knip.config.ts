@@ -4,7 +4,7 @@ import type { KnipConfig } from "knip";
 // sidecar only uses package.json for Turbo scripts.
 export default {
   // System tools the scripts call (uv for the Python sidecar).
-  ignoreBinaries: ["uv", "nsh"],
+  ignoreBinaries: ["uv"],
   // `packages/TOBEREFR` holds plugins parked until the ESM rework is done (TODO.md there).
   ignore: ["**/test/**/fixtures/**", "packages/TOBEREFR/**"],
   // CSS files are part of the module graph: their @imports reference
@@ -91,12 +91,6 @@ export default {
         "html2canvas-pro",
         "jsqr",
       ],
-    },
-    "apps/mobile": {
-      // `nsh` builds it: the entries are named in its commands.
-      entry: ["App.tsx", "DevApp.tsx", "src/**/*.test.tsx"],
-      // The Native Shell runtime provides them; nothing installs them.
-      ignoreDependencies: ["nsh", "websocket"],
     },
   },
 } satisfies KnipConfig;
