@@ -1,10 +1,11 @@
 /**
- * `git clone` on the machine, with `simple-git`: the progress git reports, a stop when asked, a
- * stall that ends it, and a failure that says what went wrong in words a person can act on.
+ * "git clone" on the machine, run as the git program itself: the progress git reports, a stop
+ * when asked, a stall that ends it, and a failure that says what went wrong in words a person
+ * can act on.
  *
- * A repository chosen from `gh`'s list is cloned over the protocol gh is set to
- * (`gh config get git_protocol`), and over HTTPS with gh as git's credential helper
- * (`gh auth git-credential`, what `gh auth setup-git` configures): the user's gh login, and no
+ * A repository chosen from gh's list is cloned over the protocol gh is set to
+ * ("gh config get git_protocol"), and over HTTPS with gh as git's credential helper
+ * ("gh auth git-credential", what "gh auth setup-git" configures): the user's gh login, and no
  * token kept by eta. Nothing may stop to ask a question nobody will see: prompts for a password
  * or a host key fail instead.
  */
@@ -12,8 +13,7 @@ import type { CloneProgress } from "@eta/client-contracts";
 import type { PlaceFs, PlaceRunner } from "./system";
 import process from "node:process";
 import { cloneUrlOf, isCloneable, isGitRemote } from "@eta/client-contracts";
-import { isGuardedEnvKey } from "@simple-git/argv-parser";
-import { GitPluginError, simpleGit } from "simple-git";
+import { execa } from "execa";
 import { classifyNetwork, PlaceError } from "./system";
 
 /** A clone that writes nothing for this long is stuck, and is stopped like a cancelled one. */
@@ -26,16 +26,21 @@ const QUIET_ENV = {
   GIT_SSH_COMMAND: "ssh -o BatchMode=yes",
 };
 
+/** git's progress lines, e.g. "Receiving objects:  10% (1/10)". git ends each with a carriage return. */
+const PROGRESS = /(Enumerating objects|Counting objects|Compressing objects|Receiving objects|Resolving deltas|Writing objects|Updating files):\s+(\d+)%/g;
+
 /**
- * The environment a clone runs in: the machine's, less what simple-git guards against (an
- * editor, a pager, a work tree, an SSH command, a config of the shell's: nothing a fresh clone
- * should follow, and what simple-git would refuse to be handed), plus the quiet ones above.
+ * The environment a clone runs in: the machine's, less git's own settings (a config, a work tree,
+ * an editor, a pager, an SSH command) that a fresh clone should not follow, plus the quiet ones.
  */
 function cloneEnv(): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env))
-    if (value !== undefined && !isGuardedEnvKey(key.toLowerCase()))
-      env[key] = value;
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value === undefined) continue;
+    const upper = key.toUpperCase();
+    if (upper.startsWith("GIT_") || upper === "EDITOR" || upper === "VISUAL" || upper === "PAGER") continue;
+    env[key] = value;
+  }
   return { ...env, ...QUIET_ENV };
 }
 
@@ -72,7 +77,7 @@ export async function clone(input: {
   protocol?: "https" | "ssh";
   target: string;
   cwd: string;
-  /** `gh` is signed in: an `owner/repo` with no protocol is cloned with its login. */
+  /** gh is signed in: an owner/repo with no protocol is cloned with its login. */
   useGh: boolean;
   run: PlaceRunner;
   fs: PlaceFs;
@@ -82,7 +87,7 @@ export async function clone(input: {
   onProgress?: (progress: CloneProgress) => void;
 }): Promise<void> {
   const typed = input.url.trim();
-  // Neither a remote git can clone nor `owner/repo` (an option dressed as a URL included).
+  // Neither a remote git can clone nor owner/repo (an option dressed as a URL included).
   if (!isCloneable(typed)) throw new PlaceError("invalid");
   const shorthand = !isGitRemote(typed);
   const viaGh = shorthand && input.protocol === undefined && input.useGh;
@@ -96,52 +101,68 @@ export async function clone(input: {
     protocol = asked.stdout.trim() === "ssh" ? "ssh" : "https";
   }
   const url = cloneUrlOf(typed, protocol);
+  const helper =
+    viaGh && protocol === "https"
+      ? ["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"]
+      : [];
+  const args = [...helper, "clone", "--progress", url, input.target];
+
+  const child = execa(input.git ?? "git", args, {
+    cwd: input.cwd,
+    env: cloneEnv(),
+    cancelSignal: input.signal,
+    stdin: "ignore",
+  });
+
+  // A stall is silence on stderr for STALL_MS; every chunk of progress resets the wait.
+  let stalled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = (): void => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      stalled = true;
+      child.kill();
+    }, STALL_MS);
+  };
+  arm();
+
+  let stderr = "";
   let last = "";
-  const git = simpleGit({
-    baseDir: input.cwd,
-    ...(input.git === undefined
-      ? {}
-      : { binary: input.git, unsafe: { allowUnsafeCustomBinary: true } }),
-    ...(input.signal === undefined ? {} : { abort: input.signal }),
-    timeout: { block: STALL_MS },
-    allowEnvironment: Object.keys(QUIET_ENV),
-    ...(viaGh && protocol === "https"
-      ? {
-          config: [
-            "credential.helper=",
-            "credential.helper=!gh auth git-credential",
-          ],
-          allowConfig: ["credential.helper"],
-        }
-      : {}),
-    progress: ({ stage, progress }) => {
-      const key = `${stage}:${progress}`;
-      if (key === last) return;
+  child.stderr?.on("data", (chunk: Buffer) => {
+    const text = chunk.toString("utf8");
+    stderr += text;
+    arm();
+    for (const match of text.matchAll(PROGRESS)) {
+      const phase = (match[1] ?? "").split(" ")[0]!.toLowerCase();
+      const percent = Number(match[2]);
+      const key = phase + ":" + String(percent);
+      if (key === last) continue;
       last = key;
-      input.onProgress?.({ phase: stage, percent: progress });
-    },
-  }).env(cloneEnv());
+      input.onProgress?.({ phase, percent });
+    }
+  });
+
   try {
-    await git.clone(url, input.target);
+    await child;
   } catch (error) {
     // What git left behind is ours: the target was not there before it started.
     await input.fs.remove(input.target).catch(() => undefined);
-    throw failureOf(error, input.signal);
+    throw failureOf(error, { stderr, stalled, signal: input.signal });
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 function failureOf(
   error: unknown,
-  signal: AbortSignal | undefined,
+  state: { stderr: string; stalled: boolean; signal: AbortSignal | undefined },
 ): PlaceError {
-  if (signal?.aborted === true) return new PlaceError("cancelled");
-  if (error instanceof GitPluginError) {
-    if (error.plugin === "abort") return new PlaceError("cancelled");
-    if (error.plugin === "timeout") return new PlaceError("timeout");
-  }
+  if (state.signal?.aborted === true) return new PlaceError("cancelled");
+  if (state.stalled) return new PlaceError("timeout");
+  const code = (error as { code?: unknown }).code;
+  const causeCode = (error as { cause?: { code?: unknown } }).cause?.code;
+  // The program could not be started at all.
+  if (code === "ENOENT" || causeCode === "ENOENT") return new PlaceError("no_git");
   const message = error instanceof Error ? error.message : String(error);
-  // simple-git says so when the program itself could not be started.
-  if (/\bENOENT\b/.test(message) && !/fatal:/.test(message))
-    return new PlaceError("no_git");
-  return classifyCloneFailure(message);
+  return classifyCloneFailure(state.stderr.trim() === "" ? message : state.stderr);
 }

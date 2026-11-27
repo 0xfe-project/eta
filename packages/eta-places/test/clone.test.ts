@@ -1,6 +1,6 @@
 /**
  * Cloning: git's progress as it comes, a stop that leaves nothing behind, and a failure that says
- * which of the usual troubles it was. `simple-git` runs a scripted git program for the troubles,
+ * which of the usual troubles it was. A scripted git program stands in for the troubles,
  * and a real git against a local repository for the clone itself.
  */
 import type { PlaceRunner, RunResult } from "../src";
