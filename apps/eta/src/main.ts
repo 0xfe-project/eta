@@ -53,8 +53,8 @@ const [command, ...rest] = process.argv.slice(2);
 if (command === "mcp-bridge") {
   const controller = new AbortController();
   for (const signal of ["SIGINT", "SIGTERM"] as const)
-    process.on(signal, () => controller.abort());
-  process.exit(await runMcpBridge({ signal: controller.signal }));
+    process.on(signal, () => controller.abort(signal));
+  process.exit(await runMcpBridge({ args: rest, signal: controller.signal }));
 }
 
 // Before anything can start a process that would inherit it.

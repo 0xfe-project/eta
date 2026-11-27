@@ -45,8 +45,13 @@ import { VERSION } from "./version";
 if (process.argv[2] === "mcp-bridge") {
   const controller = new AbortController();
   for (const signal of ["SIGINT", "SIGTERM"] as const)
-    process.on(signal, () => controller.abort());
-  process.exit(await runMcpBridge({ signal: controller.signal }));
+    process.on(signal, () => controller.abort(signal));
+  process.exit(
+    await runMcpBridge({
+      args: process.argv.slice(3),
+      signal: controller.signal,
+    }),
+  );
 }
 
 const { positionals, values } = parseArgs({
