@@ -39,23 +39,19 @@ test("Context panel task and artifact empty states have symmetric vertical paddi
     "context-tasks-empty",
     "text:No tasks yet",
   );
-  expectSymmetricEmptyRow(app, "context-tasks-no-open", "text:No open tasks");
+  const noOpen = expectSymmetricEmptyRow(
+    app,
+    "context-tasks-no-open",
+    "text:No open tasks",
+  );
 
-  // Also verify the action button inside the noOpenTasks empty state row
-  // (nth=0 is the ViewAll button inside SectionHeading).
-  const noOpenSection = app.layout("id:context-tasks-no-open")!;
-  const noOpenEmptyTop = noOpenSection.y + sizes.sectionHeader;
-  const noOpenEmptyBottom =
-    noOpenSection.y + noOpenSection.height - border.hair;
-  const action = app.layout(
-    "id:context-tasks-no-open >> label:View all tasks >> nth=1",
-  )!;
-  expect(action).toBeTruthy();
-  expect(action.y).toBeGreaterThanOrEqual(noOpenEmptyTop);
-  const actionTopGap = action.y - noOpenEmptyTop;
-  const actionBottomGap = noOpenEmptyBottom - (action.y + action.height);
-  expect(actionTopGap).toBeGreaterThanOrEqual(space[8] - 1);
-  expect(Math.abs(actionTopGap - actionBottomGap)).toBeLessThanOrEqual(1);
+  // ViewAll in SectionHeading stays rendered, with no duplicate button in the empty row.
+  expect(
+    app.shows("id:context-tasks-no-open >> label:View all tasks >> nth=0"),
+  ).toBe(true);
+  expect(
+    app.shows("id:context-tasks-no-open >> label:View all tasks >> nth=1"),
+  ).toBe(false);
 
   const artifactsEmpty = expectSymmetricEmptyRow(
     app,
@@ -69,5 +65,6 @@ test("Context panel task and artifact empty states have symmetric vertical paddi
   );
 
   expect(tasksEmpty.section.height).toBe(membersEmpty.section.height);
+  expect(noOpen.section.height).toBe(membersEmpty.section.height);
   expect(artifactsEmpty.section.height).toBe(membersEmpty.section.height);
 });

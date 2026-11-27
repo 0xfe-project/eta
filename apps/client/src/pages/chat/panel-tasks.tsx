@@ -191,16 +191,11 @@ export function ContextTasks(props: {
             retry: load.retry,
             retrying: load.retrying(),
           }}
-          empty={
-            props.tasks.length
-              ? {
-                  title: uiText("noOpenTasks"),
-                  actions: [
-                    { label: uiText("tasksViewAll"), onPress: props.onViewAll },
-                  ],
-                }
-              : { title: uiText("noTasksYet") }
-          }
+          empty={{
+            title: props.tasks.length
+              ? uiText("noOpenTasks")
+              : uiText("noTasksYet"),
+          }}
           style={{
             paddingHorizontal: space[12],
             borderBottomWidth: 1,
