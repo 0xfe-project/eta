@@ -77,7 +77,11 @@ export function taskNeedsAttention(task: BoardTaskView): boolean {
   );
 }
 
-export function TaskGlyph(props: { status: BoardTaskStatus; size?: number }) {
+export function TaskGlyph(props: {
+  status: BoardTaskStatus;
+  size?: number;
+  testID?: string;
+}) {
   const c = colors();
   return (
     <ShapeImage
@@ -85,6 +89,7 @@ export function TaskGlyph(props: { status: BoardTaskStatus; size?: number }) {
         .replaceAll("currentColor", c()[tones[props.status]])
         .replaceAll("paper", c().canvas)}
       size={props.size}
+      testID={props.testID}
     />
   );
 }
@@ -100,11 +105,12 @@ export function SubtreeGlyph(props: { size?: number }) {
   );
 }
 
-function ShapeImage(props: { shape: string; size?: number }) {
+function ShapeImage(props: { shape: string; size?: number; testID?: string }) {
   const src = () =>
     `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">${props.shape}</svg>`)}`;
   return (
     <Image
+      testID={props.testID}
       src={src()}
       fadeDuration={0}
       style={{
