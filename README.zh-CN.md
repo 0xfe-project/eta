@@ -47,24 +47,32 @@
 
 ## 快速安装
 
-既可以直接打开桌面端或移动端应用零终端起步，也可以把 `eta-host` 部署在常驻服务器上，让 Agent 舰队在合上笔记本后继续工作。
+可以把安装手册直接交给你的 AI Agent 全自动部署，也可以下载原生客户端零终端起步，或将 `eta-host` 部署在常驻服务器上，让 Agent 舰队在合上笔记本后继续工作。
 
-### 方式一：原生客户端（桌面端 & 移动端，零终端即开即用）
+### 方式一：让你的 AI Agent 帮你安装（最省心）
 
-前往 [GitHub Releases](https://github.com/0xfe-project/eta/releases) 下载对应平台的安装包，打开后直接选择 **Run on this computer**（自动托管本地宿主）或 **Connect to an existing host**（连接已有宿主）。
+把下面这段提示词直接发给 **Claude Code**、**Codex**、**Antigravity**、**Cursor**、**OpenCode** 或任意编码 Agent —— 它会先依据 [INSTALL.md](INSTALL.md) 检测你的系统环境，自动选择最合适的方案，并妥善处理 macOS 隔离属性、Windows SmartScreen、Linux Flatpak 与 `.tar.gz` 选型、常驻宿主 + Web UI 及移动端配对：
 
-| 平台                          | 安装包                         | 说明                                                                                                       |
-| ----------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| **macOS** (Apple Silicon)     | `eta-desktop-darwin-arm64.dmg` | 拖入 Applications；安装包暂未签名，首次运行前请执行 `xattr -dr com.apple.quarantine /Applications/eta.app` |
-| **Windows** (x64)             | `eta-desktop-windows-x64.zip`  | 解压后运行 `Eta.exe`                                                                                       |
-| **Linux** (x64)               | `eta-desktop-linux-x64.tar.gz` | 解压应用目录并启动                                                                                         |
-| **Android** (8+, arm64/armv7) | `eta-android.apk`              | 侧载安装 APK，支持地址直连或扫码配对                                                                       |
-| **iOS** (15+)                 | `eta-ios.ipa`                  | 可通过 AltStore / Sideloadly 或自签证书安装                                                                |
-| **HarmonyOS**                 | `eta-harmonyos.hap`            | 安装至真机前请先使用个人开发者证书签名                                                                     |
+```text
+请阅读 https://raw.githubusercontent.com/0xfe-project/eta/main/INSTALL.md 并帮我在本机安装 Eta。先检测我的系统环境，推荐最合适的安装方式，自动处理平台签名/依赖问题，并在完成后验证运行正常。
+```
 
-习惯浏览器或终端？所有 `eta-host` 均自带完整的 **Web UI**（默认端口 `:8787`），独立的终端 **TUI**（`eta`）也让你在命令行中顺滑操控。桌面端与 Android 客户端还可在 **Settings → Update** 直接接收带签名的 **应用内 / OTA 热更新**。
+### 方式二：原生客户端（桌面端 & 移动端，零终端即开即用）
 
-### 方式二：常驻宿主（7×24 小时舰队与多设备协同）
+前往 [GitHub Releases](https://github.com/0xfe-project/eta/releases) 下载对应平台的 `desktop-v*` 客户端安装包（与 `v*` 宿主版本独立发布），打开后选择 **Run on this computer**（自动托管本地宿主）或 **Connect to an existing host**（连接已有宿主）。
+
+| 平台                          | 安装包                                                            | 说明                                                                                                                                                                                                        |
+| ----------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **macOS** (Apple Silicon)     | `eta-desktop-darwin-arm64.dmg`                                    | 拖入 Applications；安装包暂未签名，首次运行前请执行 `xattr -dr com.apple.quarantine /Applications/Eta.app`                                                                                                  |
+| **Windows** (x64)             | `eta-desktop-windows-x64.zip`                                     | 解压后运行 `Eta.exe`（若弹出 SmartScreen 提示，请点击 **More info → Run anyway**）                                                                                                                          |
+| **Linux** (x64)               | `eta-desktop-linux-x64.tar.gz`<br>`eta-desktop-linux-x64.flatpak` | `.tar.gz` 支持应用内热更新与本地宿主托管；`.flatpak` 可通过 `flatpak install --user` 跨发行版安装（推荐搭配系统或远程 `eta-host` 并选择 **Connect to an existing host**；升级需重新安装新版 `.flatpak` 包） |
+| **Android** (8+, arm64/armv7) | `eta-android.apk`                                                 | 侧载安装 APK，支持地址直连或扫码配对                                                                                                                                                                        |
+| **iOS** (15+)                 | `eta-ios.ipa`                                                     | 可通过 AltStore / Sideloadly 或自签证书安装                                                                                                                                                                 |
+| **HarmonyOS**                 | `eta-harmonyos.hap`                                               | 安装至真机前请先使用个人开发者证书签名                                                                                                                                                                      |
+
+习惯浏览器或终端？所有 `eta-host` 均自带完整的 **Web UI**（默认端口 `:8787`），独立的终端 **TUI**（`eta`）也让你在命令行中顺滑操控。桌面端（`.dmg`、`.zip`、`.tar.gz`）与 Android 客户端还可在 **Settings → Update** 直接接收带签名的 **应用内 / OTA 热更新**。
+
+### 方式三：常驻宿主（7×24 小时舰队与多设备协同）
 
 `eta-host` 是发布在 [Latest Releases](https://github.com/0xfe-project/eta/releases/latest) 的单文件可执行程序，集成了 Web 界面与完整编排能力，全部数据保存在 `~/.eta`。
 
@@ -226,6 +234,7 @@ eta-host upgrade
 
 ## 相关文档
 
+- [安装指南（Agent 可执行手册）](INSTALL.md) — 面向 AI Agent 的全平台自动化安装手册（macOS、Windows、Linux、Docker 与移动端）
 - [自托管指南](docs/self-hosting.md) — 启动参数、Token 门禁、反向代理、`eta-daemon` 与版本升级
 - [架构总览](docs/architecture/overview.md) — 进程模型、管道协议、数据目录与插件分层
 - [开发指南](docs/development.md) — 仓库结构、Bun / Node 24 环境配置、源码启动与 CI 校验

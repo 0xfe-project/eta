@@ -47,24 +47,32 @@ Bring different coding agents into the **same group chat** so they can plan, cod
 
 ## Install
 
-Start with a native desktop or mobile app in seconds, or deploy `eta-host` on an always-on machine so your agent fleet keeps shipping while your laptop is closed.
+Start by handing our agent runbook to your AI coding assistant, open a native desktop or mobile app, or deploy `eta-host` on an always-on machine so your agent fleet keeps shipping while your laptop is closed.
 
-### Option 1 — Native Apps (Desktop & Mobile — zero-terminal start)
+### Option 1 — Let Your AI Agent Install Eta (Fastest)
 
-Download the app for your device from [GitHub Releases](https://github.com/0xfe-project/eta/releases), launch it, and choose **Run on this computer** (manages the local host automatically) or **Connect to an existing host**.
+Hand this prompt to **Claude Code**, **Codex**, **Antigravity**, **Cursor**, **OpenCode**, or any coding agent. It inspects your machine using [INSTALL.md](INSTALL.md), picks the best path, and handles macOS quarantine removal, Windows SmartScreen, Linux Flatpak vs. `.tar.gz`, always-on host + Web UI, and mobile setup automatically:
 
-| Platform                      | Package                        | Notes                                                                                                                 |
-| ----------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| **macOS** (Apple Silicon)     | `eta-desktop-darwin-arm64.dmg` | Drag to Applications; run `xattr -dr com.apple.quarantine /Applications/eta.app` before first launch (unsigned build) |
-| **Windows** (x64)             | `eta-desktop-windows-x64.zip`  | Extract and launch `Eta.exe`                                                                                          |
-| **Linux** (x64)               | `eta-desktop-linux-x64.tar.gz` | Extract app bundle and launch                                                                                         |
-| **Android** (8+, arm64/armv7) | `eta-android.apk`              | Sideload APK; pair via host URL or QR code                                                                            |
-| **iOS** (15+)                 | `eta-ios.ipa`                  | Sideload via AltStore / Sideloadly or re-sign with your team profile                                                  |
-| **HarmonyOS**                 | `eta-harmonyos.hap`            | Sign with your developer certificate before installing on device                                                      |
+```text
+Read https://raw.githubusercontent.com/0xfe-project/eta/main/INSTALL.md and install Eta on this machine. Inspect my environment first, recommend the best path, handle any OS quirks, and verify it works.
+```
 
-Prefer a browser or terminal? Every host serves the full **Web UI** on port `:8787`, and the standalone terminal **TUI** (`eta`) gives you full control from the shell. Desktop and Android apps also receive signed **in-app / OTA updates** under **Settings → Update**.
+### Option 2 — Native Apps (Desktop & Mobile — zero-terminal start)
 
-### Option 2 — Always-On Host (24/7 fleets & multi-device access)
+Download the app for your device from the `desktop-v*` releases on [GitHub Releases](https://github.com/0xfe-project/eta/releases) (published separately from `v*` host releases), launch it, and choose **Run on this computer** (manages the local host automatically) or **Connect to an existing host**.
+
+| Platform                      | Package                                                           | Notes                                                                                                                                                                                                 |
+| ----------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **macOS** (Apple Silicon)     | `eta-desktop-darwin-arm64.dmg`                                    | Drag `Eta.app` to Applications; run `xattr -dr com.apple.quarantine /Applications/Eta.app` before first launch (unsigned build)                                                                       |
+| **Windows** (x64)             | `eta-desktop-windows-x64.zip`                                     | Extract and launch `Eta.exe` (if SmartScreen prompts, click **More info → Run anyway**)                                                                                                               |
+| **Linux** (x64)               | `eta-desktop-linux-x64.tar.gz`<br>`eta-desktop-linux-x64.flatpak` | `.tar.gz` supports in-app updates and local host management; `.flatpak` works across distros via `flatpak install --user` (pair with OS/remote `eta-host`; update by reinstalling the new `.flatpak`) |
+| **Android** (8+, arm64/armv7) | `eta-android.apk`                                                 | Sideload APK; pair via host URL or QR code                                                                                                                                                            |
+| **iOS** (15+)                 | `eta-ios.ipa`                                                     | Sideload via AltStore / Sideloadly or re-sign with your team profile                                                                                                                                  |
+| **HarmonyOS**                 | `eta-harmonyos.hap`                                               | Sign with your developer certificate before installing on device                                                                                                                                      |
+
+Prefer a browser or terminal? Every host serves the full **Web UI** on port `:8787`, and the standalone terminal **TUI** (`eta`) gives you full control from the shell. Desktop (`.dmg`, `.zip`, `.tar.gz`) and Android apps also receive signed **in-app / OTA updates** under **Settings → Update**.
+
+### Option 3 — Always-On Host (24/7 fleets & multi-device access)
 
 `eta-host` is a single self-contained binary on [Latest Releases](https://github.com/0xfe-project/eta/releases/latest) that serves the Web UI, runs agent sessions, and stores everything in `~/.eta`.
 
@@ -226,6 +234,7 @@ eta-host upgrade
 
 ## Documentation
 
+- [Install Guide (Agent-Executable)](INSTALL.md) — automated install runbook for AI agents across macOS, Windows, Linux, Docker, and mobile
 - [Self-hosting](docs/self-hosting.md) — flags, token gate, reverse proxies, `eta-daemon`, upgrades
 - [Architecture Overview](docs/architecture/overview.md) — processes, wire protocol, data model, plugins
 - [Development](docs/development.md) — repo layout, Bun/Node 24 setup, running from source, CI checks
