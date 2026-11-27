@@ -59,6 +59,12 @@ export const motion = {
   /** How long an agent face's idle motion takes to come in or die away, as
    * `@blobatar/react-native` ramps it. */
   faceRamp: 400,
+  /** A rolling number (`RollingNumber`). Each digit's wheel springs to its new digit over about
+   * `period` (critically damped, so it never passes it); a digit the number gains or loses grows
+   * or shrinks over about `presence`; the digits that turn start `stagger` apart, the ones
+   * first; a digit fades out `fade` em (not points) past the wheel's edge. `appear` is the fade
+   * of the number coming in, and of a mark beside it (the `≈` of an estimate). */
+  counter: { period: 700, presence: 600, stagger: 40, fade: 0.3, appear: 120 },
 } as const;
 
 /** Where something comes from as it fades in: below (a dialog, a sheet), the trailing edge (a
