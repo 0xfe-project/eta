@@ -48,7 +48,7 @@ function readShell(): ShellInfo | undefined {
 }
 
 const desktop = ["macos", "linux", "windows"].includes(platform.os);
-const android = platform.os === "android";
+const android = platform.os === "android" && platform.name !== "harmonyos";
 const shell = readShell();
 
 /** A release build that knows where its updates are: `nsh.json` has
