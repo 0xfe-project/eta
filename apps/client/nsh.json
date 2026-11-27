@@ -21,6 +21,7 @@
     },
     "webview": {
       "hosts": [
+        "*",
         "eta-camera.invalid",
         "eta-artifact.invalid",
         "eta-export.invalid"
