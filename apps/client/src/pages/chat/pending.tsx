@@ -223,7 +223,8 @@ export function Pending(props: {
           <Label
             variant="caption"
             tone="muted"
-            style={{ width: control.md, textAlign: "right", flexShrink: 0 }}
+            lines={1}
+            style={{ textAlign: "right", flexShrink: 0 }}
           >
             {relativeTime(props.when!)}
           </Label>
