@@ -58,6 +58,8 @@ test("desktop keeps its own sidebar toggle and has no list button of its own", a
   await app.press(fold);
   expect(app.count(unfold)).toBe(1);
   expect(app.shows(fold)).toBe(false);
+  // The expand button replaces the wordmark in the sidebar's top row.
+  expect(app.layout(unfold)!.y).toBeLessThan(app.layout("label:Captain")!.y);
 });
 
 test("phone has neither button", async () => {
