@@ -15,6 +15,8 @@ interface PressableOptions {
   focusRingKind?: "ring" | "inset";
   hoverBackground?: () => string | undefined;
   onPress?: () => void;
+  onPressDown?: () => void;
+  onPressUp?: () => void;
 }
 
 /**
@@ -39,6 +41,12 @@ export function createPressable(options: PressableOptions) {
   const press = () => {
     if (interactive()) options.onPress?.();
   };
+  const pressDown = () => {
+    if (interactive()) options.onPressDown?.();
+  };
+  const pressUp = () => {
+    options.onPressUp?.();
+  };
 
   const hoverStyle = (): ViewStyle | undefined => {
     if (!canHover || disabled()) return undefined;
@@ -59,6 +67,8 @@ export function createPressable(options: PressableOptions) {
     busy,
     interactive,
     press,
+    pressDown,
+    pressUp,
     accessibilityState,
     hoverStyle,
     focusVisibleStyle,
@@ -72,6 +82,8 @@ export function createPressable(options: PressableOptions) {
       onMouseEnter,
       onMouseLeave,
       onPress: press,
+      ...(options.onPressDown ? { onPressDown: pressDown } : {}),
+      ...(options.onPressUp ? { onPressUp: pressUp } : {}),
       hoverStyle: hoverStyle(),
       focusVisibleStyle: focusVisibleStyle(),
     }),

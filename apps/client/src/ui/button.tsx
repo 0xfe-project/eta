@@ -53,6 +53,8 @@ export function Button(props: {
   focusRingKind?: "ring" | "inset";
   style?: ViewStyle;
   onPress: () => void;
+  onPressDown?: () => void;
+  onPressUp?: () => void;
 }) {
   const color = colors();
   const density = densityDefaults();
@@ -69,6 +71,8 @@ export function Button(props: {
     focusRingKind: props.focusRingKind,
     hoverBackground: () => (primary() ? color().ink : color().selected),
     onPress: () => props.onPress(),
+    onPressDown: () => props.onPressDown?.(),
+    onPressUp: () => props.onPressUp?.(),
   });
   const waiting = shownWhile(() => !!props.busy && !props.spinIcon);
   const iconSize = () => props.iconSize ?? density().buttonIcon;
@@ -94,6 +98,8 @@ export function Button(props: {
       onMouseEnter={press.onMouseEnter}
       onMouseLeave={press.onMouseLeave}
       onPress={press.press}
+      onPressDown={props.onPressDown ? press.pressDown : undefined}
+      onPressUp={props.onPressUp ? press.pressUp : undefined}
       hoverStyle={press.hoverStyle()}
       focusVisibleStyle={press.focusVisibleStyle()}
       style={{
