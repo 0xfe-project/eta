@@ -351,12 +351,20 @@ export class TriggerHub {
 
       // If the previous trigger was removed or replaced, drop its remote instance first (if unshared)
       // and retire any stale pending events from the old trigger definition.
+      // Same-provider inbound webhook edits keep their persisted URL token and secret intact.
       if (
         prev !== undefined &&
         (input.triggerPatch === null || input.triggerPatch !== undefined)
       ) {
         this.#clearPendingOnTriggerChange(input.routineId);
-        if (prev.instanceId !== null)
+        if (
+          prev.instanceId !== null &&
+          !(
+            current !== undefined &&
+            prev.provider === "webhook" &&
+            current.provider === "webhook"
+          )
+        )
           await this.#deleteUnshared(
             prev.provider,
             prev.instanceId,

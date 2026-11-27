@@ -55,6 +55,23 @@ export type RoutineTriggerMode = "webhook" | "poll";
 /** Runtime state of a routine's attached external trigger instance. */
 export type RoutineTriggerStatus = "active" | "disabled" | "error";
 
+/** Authentication mode for an inbound webhook trigger. */
+export type WebhookAuthMode = "none" | "header" | "hmac-sha256";
+
+/** On-demand inbound webhook endpoint and credential details for the signed-in detail view. */
+export interface WebhookTriggerInfo {
+  routineId: string;
+  /** Relative inbound path `/hooks/<token>`. */
+  path: string;
+  /** Full public URL when `publicUrl` is configured on the host; null otherwise. */
+  publicUrl: string | null;
+  authMode: WebhookAuthMode;
+  /** Effective HTTP header inspected for authentication, or null when `authMode === "none"`. */
+  headerName: string | null;
+  hasSecret: boolean;
+  secret: string | null;
+}
+
 /**
  * Input configuration for a routine's external event trigger (multi-provider).
  * For Composio: `provider: "composio"`, `source: "<toolkitSlug>"`, `trigger: "<TRIGGER_SLUG>"`.
@@ -240,6 +257,9 @@ export const ROUTINE_ACTIONS = [
   "feedback",
   "restoreBrief",
   "triggers",
+  "webhookInfo",
+  "webhookRotate",
+  "webhookSetSecret",
 ] as const;
 export type RoutineAction = (typeof ROUTINE_ACTIONS)[number];
 
@@ -279,6 +299,16 @@ export interface RoutineArgs {
     query?: string;
     refresh?: boolean;
   };
+  /** Reads inbound webhook URL and credentials for a webhook-triggered routine. */
+  webhookInfo: { routineId: string };
+  /** Rotates inbound webhook token and/or secret for a webhook-triggered routine. */
+  webhookRotate: {
+    routineId: string;
+    rotateToken?: boolean;
+    rotateSecret?: boolean;
+  };
+  /** Sets a custom inbound webhook authentication secret for header/HMAC modes. */
+  webhookSetSecret: { routineId: string; secret: string };
 }
 export interface RoutineResults {
   create: { routine: RoutineSummary };
@@ -293,6 +323,9 @@ export interface RoutineResults {
     triggers: TriggerCatalogItem[];
     providers?: TriggerProviderStatus[];
   };
+  webhookInfo: WebhookTriggerInfo;
+  webhookRotate: WebhookTriggerInfo;
+  webhookSetSecret: WebhookTriggerInfo;
 }
 export type RoutineCall = {
   [A in RoutineAction]: Omit<CallFrame, "target" | "action" | "args"> & {

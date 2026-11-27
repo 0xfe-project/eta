@@ -435,3 +435,82 @@ test("multi-option selects stay visible, TriggerSearchSelect highlights on hover
   expect(app.shows("label:App / source")).toBe(true);
   expect(app.shows("label:Trigger event")).toBe(true);
 });
+
+test("Webhook channel auto-folds single source/trigger and detail panel supports copy URL/curl, secret reveal/set, and rotate", async () => {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "en-US",
+  });
+  await app.waitFor("label:New routine");
+  await app.press("label:New routine");
+  await app.waitFor("label:Event trigger");
+
+  await app.type("label:Name", "Deploy Hook");
+  await app.type("label:Brief", "Summarize incoming deploy webhooks.");
+  await app.press("label:Event trigger");
+
+  await app.waitFor("label:Channel");
+  await app.press("label:Channel");
+  await app.waitFor("label:Webhook");
+  await app.press("label:Webhook");
+
+  // Single source + single trigger auto-selected and selectors folded.
+  await app.waitFor("text:Webhook received");
+  expect(app.shows("text:WEBHOOK_RECEIVED")).toBe(true);
+  expect(app.shows("label:App / source")).toBe(false);
+  expect(app.shows("label:Trigger event")).toBe(false);
+  expect(app.shows("label:Polling interval (minutes)")).toBe(false);
+
+  // Choose HMAC-SHA256 authentication mode.
+  await app.waitFor("label:Authentication");
+  await app.press("label:Authentication");
+  await app.waitFor("label:HMAC-SHA256 signature");
+  await app.press("label:HMAC-SHA256 signature");
+
+  await app.press("label:Create");
+  await app.waitFor("text:Deploy Hook");
+
+  // Detail panel renders inbound URL, loopback hint, copy URL/curl, masked secret, and rotate.
+  await app.waitFor("text:http://127.0.0.1:4100/hooks/tok_1");
+  expect(app.shows("text:HMAC-SHA256 · X-Hub-Signature-256")).toBe(true);
+  expect(
+    app.shows(
+      "text:This URL uses a local loopback address. External services need a public URL, Tailscale, or a reverse proxy to reach it.",
+    ),
+  ).toBe(true);
+  expect(app.shows("text:sec_initial_1")).toBe(false);
+
+  await app.press("label:Copy URL");
+  await app.waitUntil(
+    () => app.clipboard() === "http://127.0.0.1:4100/hooks/tok_1",
+  );
+
+  await app.press("label:Copy curl");
+  await app.waitUntil(() =>
+    (app.clipboard() ?? "").includes(
+      "curl -X POST 'http://127.0.0.1:4100/hooks/tok_1' -H 'Content-Type: application/json' -H 'X-Hub-Signature-256: sha256=<hmac-sha256>'",
+    ),
+  );
+
+  // Reveal secret & set a custom secret.
+  await app.press("label:Show");
+  await app.waitFor("text:sec_initial_1");
+  await app.press("label:Copy secret");
+  await app.waitUntil(() => app.clipboard() === "sec_initial_1");
+
+  await app.type("label:Custom secret", "gh_secret_custom");
+  await app.press("label:Save");
+  await app.waitFor("text:gh_secret_custom");
+  expect(
+    app.shows("text:WebhookAction:setSecret:r-created:gh_secret_custom"),
+  ).toBe(true);
+
+  // Rotate credentials with confirmation dialog.
+  await app.press("label:Rotate credentials");
+  await app.waitFor("text:Rotate webhook credentials?");
+  await app.press("label:Rotate");
+  await app.waitFor("text:http://127.0.0.1:4100/hooks/tok_rot_2");
+  expect(app.shows("text:WebhookAction:rotate:r-created")).toBe(true);
+});

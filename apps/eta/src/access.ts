@@ -133,13 +133,15 @@ function askedFor(request: Request): { host: string; origin: string } {
 /**
  * The pages that carry their own capability: an artifact's preview (a signed address, because a
  * sandboxed iframe sends no cookie) and its public share (a secret token, for people who are not
- * the user), and the return of an MCP server's OAuth sign-in (the browser comes back from the
+ * the user), the return of an MCP server's OAuth sign-in (the browser comes back from the
  * provider, a site that holds no cookie of ours; the route completes only a sign-in this host is
- * waiting for, found by its unguessable `state`). They are exempt from the token gate for that reason
- * and no other, and only to read: everything else, the app's own `/artifacts/` downloads included,
- * stays behind it.
+ * waiting for, found by its unguessable `state`), and inbound webhook deliveries (`POST /hooks/<token>`,
+ * authenticated by their own secret URL token and optional header/HMAC signature).
+ * They are exempt from the token gate for that reason and no other: everything else, the app's
+ * own `/artifacts/` downloads included, stays behind it.
  */
 function carriesOwnCapability(request: Request, pathname: string): boolean {
+  if (pathname.startsWith("/hooks/")) return true;
   return (
     (request.method === "GET" || request.method === "HEAD") &&
     (pathname.startsWith("/preview/") ||

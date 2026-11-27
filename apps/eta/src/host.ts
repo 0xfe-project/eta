@@ -26,6 +26,7 @@ import type {
   RoutinesOptions,
   RssTuning,
   TasksOptions,
+  WebhookTuning,
 } from "./product";
 import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
@@ -95,6 +96,8 @@ export interface HostOptions {
   composio?: ComposioTuning;
   /** Test tuning for built-in RSS / Atom / JSON Feed polling triggers. */
   rss?: RssTuning;
+  /** Test tuning for built-in inbound webhook triggers. */
+  webhook?: WebhookTuning;
   /** What a published site may hold; the defaults are for real use, a test makes them small. */
   artifactLimits?: Partial<SiteLimits> | undefined;
   /**
@@ -272,6 +275,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.mcp === undefined ? {} : { mcp: options.mcp }),
       ...(options.composio === undefined ? {} : { composio: options.composio }),
       ...(options.rss === undefined ? {} : { rss: options.rss }),
+      ...(options.webhook === undefined ? {} : { webhook: options.webhook }),
     });
     const web = createWebRoutes(options.webDir);
     server = await assembleServer({

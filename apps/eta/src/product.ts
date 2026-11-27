@@ -115,6 +115,7 @@ import { Scheduler } from "./routines/scheduler";
 import { RoutineService } from "./routines/service";
 import { RoutineStore } from "./routines/store";
 import { TriggerHub } from "./routines/triggers";
+import { WebhookTriggerProvider } from "./routines/webhook-triggers";
 import { loadSecretKey } from "./secret";
 import { combineSessionHooks } from "./session-hooks";
 import {
@@ -194,6 +195,14 @@ export interface RssTuning {
   timer?: boolean | undefined;
   backoffBaseMs?: number | undefined;
   backoffMaxMs?: number | undefined;
+}
+
+/** Test-only overrides for `WebhookTriggerProvider` inbound limits and clock. */
+export interface WebhookTuning {
+  now?: (() => number) | undefined;
+  maxBodyBytes?: number | undefined;
+  rateLimitMax?: number | undefined;
+  rateLimitWindowMs?: number | undefined;
 }
 
 /** What a test sets to move a reply's stop along; a real host leaves it alone. */
@@ -327,6 +336,8 @@ export function createProduct(options: {
   composio?: ComposioTuning | undefined;
   /** Test tuning for built-in RSS / Atom / JSON Feed polling triggers. */
   rss?: RssTuning | undefined;
+  /** Test tuning for built-in inbound webhook triggers. */
+  webhook?: WebhookTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const captainOn = options.captain !== false;
@@ -535,6 +546,7 @@ export function createProduct(options: {
       ? {}
       : { maxBatch: options.routines.maxBatch }),
   });
+  const secretKey = loadSecretKey(dataDir);
   const rssTriggers = new RssTriggerProvider({
     settings: new SettingStore(db),
     now: options.rss?.now ?? now,
@@ -557,7 +569,24 @@ export function createProduct(options: {
       ? {}
       : { backoffMaxMs: options.rss.backoffMaxMs }),
   });
+  const webhookTriggers = new WebhookTriggerProvider({
+    settings: new SettingStore(db),
+    secretKey,
+    publicUrl: options.publicUrl,
+    now: options.webhook?.now ?? now,
+    warn,
+    ...(options.webhook?.maxBodyBytes === undefined
+      ? {}
+      : { maxBodyBytes: options.webhook.maxBodyBytes }),
+    ...(options.webhook?.rateLimitMax === undefined
+      ? {}
+      : { rateLimitMax: options.webhook.rateLimitMax }),
+    ...(options.webhook?.rateLimitWindowMs === undefined
+      ? {}
+      : { rateLimitWindowMs: options.webhook.rateLimitWindowMs }),
+  });
   triggerHub.register(rssTriggers);
+  triggerHub.register(webhookTriggers);
   runner.setRunFinishedListener((routineId) =>
     triggerHub.onRunFinished(routineId),
   );
@@ -644,7 +673,6 @@ export function createProduct(options: {
     ...(options.places === undefined ? {} : { local: options.places }),
   });
   const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
-  const secretKey = loadSecretKey(dataDir);
   const mcp = new McpService({
     db,
     key: secretKey,
@@ -1134,6 +1162,7 @@ export function createProduct(options: {
       (await mcp.route(request)) ??
       (await artifactRoutes(request)) ??
       (await attachmentRoutes(request)) ??
+      (await webhookTriggers.route(request)) ??
       upgradeRoutes(request, dataDir),
     remote: router,
     endpoints: [hub.endpoint],
@@ -1499,6 +1528,7 @@ export function createProduct(options: {
             runner,
             scheduler,
             triggers: triggerHub,
+            webhook: webhookTriggers,
             now,
             changed: routinesChanged,
           },

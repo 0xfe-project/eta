@@ -1,6 +1,11 @@
 import { expect, test } from "nsh/test";
 import { createLanguagePreference } from "../src/i18n";
-import { providerLabel } from "../src/pages/routines/schedule";
+import {
+  isLoopbackWebhookUrl,
+  providerLabel,
+  webhookCurlCommand,
+  webhookFullUrl,
+} from "../src/pages/routines/schedule";
 import {
   buildTriggerConfigPayload,
   enumSelectionValue,
@@ -194,6 +199,61 @@ test("validateTriggerField and buildTriggerConfigPayload enforce schema constrai
 
 test("providerLabel formats built-in rss and other trigger provider ids", () => {
   expect(providerLabel("rss")).toBe("RSS");
+  expect(providerLabel("webhook")).toBe("Webhook");
   expect(providerLabel("composio")).toBe("Composio");
   expect(providerLabel("custom_hook")).toBe("Custom Hook");
+});
+
+test("webhook URL, loopback detection, and curl command helpers handle all auth modes", () => {
+  expect(
+    webhookFullUrl(
+      {
+        path: "/hooks/tok123",
+        publicUrl: "https://eta.example.com/hooks/tok123",
+      },
+      "http://127.0.0.1:4100",
+    ),
+  ).toBe("https://eta.example.com/hooks/tok123");
+  expect(
+    webhookFullUrl(
+      { path: "/hooks/tok123", publicUrl: null },
+      "http://127.0.0.1:4100/",
+    ),
+  ).toBe("http://127.0.0.1:4100/hooks/tok123");
+
+  expect(isLoopbackWebhookUrl("http://127.0.0.1:4100/hooks/tok123")).toBe(true);
+  expect(isLoopbackWebhookUrl("http://localhost:4100/hooks/tok123")).toBe(true);
+  expect(isLoopbackWebhookUrl("https://eta.example.com/hooks/tok123")).toBe(
+    false,
+  );
+
+  expect(
+    webhookCurlCommand("https://eta.example.com/hooks/tok123", {
+      authMode: "none",
+      headerName: null,
+    }),
+  ).toBe(
+    "curl -X POST 'https://eta.example.com/hooks/tok123' -H 'Content-Type: application/json' -d '{\"event\":\"test\"}'",
+  );
+
+  expect(
+    webhookCurlCommand("https://eta.example.com/hooks/tok123", {
+      authMode: "header",
+      headerName: "Authorization",
+    }),
+  ).toContain("-H 'Authorization: Bearer <secret>'");
+
+  expect(
+    webhookCurlCommand("https://eta.example.com/hooks/tok123", {
+      authMode: "header",
+      headerName: "X-Webhook-Secret",
+    }),
+  ).toContain("-H 'X-Webhook-Secret: <secret>'");
+
+  expect(
+    webhookCurlCommand("https://eta.example.com/hooks/tok123", {
+      authMode: "hmac-sha256",
+      headerName: "X-Hub-Signature-256",
+    }),
+  ).toContain("-H 'X-Hub-Signature-256: sha256=<hmac-sha256>'");
 });

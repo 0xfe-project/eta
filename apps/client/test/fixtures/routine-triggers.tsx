@@ -5,6 +5,8 @@ import type {
   RunView,
   TriggerCatalogItem,
   TriggerProviderStatus,
+  WebhookAuthMode,
+  WebhookTriggerInfo,
 } from "@eta/client-contracts";
 import type { Layout } from "../../src/components";
 import { mount, signal, Text, View, windowSize } from "nsh";
@@ -143,21 +145,47 @@ const catalogItems: TriggerCatalogItem[] = [
   },
   {
     provider: "webhook",
-    source: "linear",
-    sourceName: "Linear",
-    trigger: "ISSUE_CREATED",
-    name: "Issue Created",
-    description: "Fires when a new Linear issue is opened.",
+    source: "http",
+    sourceName: "Inbound Webhook",
+    trigger: "WEBHOOK_RECEIVED",
+    name: "Webhook received",
+    description:
+      "Triggers when an external service sends an HTTP POST request to this routine's dedicated webhook URL.",
     modes: ["webhook"],
     configSchema: {
       type: "object",
-      required: ["team"],
+      required: ["authMode"],
       properties: {
-        team: { type: "string", title: "Team key" },
+        authMode: {
+          type: "string",
+          title: "Authentication",
+          enum: ["none", "header", "hmac-sha256"],
+          enumNames: [
+            "URL token only (none)",
+            "Shared secret header",
+            "HMAC-SHA256 signature",
+          ],
+          default: "none",
+        },
+        headerName: {
+          type: "string",
+          title: "Header name",
+          examples: ["X-Webhook-Secret"],
+        },
+        includeKeywords: {
+          type: "string",
+          title: "Include keywords",
+          examples: ["deploy, release"],
+        },
+        excludeKeywords: {
+          type: "string",
+          title: "Exclude keywords",
+          examples: ["ping, healthcheck"],
+        },
       },
     },
     payloadSchema: {},
-    accounts: [{ id: "lin_1", label: "Linear Workspace" }],
+    accounts: [],
   },
 ];
 
@@ -395,7 +423,10 @@ function Fixture() {
   const lastCreate = signal("");
   const lastUpdate = signal("");
   const lastTriggersCall = signal("");
+  const lastWebhookAction = signal("");
   const navLog = signal<string[]>([]);
+  let webhookSeq = 1;
+  const webhookStore = new Map<string, WebhookTriggerInfo>();
 
   const target = <T,>(sections: T) => ({ sections, revisions: {}, version: 0 });
   const setRoutines = (items: RoutineSummary[]) => {
@@ -437,6 +468,9 @@ function Fixture() {
       "routines.delete",
       "routines.run",
       "routines.triggers",
+      "routines.webhookInfo",
+      "routines.webhookRotate",
+      "routines.webhookSetSecret",
       "captain.decideOperation",
     ],
     targets: {
@@ -444,7 +478,46 @@ function Fixture() {
       agents: target({ list: [] }),
     },
   }));
+  host.address.set({ origin: "http://127.0.0.1:4100" });
   setRoutines(initialRoutines);
+
+  const ensureWebhookState = (routineId: string): WebhookTriggerInfo | null => {
+    const existing = webhookStore.get(routineId);
+    if (existing) return existing;
+    const item = host
+      .list<RoutineSummary>("routines")
+      .find((r) => r.id === routineId);
+    if (
+      !item?.trigger ||
+      item.trigger.provider !== "webhook" ||
+      item.trigger.source !== "http"
+    ) {
+      return null;
+    }
+    const authMode =
+      (item.trigger.config.authMode as WebhookAuthMode | undefined) ?? "none";
+    const rawHeader =
+      typeof item.trigger.config.headerName === "string"
+        ? item.trigger.config.headerName.trim()
+        : "";
+    const headerName =
+      authMode === "none"
+        ? null
+        : rawHeader ||
+          (authMode === "header" ? "Authorization" : "X-Hub-Signature-256");
+    const n = webhookSeq++;
+    const created: WebhookTriggerInfo = {
+      routineId,
+      path: `/hooks/tok_${n}`,
+      publicUrl: null,
+      authMode,
+      headerName,
+      hasSecret: authMode !== "none",
+      secret: authMode === "none" ? null : `sec_initial_${n}`,
+    };
+    webhookStore.set(routineId, created);
+    return created;
+  };
 
   host.call = (async (targetName: string, action: string, args: unknown) => {
     if (targetName === "routines" && action === "triggers") {
@@ -580,6 +653,37 @@ function Fixture() {
         routine: next.find((item) => item.id === input.routineId)!,
       };
     }
+    if (targetName === "routines" && action === "webhookInfo") {
+      const input = args as { routineId: string };
+      return ensureWebhookState(input.routineId) ?? {};
+    }
+    if (targetName === "routines" && action === "webhookRotate") {
+      const input = args as { routineId: string };
+      lastWebhookAction.set(`rotate:${input.routineId}`);
+      const current = ensureWebhookState(input.routineId);
+      if (!current) return {};
+      const n = webhookSeq++;
+      const next: WebhookTriggerInfo = {
+        ...current,
+        path: `/hooks/tok_rot_${n}`,
+        secret: current.authMode === "none" ? null : `sec_rot_${n}`,
+      };
+      webhookStore.set(input.routineId, next);
+      return next;
+    }
+    if (targetName === "routines" && action === "webhookSetSecret") {
+      const input = args as { routineId: string; secret: string };
+      lastWebhookAction.set(`setSecret:${input.routineId}:${input.secret}`);
+      const current = ensureWebhookState(input.routineId);
+      if (!current) return {};
+      const next: WebhookTriggerInfo = {
+        ...current,
+        hasSecret: true,
+        secret: input.secret,
+      };
+      webhookStore.set(input.routineId, next);
+      return next;
+    }
     return {};
   }) as typeof host.call;
 
@@ -643,6 +747,7 @@ function Fixture() {
               <Text>{`Create:${lastCreate()}`}</Text>
               <Text>{`Update:${lastUpdate()}`}</Text>
               <Text>{`Triggers:${lastTriggersCall()}`}</Text>
+              <Text>{`WebhookAction:${lastWebhookAction()}`}</Text>
               <Text>{`Nav:${navLog().join(",")}`}</Text>
             </View>
           </If>
