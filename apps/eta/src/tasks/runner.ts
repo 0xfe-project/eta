@@ -772,6 +772,13 @@ export class TaskRunner implements TaskRuns {
     return `Your answer is in the thread of #${task.number}.`;
   }
 
+  /** Mark a mentioned/consulted agent's active run as having already posted its outcome. */
+  markReported(taskId: string, agentId: string): void {
+    const run = this.workingRunOf(taskId, agentId);
+    const live = run === undefined ? undefined : this.#live.get(run.id);
+    if (live !== undefined) live.reported = true;
+  }
+
   /**
    * The executor says it is done (or stuck). The summary becomes a comment, the task moves to
    * review, and the same words are posted in the conversation the task came from, as the agent.

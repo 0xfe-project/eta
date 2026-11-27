@@ -493,6 +493,7 @@ describe("the child process", () => {
 
   it("starts in the session's directory unless the config names one", async () => {
     const h = await setup();
+    let h2: Awaited<ReturnType<typeof setup>> | undefined;
     const sessionDir = await mkdtemp(join(tmpdir(), "eta-mcp-cwd-"));
     const configured = await mkdtemp(join(tmpdir(), "eta-mcp-cwd-"));
     try {
@@ -500,10 +501,13 @@ describe("the child process", () => {
       expect(await inSession.read("cwd")).toBe(await realpath(sessionDir));
       await h.manager.closeAll();
 
-      const h2 = await setup();
+      h2 = await setup();
       const inConfig = await probe(h2, { cwd: configured }, sessionDir);
       expect(await inConfig.read("cwd")).toBe(await realpath(configured));
     } finally {
+      // Close both managers before removing their temp cwd dirs so Windows releases directory handles.
+      await h.manager.closeAll();
+      await h2?.manager.closeAll();
       await removeWithRetry(sessionDir);
       await removeWithRetry(configured);
     }

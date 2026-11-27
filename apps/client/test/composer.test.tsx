@@ -84,12 +84,16 @@ test("a pasted file is a block where the caret is, kept with its chat, sent as a
 });
 
 // The test's own directory, as a file manager names it (`import.meta.url` is `asset:` here;
-// on Windows `asset://D:\...` needs forward slashes and three slashes so the drive letter is not the host).
+// on Windows NSH parses `D:/a/...` into a single-letter host `asset://d/a/...` with the colon stripped).
 const fileUrl = (path: string) => {
   const base = import.meta.url
     .replaceAll("\\", "/")
     .replace(/^asset:\/\/([a-z]:)/i, "asset:///$1");
-  return `file://${new URL(path, base).pathname}`;
+  const url = new URL(path, base);
+  const drive = /^[a-z]$/i.test(url.hostname)
+    ? `/${url.hostname.toUpperCase()}:`
+    : "";
+  return `file://${drive}${url.pathname}`;
 };
 
 test("files a file manager copied or dropped are read from their file: URLs and sent", async () => {
