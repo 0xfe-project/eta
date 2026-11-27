@@ -5,9 +5,9 @@ import type {
 import type { Signal } from "nsh";
 import { effect, Image, signal, untracked, View } from "nsh";
 import { colors, Label } from "../../components";
+import { avatar, weight } from "../../components/tokens";
 import { useHost } from "../../services/host";
 import { avatarFill, avatarInitial, avatarInk } from "./avatar-color";
-import { avatar, weight } from "../../components/tokens";
 
 const found = new Map<string, Signal<string | null | undefined>>();
 

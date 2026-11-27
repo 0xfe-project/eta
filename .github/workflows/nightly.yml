@@ -1,0 +1,206 @@
+# Full cacheless cross-platform Nightly verification:
+# - Unsharded 3-OS CI (`all: true, force: true`)
+# - Host upgrade E2E (macOS launchd + Windows service)
+# - Cross-version upgrade E2E (Linux, from latest stable host release)
+# - Client packaging smoke (web bundle + Linux desktop package)
+# - OpenDAL-style GitHub Issue reconciler (opens/updates on failure, closes on recovery)
+name: Nightly
+
+on:
+  schedule:
+    # 02:00 Asia/Shanghai
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Preview issue reconciler changes without modifying GitHub issues.
+        type: boolean
+        default: false
+
+concurrency:
+  group: nightly-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    with:
+      all: true
+      force: true
+
+  host-upgrade-e2e:
+    uses: ./.github/workflows/host-upgrade-e2e.yml
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+
+  latest-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      to: ${{ steps.release.outputs.to }}
+    steps:
+      - name: Resolve latest stable host release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          latest=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
+            --jq '.[] | select(.draft == false and .prerelease == false and (.tag_name | test("^v[0-9]"))) | .tag_name' |
+            head -n 1 || true)
+          echo "to=${latest#v}" >> "$GITHUB_OUTPUT"
+
+  upgrade-cross:
+    needs: latest-release
+    if: needs.latest-release.outputs.to != ''
+    uses: ./.github/workflows/upgrade-cross.yml
+    permissions:
+      contents: write
+    with:
+      to: ${{ needs.latest-release.outputs.to }}
+
+  client-package-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile --ignore-scripts
+
+      - uses: ./.github/actions/setup-nsh
+
+      - name: Smoke web bundle
+        run: |
+          bun run --cwd apps/client package:web
+          test -f apps/client/dist/Eta/index.html
+          grep -q 'id="nsh-app"' apps/client/dist/Eta/index.html
+
+      - name: Smoke Linux desktop package
+        env:
+          ETA_HOST_UPSTREAM: ${{ github.api_url }}/repos/${{ github.repository }}
+        run: |
+          out="$RUNNER_TEMP/eta-client"
+          bun run client:package --target linux --app-version 0.0.0-nightly --build 1 --out "$out"
+          test -x "$out/Eta/nsh/eta-bootstrap"
+          test -f "$out/Eta.tar.gz"
+          changed=$(git status --porcelain)
+          if [[ -n "$changed" ]]; then
+            echo "::error::The checkout changed during packaging smoke:"
+            echo "$changed"
+            exit 1
+          fi
+
+  report:
+    needs:
+      [
+        ci,
+        host-upgrade-e2e,
+        latest-release,
+        upgrade-cross,
+        client-package-smoke,
+      ]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SERVER_URL: ${{ github.server_url }}
+      RUN_ID: ${{ github.run_id }}
+      SHA: ${{ github.sha }}
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
+      CI_RESULT: ${{ needs.ci.result }}
+      HOST_E2E_RESULT: ${{ needs.host-upgrade-e2e.result }}
+      LATEST_RELEASE_RESULT: ${{ needs.latest-release.result }}
+      CROSS_RESULT: ${{ needs.upgrade-cross.result }}
+      CLIENT_SMOKE_RESULT: ${{ needs.client-package-smoke.result }}
+    steps:
+      - name: Reconcile nightly tracking issue
+        run: |
+          set -euo pipefail
+          run_url="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
+          run_date=$(date -u +"%Y-%m-%d %H:%M UTC")
+
+          failed=false
+          for r in "$CI_RESULT" "$HOST_E2E_RESULT" "$LATEST_RELEASE_RESULT" "$CLIENT_SMOKE_RESULT"; do
+            if [[ "$r" != "success" ]]; then failed=true; fi
+          done
+          if [[ "$CROSS_RESULT" != "success" && ! ( "$CROSS_RESULT" == "skipped" && "$LATEST_RELEASE_RESULT" == "success" ) ]]; then
+            failed=true
+          fi
+
+          body_file="$RUNNER_TEMP/nightly-issue.md"
+          {
+            echo "<!-- eta-nightly-tracker -->"
+            if [[ "$failed" == "true" ]]; then
+              echo "Nightly CI reported failures on **${run_date}**."
+            else
+              echo "Nightly CI recovered and passed on **${run_date}**."
+            fi
+            echo ""
+            echo "- Commit: \`${SHA}\`"
+            echo "- Run: ${run_url}"
+            echo ""
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "| \`ci\` (3-OS \`--force\`) | \`${CI_RESULT}\` |"
+            echo "| \`host-upgrade-e2e\` | \`${HOST_E2E_RESULT}\` |"
+            echo "| \`latest-release\` | \`${LATEST_RELEASE_RESULT}\` |"
+            echo "| \`upgrade-cross\` | \`${CROSS_RESULT}\` |"
+            echo "| \`client-package-smoke\` | \`${CLIENT_SMOKE_RESULT}\` |"
+          } > "$body_file"
+
+          existing=$(gh issue list --repo "$REPO" --state open --limit 100 \
+            --json number,title,body \
+            --jq 'map(select(.title == "[Nightly] CI failure tracking" or (.body | contains("<!-- eta-nightly-tracker -->")))) | .[0].number // empty')
+
+          if [[ "$DRY_RUN" == "true" ]]; then
+            if [[ "$failed" == "true" ]]; then
+              action=${existing:+"update+comment #$existing"}
+              action=${action:-"create new tracking issue"}
+            else
+              action=${existing:+"comment+close #$existing"}
+              action=${action:-"noop (all green, no open tracking issue)"}
+            fi
+            {
+              echo "### Nightly Issue Reconciler (dry run)"
+              echo "- Planned action: \`${action}\`"
+              echo ""
+              cat "$body_file"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [[ "$failed" == "true" ]]; then
+            if [[ -n "$existing" ]]; then
+              gh issue edit "$existing" --repo "$REPO" --body-file "$body_file"
+              gh issue comment "$existing" --repo "$REPO" --body "Nightly run failed on \`${SHA}\`: ${run_url}"
+            else
+              gh issue create --repo "$REPO" --title "[Nightly] CI failure tracking" --body-file "$body_file"
+            fi
+          elif [[ -n "$existing" ]]; then
+            gh issue edit "$existing" --repo "$REPO" --body-file "$body_file"
+            gh issue comment "$existing" --repo "$REPO" --body "Recovered on \`${SHA}\`: ${run_url}. Closing tracking issue."
+            gh issue close "$existing" --repo "$REPO" --reason completed
+          else
+            echo "Nightly run passed with no open tracking issue." >> "$GITHUB_STEP_SUMMARY"
+          fi

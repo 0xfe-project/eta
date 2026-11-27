@@ -1,5 +1,5 @@
-import { platform } from "nsh";
 import { desktopHostLauncherPath } from "@eta/client-contracts/host-launcher";
+import { platform } from "nsh";
 
 /** The packaged host launcher as a path the OS can execute. */
 export function packagedHostBootstrap(): string | undefined {

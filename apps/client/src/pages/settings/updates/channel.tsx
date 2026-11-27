@@ -1,6 +1,6 @@
+import { effect, signal } from "nsh";
 import { ActionItem, ActionMenu, colors, row } from "../../../components";
 import { space } from "../../../components/tokens";
-import { effect, signal } from "nsh";
 
 export interface UpdateChannelChoice {
   value: string;

@@ -1,6 +1,6 @@
 /**
  * What each kind of service manager is asked, and what its answers are taken to mean. The managers
- * themselves are not here: the real ones run in the sandbox and in `upgrade-e2e.yml`.
+ * themselves are not here: the real ones run in the sandbox and in `host-upgrade-e2e.yml`.
  */
 import type { Exec, ServiceUnit } from "../src/service";
 import { existsSync } from "node:fs";

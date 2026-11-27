@@ -3,11 +3,19 @@
  * line, answers `/up` on the port it was given, and writes down what it was started with.
  */
 import type { ServiceServer } from "../service";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
 import { HOST_WRAPPER } from "../host";
 import {
   LocalHost,
@@ -19,6 +27,77 @@ import {
 let dir: string;
 let host: LocalHost | undefined;
 let server: ServiceServer | undefined;
+let jobDir: string | undefined;
+let jobExe: string | undefined;
+
+const FAKE_HOST = String.raw`
+const { createServer } = require("node:net");
+const port = Number(process.argv[process.argv.indexOf("--port") + 1]);
+const server = Bun.serve({ hostname: "127.0.0.1", port, fetch: () => new Response("ok") });
+await Bun.write(process.env.STARTS + "/" + Date.now() + "-" + process.pid, JSON.stringify({
+  service: process.env.ETA_DESKTOP_SERVICE ?? null,
+  hasToken: (process.env.ETA_DESKTOP_SERVICE_TOKEN ?? "") !== "",
+}));
+const stop = () => { server.stop(true); process.exit(0); };
+process.on("SIGTERM", stop);
+if (process.env.ETA_STOP_PIPE) {
+  const pipe = createServer((conn) => {
+    conn.once("data", () => {
+      pipe.close();
+      stop();
+    });
+  });
+  pipe.listen(process.env.ETA_STOP_PIPE, () => {
+    console.log(JSON.stringify({ port: server.port }));
+  });
+} else {
+  console.log(JSON.stringify({ port: server.port }));
+}
+setInterval(() => {}, 1000);
+`;
+
+/** A job that writes its argv and environment where the test can read them, then waits. */
+const FAKE_JOB = String.raw`
+import { createServer } from "node:net";
+const out = process.env.JOB_OUT ?? "";
+const payload = JSON.stringify({
+  argv: process.argv.slice(2),
+  passed: process.env.PASSED ?? null,
+  service: process.env.ETA_DESKTOP_SERVICE ?? null,
+});
+process.on("SIGTERM", () => process.exit(130));
+if (process.env.ETA_STOP_PIPE) {
+  const pipe = createServer((conn) => {
+    conn.once("data", () => {
+      pipe.close();
+      process.exit(130);
+    });
+  });
+  pipe.listen(process.env.ETA_STOP_PIPE, async () => {
+    await Bun.write(out, payload);
+  });
+} else {
+  await Bun.write(out, payload);
+}
+setInterval(() => {}, 1000);
+`;
+
+beforeAll(async () => {
+  if (process.platform !== "win32") return;
+  jobDir = await mkdtemp(join(tmpdir(), "eta-service-job-"));
+  const src = join(jobDir, "job.ts");
+  jobExe = join(jobDir, "eta-host.exe");
+  await writeFile(src, FAKE_JOB);
+  const built = Bun.spawnSync(
+    [process.execPath, "build", "--compile", src, "--outfile", jobExe],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  if (built.exitCode !== 0) {
+    throw new Error(
+      `failed to compile Windows fake job: ${built.stderr.toString()}`,
+    );
+  }
+}, 60_000);
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "eta-service-"));
@@ -27,31 +106,24 @@ afterEach(async () => {
   server?.close();
   await host?.stop();
   [host, server] = [undefined, undefined];
-  await rm(dir, { recursive: true, force: true });
+  await rm(dir, {
+    recursive: true,
+    force: true,
+    maxRetries: 20,
+    retryDelay: 100,
+  });
 });
 
-const FAKE_HOST = String.raw`
-const port = Number(process.argv[process.argv.indexOf("--port") + 1]);
-const server = Bun.serve({ hostname: "127.0.0.1", port, fetch: () => new Response("ok") });
-await Bun.write(process.env.STARTS + "/" + Date.now() + "-" + process.pid, JSON.stringify({
-  service: process.env.ETA_DESKTOP_SERVICE ?? null,
-  hasToken: (process.env.ETA_DESKTOP_SERVICE_TOKEN ?? "") !== "",
-}));
-console.log(JSON.stringify({ port: server.port }));
-process.on("SIGTERM", () => { server.stop(true); process.exit(0); });
-setInterval(() => {}, 1000);
-`;
-
-/** A job that writes its argv and environment where the test can read them, then waits. */
-const FAKE_JOB = String.raw`
-await Bun.write(process.env.JOB_OUT, JSON.stringify({
-  argv: process.argv.slice(2),
-  passed: process.env.PASSED ?? null,
-  service: process.env.ETA_DESKTOP_SERVICE ?? null,
-}));
-process.on("SIGTERM", () => process.exit(130));
-setInterval(() => {}, 1000);
-`;
+afterAll(async () => {
+  if (jobDir) {
+    await rm(jobDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 20,
+      retryDelay: 100,
+    });
+  }
+});
 
 async function setUp(wrapped = true) {
   const wrapper = join(dir, "wrapper.ts");
@@ -68,16 +140,22 @@ async function setUp(wrapped = true) {
     ...(wrapped ? { wrapper, bun: process.execPath } : {}),
     summary: join(dir, "summary"),
   });
-  // The job's program is the host's file; here a script bun runs, through a shebang-less stub.
-  const program = join(dir, "eta-host");
-  await writeFile(
-    program,
-    `#!/bin/sh\nexec ${process.execPath} ${join(dir, "job.ts")} "$@"\n`,
-    {
-      mode: 0o755,
-    },
-  );
-  await writeFile(join(dir, "job.ts"), FAKE_JOB);
+  // The job's program is the host's file; on POSIX a script bun runs, on Windows a compiled exe.
+  let program: string;
+  if (process.platform === "win32") {
+    program = join(dir, "eta-host.exe");
+    await copyFile(jobExe!, program);
+  } else {
+    program = join(dir, "eta-host");
+    await writeFile(
+      program,
+      `#!/bin/sh\nexec ${process.execPath} ${join(dir, "job.ts")} "$@"\n`,
+      {
+        mode: 0o755,
+      },
+    );
+    await writeFile(join(dir, "job.ts"), FAKE_JOB);
+  }
   server = startServiceServer({ host, program, dir, env });
   Object.assign(env, server.env);
   await host.spawn();

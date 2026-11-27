@@ -1,12 +1,10 @@
 # Full verification (`bun run check:affected`), for every pull request and every
 # push to main; the local `pre-commit` hook only formats staged files with dprint.
-# A release runs it over the whole repository (release.yml).
+# Releases (`release.yml`, `release-desktop.yml`) and Nightly (`nightly.yml`) invoke it
+# via `workflow_call` (`all: true`, and `force: true` for Nightly).
 #
-# The check runs as four parts on runners of their own, because the TUI's and the
-# host's tests each take minutes and slow each other down on one 2-core runner. Together
-# the parts run exactly the tasks of package.json's `check` (`check:affected`): change
-# one, change the other. A part that the change does not reach stops after checkout.
-# `check` passes only when every part did, so the status to require stays `check`.
+# Each OS runs as a single unsharded job driving Turborepo directly (`--continue`) so
+# every failing package/task reports in one run without duplicate checkouts/installs.
 name: CI
 
 on:
@@ -19,154 +17,330 @@ on:
         description: Check the whole repository, not only what changed since the base.
         type: boolean
         default: false
+      force:
+        description: Bypass Turborepo cache (--force) and skip cache save (used by Nightly).
+        type: boolean
+        default: false
+      platforms:
+        description: OS runners to execute ('all' for Linux+Windows+macOS, 'linux' for Linux only).
+        type: string
+        default: all
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions: {}
+
+env:
+  TURBO_TASKS: build typecheck lint //#lint:repo //#typecheck:scripts test //#test:scripts //#knip
+
 jobs:
-  part:
-    name: ${{ matrix.name }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+  plan:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
     permissions:
       contents: read
-      # The Remote Cache token is exchanged for the job's OIDC token.
-      id-token: write
-    strategy:
-      # Every part reports, so one run shows all that is wrong.
-      fail-fast: false
-      matrix:
-        include:
-          - part: static
-            name: format, build, types, lint, knip
-            tasks: build typecheck lint //#lint:repo //#knip
-          - part: tui
-            name: test TUI
-            tasks: test --filter=@eta/tui
-          - part: host
-            name: test host
-            tasks: test --filter=@eta/app
-          - part: rest
-            name: test the rest
-            tasks: test --filter=!@eta/tui --filter=!@eta/app
-    env:
-      # Tests that need a tool fail instead of skipping without it.
-      CI: "1"
-      TASKS: ${{ matrix.tasks }}
-      # All of it for a release: --affected compares with main, and a tag on main has
-      # nothing to compare.
-      SCOPE: ${{ !inputs.all && '--affected' || '' }}
+    outputs:
+      has_tasks: ${{ steps.plan.outputs.has_tasks }}
+      has_memory: ${{ steps.plan.outputs.has_memory }}
+      has_client: ${{ steps.plan.outputs.has_client }}
+      has_meta: ${{ steps.plan.outputs.has_meta }}
+      scope: ${{ steps.plan.outputs.scope }}
+      scm_base: ${{ steps.plan.outputs.scm_base }}
+      task_count: ${{ steps.plan.outputs.task_count }}
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
         with:
-          # The full history, for turbo's --affected to compare against.
+          # Full history for turbo --affected and push SCM base comparisons.
           fetch-depth: 0
           filter: blob:none
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
 
-      # Turbo's dry run of the part needs neither node_modules nor caches, so a part with
-      # nothing to do ends here.
-      - name: Plan
+      - name: Plan affected tasks and OS matrix
         id: plan
-        run: |
-          version=$(grep -oP '^\s+"turbo": \["turbo@\K[^"]+' bun.lock)
-          read -ra tasks <<< "$TASKS"
-          # shellcheck disable=SC2086 # SCOPE is one flag or none.
-          bunx "turbo@$version" run "${tasks[@]}" $SCOPE --dry=json > "$RUNNER_TEMP/plan.json"
-          jq -r '.tasks[] | select(.command != "<NONEXISTENT>") | .taskId' "$RUNNER_TEMP/plan.json" > "$RUNNER_TEMP/plan.txt"
-          {
-            echo "### $PART_NAME"
-            if [[ -s $RUNNER_TEMP/plan.txt ]]; then
-              while read -r task; do echo "- \`$task\`"; done < "$RUNNER_TEMP/plan.txt"
-            else
-              echo "Nothing to run: the change does not reach this part."
-            fi
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          # Formatting is checked over the whole repository, every time.
-          if [[ -s $RUNNER_TEMP/plan.txt || $PART == static ]]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
         env:
-          PART: ${{ matrix.part }}
-          PART_NAME: ${{ matrix.name }}
+          INPUT_ALL: ${{ inputs.all }}
+          INPUT_FORCE: ${{ inputs.force }}
+          INPUT_PLATFORMS: ${{ inputs.platforms || 'all' }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          scope=""
+          scm_base=""
+          diff_base=""
+
+          if [[ "$INPUT_ALL" != "true" ]]; then
+            if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+              if [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "0000000000000000000000000000000000000000" ]] \
+                && git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
+                scm_base="$EVENT_BEFORE"
+              elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+                scm_base=$(git rev-parse HEAD^)
+              fi
+              if [[ -n "$scm_base" ]]; then
+                scope="--affected"
+                export TURBO_SCM_BASE="$scm_base"
+                diff_base="$scm_base"
+              fi
+            else
+              scope="--affected"
+              if [[ -n "$BASE_REF" ]]; then
+                if ! git rev-parse --verify "origin/$BASE_REF" >/dev/null 2>&1; then
+                  git fetch --no-tags --filter=blob:none origin "$BASE_REF:refs/remotes/origin/$BASE_REF" || true
+                fi
+                if git rev-parse --verify "origin/$BASE_REF" >/dev/null 2>&1; then
+                  diff_base="origin/$BASE_REF"
+                fi
+              fi
+              if [[ -z "$diff_base" ]] && git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+                diff_base=$(git rev-parse HEAD^)
+              fi
+            fi
+          fi
+
+          has_meta=false
+          if [[ "$INPUT_ALL" == "true" || -z "$diff_base" ]]; then
+            has_meta=true
+          elif [[ -n $(git diff --name-only "$diff_base...HEAD" -- .github/) ]]; then
+            has_meta=true
+          fi
+
+          version=$(bun -e '
+            const s = await Bun.file("bun.lock").text();
+            const m = s.match(/^\s+"turbo":\s*\["turbo@([^"]+)"/m);
+            if (!m) process.exit(1);
+            console.log(m[1]);
+          ')
+
+          read -ra tasks <<< "$TURBO_TASKS"
+          args=("${tasks[@]}")
+          if [[ -n "$scope" ]]; then args+=("$scope"); fi
+          bunx "turbo@$version" run "${args[@]}" --dry=json > "$RUNNER_TEMP/plan.json"
+
+          PLAN_JSON="$RUNNER_TEMP/plan.json" \
+          SCOPE_FLAG="$scope" \
+          SCOPE_LABEL="${scope:-all}" \
+          SCM_BASE="$scm_base" \
+          HAS_META="$has_meta" \
+          bun -e '
+            import { appendFileSync, readFileSync } from "node:fs";
+            const plan = JSON.parse(readFileSync(process.env.PLAN_JSON!, "utf8"));
+            const taskIds = plan.tasks
+              .filter((t) => t.command !== "<NONEXISTENT>")
+              .map((t) => String(t.taskId))
+              .sort();
+            const inputAll = process.env.INPUT_ALL === "true";
+            const inputForce = process.env.INPUT_FORCE === "true";
+            const platforms = process.env.INPUT_PLATFORMS || "all";
+            const hasTasks = taskIds.length > 0;
+            const hasMemory = inputAll || taskIds.some((id) => id.startsWith("@eta/memory#"));
+            const hasClient = inputAll || taskIds.some((id) => id.startsWith("@eta/client#"));
+            const hasMeta = process.env.HAS_META === "true";
+            const scmBase = process.env.SCM_BASE || "";
+
+            const include = [{ os: "ubuntu-latest", name: "Linux", timeout: 60 }];
+            if (hasTasks && platforms !== "linux") {
+              include.push(
+                { os: "windows-latest", name: "Windows", timeout: 90 },
+                { os: "macos-latest", name: "macOS", timeout: 90 },
+              );
+            }
+
+            appendFileSync(
+              process.env.GITHUB_OUTPUT!,
+              [
+                "has_tasks=" + hasTasks,
+                "has_memory=" + hasMemory,
+                "has_client=" + hasClient,
+                "has_meta=" + hasMeta,
+                "scope=" + (process.env.SCOPE_FLAG || ""),
+                "scm_base=" + scmBase,
+                "task_count=" + taskIds.length,
+                "matrix=" + JSON.stringify({ include }),
+              ].join("\n") + "\n",
+            );
+
+            const q = "\x60";
+            const summary = [
+              "### Turbo CI Plan",
+              "- Scope: " + q + process.env.SCOPE_LABEL + q + (inputForce ? " (" + q + "--force" + q + ")" : ""),
+              ...(scmBase ? ["- SCM base (" + q + "TURBO_SCM_BASE" + q + "): " + q + scmBase + q] : []),
+              "- OS matrix: " + include.map((m) => q + m.name + q).join(", "),
+              "- Flags: " + q + "has_tasks=" + hasTasks + q + ", " + q + "has_memory=" + hasMemory + q + ", " + q + "has_client=" + hasClient + q + ", " + q + "has_meta=" + hasMeta + q,
+              "- Planned tasks (" + taskIds.length + "):",
+              ...(hasTasks ? taskIds.map((id) => "  - " + q + id + q) : ["  - _None (dprint + meta checks only)_"]),
+              "",
+            ].join("\n");
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY!, summary);
+          '
+
+  verify:
+    name: ${{ matrix.name }}
+    needs: plan
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
 
       - name: Prepare
         id: prepare
-        if: steps.plan.outputs.run
         uses: ./.github/actions/prepare
         with:
-          part: ${{ matrix.part }}
-          save-uv-cache: ${{ matrix.part == 'static' }}
+          setup-uv: ${{ needs.plan.outputs.has_memory }}
+          restore-turbo-cache: ${{ needs.plan.outputs.has_tasks == 'true' && !inputs.force }}
 
-      # The client is checked with nsh (typecheck, in the static part) and tested with it
-      # (test, in the rest part); the other parts do not run it and do not pay for it.
       - name: Set up nsh
-        if: ${{ steps.plan.outputs.run && (matrix.part == 'static' || matrix.part == 'rest') }}
+        if: needs.plan.outputs.has_client == 'true'
         uses: ./.github/actions/setup-nsh
 
-      # Turborepo's Remote Cache (turbo.json's remoteCache): a short-lived token
-      # for the Vercel team, through its OIDC policy for this repository.
-      - name: Turborepo Remote Cache
-        if: steps.plan.outputs.run
-        uses: vercel/setup-turborepo-remote-cache-action@v1.1.0
-        continue-on-error: true
-        with:
-          team: team_m0cGPvm66wsuOjDpnCrXUDPz
-
-      # dprint's compiled WASM plugins; only this part runs dprint.
       - name: Cache dprint
-        if: matrix.part == 'static'
+        if: matrix.os == 'ubuntu-latest'
         uses: actions/cache@v6
         with:
           path: ~/.cache/dprint
           key: dprint-${{ runner.os }}-${{ hashFiles('dprint.json') }}
           restore-keys: |
             dprint-${{ runner.os }}-
-      - if: matrix.part == 'static'
-        run: bunx dprint check
+
+      - name: Check formatting (dprint)
+        if: matrix.os == 'ubuntu-latest'
+        run: bun --bun dprint check
 
       - name: Turbo
         id: turbo
-        if: steps.plan.outputs.run
+        if: needs.plan.outputs.has_tasks == 'true'
+        env:
+          CI: "1"
+          MSYS_NO_PATHCONV: "1"
+          SCM_BASE: ${{ needs.plan.outputs.scm_base }}
+          SCOPE: ${{ needs.plan.outputs.scope }}
+          FORCE: ${{ inputs.force && '--force' || '' }}
         run: |
           touch "$RUNNER_TEMP/turbo-start"
-          read -ra tasks <<< "$TASKS"
-          # shellcheck disable=SC2086 # SCOPE is one flag or none.
-          bunx turbo run "${tasks[@]}" $SCOPE
+          if [[ -n "$SCM_BASE" ]]; then
+            export TURBO_SCM_BASE="$SCM_BASE"
+          fi
+          read -ra tasks <<< "$TURBO_TASKS"
+          args=("${tasks[@]}" --continue --concurrency=50%)
+          if [[ -n "$SCOPE" ]]; then args+=("$SCOPE"); fi
+          if [[ -n "$FORCE" ]]; then args+=("$FORCE"); fi
+          bunx turbo run "${args[@]}"
 
-      # What the tasks added to Turborepo's cache, failed run or not: turbo caches only
-      # the tasks that passed.
       - name: Did Turborepo cache anything
         id: turbo-new
-        if: ${{ !cancelled() && (steps.turbo.outcome == 'success' || steps.turbo.outcome == 'failure') }}
+        if: ${{ !cancelled() && !inputs.force && needs.plan.outputs.has_tasks == 'true' && (steps.turbo.outcome == 'success' || steps.turbo.outcome == 'failure') }}
         run: |
           if [[ -n $(find .turbo/cache -type f -newer "$RUNNER_TEMP/turbo-start" -print -quit 2>/dev/null) ]]; then
             echo "new=true" >> "$GITHUB_OUTPUT"
           fi
+
       - name: Save Turborepo
-        if: ${{ !cancelled() && steps.turbo-new.outputs.new }}
+        if: ${{ !cancelled() && !inputs.force && needs.plan.outputs.has_tasks == 'true' && steps.turbo-new.outputs.new }}
         uses: actions/cache/save@v6
         with:
           path: .turbo/cache
           key: ${{ steps.prepare.outputs.turbo-cache-key }}
 
-  # The one status to require: every part passed, or ran nothing because it had nothing
-  # to run.
+  ci-meta:
+    name: CI meta (actionlint + zizmor)
+    needs: plan
+    if: needs.plan.outputs.has_meta == 'true'
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Run actionlint
+        run: |
+          set -euo pipefail
+          version=1.7.12
+          archive="actionlint_${version}_linux_amd64.tar.gz"
+          dir="$RUNNER_TEMP/actionlint"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 "https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}" -o "$dir/$archive"
+          tar -xzf "$dir/$archive" -C "$dir" actionlint
+          "$dir/actionlint"
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@v0.9.2
+        with:
+          inputs: .github
+          config: .github/zizmor.yml
+          online-audits: false
+          advanced-security: false
+          annotations: true
+          min-severity: medium
+          min-confidence: medium
+
+  # The one status to require: every planned OS and meta job passed.
   check:
-    needs: part
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    needs: [plan, verify, ci-meta]
+    if: always() && !cancelled()
+    runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions: {}
+    env:
+      PLAN_RESULT: ${{ needs.plan.result }}
+      VERIFY_RESULT: ${{ needs.verify.result }}
+      META_RESULT: ${{ needs.ci-meta.result }}
+      TASK_COUNT: ${{ needs.plan.outputs.task_count }}
+      HAS_TASKS: ${{ needs.plan.outputs.has_tasks }}
+      HAS_META: ${{ needs.plan.outputs.has_meta }}
     steps:
-      - run: |
-          if [[ $RESULT != success ]]; then
-            echo "::error::A part of the check did not pass ($RESULT)."
+      - name: Summarize and enforce gate
+        run: |
+          {
+            echo "## CI Summary"
+            echo ""
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "| \`plan\` | \`${PLAN_RESULT}\` (tasks: ${TASK_COUNT:-0}, has_tasks: ${HAS_TASKS:-false}, has_meta: ${HAS_META:-false}) |"
+            echo "| \`verify\` | \`${VERIFY_RESULT}\` |"
+            echo "| \`ci-meta\` | \`${META_RESULT}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$PLAN_RESULT" != "success" ]]; then
+            echo "::error::plan job did not succeed ($PLAN_RESULT)."
             exit 1
           fi
-        env:
-          RESULT: ${{ needs.part.result }}
+          if [[ "$VERIFY_RESULT" != "success" ]]; then
+            echo "::error::One or more OS verification jobs did not pass ($VERIFY_RESULT)."
+            exit 1
+          fi
+          if [[ "$META_RESULT" != "success" && "$META_RESULT" != "skipped" ]]; then
+            echo "::error::ci-meta job did not pass ($META_RESULT)."
+            exit 1
+          fi

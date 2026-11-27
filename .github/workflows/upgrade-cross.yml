@@ -82,7 +82,7 @@ jobs:
             fi
           fi
           # A build older than the first seed has no data to be tested on: v0.1.0 cannot upgrade at all.
-          oldest=$(ls test/upgrade-seed | sort -V | head -1)
+          oldest=$(for d in test/upgrade-seed/*; do basename "$d"; done | sort -V | head -1)
           tooOld() { [[ $(printf '%s\n' "$1" "$oldest" | sort -V | head -1) != "$oldest" ]]; }
           why=
           if [[ -n $from ]] && tooOld "$from"; then

@@ -5,10 +5,40 @@
     // The embedding model, the same on every platform.
     "build": {
       "inputs": ["axp_memory/embedding.py", "uv.lock"],
-      "outputs": ["out/models/**"]
+      "outputs": ["out/models/**"],
+      "passThroughEnv": [
+        "UV_CACHE_DIR",
+        "UV_PYTHON_INSTALL_DIR",
+        "UV_PYTHON",
+        "VIRTUAL_ENV"
+      ]
+    },
+    "typecheck": {
+      "dependsOn": [],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
+      "passThroughEnv": [
+        "UV_CACHE_DIR",
+        "UV_PYTHON_INSTALL_DIR",
+        "UV_PYTHON",
+        "VIRTUAL_ENV"
+      ]
     },
     "lint": {
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "$TURBO_ROOT$/ruff.toml"]
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "$TURBO_ROOT$/ruff.toml"],
+      "passThroughEnv": [
+        "UV_CACHE_DIR",
+        "UV_PYTHON_INSTALL_DIR",
+        "UV_PYTHON",
+        "VIRTUAL_ENV"
+      ]
+    },
+    "test": {
+      "passThroughEnv": [
+        "UV_CACHE_DIR",
+        "UV_PYTHON_INSTALL_DIR",
+        "UV_PYTHON",
+        "VIRTUAL_ENV"
+      ]
     }
   }
 }

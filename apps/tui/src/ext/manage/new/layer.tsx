@@ -370,7 +370,7 @@ export function NewConversationLayer({
       title={t("newTitle")}
       footer={t(page.kind === "browse" ? "browseFlowFooter" : "flowFooter")}
     >
-      <Text bold wrap="truncate-end">
+      <Text bold wrap="truncate-start">
         {trail(flow, t)}
       </Text>
       {flow.listing === undefined ? null : (

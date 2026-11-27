@@ -1,5 +1,6 @@
 import {
   chmod,
+  copyFile,
   mkdir,
   mkdtemp,
   readFile,
@@ -10,7 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /** The repository root, from this file's directory. */
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -39,6 +40,70 @@ const started = (record: string): Map<string, string> =>
       ]),
   );
 
+let stubDir: string | undefined;
+let stubExe: string | undefined;
+
+beforeAll(async () => {
+  if (process.platform !== "win32") return;
+  stubDir = await mkdtemp(join(tmpdir(), "eta-bootstrap-stub-"));
+  const src = join(stubDir, "stand-in-host.ts");
+  stubExe = join(stubDir, "eta-host.exe");
+  await writeFile(
+    src,
+    `import { renameSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import process from "node:process";
+
+if (process.argv.slice(2).some((arg) => arg.includes("running"))) {
+  console.log("null");
+  process.exit(0);
+}
+
+const home = process.env.HOME ?? "";
+const tmp = join(home, ".host-environment");
+const finalPath = join(home, "host-environment.txt");
+const lines = Object.entries(process.env)
+  .map(([key, value]) => \`\${key}=\${value ?? ""}\`)
+  .join("\\n");
+writeFileSync(tmp, \`\${lines}\\n\`);
+renameSync(tmp, finalPath);
+console.log('{"port":45999}');
+
+const parent = process.ppid;
+const watch = setInterval(() => {
+  try {
+    process.kill(parent, 0);
+  } catch {
+    clearInterval(watch);
+    process.exit(0);
+  }
+}, 100);
+watch.unref();
+setTimeout(() => process.exit(0), 30_000);
+`,
+  );
+  const built = Bun.spawnSync(
+    [process.execPath, "build", "--compile", src, "--outfile", stubExe],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  if (built.exitCode !== 0) {
+    throw new Error(
+      `failed to compile Windows stand-in host: ${built.stderr.toString()}`,
+    );
+  }
+}, 60_000);
+
+afterAll(async () => {
+  if (stubDir) {
+    await rm(stubDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 20,
+      retryDelay: 100,
+    });
+  }
+});
+
 async function launch({
   names,
 }: {
@@ -52,21 +117,29 @@ async function launch({
   const home = await mkdtemp(join(tmpdir(), "eta-bootstrap-"));
   const dir = join(home, ".eta", "desktop", "host");
   await mkdir(dir, { recursive: true });
-  const host = join(dir, "eta-host");
-  await writeFile(host, standInHost);
-  await chmod(host, 0o755);
+  if (process.platform === "win32") {
+    await copyFile(stubExe!, join(dir, "eta-host.exe"));
+  } else {
+    const host = join(dir, "eta-host");
+    await writeFile(host, standInHost);
+    await chmod(host, 0o755);
+  }
   // Kept, not discarded: when the host never records its environment, these say why.
   const said = join(home, "bootstrap.out");
   const complained = join(home, "bootstrap.err");
 
   // What launchd hands an app opened from the Dock: only HOME. `names` is the other case — an app
   // that was started with a user environment, complete or with a hole in it.
-  const { PATH } = process.env;
+  const { PATH, SystemRoot, TEMP, TMP } = process.env;
+  const winEnv: Record<string, string | undefined> =
+    process.platform === "win32"
+      ? { USERPROFILE: home, SystemRoot, TEMP, TMP }
+      : {};
   const child = Bun.spawn(
     [process.execPath, join(root, "scripts", "nsh-host-bootstrap.ts"), "0.1.0"],
     {
       cwd: root,
-      env: { HOME: home, PATH, ...names },
+      env: { HOME: home, PATH, ...winEnv, ...names },
       stdin: "ignore",
       stdout: Bun.file(said),
       stderr: Bun.file(complained),
@@ -94,7 +167,12 @@ async function launch({
     stop: async () => {
       child.kill();
       await child.exited;
-      await rm(home, { recursive: true, force: true });
+      await rm(home, {
+        recursive: true,
+        force: true,
+        maxRetries: 20,
+        retryDelay: 100,
+      });
     },
   };
 }

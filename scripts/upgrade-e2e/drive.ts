@@ -13,7 +13,7 @@
  *
  * Two workflows run it, and they prove different things:
  *
- * - `upgrade-e2e.yml` ("Upgrade end to end"), the `upgrade` jobs on a pull request: SCENARIOS,
+ * - `host-upgrade-e2e.yml` ("Host upgrade E2E"), the `upgrade` jobs on a pull request: SCENARIOS,
  *   between the 0.9.x hosts `build.ts` makes from the pull request's own code. It proves the
  *   machinery (swap, restart, migration, backup, rollback, the button, `--cancel`) on launchd and a
  *   Windows service. It is NOT a test across versions: no published build, no seed, no release
