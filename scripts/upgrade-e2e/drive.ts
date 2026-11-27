@@ -893,14 +893,20 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     const page = await context.newPage();
     const shot = (file: string) =>
       page.screenshot({ path: join(SHOTS, `${process.platform}-${file}.png`) });
+    const hostVersion = page.getByTestId("host-version");
+    /**
+     * The row once the Host has answered: since #1037 it is drawn from the first
+     * paint and says "—" until its first check comes back, so the row being on
+     * the page is not the answer, a version in it is.
+     */
+    const answered = hostVersion.filter({ hasText: /\d+\.\d+\.\d+/ });
     const settings = async (): Promise<void> => {
       // On a desktop-wide window Settings is a page of its own, not a dialog.
       await page.goto(`http://127.0.0.1:${PORT}/?settings=update`);
-      await page.getByTestId("host-version").waitFor({ timeout: 30_000 });
+      await answered.waitFor({ timeout: 60_000 });
     };
     const shown = async (): Promise<string> => {
-      const version =
-        (await page.getByTestId("host-version").textContent()) ?? "";
+      const version = (await answered.textContent({ timeout: 30_000 })) ?? "";
       return version.replace("Current version", "").trim();
     };
 
