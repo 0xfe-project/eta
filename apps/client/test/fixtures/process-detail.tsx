@@ -4,7 +4,7 @@ import type {
   ViewMessageRow,
 } from "@eta/client-contracts";
 import { colorScheme, mount, View } from "nsh";
-import { palette, Palette } from "../../src/components";
+import { Button, palette, Palette } from "../../src/components";
 import { Message } from "../../src/pages/chat/message";
 import { Appearance } from "../../src/pages/settings/appearance";
 import { createHost, Host } from "../../src/services/host";
@@ -13,8 +13,9 @@ import {
   ProcessDetails,
 } from "../../src/services/process-detail";
 
-// Ada's reply at work (a thought, words, a call) and Settings › Appearance beside it to switch
-// how much of its process shows.
+// Ada's reply at work (a thought, words, eight calls of five kinds) and Settings › Appearance
+// beside it to switch how much of its process shows; the run can call once more, or be one
+// that only thought.
 
 const at = Date.UTC(2026, 10, 21, 9, 30);
 
@@ -27,26 +28,66 @@ function row(seq: number, message: Record<string, unknown>): ViewMessageRow {
   };
 }
 
+const call = (id: string, name: string, input: Record<string, unknown>) => ({
+  type: "toolCall",
+  id,
+  name,
+  arguments: input,
+});
+
+const result = (seq: number, id: string) =>
+  row(seq, {
+    role: "toolResult",
+    toolCallId: id,
+    content: [{ type: "text", text: "ok" }],
+    isError: false,
+  });
+
+const briefing = row(1, {
+  role: "user",
+  content: "Why does the model return 401?",
+});
+
 const rows = [
-  row(1, { role: "user", content: "Why does the model return 401?" }),
+  briefing,
   row(2, {
     role: "assistant",
     content: [
       { type: "thinking", thinking: "Look at the provider config." },
       { type: "text", text: "I'll check config.json first." },
-      {
-        type: "toolCall",
-        id: "t1",
-        name: "read",
-        arguments: { path: "config.json" },
-      },
+      call("b1", "bash", { command: "ls" }),
+      call("b2", "bash", { command: "cat .env" }),
+      call("w1", "web_fetch", { url: "https://example.invalid/a" }),
     ],
   }),
-  row(3, {
-    role: "toolResult",
-    toolCallId: "t1",
-    content: [{ type: "text", text: "baseUrl: https://example.invalid" }],
-    isError: false,
+  result(3, "b1"),
+  result(4, "b2"),
+  result(5, "w1"),
+  row(6, {
+    role: "assistant",
+    content: [
+      call("b3", "bash", { command: "env" }),
+      call("w2", "web_fetch", { url: "https://example.invalid/b" }),
+      call("r1", "read", { path: "config.json" }),
+      call("g1", "grep", { pattern: "baseUrl" }),
+      call("x1", "write", { path: "notes.md" }),
+    ],
+  }),
+  ...["b3", "w2", "r1", "g1", "x1"].map((id, index) => result(7 + index, id)),
+];
+
+/** One more call, still running. */
+const oneMore = row(12, {
+  role: "assistant",
+  content: [call("b4", "bash", { command: "curl -I" })],
+});
+
+/** A run that only thought. */
+const thoughtOnly = [
+  briefing,
+  row(2, {
+    role: "assistant",
+    content: [{ type: "thinking", thinking: "Look at the provider config." }],
   }),
 ];
 
@@ -73,25 +114,28 @@ function Fixture() {
   const host = createHost();
   host.address.set({ origin: "http://example.invalid" });
   host.call = async <T,>() => undefined as T;
-  host.state.update((state) => ({
-    ...state,
-    status: "open",
-    targets: {
-      agents: {
-        version: 1,
-        revisions: {},
-        sections: { list: [{ id: "ada", name: "Ada" }] },
-      },
-      "sessions.s-ada": {
-        version: 1,
-        revisions: {},
-        sections: {
-          transcript: { messages: rows },
-          core: { session: "s-ada", running: true },
+  const show = (messages: ViewMessageRow[]) =>
+    host.state.update((state) => ({
+      ...state,
+      status: "open",
+      targets: {
+        ...state.targets,
+        agents: {
+          version: 1,
+          revisions: {},
+          sections: { list: [{ id: "ada", name: "Ada" }] },
+        },
+        "sessions.s-ada": {
+          version: 1,
+          revisions: {},
+          sections: {
+            transcript: { messages },
+            core: { session: "s-ada", running: true },
+          },
         },
       },
-    },
-  }));
+    }));
+  show(rows);
   const processDetail = createProcessDetail();
   return (
     <Palette.Provider value={() => palette(colorScheme())}>
@@ -120,6 +164,11 @@ function Fixture() {
                 onReadDraft={() => {}}
                 registerAction={() => () => {}}
               />
+              <Button
+                label="Call once more"
+                onPress={() => show([...rows, oneMore])}
+              />
+              <Button label="Only thought" onPress={() => show(thoughtOnly)} />
             </View>
             <View style={{ width: 420 }}>
               <Appearance

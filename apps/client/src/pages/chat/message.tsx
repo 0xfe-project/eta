@@ -71,7 +71,7 @@ import { cardOpen, setCardOpen } from "./card-folds";
 import { DeliveryLine } from "./composer-delivery";
 import { activeReply } from "./member-status";
 import { messageTime } from "./message-time";
-import { ProcessStep, ProcessWindow } from "./process-step";
+import { ProcessStep, ProcessTally, ProcessWindow } from "./process-step";
 import { MemberRun } from "./run/member-run";
 import { RunPanel } from "./run/run-panel";
 import { draftTitle } from "./task-draft-detail";
@@ -374,6 +374,15 @@ export function Message(props: {
   /** The steps a count says: a trace of an insert is not one. */
   const stepCount = () =>
     processSteps().filter((step) => step.type !== "steer").length;
+  const liveCount = () =>
+    stepCount() === 1
+      ? uiText("processOneStep")
+      : uiText("processSteps", { length: stepCount() });
+  const finishedCount = () =>
+    `${props.phone ? "· " : ""}${uiText(
+      stepCount() === 1 ? "oneProcessStep" : "processStepCount",
+      { count: stepCount() },
+    )}`;
   /** The answer text: streams live as it arrives, or shows the final saved reply text. */
   const answer = () => {
     if (item().status === "failed") return undefined;
@@ -899,14 +908,30 @@ export function Message(props: {
                   text={uiText("thinkingProcess")}
                   style={{ color: c().faint }}
                 />
-                <View style={{ flex: 1 }} />
-                <Caption
-                  style={{ color: c().faint }}
-                  text={`${props.phone ? "· " : ""}${uiText(
-                    stepCount() === 1 ? "oneProcessStep" : "processStepCount",
-                    { count: stepCount() },
-                  )}`}
-                />
+                <If
+                  when={brief()}
+                  else={
+                    <>
+                      <View style={{ flex: 1 }} />
+                      <Caption
+                        style={{ color: c().faint }}
+                        text={finishedCount()}
+                      />
+                    </>
+                  }
+                >
+                  <ProcessTally
+                    count={finishedCount()}
+                    steps={processSteps()}
+                    align="flex-end"
+                    // Tool names read as their step rows write them: not in capitals.
+                    line={(text) => (
+                      <Label variant="caption" tone="faint" lines={1}>
+                        {text}
+                      </Label>
+                    )}
+                  />
+                </If>
               </View>
             </If>
           }
@@ -956,17 +981,30 @@ export function Message(props: {
                     tone="muted"
                   />
                 </If>
-                <Label variant="caption" tone="muted" lines={1}>
-                  {stepCount()
-                    ? stepCount() === 1
-                      ? uiText("processOneStep")
-                      : uiText("processSteps", { length: stepCount() })
-                    : item().status === "queued"
-                      ? uiText("queued")
-                      : item().status === "stopping"
-                        ? uiText("stopping")
-                        : uiText("working")}
-                </Label>
+                <If
+                  when={brief() && stepCount()}
+                  else={
+                    <Label variant="caption" tone="muted" lines={1}>
+                      {stepCount()
+                        ? liveCount()
+                        : item().status === "queued"
+                          ? uiText("queued")
+                          : item().status === "stopping"
+                            ? uiText("stopping")
+                            : uiText("working")}
+                    </Label>
+                  }
+                >
+                  <ProcessTally
+                    count={liveCount()}
+                    steps={processSteps()}
+                    line={(text) => (
+                      <Label variant="caption" tone="muted" lines={1}>
+                        {text}
+                      </Label>
+                    )}
+                  />
+                </If>
               </View>
               <Button
                 label={uiText("stop")}
