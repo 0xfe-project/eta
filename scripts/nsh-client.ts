@@ -94,12 +94,14 @@ async function run(
 const packaging =
   args[0] === "package" && !args.includes("--help") && !args.includes("-h");
 const target = option("--target");
+const format = option("--format");
 const desktopTarget =
   packaging &&
   (target === "macos" || target === "windows" || target === "linux")
     ? target
     : undefined;
 const desktop = desktopTarget !== undefined;
+const linuxFlatpak = desktopTarget === "linux" && format === "flatpak";
 // Android updates by signed packages of the app's code (`nsh publish`), and
 // by a new APK when the code needs a newer shell. iOS goes through the store.
 const android = packaging && target === "android";
@@ -163,6 +165,8 @@ const manifest =
   !args.includes("-h") &&
   !!(updateUrl || updateKey);
 let staging: string | undefined;
+const flatpakState = join(cwd, ".flatpak-builder");
+const hadFlatpakState = existsSync(flatpakState);
 function stripOption(argv: string[], name: string): string[] {
   const result: string[] = [];
   for (let i = 0; i < argv.length; i++) {
@@ -330,6 +334,8 @@ try {
   await run(nsh, command);
 } finally {
   if (staging) rmSync(staging, { recursive: true, force: true });
+  if (linuxFlatpak && !hadFlatpakState)
+    rmSync(flatpakState, { recursive: true, force: true });
 }
 
 if (packaging && target === "web") {
@@ -431,6 +437,49 @@ if (desktop) {
     ]);
   } else if (desktopTarget === "linux") {
     await run("tar", ["-czf", join(out, `${name}.tar.gz`), "-C", out, name]);
+    if (linuxFlatpak) {
+      const id = option("--id") ?? meta.id;
+      const flatpakDir = join(out, "flatpak");
+      const manifestPath = join(flatpakDir, `${id}.yml`);
+      if (
+        existsSync(manifestPath) &&
+        Bun.which("flatpak-builder") &&
+        Bun.which("flatpak")
+      ) {
+        const repo = join(flatpakDir, "repo");
+        const buildDir = join(flatpakDir, "build");
+        const stateDir = join(flatpakDir, ".flatpak-builder");
+        const flatpakBundle = join(out, `${name}.flatpak`);
+        // nsh packages Flatpak before eta-bootstrap is compiled into the bundle;
+        // rebuild the Flatpak from the re-tarred archive so eta-bootstrap is included.
+        rmSync(repo, { recursive: true, force: true });
+        rmSync(flatpakBundle, { force: true });
+        await run(
+          "flatpak-builder",
+          [
+            "--user",
+            "--install-deps-from=flathub",
+            "--force-clean",
+            `--state-dir=${stateDir}`,
+            `--repo=${repo}`,
+            buildDir,
+            manifestPath,
+          ],
+          flatpakDir,
+        );
+        await run(
+          "flatpak",
+          [
+            "build-bundle",
+            "--runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo",
+            repo,
+            flatpakBundle,
+            id,
+          ],
+          flatpakDir,
+        );
+      }
+    }
   } else {
     // Windows' own bsdtar: the GNU tar of Git's bash, first on a runner's PATH, reads `D:\…` as
     // a remote host, and cannot write a zip either.
