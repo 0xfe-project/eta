@@ -8,9 +8,13 @@ import {
 } from "@eta/client-contracts/host-launcher";
 import { appInfo, platform, signal } from "nsh";
 import { packagedHostBootstrap } from "../../../packaged-host-bootstrap";
+import { isFlatpak } from "../../services/flatpak";
 import { addressFrom } from "../../services/host";
 
-export const canStartHost = ["macos", "linux", "windows"].includes(platform.os);
+export const isDesktopPlatform = ["macos", "linux", "windows"].includes(
+  platform.os,
+);
+export const canStartHost = isDesktopPlatform && !isFlatpak;
 export const localProgress = signal<
   { version?: string; received?: number; total?: number } | undefined
 >(undefined);
@@ -55,6 +59,12 @@ function bootstrap(): DesktopHostCommand[] {
 }
 
 async function prepare(): Promise<HostAddress> {
+  if (isFlatpak) {
+    throw new LocalHostError(
+      "sandbox",
+      "Install eta-host on your system and connect to it instead of starting a host inside Flatpak.",
+    );
+  }
   for (const launch of bootstrap()) {
     // Only a launcher that was not found is skipped so the installed host is
     // tried next; a launcher that was found but failed to start reports its

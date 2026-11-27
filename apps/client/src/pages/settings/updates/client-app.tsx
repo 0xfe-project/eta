@@ -1,6 +1,7 @@
 import type {
   ClientChannel,
   ClientOffer,
+  createClientUpdate,
 } from "../../../services/client-update";
 import { effect, signal, View } from "nsh";
 import { BackHandler } from "nsh/mobile";
@@ -31,8 +32,11 @@ import { releaseRow, ReleaseStatus, statusWidth } from "./host-release";
 const dialogHeight = 248;
 
 /** What the offer's one button says, from finding it to restarting into it. */
-export function clientUpdateAction(offer: ClientOffer) {
-  const update = clientUpdate;
+export function clientUpdateAction(
+  offer: ClientOffer,
+  platformKind = clientPlatform,
+  update = clientUpdate,
+) {
   if (update.downloading()) {
     const percentage = update.percentage();
     return percentage === undefined
@@ -45,15 +49,17 @@ export function clientUpdateAction(offer: ClientOffer) {
       : update.restarting()
         ? uiText("restarting")
         : uiText("restartToUpdate");
-  if (offer.kind === "app" && !offer.update.canInstall)
-    return uiText("downloadApk");
+  if (offer.kind === "app" && !offer.update.canInstall) {
+    if (platformKind === "android") return uiText("downloadApk");
+    if (platformKind === "flatpak") return uiText("downloadFlatpak");
+    return uiText("downloadRelease");
+  }
   return uiText("downloadUpdate");
 }
 
 /** Download, then restart: the desktop asks first, Android closes the app,
  * which runs the package from its next start. */
-export function pressClientUpdate(confirm: () => void) {
-  const update = clientUpdate;
+export function pressClientUpdate(confirm: () => void, update = clientUpdate) {
   const offer = update.offer();
   if (!offer || update.busy()) return;
   if (!update.ready()) {
@@ -159,9 +165,14 @@ export function ClientChannelSelect() {
 /** This app's own updates: the desktop app replaces itself, the Android app
  * takes a package of its code, or an APK when the code needs a newer one.
  * The row reads as the Host's does: version, product and machine, status. */
-export function ClientAppUpdate(props: { phone: boolean }) {
+export function ClientAppUpdate(props: {
+  phone: boolean;
+  flatpak?: boolean;
+  update?: ReturnType<typeof createClientUpdate>;
+}) {
   const c = colors();
-  const update = clientUpdate;
+  const update = props.update ?? clientUpdate;
+  const platformKind = props.flatpak ? "flatpak" : clientPlatform;
   const confirm = signal(false);
   const status = () => {
     if (update.checking())
@@ -190,12 +201,12 @@ export function ClientAppUpdate(props: { phone: boolean }) {
           when={!update.downloading()}
           else={
             <Label variant="small" tone="muted">
-              {clientUpdateAction(offer())}
+              {clientUpdateAction(offer(), platformKind, update)}
             </Label>
           }
         >
           <Button
-            label={clientUpdateAction(offer())}
+            label={clientUpdateAction(offer(), platformKind, update)}
             tone={update.ready() ? "primary" : undefined}
             size={props.phone ? control.touch : undefined}
             style={
@@ -204,7 +215,7 @@ export function ClientAppUpdate(props: { phone: boolean }) {
                 : undefined
             }
             busy={update.restarting()}
-            onPress={() => pressClientUpdate(() => confirm.set(true))}
+            onPress={() => pressClientUpdate(() => confirm.set(true), update)}
           />
         </If>
       )}
@@ -240,10 +251,17 @@ export function ClientAppUpdate(props: { phone: boolean }) {
         <Label weight={weight.regular}>{clientVersion() ?? "dev"}</Label>
         <If when={props.phone}>{statusLine()}</If>
         <Label variant="small" tone="muted">
-          {clientPlatform === "android"
+          {platformKind === "android"
             ? uiText("androidAppHere")
-            : uiText("desktopAppHere")}
+            : platformKind === "flatpak"
+              ? uiText("flatpakAppHere")
+              : uiText("desktopAppHere")}
         </Label>
+        <If when={platformKind === "flatpak"}>
+          <Label variant="small" tone="muted">
+            {uiText("flatpakUpdateHint")}
+          </Label>
+        </If>
         <If when={update.ready() && update.offer()?.kind === "package"}>
           <Label variant="small" tone="muted">
             {uiText("reopenEtaToUse", { version: update.offer()!.version })}

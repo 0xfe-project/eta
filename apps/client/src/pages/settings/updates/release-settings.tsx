@@ -153,7 +153,7 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
           </If>
         </View>
       </ChannelRow>
-      <If when={clientPlatform === "desktop"}>
+      <If when={clientPlatform === "desktop" || clientPlatform === "flatpak"}>
         <ChannelRow title={uiText("desktopApp")} phone={props.phone}>
           <ClientChannelSelect />
         </ChannelRow>

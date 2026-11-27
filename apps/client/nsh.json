@@ -45,7 +45,12 @@
     "statusBar": true,
     "process": {
       "execute": ["eta-host", "eta-host.exe", "env", "cmd.exe"],
-      "env": ["XDG_DATA_HOME", "ETA_RELEASES_URL", "ETA_HOST_ORIGIN"]
+      "env": [
+        "XDG_DATA_HOME",
+        "ETA_RELEASES_URL",
+        "ETA_HOST_ORIGIN",
+        "FLATPAK_ID"
+      ]
     },
     "application": true
   },

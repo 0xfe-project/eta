@@ -43,6 +43,14 @@ export const connectionMessages = {
   ],
   downloadingTheHost: ["Downloading the host", "正在下载主机"],
   findingARelease: ["Finding a release…", "正在查找版本…"],
+  flatpakLocalHostFooter: [
+    "Running inside Flatpak. Install eta-host on your host OS so agents can reach your projects and tools.",
+    "当前运行于 Flatpak 沙箱。请在宿主机安装 eta-host，以便智能体访问你的项目和本地工具。",
+  ],
+  flatpakLocalHostUnavailable: [
+    "Unavailable inside Flatpak. Install eta-host on your system and connect to it below (e.g. http://127.0.0.1:8787).",
+    "Flatpak 沙箱内无法启动本机主机。请在宿主机安装 eta-host 并在下方连接（如 http://127.0.0.1:8787）。",
+  ],
   getANewLinkFromThe: [
     "Get a new link from the host: Settings → Machines → Connect a phone.",
     "从主机获取新链接：设置 → 机器 → 连接手机。",
