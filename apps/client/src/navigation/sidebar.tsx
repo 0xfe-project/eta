@@ -36,6 +36,8 @@ const phoneItemWidth = "20%";
 /** An unread count over a rail or tab icon. */
 const badgeHeight = 16;
 const footerHeight = 36;
+/** Negative right margin to align a centered icon-only button's glyph with `space[16]`. */
+const collapseButtonRightInset = -(control.md - icon.md) / 2;
 /** The wordmark's own spacing, not a caption's. */
 const wordmarkTracking = 3.2;
 
@@ -82,10 +84,10 @@ export function NavItem(props: {
         width: phone() ? phoneItemWidth : "100%",
         flexShrink: 0,
         paddingHorizontal: wide()
-          ? props.compact
-            ? space[12]
-            : props.flush
-              ? space[16]
+          ? props.flush
+            ? space[16]
+            : props.compact
+              ? space[12]
               : space[8]
           : 0,
         ...(props.flush === "bottom"
@@ -111,6 +113,7 @@ export function NavItem(props: {
               : icon.md
         }
         tone={props.selected || wide() ? "ink" : "muted"}
+        testID={wide() ? `sidebar-nav-icon-${props.item[0]}` : undefined}
       />
       <Label
         variant={wide() ? (props.compact ? "small" : "body") : "caption"}
@@ -169,6 +172,7 @@ export function DesktopSidebar(
   }
   return (
     <View
+      testID="desktop-sidebar"
       style={{
         width: props.collapsed ? sizes.rail : paneWidth("sidebar"),
         height: "100%",
@@ -220,7 +224,9 @@ export function DesktopSidebar(
               icon="sidebar"
               size={control.md}
               iconSize={icon.md}
+              iconTestID="sidebar-collapse-icon"
               expanded
+              style={{ marginRight: collapseButtonRightInset }}
               attach={attachToggle}
               onPress={toggleSidebar}
             />

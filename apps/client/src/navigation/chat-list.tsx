@@ -29,6 +29,8 @@ import { RailButton } from "./rail-controls";
 
 /** A phone's section heading over the list ("Groups"). */
 const sectionHeight = 36;
+/** Negative right margin to align a centered icon-only button's glyph with `space[16]`. */
+const newGroupButtonRightInset = -(control.sm - icon.sm) / 2;
 
 export interface ChatListProps {
   layout: Layout;
@@ -170,8 +172,13 @@ export function ChatList(
                     iconOnly
                     tone="ghost"
                     size={control.sm}
+                    iconSize={icon.sm}
+                    iconTestID="sidebar-new-group-icon"
                     onPress={() => props.onCreate()}
-                    style={{ backgroundColor: "transparent" }}
+                    style={{
+                      backgroundColor: "transparent",
+                      marginRight: newGroupButtonRightInset,
+                    }}
                   />
                 </>
               }

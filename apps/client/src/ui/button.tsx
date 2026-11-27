@@ -23,6 +23,7 @@ export function Button(props: {
   end?: IconName;
   iconOnly?: boolean;
   iconSize?: number;
+  iconTestID?: string;
   tone?: "primary" | "plain" | "ghost" | "danger";
   selected?: boolean;
   disabled?: boolean;
@@ -137,7 +138,12 @@ export function Button(props: {
             <If
               when={waiting()}
               else={
-                <Icon name={props.icon!} tone={textTone()} size={iconSize()} />
+                <Icon
+                  name={props.icon!}
+                  tone={textTone()}
+                  size={iconSize()}
+                  testID={props.iconTestID}
+                />
               }
             >
               <Spinner tone={textTone()} size={iconSize()} />

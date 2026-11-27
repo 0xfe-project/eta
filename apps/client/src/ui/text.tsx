@@ -59,6 +59,7 @@ export function Icon(props: {
   tone?: keyof typeof light;
   /** When omitted, the icon is decorative and hidden from assistive technologies. */
   accessibilityLabel?: string;
+  testID?: string;
 }) {
   const color = colors();
   const density = densityDefaults();
@@ -71,6 +72,7 @@ export function Icon(props: {
     )}`;
   return (
     <Image
+      testID={props.testID}
       src={src()}
       fadeDuration={0}
       accessibilityLabel={props.accessibilityLabel}
