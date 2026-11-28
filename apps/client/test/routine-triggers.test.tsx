@@ -780,3 +780,184 @@ test("Eta Events channel folds single source, lets user pick event & status/assi
     },
   });
 });
+
+async function openZhEditor() {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "zh-CN",
+  });
+  await app.waitFor("label:新建定时任务");
+  await app.press("label:Scenario: ready");
+  await app.press("label:新建定时任务");
+  await app.waitFor("label:仅事件触发");
+  await app.type("label:名称", "触发器翻译");
+  await app.type("label:要求", "检查触发器中文。");
+  await app.press("label:仅事件触发");
+  await app.waitFor("label:渠道");
+  return app;
+}
+
+test("built-in provider catalogs and config fields show in Chinese", async () => {
+  const app = await openZhEditor();
+
+  async function choose(provider: string) {
+    await app.press("label:渠道");
+    await app.waitFor(`label:${provider}`);
+    await app.press(`label:${provider}`);
+  }
+
+  await choose("Webhook");
+  await app.waitFor("text:收到 Webhook");
+  for (const title of ["验证方式", "请求头名称", "包含关键词", "排除关键词"]) {
+    expect(app.shows(`label:${title}`)).toBe(true);
+  }
+  expect(app.shows("label:Authentication")).toBe(false);
+  await app.press("label:验证方式");
+  await app.waitFor("label:HMAC-SHA256 签名");
+  expect(app.shows("label:共享密钥请求头")).toBe(true);
+  expect(app.shows("label:仅地址令牌（无）")).toBe(true);
+  await app.press("label:HMAC-SHA256 签名");
+
+  await choose("RSS");
+  await app.waitFor("text:新订阅条目");
+  expect(
+    app.shows(
+      "text:RSS 2.0、Atom 1.0 或 JSON Feed 1.1 订阅源发布新条目时触发。",
+    ),
+  ).toBe(true);
+  expect(app.shows("label:订阅地址")).toBe(true);
+  expect(
+    app.shows("text:RSS 2.0、Atom 1.0 或 JSON Feed 1.1 的地址（http/https）。"),
+  ).toBe(true);
+  expect(app.shows("label:包含关键词")).toBe(true);
+  expect(app.shows("label:排除关键词")).toBe(true);
+
+  await choose("网页监控");
+  await app.waitFor("text:网页 / JSON 内容变化");
+  for (const title of [
+    "地址",
+    "CSS 选择器",
+    "JSON 路径",
+    "HTTP 方法",
+    "请求头",
+  ]) {
+    expect(app.shows(`label:${title}`)).toBe(true);
+  }
+  expect(app.shows("text:要监控的 HTTP 或 HTTPS 地址。")).toBe(true);
+
+  await choose("文件监听");
+  await app.waitFor("text:文件或目录变化");
+  for (const title of [
+    "监听路径",
+    "包含的 glob",
+    "忽略的 glob",
+    "防抖（毫秒）",
+  ]) {
+    expect(app.shows(`label:${title}`)).toBe(true);
+  }
+  expect(
+    app.shows("text:本机文件或目录的绝对路径，或 ~/... 形式的路径。"),
+  ).toBe(true);
+});
+
+test("eta-events fields show in Chinese while group, creator and assignee options keep the host's names", async () => {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "zh-CN",
+  });
+  await app.waitFor("label:新建定时任务");
+  await app.press("label:Scenario: origin_filters");
+  await app.press("label:新建定时任务");
+  await app.waitFor("label:仅事件触发");
+  await app.type("label:名称", "任务事件");
+  await app.type("label:要求", "检查任务事件。");
+  await app.press("label:仅事件触发");
+  await app.waitFor("label:渠道");
+  await app.press("label:渠道");
+  await app.waitFor("label:eta 事件");
+  await app.press("label:eta 事件");
+
+  await app.waitFor("label:触发器类型");
+  await app.press("label:触发器类型");
+  await app.waitFor("label:任务运行结束");
+  expect(
+    app.shows("text:任务状态变化时触发（例如进入待验收、已完成或已阻塞）。"),
+  ).toBe(true);
+  await app.press("label:任务状态变化");
+
+  await app.waitFor("label:目标状态: 待验收");
+  expect(app.shows("label:目标状态: 已阻塞")).toBe(true);
+  expect(app.shows("label:原状态: 进行中")).toBe(true);
+  expect(app.shows("label:目标状态: in_review")).toBe(false);
+  expect(
+    app.shows("text:可选，要匹配的目标状态（留空则匹配任何状态变化）。"),
+  ).toBe(true);
+  expect(
+    app.shows(
+      "text:可选，任务是在哪个群聊里提出的，包括 Captain 的对话（留空则不限）。",
+    ),
+  ).toBe(true);
+
+  await app.press("label:来源群聊");
+  await app.waitFor("label:Dev Group");
+  expect(app.shows("label:Release Crew")).toBe(true);
+  await app.press("label:Release Crew");
+
+  await app.press("label:创建者");
+  await app.waitFor("label:Forge");
+  expect(app.shows("label:Ada")).toBe(true);
+  await app.press("label:Ada");
+
+  await app.press("label:执行者");
+  await app.waitFor("label:Forge");
+  await app.press("label:Forge");
+
+  await app.press("label:创建");
+  await app.waitFor("text:任务事件");
+  const createLine = app.texts().find((t) => t.startsWith("Create:")) ?? "";
+  const payload = JSON.parse(createLine.slice("Create:".length)) as {
+    trigger: { config: Record<string, unknown> };
+  };
+  expect(payload.trigger.config).toEqual({
+    group: "g2",
+    creator: "a2",
+    assignee: "a1",
+  });
+});
+
+test("eta-events fields keep the host's English text in English", async () => {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "en-US",
+  });
+  await app.waitFor("label:New routine");
+  await app.press("label:Scenario: origin_filters");
+  await app.press("label:New routine");
+  await app.waitFor("label:Event trigger");
+  await app.type("label:Name", "Task events");
+  await app.type("label:Brief", "Check task events.");
+  await app.press("label:Event trigger");
+  await app.waitFor("label:Channel");
+  await app.press("label:Channel");
+  await app.waitFor("label:Eta Events");
+  await app.press("label:Eta Events");
+  await app.waitFor("label:Trigger event");
+  await app.press("label:Trigger event");
+  await app.waitFor("label:Task run finished");
+  await app.press("label:Task status changed");
+
+  await app.waitFor("label:Target statuses: in_review");
+  expect(app.shows("label:Previous statuses: in_progress")).toBe(true);
+  for (const title of ["Source group", "Creator", "Assignee"]) {
+    expect(app.shows(`label:${title}`)).toBe(true);
+  }
+  await app.press("label:Source group");
+  await app.waitFor("label:Dev Group");
+  expect(app.shows("label:Release Crew")).toBe(true);
+});

@@ -25,7 +25,8 @@ type CatalogScenario =
   | "error"
   | "empty"
   | "partial_empty"
-  | "stale_catalog";
+  | "stale_catalog"
+  | "origin_filters";
 
 const catalogItems: TriggerCatalogItem[] = [
   {
@@ -375,6 +376,119 @@ const catalogItems: TriggerCatalogItem[] = [
             "Optional executor agent id or name to match (leave empty for any assignee).",
           examples: ["forge"],
         },
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
+  },
+];
+
+const originFilterFields = {
+  group: {
+    type: "string",
+    title: "Source group",
+    description:
+      "Optional group chat the task was proposed in, Captain's included (leave empty for any).",
+    enum: ["g1", "g2"],
+    enumNames: ["Dev Group", "Release Crew"],
+  },
+  creator: {
+    type: "string",
+    title: "Creator",
+    description:
+      "Optional agent that created the task (leave empty for any creator).",
+    enum: ["a1", "a2"],
+    enumNames: ["Forge", "Ada"],
+  },
+  assignee: {
+    type: "string",
+    title: "Assignee",
+    description:
+      "Optional executor agent to match (leave empty for any assignee).",
+    enum: ["a1", "a2"],
+    enumNames: ["Forge", "Ada"],
+  },
+};
+
+/** eta-events as the host lists it: group, creator and assignee are dropdowns of the user's own groups and agents. */
+const originFilterItems: TriggerCatalogItem[] = [
+  {
+    provider: "eta-events",
+    source: "tasks",
+    sourceName: "eta Tasks",
+    trigger: "task.status.changed",
+    name: "Task status changed",
+    description:
+      "Triggers when a task changes status (for example moving into in_review, done, or blocked).",
+    modes: [],
+    configSchema: {
+      type: "object",
+      properties: {
+        to: {
+          type: "array",
+          title: "Target statuses",
+          description:
+            "Optional target statuses to match (leave empty to match any status change).",
+          items: {
+            type: "string",
+            enum: [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+              "done",
+              "blocked",
+              "cancelled",
+            ],
+          },
+        },
+        from: {
+          type: "array",
+          title: "Previous statuses",
+          description:
+            "Optional previous statuses to match (leave empty to match any).",
+          items: {
+            type: "string",
+            enum: [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+              "done",
+              "blocked",
+              "cancelled",
+            ],
+          },
+        },
+        ...originFilterFields,
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
+  },
+  {
+    provider: "eta-events",
+    source: "tasks",
+    sourceName: "eta Tasks",
+    trigger: "task.run.finished",
+    name: "Task run finished",
+    description:
+      "Triggers when a task run ends (completed, failed, or interrupted).",
+    modes: [],
+    configSchema: {
+      type: "object",
+      properties: {
+        status: {
+          type: "array",
+          title: "Run statuses",
+          description:
+            "Optional run outcomes to match (leave empty to match any finished run).",
+          items: {
+            type: "string",
+            enum: ["completed", "failed", "interrupted"],
+          },
+        },
+        ...originFilterFields,
       },
     },
     payloadSchema: {},
@@ -844,6 +958,7 @@ function Fixture() {
           { provider: "webhook", status: "ready" },
         ],
         stale_catalog: [{ provider: "composio", status: "ready" }],
+        origin_filters: [{ provider: "eta-events", status: "ready" }],
       };
       return {
         triggers:
@@ -853,7 +968,9 @@ function Fixture() {
               ? catalogItems.filter((item) => item.provider === "webhook")
               : mode === "stale_catalog"
                 ? catalogItems.filter((item) => item.source === "slack")
-                : [],
+                : mode === "origin_filters"
+                  ? originFilterItems
+                  : [],
         providers: providers[mode],
       };
     }
@@ -1032,6 +1149,10 @@ function Fixture() {
               <Button
                 label="Scenario: stale_catalog"
                 onPress={() => scenario.set("stale_catalog")}
+              />
+              <Button
+                label="Scenario: origin_filters"
+                onPress={() => scenario.set("origin_filters")}
               />
               <Button
                 label="Hide controls"

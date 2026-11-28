@@ -1,4 +1,9 @@
 import { uiText } from "../../i18n";
+import {
+  fieldDescriptionText,
+  fieldOptionText,
+  fieldTitleText,
+} from "./trigger-text";
 
 type TriggerFieldKind =
   | "string"
@@ -54,15 +59,20 @@ function schemaTypeOf(raw: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
-function enumOptionsOf(raw: Record<string, unknown>): TriggerEnumOption[] {
+function enumOptionsOf(
+  raw: Record<string, unknown>,
+  optionText: (value: unknown, fallback: string) => string,
+): TriggerEnumOption[] {
   if (Array.isArray(raw.enum) && raw.enum.length > 0) {
     const names = Array.isArray(raw.enumNames) ? raw.enumNames : [];
     return raw.enum.map((item, index) => ({
       value: `opt:${index}`,
-      label:
+      label: optionText(
+        item,
         typeof names[index] === "string" && names[index].trim() !== ""
           ? names[index]
           : String(item),
+      ),
       raw: item,
     }));
   }
@@ -82,10 +92,12 @@ function enumOptionsOf(raw: Record<string, unknown>): TriggerEnumOption[] {
   ) {
     return branches.map((entry, index) => ({
       value: `opt:${index}`,
-      label:
+      label: optionText(
+        entry.const,
         typeof entry.title === "string" && entry.title.trim() !== ""
           ? entry.title.trim()
           : String(entry.const),
+      ),
       raw: entry.const,
     }));
   }
@@ -122,8 +134,11 @@ function finiteOrUndefined(value: unknown): number | undefined {
 /**
  * Parses a JSON Schema `configSchema` into typed field specs.
  * Deprecated properties are skipped unless `existingConfig` already carries a saved value for them.
+ * `provider` and `trigger` identify the catalog entry, so built-in providers' fields show in Chinese.
  */
 export function parseTriggerConfigSchema(
+  provider: string,
+  trigger: string,
   schema: Record<string, unknown> | undefined,
   existingConfig?: Record<string, unknown>,
 ): TriggerConfigField[] {
@@ -144,7 +159,9 @@ export function parseTriggerConfigSchema(
       : false;
     if (deprecated && !hasSaved) continue;
 
-    const options = enumOptionsOf(raw);
+    const optionText = (value: unknown, fallback: string) =>
+      fieldOptionText(provider, trigger, key, value, fallback);
+    const options = enumOptionsOf(raw, optionText);
     const schemaType = schemaTypeOf(raw);
     let kind: TriggerFieldKind;
     if (options.length > 0) kind = "enum";
@@ -157,7 +174,9 @@ export function parseTriggerConfigSchema(
 
     const itemsType = isPlain(raw.items) ? schemaTypeOf(raw.items) : undefined;
     const arrayOptions =
-      kind === "array" && isPlain(raw.items) ? enumOptionsOf(raw.items) : [];
+      kind === "array" && isPlain(raw.items)
+        ? enumOptionsOf(raw.items, optionText)
+        : [];
     const arrayItemKind =
       itemsType === "string" ||
       itemsType === "number" ||
@@ -174,12 +193,20 @@ export function parseTriggerConfigSchema(
 
     fields.push({
       key,
-      title:
+      title: fieldTitleText(
+        provider,
+        trigger,
+        key,
         typeof raw.title === "string" && raw.title.trim() !== ""
           ? raw.title.trim()
           : key,
-      description:
+      ),
+      description: fieldDescriptionText(
+        provider,
+        trigger,
+        key,
         typeof raw.description === "string" ? raw.description.trim() : "",
+      ),
       kind,
       required: !deprecated && (requiredKeys.has(key) || raw.required === true),
       deprecated,

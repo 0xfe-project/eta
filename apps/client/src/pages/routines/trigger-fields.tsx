@@ -40,6 +40,11 @@ import {
   triggerModeLabel,
 } from "./schedule";
 import { enumSelectionValue, validateTriggerField } from "./trigger-config";
+import {
+  sourceText,
+  triggerDescriptionText,
+  triggerNameText,
+} from "./trigger-text";
 
 const selectMenuWidth = { phone: 240, tablet: 220, desktop: 220 } as const;
 const optionHeight = { tablet: 36, desktop: 32 } as const;
@@ -636,7 +641,14 @@ export function TriggerSection(props: {
     for (const item of props.triggers) {
       if (item.provider !== props.provider) continue;
       if (!seen.has(item.source)) {
-        seen.set(item.source, item.sourceName || item.source);
+        seen.set(
+          item.source,
+          sourceText(
+            item.provider,
+            item.source,
+            item.sourceName || item.source,
+          ),
+        );
       }
     }
     if (props.source && !seen.has(props.source)) {
@@ -659,9 +671,15 @@ export function TriggerSection(props: {
     );
     const list: SearchableChoice[] = matched.map((item) => ({
       value: item.trigger,
-      title: item.name || item.trigger,
+      title: triggerNameText(
+        item.provider,
+        item.trigger,
+        item.name || item.trigger,
+      ),
       subtitle: item.name !== item.trigger ? item.trigger : undefined,
-      description: item.description || undefined,
+      description: item.description
+        ? triggerDescriptionText(item.provider, item.trigger, item.description)
+        : undefined,
     }));
     if (
       props.triggerSlug &&
@@ -980,7 +998,7 @@ export function TriggerSection(props: {
               }}
             >
               <Label variant="small" weight={weight.strong}>
-                {item().name}
+                {triggerNameText(item().provider, item().trigger, item().name)}
               </Label>
               <Label
                 variant="caption"
@@ -1001,7 +1019,11 @@ export function TriggerSection(props: {
             </View>
             <If when={item().description}>
               <Label variant="caption" tone="muted">
-                {item().description}
+                {triggerDescriptionText(
+                  item().provider,
+                  item().trigger,
+                  item().description,
+                )}
               </Label>
             </If>
             <If when={item().instructions}>

@@ -13,6 +13,11 @@ import {
   parseTriggerConfigSchema,
   validateTriggerField,
 } from "../src/pages/routines/trigger-config";
+import {
+  sourceText,
+  triggerDescriptionText,
+  triggerNameText,
+} from "../src/pages/routines/trigger-text";
 
 const language = createLanguagePreference();
 
@@ -66,7 +71,11 @@ test("parseTriggerConfigSchema handles types, required, defaults, and deprecated
     },
   };
 
-  const createdFields = parseTriggerConfigSchema(schema);
+  const createdFields = parseTriggerConfigSchema(
+    "composio",
+    "GITHUB_COMMIT_EVENT",
+    schema,
+  );
   expect(createdFields.map((field) => field.key)).toEqual([
     "owner",
     "count",
@@ -89,10 +98,15 @@ test("parseTriggerConfigSchema handles types, required, defaults, and deprecated
   expect(createdFields.find((f) => f.key === "labels")?.kind).toBe("array");
 
   // Deprecated fields with an existing saved value are retained and marked deprecated.
-  const editedFields = parseTriggerConfigSchema(schema, {
-    owner: "octocat",
-    legacy_kept: "saved-token",
-  });
+  const editedFields = parseTriggerConfigSchema(
+    "composio",
+    "GITHUB_COMMIT_EVENT",
+    schema,
+    {
+      owner: "octocat",
+      legacy_kept: "saved-token",
+    },
+  );
   const kept = editedFields.find((field) => field.key === "legacy_kept");
   expect(kept).toBeDefined();
   expect(kept?.deprecated).toBe(true);
@@ -101,7 +115,7 @@ test("parseTriggerConfigSchema handles types, required, defaults, and deprecated
 });
 
 test("initialTriggerConfigState applies defaults without overwriting saved values", () => {
-  const fields = parseTriggerConfigSchema({
+  const fields = parseTriggerConfigSchema("composio", "GITHUB_COMMIT_EVENT", {
     type: "object",
     required: ["enabled"],
     properties: {
@@ -134,7 +148,7 @@ test("initialTriggerConfigState applies defaults without overwriting saved value
 
 test("validateTriggerField and buildTriggerConfigPayload enforce schema constraints", () => {
   language.set("en");
-  const fields = parseTriggerConfigSchema({
+  const fields = parseTriggerConfigSchema("composio", "GITHUB_COMMIT_EVENT", {
     type: "object",
     required: ["owner", "count"],
     properties: {
@@ -208,20 +222,24 @@ test("providerLabel formats built-in rss and other trigger provider ids", () => 
 });
 
 test("validateTriggerField checks web-monitor selector/jsonPath conflict and string-valued headers", () => {
-  const fields = parseTriggerConfigSchema({
-    type: "object",
-    required: ["url"],
-    properties: {
-      url: { type: "string", title: "URL" },
-      selector: { type: "string", title: "CSS selector" },
-      jsonPath: { type: "string", title: "JSON path" },
-      headers: {
-        type: "object",
-        title: "Request headers",
-        additionalProperties: { type: "string" },
+  const fields = parseTriggerConfigSchema(
+    "web-monitor",
+    "WEB_CONTENT_CHANGED",
+    {
+      type: "object",
+      required: ["url"],
+      properties: {
+        url: { type: "string", title: "URL" },
+        selector: { type: "string", title: "CSS selector" },
+        jsonPath: { type: "string", title: "JSON path" },
+        headers: {
+          type: "object",
+          title: "Request headers",
+          additionalProperties: { type: "string" },
+        },
       },
     },
-  });
+  );
 
   const selectorField = fields.find((f) => f.key === "selector")!;
   const jsonPathField = fields.find((f) => f.key === "jsonPath")!;
@@ -327,7 +345,7 @@ test("webhook URL, loopback detection, and curl command helpers handle all auth 
 });
 
 test("validateTriggerField checks file-watch path, root rejection, glob syntax, and debounceMs", () => {
-  const fields = parseTriggerConfigSchema({
+  const fields = parseTriggerConfigSchema("file-watch", "FILE_CHANGED", {
     type: "object",
     required: ["path"],
     properties: {
@@ -401,7 +419,7 @@ test("validateTriggerField checks file-watch path, root rejection, glob syntax, 
 });
 
 test("parseTriggerConfigSchema, validateTriggerField, and buildTriggerConfigPayload support eta-events enum arrays", () => {
-  const fields = parseTriggerConfigSchema({
+  const fields = parseTriggerConfigSchema("eta-events", "task.status.changed", {
     type: "object",
     properties: {
       to: {
@@ -477,7 +495,7 @@ test("eta-events group, creator, and assignee string enums with enumNames render
     enum: ids,
     enumNames: names,
   });
-  const fields = parseTriggerConfigSchema({
+  const fields = parseTriggerConfigSchema("eta-events", "task.status.changed", {
     type: "object",
     properties: {
       group: dropdown(
@@ -525,4 +543,222 @@ test("eta-events group, creator, and assignee string enums with enumNames render
   expect(buildTriggerConfigPayload(fields, cleared, {})).toEqual({
     assignee: "agent-forge",
   });
+});
+
+const webhookSchema = {
+  type: "object",
+  required: ["authMode"],
+  properties: {
+    authMode: {
+      type: "string",
+      title: "Authentication",
+      description: "How incoming requests are verified.",
+      enum: ["none", "header", "hmac-sha256"],
+      enumNames: [
+        "URL token only (none)",
+        "Shared secret header",
+        "HMAC-SHA256 signature",
+      ],
+    },
+    headerName: { type: "string", title: "Header name" },
+  },
+};
+
+test("parseTriggerConfigSchema shows built-in provider fields in Chinese and keeps English as sent", () => {
+  language.set("zh");
+  const zh = parseTriggerConfigSchema(
+    "webhook",
+    "WEBHOOK_RECEIVED",
+    webhookSchema,
+  );
+  expect(zh.map((field) => field.title)).toEqual(["验证方式", "请求头名称"]);
+  expect(zh[0]?.description).toBe("除了地址里的密钥令牌，如何验证收到的请求。");
+  expect(zh[0]?.options.map((option) => option.label)).toEqual([
+    "仅地址令牌（无）",
+    "共享密钥请求头",
+    "HMAC-SHA256 签名",
+  ]);
+  expect(zh[0]?.options.map((option) => option.raw)).toEqual([
+    "none",
+    "header",
+    "hmac-sha256",
+  ]);
+
+  language.set("en");
+  const en = parseTriggerConfigSchema(
+    "webhook",
+    "WEBHOOK_RECEIVED",
+    webhookSchema,
+  );
+  expect(en.map((field) => field.title)).toEqual([
+    "Authentication",
+    "Header name",
+  ]);
+  expect(en[0]?.description).toBe("How incoming requests are verified.");
+  expect(en[0]?.options.map((option) => option.label)).toEqual([
+    "URL token only (none)",
+    "Shared secret header",
+    "HMAC-SHA256 signature",
+  ]);
+});
+
+test("parseTriggerConfigSchema keeps the backend text when a provider, trigger or field has no translation", () => {
+  language.set("zh");
+  const schema = {
+    type: "object",
+    properties: {
+      authMode: {
+        type: "string",
+        title: "Authentication",
+        description: "How incoming requests are verified.",
+        enum: ["none", "other"],
+        enumNames: ["Plain", "Other"],
+      },
+      unlisted: {
+        type: "string",
+        title: "Unlisted",
+        description: "Not in the table.",
+      },
+    },
+  };
+  for (const [provider, trigger] of [
+    ["composio", "WEBHOOK_RECEIVED"],
+    ["webhook", "OTHER_TRIGGER"],
+    ["webhook", "WEBHOOK_RECEIVED"],
+  ] as const) {
+    const fields = parseTriggerConfigSchema(provider, trigger, schema);
+    const unlisted = fields.find((field) => field.key === "unlisted");
+    expect(unlisted?.title).toBe("Unlisted");
+    expect(unlisted?.description).toBe("Not in the table.");
+    if (provider !== "webhook" || trigger !== "WEBHOOK_RECEIVED") {
+      const authMode = fields.find((field) => field.key === "authMode");
+      expect(authMode?.title).toBe("Authentication");
+      expect(authMode?.options.map((option) => option.label)).toEqual([
+        "Plain",
+        "Other",
+      ]);
+    }
+  }
+  const known = parseTriggerConfigSchema("webhook", "WEBHOOK_RECEIVED", schema);
+  // An option the table does not know keeps its enumNames text.
+  expect(known[0]?.options.map((option) => option.label)).toEqual([
+    "仅地址令牌（无）",
+    "Other",
+  ]);
+  language.set("en");
+});
+
+test("eta-events fields are Chinese while group, creator and assignee options stay the backend's names", () => {
+  const origin = {
+    group: {
+      type: "string",
+      title: "Source group",
+      enum: ["g1", "c1"],
+      enumNames: ["Dev Group", "Captain"],
+    },
+    creator: {
+      type: "string",
+      title: "Creator",
+      enum: ["a1"],
+      enumNames: ["Forge"],
+    },
+    assignee: {
+      type: "string",
+      title: "Assignee",
+      enum: ["a1"],
+      enumNames: ["Forge"],
+    },
+  };
+  const schema = {
+    type: "object",
+    properties: {
+      to: {
+        type: "array",
+        title: "Target statuses",
+        items: { type: "string", enum: ["in_review", "blocked"] },
+      },
+      ...origin,
+    },
+  };
+  language.set("zh");
+  const zh = parseTriggerConfigSchema(
+    "eta-events",
+    "task.status.changed",
+    schema,
+  );
+  expect(zh.map((field) => field.title)).toEqual([
+    "目标状态",
+    "来源群聊",
+    "创建者",
+    "执行者",
+  ]);
+  expect(zh[0]?.arrayOptions?.map((option) => option.label)).toEqual([
+    "待验收",
+    "已阻塞",
+  ]);
+  expect(zh[1]?.options.map((option) => option.label)).toEqual([
+    "Dev Group",
+    "Captain",
+  ]);
+  expect(zh[2]?.options.map((option) => option.label)).toEqual(["Forge"]);
+  expect(zh[3]?.options.map((option) => option.label)).toEqual(["Forge"]);
+
+  language.set("en");
+  const en = parseTriggerConfigSchema(
+    "eta-events",
+    "task.status.changed",
+    schema,
+  );
+  expect(en.map((field) => field.title)).toEqual([
+    "Target statuses",
+    "Source group",
+    "Creator",
+    "Assignee",
+  ]);
+  expect(en[0]?.arrayOptions?.map((option) => option.label)).toEqual([
+    "in_review",
+    "blocked",
+  ]);
+});
+
+test("providerLabel names the built-in providers in Chinese and leaves others alone", () => {
+  language.set("zh");
+  expect(providerLabel("web-monitor")).toBe("网页监控");
+  expect(providerLabel("file-watch")).toBe("文件监听");
+  expect(providerLabel("eta-events")).toBe("eta 事件");
+  expect(providerLabel("webhook")).toBe("Webhook");
+  expect(providerLabel("rss")).toBe("RSS");
+  expect(providerLabel("composio")).toBe("Composio");
+  expect(providerLabel("custom_hook")).toBe("Custom Hook");
+  language.set("en");
+  expect(providerLabel("web-monitor")).toBe("Web Monitor");
+});
+
+test("source, trigger name and description show in Chinese for built-in providers and keep the host's text otherwise", () => {
+  language.set("zh");
+  expect(sourceText("file-watch", "fs", "Local Filesystem")).toBe(
+    "本地文件系统",
+  );
+  expect(triggerNameText("rss", "RSS_NEW_ITEM", "New feed item")).toBe(
+    "新订阅条目",
+  );
+  expect(
+    triggerDescriptionText(
+      "eta-events",
+      "task.run.finished",
+      "Triggers when a task run ends (completed, failed, or interrupted).",
+    ),
+  ).toBe("任务运行结束时触发（已完成、失败或已停止）。");
+  expect(sourceText("composio", "github", "GitHub")).toBe("GitHub");
+  expect(sourceText("rss", "other", "Other feed")).toBe("Other feed");
+  expect(
+    triggerNameText("composio", "GITHUB_COMMIT_EVENT", "Commit Pushed"),
+  ).toBe("Commit Pushed");
+  language.set("en");
+  expect(sourceText("file-watch", "fs", "Local Filesystem")).toBe(
+    "Local Filesystem",
+  );
+  expect(triggerNameText("rss", "RSS_NEW_ITEM", "New feed item")).toBe(
+    "New feed item",
+  );
 });

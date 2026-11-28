@@ -179,6 +179,8 @@ export function RoutineEditor(props: {
 
   const triggerFields = () =>
     parseTriggerConfigSchema(
+      triggerProvider(),
+      triggerSlug(),
       selectedCatalogItem()?.configSchema,
       triggerConfig(),
     );
@@ -232,7 +234,11 @@ export function RoutineEditor(props: {
     );
     triggerMode.set(item.modes.length > 0 ? item.modes[0]! : null);
     pollingIntervalText.set("");
-    const parsed = parseTriggerConfigSchema(item.configSchema);
+    const parsed = parseTriggerConfigSchema(
+      item.provider,
+      item.trigger,
+      item.configSchema,
+    );
     const nextState = initialTriggerConfigState(parsed);
     triggerConfig.set(nextState.config);
     triggerDrafts.set(nextState.drafts);
@@ -267,6 +273,8 @@ export function RoutineEditor(props: {
         const existingDrafts = untracked(triggerDrafts);
         const touchedFields = untracked(triggerTouched);
         const fields = parseTriggerConfigSchema(
+          matched.provider,
+          matched.trigger,
           matched.configSchema,
           existingConfig,
         );

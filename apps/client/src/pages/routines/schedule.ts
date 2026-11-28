@@ -8,6 +8,7 @@ import type {
   WebhookTriggerInfo,
 } from "@eta/client-contracts";
 import { formatLocale, localizedText, uiText } from "../../i18n";
+import { providerText } from "./trigger-text";
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -339,13 +340,16 @@ export function upcomingTimes(
 export function providerLabel(provider: string) {
   const trimmed = provider.trim();
   if (!trimmed) return "";
-  if (trimmed.toLowerCase() === "rss") return "RSS";
+  if (trimmed.toLowerCase() === "rss") return providerText(trimmed, "RSS");
   if (/^[a-z0-9_-]+$/.test(trimmed)) {
-    return trimmed
-      .split(/[-_]+/)
-      .filter(Boolean)
-      .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-      .join(" ");
+    return providerText(
+      trimmed,
+      trimmed
+        .split(/[-_]+/)
+        .filter(Boolean)
+        .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+        .join(" "),
+    );
   }
   return trimmed;
 }
