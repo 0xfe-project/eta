@@ -39,7 +39,6 @@
 - [137] Eta 聊天过程窗口的 loading 态与内容态必须保持同一尺寸、边框和 padding；first token 到达时应填充同一个窗口，不重新挂载造成布局跳动。
 - [143] Eta main->web native channel: desktop sends `window.__etaNative?.({kind, action})` via `webview.executeJavascript`; web must implement `window.__etaNative` listener to handle menu/context-menu actions.
 - [144] Eta web keydown handling: currently only sidebar toggle and mobile drawer Escape exist; no global command-palette/shortcut dispatcher registry yet.
-- [152] Eta 聊天回复流式中无法判断正在写的文字是不是最后一段（后面可能还有工具调用或思考），所以：回复在 streaming（working/queued/stopping）时，永远只显示过程框（ProcessBox），写出来的文字也放在框里，不要把最后一段文字拿到框外当「流式答案」；只有结束后才把结尾文字（行的 text，同 `splitReply`）作为答案显示。不要写成简单的二元判断，要兜底：结束瞬间（host 一次写入 status+text）、中途停止（已写文字作答案 + Stopped）、以工具调用结束或失败（无答案）、尚未出字/排队/停止中（框标题 Working/Queued/Stopping，Stop 在框里）、流式中重新加载看不到会话（用保存的步骤）、纯文字回复结束（0 步不显示过程行）。这条原则被反复遗忘（#992、#510 原型都违反过），改动实时回复前先对照。(#510)
 
 ## preference
 
@@ -129,3 +128,4 @@
 - [140] 这台机器的 bun 是 1.4.2，而 package.json 锁 bun@1.4.3；`apps/*/typecheck` 里的 `bun check` 是 1.4.3 的内建命令，在 1.4.2 下报 `Script not found "check"`，于是 lefthook pre-commit 的 verify 步骤必然失败。手动跑等价校验（bunx tsc --noEmit / eslint / dprint / turbo build）后用 `git commit --no-verify`，别把本地 bun 版本升给正在跑的 host。
 - [142] Eta GitHub 插件默认关闭时 `open_pull_request` 报「未连接」，且 akhook 挡 `gh pr create`；此时用已登录的 `gh` 走 REST API 直接建 PR（非 akhook 屏蔽的 `gh pr create` 包装），不要静默失败，也不要为建一个 PR 擅自带 `--github` 重启正在跑的 host（属产品决定）。见 #8/#82。
 - [151] [task-23~1798#151] Task #23 depends on task #22 completing, but task #22 is still active (status: working). The esm-mode branch has packages/eta-esm-mode/, but the task-23 worktree branch (eta/task-23) does not contain the prerequisite code from task #22. Cannot proceed with task #23 until task #22 completes and its changes are available on the working branch.
+- [152] Eta 聊天实时回复：流式过程中无法判断正在写的这段文字是不是最后一块（后面可能还有工具调用或思考），所以不要按「是不是最后一块」写分支，也不要把最后一段文字拿到框外当「流式答案」。流式期间（working/queued/stopping）所有内容，包括文字，都放在过程框里；结束后才把结尾那段文字（行的 text，同 `splitReply`）取出来作为答案。兜底：中断（写到一半停下：已写的文字作答案 + Stopped；什么都没写只显示 Stopped）、报错（不显示答案，只显示过程行 + 失败原因）、既没有工具也没有文字（框标题 Working…，结束后没有过程行也没有答案）、多段文字（流式时逐段都在框里；结束后结尾连续的文字段是答案，之前的进过程行）、结束瞬间（host 用一次 `timeline.finish` 写入 status+text，不会有「已结束但没有文字」的空档）、流式中重新加载看不到会话（用保存的步骤）。这条与 [139] 不同：[139] 讲框的渲染条件不能写成「active 且 steps 非空」，这条讲流式期间不能猜哪段是最后一块。这条原则被反复遗忘（#992、#510 原型都违反过），改实时回复前先对照。(#510)
