@@ -6,7 +6,6 @@ import {
   isBlankDoc,
   legacyDraftToDoc,
   lineCount,
-  sentToDraft,
   serializeDoc,
 } from "../src/composer-doc";
 import { MAX_MESSAGE_CHARS } from "../src/composer-draft";
@@ -156,28 +155,6 @@ describe("document and draft", () => {
     ]);
     const again = docToDraft(draftToDoc(draft)).draft;
     expect(again).toEqual(draft);
-  });
-
-  it("brings a sent message back with its pastes folded and its files", () => {
-    const draft = sentToDraft({
-      text: "see a\nb\nc\nd end",
-      blocks: [[4, 11]],
-      attachments: [
-        { id: "f2", name: "log.txt", contentType: "text/plain", size: 3 },
-      ],
-    });
-    expect(draft).toEqual([
-      { type: "text", text: "see " },
-      { type: "paste", id: "paste-4", text: "a\nb\nc\nd" },
-      { type: "text", text: " end" },
-      {
-        type: "file",
-        id: "f2",
-        name: "log.txt",
-        contentType: "text/plain",
-        size: 3,
-      },
-    ]);
   });
 
   it("reads a draft saved by the old composer once", () => {

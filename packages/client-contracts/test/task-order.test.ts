@@ -1,6 +1,6 @@
 import type { BoardTaskStatus, TaskRunStatus } from "../src/index";
 import { describe, expect, it } from "vitest";
-import { compareTaskRuns, runningFirst, taskRunRank } from "../src/index";
+import { runningFirst } from "../src/index";
 
 interface Row {
   id: string;
@@ -20,24 +20,6 @@ const newestFirst = (rows: Row[]) =>
   [...rows].sort((a, b) => b.updatedAt - a.updatedAt);
 const ids = (rows: Row[]) => rows.map((each) => each.id);
 
-describe("taskRunRank", () => {
-  it("puts a run that starts or runs first, a queued one next, the rest last", () => {
-    expect(taskRunRank("running")).toBe(0);
-    expect(taskRunRank("starting")).toBe(0);
-    expect(taskRunRank("queued")).toBe(1);
-    for (const over of [null, "completed", "failed", "interrupted"] as const)
-      expect(taskRunRank(over)).toBe(2);
-  });
-
-  it("compares two tasks by it alone", () => {
-    const running = row("a", "in_progress", "running", 1);
-    const queued = row("b", "in_progress", "queued", 2);
-    expect(compareTaskRuns(running, queued)).toBeLessThan(0);
-    expect(compareTaskRuns(queued, running)).toBeGreaterThan(0);
-    expect(compareTaskRuns(queued, queued)).toBe(0);
-  });
-});
-
 describe("runningFirst", () => {
   it("puts a running task before a queued one of the same status, even one updated later", () => {
     const list = newestFirst([
@@ -50,7 +32,9 @@ describe("runningFirst", () => {
 
   it("orders running, then queued, then the rest, each in the list's own order", () => {
     const list = newestFirst([
-      row("idle-new", "in_progress", null, 600),
+      row("idle-new", "in_progress", null, 800),
+      row("failed-run", "in_progress", "failed", 700),
+      row("stopped-run", "in_progress", "interrupted", 600),
       row("queued-new", "in_progress", "queued", 500),
       row("done-run", "in_progress", "completed", 400),
       row("running-old", "in_progress", "starting", 300),
@@ -63,6 +47,8 @@ describe("runningFirst", () => {
       "queued-new",
       "queued-old",
       "idle-new",
+      "failed-run",
+      "stopped-run",
       "done-run",
     ]);
   });

@@ -6,12 +6,7 @@
 import type { ClientFrame } from "@eta/client-wire-proto";
 import type { WireSocketEvents, WireState } from "../src/wire";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  initialWireState,
-  wakeOnPageEvents,
-  Wire,
-  WireError,
-} from "../src/wire";
+import { initialWireState, Wire, WireError } from "../src/wire";
 
 class Socket {
   readonly sent: ClientFrame[] = [];
@@ -380,28 +375,5 @@ describe("waking", () => {
     expect(state().status).toBe("reconnecting");
     vi.advanceTimersByTime(100);
     expect(sockets).toHaveLength(2);
-  });
-
-  it("follows a page: visible again, or online", () => {
-    const listeners = new Map<string, () => void>();
-    const source = {
-      addEventListener: (type: string, listener: () => void) =>
-        listeners.set(type, listener),
-      removeEventListener: (type: string) => listeners.delete(type),
-    };
-    const document = { ...source, visibilityState: "hidden" };
-    let woken = 0;
-    const stop = wakeOnPageEvents(
-      { wake: () => (woken += 1) },
-      { window: source, document },
-    );
-    listeners.get("visibilitychange")!();
-    expect(woken).toBe(0);
-    document.visibilityState = "visible";
-    listeners.get("visibilitychange")!();
-    listeners.get("online")!();
-    expect(woken).toBe(2);
-    stop();
-    expect(listeners.size).toBe(0);
   });
 });

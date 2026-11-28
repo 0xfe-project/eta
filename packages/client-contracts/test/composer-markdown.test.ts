@@ -61,6 +61,13 @@ describe("docToMarkdown", () => {
     expect(out.text.slice(...out.blocks[0]!)).toBe("l1\nl2\nl3\nl4");
     expect(out.mentions).toEqual(["m1"]);
     expect(out.files).toEqual(["f1"]);
+    // A plain draft saved before the rich editor sends the same bytes too.
+    const saved = draftToDoc([
+      { type: "text", text: "see\n" },
+      { type: "paste", id: "p", text: "a\nb\nc\nd" },
+      { type: "text", text: "\nthanks" },
+    ]);
+    expect(docToMarkdown(saved)).toEqual(serializeDoc(saved));
   });
 
   it("writes formatting as Markdown", () => {
@@ -260,15 +267,6 @@ describe("paste kinds", () => {
     expect(isEditorCode(samples.word.html)).toBe(false);
     expect(isEditorCode(undefined)).toBe(false);
   });
-});
-
-it("writes a plain draft from before the rich editor as it was sent", () => {
-  const old = draftToDoc([
-    { type: "text", text: "see\n" },
-    { type: "paste", id: "p", text: "a\nb\nc\nd" },
-    { type: "text", text: "\nthanks" },
-  ]);
-  expect(docToMarkdown(old)).toEqual(serializeDoc(old));
 });
 
 describe("classifyClipboard in a rich editor", () => {
