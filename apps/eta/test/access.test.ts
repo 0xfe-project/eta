@@ -282,6 +282,96 @@ describe("the token gate", () => {
       }),
     ).toBe("refused");
   });
+
+  it("exempts read-only GET/HEAD /.well-known/eta/host from the token gate, but not POST", async () => {
+    const host = await testHost({ tokenFile: await tokenFile() });
+    const base = `http://127.0.0.1:${host.port}/.well-known/eta/host`;
+    const get = await fetch(base);
+    expect(get.status).toBe(200);
+    expect(await get.json()).toEqual({
+      hostId: host.product.hub ? expect.any(String) : expect.any(String),
+    });
+    const head = await fetch(base, { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe("");
+    const post = await fetch(base, { method: "POST" });
+    expect(post.status).toBe(401);
+  });
+
+  it("supports forceGate, dynamic gate toggling, and extra allowed origins on loopback", async () => {
+    const dataDir = await tempDir();
+    const events: Array<string | undefined> = [];
+    const access = createAccess({
+      hostname: "127.0.0.1",
+      dataDir,
+      onGateChange: ({ tokenFile }) => events.push(tokenFile),
+    });
+    expect(access.gated).toBe(false);
+    expect(access.token).toBeUndefined();
+    expect(
+      access.authorize(new Request("http://127.0.0.1:8787/")),
+    ).toBeUndefined();
+
+    // Enabling dynamic gate turns on the Token Gate immediately and creates ~/.eta/access-token.
+    const token = access.setDynamicGate(true);
+    expect(token).toBeDefined();
+    expect(access.gated).toBe(true);
+    expect(access.tokenFile).toBe(join(dataDir, "access-token"));
+    expect(events).toEqual([join(dataDir, "access-token")]);
+    expect(
+      access.authorize(new Request("http://127.0.0.1:8787/"))?.status,
+    ).toBe(401);
+    expect(
+      access.authorize(
+        new Request("http://127.0.0.1:8787/", {
+          headers: { authorization: `Bearer ${token}` },
+        }),
+      ),
+    ).toBeUndefined();
+
+    // Extra allowed origin permits Tailscale HTTPS Origin on /ws even when Host is 127.0.0.1.
+    access.setExtraAllowedOrigins(["https://box.tail1234.ts.net"]);
+    expect(
+      access.authorize(
+        new Request("http://127.0.0.1:8787/ws", {
+          headers: {
+            host: "127.0.0.1:8787",
+            origin: "https://box.tail1234.ts.net",
+            authorization: `Bearer ${token}`,
+          },
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      access.authorize(
+        new Request("http://127.0.0.1:8787/ws", {
+          headers: {
+            host: "127.0.0.1:8787",
+            origin: "https://other.tail1234.ts.net",
+            authorization: `Bearer ${token}`,
+          },
+        }),
+      )?.status,
+    ).toBe(403);
+
+    // Disabling dynamic gate restores ungated loopback access.
+    access.setExtraAllowedOrigins([]);
+    expect(access.setDynamicGate(false)).toBeUndefined();
+    expect(access.gated).toBe(false);
+    expect(access.token).toBeUndefined();
+    expect(events).toEqual([join(dataDir, "access-token"), undefined]);
+
+    // A host with an explicit tokenFile stays gated even when dynamic gate is turned off.
+    const gated = createAccess({
+      hostname: "127.0.0.1",
+      dataDir,
+      tokenFile: await tokenFile(),
+      forceGate: true,
+    });
+    expect(gated.gated).toBe(true);
+    expect(gated.setDynamicGate(false)).toBe(TOKEN);
+    expect(gated.gated).toBe(true);
+  });
 });
 
 describe("the token file", () => {

@@ -13,6 +13,7 @@ import type {
   MachineInstallView,
   MachineRemovePreview,
   MachineRemoveResult,
+  MachineResults,
   MachineView,
   TailnetPeerView,
 } from "@eta/client-contracts";
@@ -31,18 +32,25 @@ export interface MachinesDeps {
   removePreview: (machineId: string) => MachineRemovePreview;
   remove: (machineId: string) => Promise<MachineRemoveResult>;
   changed: () => void;
-  /** Where a daemon should dial when the caller does not say: this host's own address. */
+  /** Where a daemon or phone should dial when the caller does not say: best reachable address. */
   defaultUrl: () => Promise<string>;
-  /** This host's tailnet address, when it listens there. */
-  tailnetUrl: () => Promise<string | undefined>;
+  /** All reachable addresses & Tailscale HTTPS status for this host. */
+  addresses: () => Promise<MachineResults["addresses"]>;
+  /** Toggle Tailscale HTTPS (`tailscale serve`) on this host. */
+  setTailscaleServe?:
+    | ((input: {
+        enabled: boolean;
+        port?: number;
+      }) => Promise<MachineResults["setTailscaleServe"]>)
+    | undefined;
   /** Tailscale on this host, for discovery; without it the tailnet is never looked at. */
   tailscale?: Tailscale | undefined;
   /** The daemon builds carried, what `install` sends. */
   builds?: DaemonBuilds | undefined;
   /** How `install` reaches a computer. */
   ssh: SshRunner;
-  /** The token a client needs, when the host asks for one. */
-  accessToken?: string | undefined;
+  /** The live token a client needs, when the host asks for one. */
+  accessToken?: string | (() => string | undefined) | undefined;
   now?: (() => number) | undefined;
 }
 
@@ -130,11 +138,13 @@ export function machinesPlugin(deps: MachinesDeps, applied: () => void) {
             new Args(call).optionalString("url"),
             "phoneLink",
           );
+          const token =
+            typeof deps.accessToken === "function"
+              ? deps.accessToken()
+              : deps.accessToken;
           const query = new URLSearchParams({
             address: url,
-            ...(deps.accessToken === undefined
-              ? {}
-              : { token: deps.accessToken }),
+            ...(token === undefined ? {} : { token }),
           });
           return { result: { link: `eta://connect?${query}`, url } };
         }),
@@ -212,8 +222,26 @@ export function machinesPlugin(deps: MachinesDeps, applied: () => void) {
           };
         }),
         wire.handle("machines", "addresses", async () => ({
-          result: { tailnet: (await deps.tailnetUrl()) ?? null },
+          result: await deps.addresses(),
         })),
+        wire.handle("machines", "setTailscaleServe", async (call) => {
+          const args = new Args(call);
+          const enabled = args.optionalBoolean("enabled");
+          if (enabled === undefined)
+            throw new Error("machines.setTailscaleServe needs enabled");
+          const port = args.optionalInteger("port");
+          if (port !== undefined && (port < 1 || port > 65_535))
+            throw new Error(
+              "machines.setTailscaleServe: port must be between 1 and 65535",
+            );
+          if (deps.setTailscaleServe === undefined)
+            throw new Error("Tailscale Serve is not available on this host");
+          return {
+            result: await deps.setTailscaleServe(
+              port === undefined ? { enabled } : { enabled, port },
+            ),
+          };
+        }),
         wire.handle("machines", "install", async (call) => {
           const args = new Args(call);
           const host = args.string("host").trim();

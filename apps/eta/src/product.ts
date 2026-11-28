@@ -25,9 +25,11 @@ import type {
   WireService,
 } from "@eta/server";
 import type { Database } from "bun:sqlite";
+import type { Access } from "./access";
 import type { SiteLimits } from "./artifacts/files";
 import type { DaemonBuilds } from "./machines/builds";
 import type { SshRunner } from "./machines/install";
+import type { TailscaleProbe } from "./machines/remote-access";
 import type { MachineRecord } from "./machines/store";
 import type { Tailscale } from "./machines/tailscale";
 import type { SessionHooks } from "./session-hooks";
@@ -35,6 +37,7 @@ import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
+import { WELL_KNOWN_HOST_PATH } from "@eta/client-contracts";
 import { kernelOn, thinkingLevelsFor } from "@eta/core";
 import { parseModelId, peerAddressOf, redactionMiddleware } from "@eta/server";
 import { acpPlugin } from "./acp/plugin";
@@ -83,6 +86,7 @@ import { MachineHub } from "./machines/hub";
 import { sshRunner } from "./machines/install";
 import { SessionMirrors } from "./machines/mirror";
 import { machinesPlugin } from "./machines/plugin";
+import { RemoteAccess } from "./machines/remote-access";
 import { RemotePlace } from "./machines/remote-place";
 import { RemoteSessionsRouter } from "./machines/remote-sessions";
 import { previewRemoveMachine, removeMachine } from "./machines/remove";
@@ -179,6 +183,8 @@ export interface Product {
   readonly draftExpirer: TaskDraftExpirer;
   /** The links to other machines. */
   readonly hub: MachineHub;
+  /** Remote access & Tailscale HTTPS controller for this primary host. */
+  readonly remoteAccess: RemoteAccess;
   /** El Capitan's product service and its supervisor. */
   readonly captain: CaptainService;
   readonly captainSupervisor: CaptainSupervisor;
@@ -251,8 +257,20 @@ export function createProduct(options: {
   artifactLimits?: Partial<SiteLimits> | undefined;
   /** The address the user's browser reaches the host at, for MCP sign-in callbacks. */
   publicUrl?: string | undefined;
-  /** The token the gate asks for, when there is a gate. */
+  /** The host's access gate, when managed by `startHost`. */
+  access?: Access | undefined;
+  /** The token the gate asks for, when there is a gate (fallback when `access` is omitted). */
   accessToken?: string | undefined;
+  /** Initial Tailscale Serve preference/overrides from CLI flags or tests. */
+  tailscaleServe?:
+    | {
+        enabled?: boolean | undefined;
+        port?: number | undefined;
+        probe?: TailscaleProbe | undefined;
+      }
+    | undefined;
+  /** Tests only: override cloud VM detection for direct endpoint discovery. */
+  onCloudVm?: boolean | undefined;
   /**
    * `web_fetch` and `web_search`, run in this process. Absent means neither tool; `{}` is both,
    * searching with the SearXNG the host runs itself where a prebuilt one exists.
@@ -477,6 +495,21 @@ export function createProduct(options: {
   // Other machines. What the primary does for them needs the server (its models) and the
   // product's own hooks and tables, none of which exist yet, so it reads them when asked.
   let running: AssembledServer | undefined;
+  const remoteAccess = new RemoteAccess({
+    settings: new SettingStore(db),
+    hostname: options.hostname ?? "127.0.0.1",
+    port: () => running?.server.port ?? 0,
+    hostId: () => machines.primary()?.id,
+    publicUrl: options.publicUrl,
+    tailscale: options.tailscale,
+    access: options.access,
+    initialEnabled: options.tailscaleServe?.enabled,
+    initialPort: options.tailscaleServe?.port,
+    probe: options.tailscaleServe?.probe,
+    onCloudVm: options.onCloudVm,
+    changed: () => wire?.pushNow("machines"),
+    warn,
+  });
   const later: {
     taskRunner?: TaskRunner;
     captainSupervisor?: CaptainSupervisor;
@@ -1015,6 +1048,7 @@ export function createProduct(options: {
     archiver,
     draftExpirer,
     hub,
+    remoteAccess,
     captain,
     captainSupervisor,
     scheduler,
@@ -1026,12 +1060,33 @@ export function createProduct(options: {
     skillDirsFor: (meta) => plugins.skillDirsFor(meta),
     runtimeExtrasFor: (meta) => plugins.runtimeExtrasFor(meta),
     mcp,
-    fetch: async (request) =>
-      (await hub.route(request)) ??
-      (await mcp.route(request)) ??
-      (await artifactRoutes(request)) ??
-      (await attachmentRoutes(request)) ??
-      upgradeRoutes(request, dataDir),
+    fetch: async (request) => {
+      const { pathname } = new URL(request.url);
+      if (pathname === WELL_KNOWN_HOST_PATH) {
+        if (request.method !== "GET" && request.method !== "HEAD")
+          return new Response("method not allowed", { status: 405 });
+        const hostId = machines.primary()?.id;
+        if (hostId === undefined)
+          return new Response("not ready", { status: 503 });
+        return new Response(
+          request.method === "HEAD" ? null : JSON.stringify({ hostId }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json; charset=utf-8",
+              "cache-control": "no-store",
+            },
+          },
+        );
+      }
+      return (
+        (await hub.route(request)) ??
+        (await mcp.route(request)) ??
+        (await artifactRoutes(request)) ??
+        (await attachmentRoutes(request)) ??
+        upgradeRoutes(request, dataDir)
+      );
+    },
     remote: router,
     endpoints: [hub.endpoint],
     setPrivateNetwork: (privateNetwork) =>
@@ -1277,22 +1332,14 @@ export function createProduct(options: {
               // The limit may have moved: runs that were waiting for a slot can start.
               taskRunner.pump();
             },
-            defaultUrl: async () =>
-              await defaultDaemonUrl(
-                options.hostname ?? "127.0.0.1",
-                server.server.port,
-                options.tailscale,
-              ),
-            tailnetUrl: async () =>
-              await tailnetDaemonUrl(
-                options.hostname ?? "127.0.0.1",
-                server.server.port,
-                options.tailscale,
-              ),
+            defaultUrl: async () => await remoteAccess.defaultUrl(),
+            addresses: async () => await remoteAccess.addresses(),
+            setTailscaleServe: async (input) =>
+              await remoteAccess.setTailscaleServe(input),
             tailscale: options.tailscale,
             builds: options.daemonBuilds,
             ssh: options.ssh ?? sshRunner(join(dataDir, "run")),
-            accessToken: options.accessToken,
+            accessToken: () => options.access?.token ?? options.accessToken,
           },
           applied("machines"),
         ),
@@ -1440,37 +1487,4 @@ export function createProduct(options: {
       if (captainOn) captainSupervisor.start();
     },
   };
-}
-
-/**
- * The address a new machine is told to dial when the user does not say. On a host that listens on
- * its tailnet address (or on every interface) and is on a tailnet, its MagicDNS name: what every
- * node of the tailnet can reach. Otherwise the interface it listens on, or the computer's name
- * when that is every interface.
- */
-async function defaultDaemonUrl(
-  bound: string,
-  port: number,
-  tailscale: Tailscale | undefined,
-): Promise<string> {
-  const tailnet = await tailnetDaemonUrl(bound, port, tailscale);
-  if (tailnet !== undefined) return tailnet;
-  if (bound === "0.0.0.0" || bound === "::")
-    return `http://${hostname()}:${port}`;
-  return `http://${bound.includes(":") ? `[${bound}]` : bound}:${port}`;
-}
-
-/** This host on its tailnet, by MagicDNS name, when it is on one and listens there. */
-async function tailnetDaemonUrl(
-  bound: string,
-  port: number,
-  tailscale: Tailscale | undefined,
-): Promise<string | undefined> {
-  const every = bound === "0.0.0.0" || bound === "::";
-  const status = await tailscale?.status();
-  if (status === undefined || !(every || status.self.addresses.includes(bound)))
-    return undefined;
-  const name = status.self.dnsName || status.self.addresses[0];
-  if (name === undefined || name === "") return undefined;
-  return `http://${name.includes(":") ? `[${name}]` : name}:${port}`;
 }

@@ -1,4 +1,8 @@
-import type { MachineView } from "@eta/client-contracts";
+import type {
+  MachineResults,
+  MachineView,
+  TailscaleServeStatusView,
+} from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import type { Layout } from "../../../components";
 import { signal, View } from "nsh";
@@ -19,11 +23,13 @@ import { EmptyState } from "../../../components/empty-state";
 import { ListSkeleton } from "../../../components/loading-skeleton";
 import { MenuRule } from "../../../components/menu";
 import { StatusDot } from "../../../components/status-dot";
+import { ToggleSwitch } from "../../../components/toggle-switch";
 import { control, icon, space, weight } from "../../../components/tokens";
 import { uiText, useText } from "../../../i18n";
 import { relativeTime, useHost } from "../../../services/host";
 import { useLoadState } from "../../../services/load-status";
 import { problemText } from "../../../services/problem-text";
+import { CopyButton } from "../../../ui";
 import { emptyStyle, SectionHeader } from "../section";
 import { AddMachine } from "./add-machine";
 import { MachineDetail, machineSystem } from "./machine-detail";
@@ -34,6 +40,14 @@ import {
 } from "./machine-dialogs";
 import { useMachineUpdate } from "./machine-update";
 import { PhonePairing } from "./phone-pairing";
+import {
+  alternateTailscalePort,
+  mergeTailscaleServeResult,
+  setTailscaleServeArgs,
+  TAILSCALE_SERVE_CALL_TIMEOUT_MS,
+  tailscaleDiagnosticText,
+  tailscaleHttpsUrl,
+} from "./remote-access";
 
 /** A machine's status column: wider while it updates, for the progress. */
 const statusWidth = { updating: 160, idle: 100 } as const;
@@ -338,6 +352,252 @@ function MachineRow(props: {
   );
 }
 
+function TailscaleHttpsRow(props: {
+  addresses: MachineResults["addresses"];
+  phone: boolean;
+  onChange: (next: MachineResults["addresses"]) => void;
+}) {
+  const host = useHost();
+  const c = colors();
+  const toggling = signal<"" | "enabling" | "disabling">("");
+  const actionError = signal("");
+  const status = (): TailscaleServeStatusView => props.addresses.tailscaleServe;
+  const diagnostic = () =>
+    actionError() ||
+    (status().installed && status().running
+      ? (tailscaleDiagnosticText(status()) ?? "")
+      : "");
+  const retryPort = () => alternateTailscalePort(status());
+  const canToggle = () =>
+    host.can("machines.setTailscaleServe") &&
+    !toggling() &&
+    (status().enabled ||
+      status().holderStatus === "ours" ||
+      (status().installed && status().running));
+  const retrySamePort = () =>
+    status().diagnostic === "probe-failed" && status().port !== 443
+      ? status().port
+      : undefined;
+
+  async function toggle(enabled: boolean, port?: number) {
+    if (toggling()) return;
+    toggling.set(enabled ? "enabling" : "disabling");
+    actionError.set("");
+    try {
+      const result = await host.call<MachineResults["setTailscaleServe"]>(
+        "machines",
+        "setTailscaleServe",
+        setTailscaleServeArgs(enabled, port),
+        { timeoutMs: TAILSCALE_SERVE_CALL_TIMEOUT_MS },
+      );
+      props.onChange(mergeTailscaleServeResult(props.addresses, result));
+    } catch (err) {
+      actionError.set(problemText(err));
+    } finally {
+      toggling.set("");
+    }
+  }
+
+  return (
+    <View style={{ borderBottomWidth: 1, borderColor: c().border }}>
+      <View
+        style={{
+          ...row,
+          alignItems: "flex-start",
+          gap: space[8],
+          paddingHorizontal: space[16],
+          paddingVertical: space[8],
+        }}
+      >
+        <View
+          style={{
+            width: props.phone ? control.md : space[24],
+            height: props.phone ? control.md : space[24],
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Icon name="globe" size={icon.md} tone="muted" />
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+          <Label weight={weight.regular}>{uiText("tailscaleHttps")}</Label>
+          <If
+            when={toggling()}
+            else={
+              <If
+                when={status().enabled && status().activeUrl}
+                else={
+                  <If
+                    when={status().installed && status().running}
+                    else={
+                      <View style={{ ...row, gap: space[4] }}>
+                        <StatusDot color={c().strong} />
+                        <Label
+                          variant="small"
+                          tone="muted"
+                          lines={1}
+                          style={{ flex: 1, minWidth: 0 }}
+                        >
+                          {tailscaleDiagnosticText(status()) ??
+                            uiText("tailscaleDiagNotInstalled")}
+                        </Label>
+                      </View>
+                    }
+                  >
+                    <If
+                      when={
+                        status().enabled || status().holderStatus === "ours"
+                      }
+                      else={
+                        <Label variant="small" tone="muted" lines={1}>
+                          {status().magicDnsName && !diagnostic()
+                            ? tailscaleHttpsUrl(
+                                status().magicDnsName!,
+                                status().port,
+                              )
+                            : uiText("tailscaleHttpsReady")}
+                        </Label>
+                      }
+                    >
+                      <View style={{ ...row, gap: space[4] }}>
+                        <StatusDot color={c().warning} />
+                        <Label
+                          variant="small"
+                          tone="muted"
+                          lines={1}
+                          style={{ flex: 1, minWidth: 0 }}
+                        >
+                          {status().magicDnsName
+                            ? tailscaleHttpsUrl(
+                                status().magicDnsName!,
+                                status().port,
+                              )
+                            : uiText("tailscaleHttpsReady")}
+                        </Label>
+                      </View>
+                    </If>
+                  </If>
+                }
+              >
+                <View style={{ ...row, gap: space[4] }}>
+                  <StatusDot color={c().green} />
+                  <Label
+                    variant="small"
+                    mono
+                    tone="mutedInk"
+                    lines={1}
+                    style={{ flex: 1, minWidth: 0 }}
+                  >
+                    {status().activeUrl!}
+                  </Label>
+                </View>
+              </If>
+            }
+          >
+            <Label variant="small" tone="muted">
+              {toggling() === "enabling"
+                ? uiText("tailscaleHttpsEnabling")
+                : uiText("tailscaleHttpsDisabling")}
+            </Label>
+          </If>
+        </View>
+        <View style={{ ...row, gap: space[8], height: space[24] }}>
+          <If when={status().enabled && status().activeUrl}>
+            <CopyButton
+              value={() => status().activeUrl ?? ""}
+              label={uiText("tailscaleHttpsCopyUrl")}
+              iconOnly
+              tone="ghost"
+              size={control.sm}
+            />
+          </If>
+          <ToggleSwitch
+            label={uiText("tailscaleHttps")}
+            checked={status().enabled}
+            disabled={!canToggle()}
+            onChange={(checked) =>
+              void toggle(
+                checked,
+                checked
+                  ? retrySamePort()
+                  : !status().enabled && status().holderStatus === "ours"
+                    ? status().port
+                    : undefined,
+              )
+            }
+          />
+        </View>
+      </View>
+      <If when={diagnostic()}>
+        {(reason) => (
+          <View
+            testID="tailscale-https-error"
+            style={{
+              paddingLeft:
+                space[16] + (props.phone ? control.md : space[24]) + space[8],
+              paddingRight: space[16],
+              paddingBottom: space[8],
+              gap: space[8],
+              ...(props.phone ? {} : { ...row, alignItems: "flex-start" }),
+            }}
+          >
+            <Label variant="small" tone="warningInk" style={{ flex: 1 }}>
+              {reason()}
+            </Label>
+            <If
+              when={
+                host.can("machines.setTailscaleServe") ? retryPort() : undefined
+              }
+              else={
+                <If
+                  when={
+                    host.can("machines.setTailscaleServe") &&
+                    status().diagnostic === "probe-failed" &&
+                    !status().enabled &&
+                    status().holderStatus === "ours"
+                  }
+                  else={
+                    <If
+                      when={
+                        host.can("machines.setTailscaleServe") &&
+                        status().diagnostic === "probe-failed" &&
+                        status().enabled
+                      }
+                    >
+                      <Button
+                        label={uiText("retry")}
+                        size={props.phone ? control.touch : control.sm}
+                        disabled={!!toggling()}
+                        onPress={() => void toggle(true, retrySamePort())}
+                      />
+                    </If>
+                  }
+                >
+                  <Button
+                    label={uiText("tailscaleHttpsTurnOff")}
+                    size={props.phone ? control.touch : control.sm}
+                    disabled={!!toggling()}
+                    onPress={() => void toggle(false, status().port)}
+                  />
+                </If>
+              }
+            >
+              {(port) => (
+                <Button
+                  label={uiText("tailscaleHttpsRetryPort", { port: port() })}
+                  size={props.phone ? control.touch : control.sm}
+                  disabled={!!toggling()}
+                  onPress={() => void toggle(true, port())}
+                />
+              )}
+            </If>
+          </View>
+        )}
+      </If>
+    </View>
+  );
+}
+
 export function Machines(props: {
   machines: MachineView[];
   layout: Layout;
@@ -348,12 +608,23 @@ export function Machines(props: {
   const text = useText();
   const adding = signal(false);
   const pairing = signal(false);
+  const addresses = signal<MachineResults["addresses"] | undefined>(undefined);
   let pairingAnchor: ViewRef | undefined;
   const machineId = signal("");
   const phone = () => props.layout === "phone";
   const visible = () => props.machines;
   const machine = () => visible().find((item) => item.id === machineId());
   const load = useLoadState({ targets: () => ["machines"] });
+
+  if (host.can("machines.addresses")) {
+    void host
+      .call<MachineResults["addresses"]>("machines", "addresses", {})
+      .then((result) => {
+        if (result?.tailscaleServe) addresses.set(result);
+      })
+      .catch(() => {});
+  }
+
   return (
     <>
       <If when={!adding() || phone()}>
@@ -400,6 +671,15 @@ export function Machines(props: {
           </View>
         </SectionHeader>
         <SmoothScroll style={grow} scrollbar={false}>
+          <If when={addresses()}>
+            {(info) => (
+              <TailscaleHttpsRow
+                addresses={info()}
+                phone={phone()}
+                onChange={addresses.set}
+              />
+            )}
+          </If>
           <If when={!visible().length}>
             <EmptyState
               size="page"
@@ -444,6 +724,8 @@ export function Machines(props: {
         <PhonePairing
           phone={phone()}
           anchor={pairingAnchor}
+          initialAddresses={addresses()}
+          onAddressesChange={addresses.set}
           onClose={() => pairing.set(false)}
         />
       </If>

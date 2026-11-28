@@ -15,6 +15,8 @@ export const RUN_OPTIONS = {
   "allow-origin": { type: "string", multiple: true },
   "memory-url": { type: "string" },
   "public-url": { type: "string" },
+  "tailscale-serve": { type: "boolean", default: false },
+  "tailscale-serve-port": { type: "string" },
   "no-llm": { type: "boolean", default: false },
   // Gone with the GitHub connection, still accepted: an older desktop app or an installed service
   // may pass them, and the parser would refuse to start. Not in the usage.
@@ -47,6 +49,9 @@ Flags:
   --token-file <path>     turn the token gate on with this file (created if missing)
   --allow-origin <o>      another page origin that may open the socket, repeatable
   --public-url <url>      the address the browser reaches this host at
+  --tailscale-serve       publish this host over Tailscale HTTPS (turns the token gate on)
+  --tailscale-serve-port <n>
+                          HTTPS port for Tailscale Serve, default 443
   --memory-url <url>      the memory sidecar
   --no-llm                do not load the LLM gateway
   --no-web                do not give agents web_fetch and web_search
