@@ -67,11 +67,6 @@ export interface HostOptions {
   /** Other origins that may open the socket, for a page served elsewhere (the dev server). */
   allowOrigins?: readonly string[];
   /**
-   * The memory sidecar's address. Without one the host has no memory: no `memory` target, no
-   * memory tools, and nothing is ever sent to a sidecar.
-   */
-  memoryUrl?: string;
-  /**
    * Whether to load the LLM gateway: subscription accounts (Codex, Grok) and Gemini API keys,
    * served as the `llm` provider, by CLIProxyAPI in a child process. Off by default so a host
    * made for a test does not start one; `main.ts` turns it on. A host whose CPA does not start
@@ -236,7 +231,6 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.replies === undefined ? {} : { replies: options.replies }),
       ...(options.captain === undefined ? {} : { captain: options.captain }),
       artifactLimits: options.artifactLimits,
-      memoryUrl: options.memoryUrl,
       publicUrl: options.publicUrl,
       accessToken: access.token,
       ...(options.web === undefined || options.web === false

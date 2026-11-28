@@ -90,8 +90,7 @@ host, decided by `$HOME` — no switch. How it works: [Machines and daemon](arch
 
 Memory is a SQLite file in the data directory, next to the sessions and the artifacts, and it is
 queried per conversation. There is no separate service to run and nothing to configure: it comes with
-the install, it travels with `$HOME/.eta`, and a row you delete stays deleted. See
-[Memory](architecture/memory.md).
+the install, it travels with `$HOME/.eta`, and a row you delete stays deleted.
 
 ## Access
 

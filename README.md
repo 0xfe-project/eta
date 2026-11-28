@@ -196,11 +196,11 @@ Scale from a laptop to Linux build servers, GPU workstations, and remote boxes w
 │                                                                  │
 │  War Rooms · Captain · Task DAGs · Routines · Artifacts · Inbox  │
 │  Models & Subscriptions · Plugins · Per-Agent MCP · Approvals    │
-└──────────────┬──────────────────────────────────┬────────────────┘
-               │ Outbound Worker Link             │ Optional
-               ▼                                  ▼
-   eta-daemon Worker Nodes                   Memory Sidecar
-   (Remote worktrees, local CLIs, MCP)       (Semantic memory)
+└──────────────┬───────────────────────────────────────────────────┘
+               │ Outbound Worker Link
+               ▼
+   eta-daemon Worker Nodes
+   (Remote worktrees, local CLIs, MCP)
 ```
 
 ---

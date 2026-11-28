@@ -6,13 +6,8 @@
     "indentStyle": "space",
     "quoteStyle": "double"
   },
-  "ruff": {
-    "lineLength": 88,
-    "indentWidth": 4
-  },
   "excludes": [
     "**/node_modules",
-    "**/.venv",
     "**/out",
     "**/dist",
     "**/.output",
@@ -23,7 +18,6 @@
     "packages/TOBEREFR/eta-plugin-akhook/presets",
     "**/*-lock.json",
     "bun.lock",
-    "**/uv.lock",
     "**/var",
     "AGENTS.md",
     "**/.eta",
@@ -33,7 +27,6 @@
   ],
   "plugins": [
     "npm:@dprint/biome@0.13.13",
-    "npm:@dprint/ruff@0.9.1",
     "npm:@dprint/json@0.25.2",
     "npm:@dprint/markdown@0.26.0",
     "npm:@dprint/toml@0.9.0",

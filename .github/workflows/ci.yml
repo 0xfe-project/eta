@@ -43,7 +43,6 @@ jobs:
       contents: read
     outputs:
       has_tasks: ${{ steps.plan.outputs.has_tasks }}
-      has_memory: ${{ steps.plan.outputs.has_memory }}
       has_client: ${{ steps.plan.outputs.has_client }}
       has_meta: ${{ steps.plan.outputs.has_meta }}
       scope: ${{ steps.plan.outputs.scope }}
@@ -140,7 +139,6 @@ jobs:
             const inputForce = process.env.INPUT_FORCE === "true";
             const platforms = process.env.INPUT_PLATFORMS || "all";
             const hasTasks = taskIds.length > 0;
-            const hasMemory = inputAll || taskIds.some((id) => id.startsWith("@eta/memory#"));
             const hasClient = inputAll || taskIds.some((id) => id.startsWith("@eta/client#"));
             const hasMeta = process.env.HAS_META === "true";
             const scmBase = process.env.SCM_BASE || "";
@@ -157,7 +155,6 @@ jobs:
               process.env.GITHUB_OUTPUT!,
               [
                 "has_tasks=" + hasTasks,
-                "has_memory=" + hasMemory,
                 "has_client=" + hasClient,
                 "has_meta=" + hasMeta,
                 "scope=" + (process.env.SCOPE_FLAG || ""),
@@ -173,7 +170,7 @@ jobs:
               "- Scope: " + q + process.env.SCOPE_LABEL + q + (inputForce ? " (" + q + "--force" + q + ")" : ""),
               ...(scmBase ? ["- SCM base (" + q + "TURBO_SCM_BASE" + q + "): " + q + scmBase + q] : []),
               "- OS matrix: " + include.map((m) => q + m.name + q).join(", "),
-              "- Flags: " + q + "has_tasks=" + hasTasks + q + ", " + q + "has_memory=" + hasMemory + q + ", " + q + "has_client=" + hasClient + q + ", " + q + "has_meta=" + hasMeta + q,
+              "- Flags: " + q + "has_tasks=" + hasTasks + q + ", " + q + "has_client=" + hasClient + q + ", " + q + "has_meta=" + hasMeta + q,
               "- Planned tasks (" + taskIds.length + "):",
               ...(hasTasks ? taskIds.map((id) => "  - " + q + id + q) : ["  - _None (dprint + meta checks only)_"]),
               "",
@@ -215,7 +212,6 @@ jobs:
         id: prepare
         uses: ./.github/actions/prepare
         with:
-          setup-uv: ${{ needs.plan.outputs.has_memory }}
           restore-turbo-cache: ${{ needs.plan.outputs.has_tasks == 'true' && !inputs.force }}
 
       - name: Set up nsh

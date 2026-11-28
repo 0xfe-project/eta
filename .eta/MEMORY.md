@@ -92,7 +92,6 @@
 - [37] Eta task comment delivery 不能只依赖内存 live handle；运行中可 steer，结束后的评论需要持久化/入队续跑，否则会成无声记录。
 - [40] To keep queued Eta task replies out of chat, filter at the shared conversation query/source using held root message ids and cover both immediate send replies and reloaded host window replies.
 - [44] For Eta long-message folding, reuse the existing fold preference module and shared clamp UI across message types instead of duplicating folding logic in separate render paths.
-- [48] @eta/memory 的 lint 使用 `uv run ruff`；缺少 uv 会使整仓 check 失败，应与改动隔离判断。
 - [51] Removing an Eta WorkspacePanel tab must also remove the now-dead panel branch/container and migrate its tests to the page route; missing panel sections should route to dedicated pages.
 - [53] To fold pasted text inside sent Eta messages without changing the prompt, store paste-block ranges in message `data.blocks` and render the same chip by interval; legacy messages fall back to whole-message clamping.
 - [55] Before merging all Eta task work, verify each task branch actually has commits; long runs can die (e.g., provider stream error before start) leaving only uncommitted worktrees. Task status changes alone do not enqueue a rerun/continuation, so failed work needs explicit rerun/manual verification before merge.
@@ -101,7 +100,7 @@
 - [64] When reconciling Eta task branches with main, check whether main..branch has 0 commits; if yes and acceptance is verified, close the task. Do not merge or close based only on task status: failed/long runs may leave uncommitted worktrees, and uncommitted changes are not mergeable.
 - [67] In Eta, PRs must go through `open_pull_request`; `gh pr create` is blocked by akhook. If GitHub integration is not connected, fall back to a manual compare URL plus prepared PR body.
 - [71] When making Eta GitHub plugin optional/off-by-default, exclude GitHub from pending/everyone mount-wait sets; otherwise the disabled plugin still causes MOUNT_TIMEOUT_MS waits.
-- [72] In Eta, prefer hiding optional plugin surfaces from existing state.mounted / useGitHubMounted and memory-sidecar-style optional backend loading instead of adding new feature flags or config round-trips.
+- [72] In Eta, prefer hiding optional plugin surfaces from existing state.mounted / useGitHubMounted and optional backend loading instead of adding new feature flags or config round-trips.
 - [73] Eta web test matrix can have concurrency-sensitive flakes (including @eta/web#test, not only sidebar-tree recent-activity cases); reproduce isolated before treating a red run as a regression.
 - [77] Squash-merged Eta PR branches can still show commits in `main..branch`; use tree equality or `git merge-tree` to detect already-merged content, then close the branch/task instead of creating an empty merge.
 - [78] When Eta's GitHub plugin is disabled, also omit akhook's GitHub layer; otherwise `gh pr create` remains blocked even though GitHub is not loaded/connected.

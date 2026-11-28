@@ -10,7 +10,7 @@
   },
   "scripts": {
     "prepare": "lefthook install",
-    "setup": "bun install && uv sync --project apps/memory --dev",
+    "setup": "bun install",
     "dev": "bun scripts/dev.ts",
     "dev:client": "bun scripts/dev.ts",
     "client:package": "bun run --cwd apps/client package",

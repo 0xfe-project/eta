@@ -92,9 +92,6 @@ import { transportOn } from "./machines/shell";
 import { MachineStore } from "./machines/store";
 import { mcpPlugin } from "./mcp/plugin";
 import { McpService } from "./mcp/service";
-import { MemoryClient } from "./memory/client";
-import { memoryRunHooks, memoryTools } from "./memory/hooks";
-import { memoryPlugin } from "./memory/plugin";
 import { MachinePlaces, wireFailure } from "./places/on-machine";
 import { placesPlugin } from "./places/plugin";
 import { PlaceStore } from "./places/store";
@@ -118,12 +115,7 @@ import { RoutineStore } from "./routines/store";
 import { TriggerHub } from "./routines/triggers";
 import { loadSecretKey } from "./secret";
 import { combineSessionHooks } from "./session-hooks";
-import {
-  conversationOf,
-  ownerOf,
-  sessionKeyOf,
-  taskKey,
-} from "./session-owner";
+import { conversationOf, ownerOf, sessionKeyOf } from "./session-owner";
 import { SettingStore } from "./settings/store";
 import { skillFilesPlugin } from "./skills/plugin";
 import { SkillFileService } from "./skills/service";
@@ -275,8 +267,6 @@ const MOUNT_TIMEOUT_MS = 10_000;
 export function createProduct(options: {
   db: Database;
   dataDir: string;
-  /** The memory sidecar's address. Without one there is no memory: no plugin, no tools, no calls. */
-  memoryUrl?: string | undefined;
   warn: (message: string) => void;
   /** The interface the host listens on, for the address a new machine is told to dial. */
   hostname?: string | undefined;
@@ -331,10 +321,6 @@ export function createProduct(options: {
 }): Product {
   const { db, dataDir, warn } = options;
   const captainOn = options.captain !== false;
-  const memory =
-    options.memoryUrl === undefined || options.memoryUrl === ""
-      ? undefined
-      : new MemoryClient(options.memoryUrl);
   const agents = new AgentStore(db);
   const machines = new MachineStore(db);
   const projects = new ProjectStore(db);
@@ -749,24 +735,11 @@ export function createProduct(options: {
     agents,
     projects,
     conversations,
-    client: memory,
   });
   // Reading the web: pages and searches, for every session that has the tools.
   const web =
     options.web === undefined ? undefined : new Web({ ...options.web, warn });
   const runHooks = combineRunHooks([
-    ...(memory === undefined
-      ? []
-      : [
-          memoryRunHooks(memory, (run) => {
-            // A task's run is said in the conversation the task came from, but is the task's.
-            const taskRun = runRows.get(run.replyId);
-            const key = taskRun ? taskKey(taskRun.taskId) : run.conversationId;
-            return (
-              made.captain?.memoryEnabled({ conversationId: key }) !== false
-            );
-          }),
-        ]),
     {
       afterRun: (run) => {
         if (run.status === "done") made.captain?.replyEnded(run.replyId);
@@ -1088,18 +1061,6 @@ export function createProduct(options: {
     {
       askObserve: (meta: SessionMeta) => inbox.askObserve(originOf(meta)),
     },
-    ...(memory === undefined
-      ? []
-      : [
-          {
-            sessionTools: (input: Parameters<typeof memoryTools>[1]) =>
-              memoryTools(
-                memory,
-                { ...input, meta: originOf(input.meta) },
-                () => captain.memoryEnabled(input.meta),
-              ),
-          },
-        ]),
     ...(web === undefined ? [] : [{ sessionTools: webSessionTools(web) }]),
     { sessionTools: widgetSessionTools() },
   ];
@@ -1190,7 +1151,6 @@ export function createProduct(options: {
         "mcp",
         "skills",
         ...(options.acp === undefined ? [] : ["acp"]),
-        ...(memory === undefined ? [] : ["memory"]),
       ]);
       let ready!: () => void;
       const everyone = new Promise<void>((resolve) => {
@@ -1571,11 +1531,6 @@ export function createProduct(options: {
       server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
       if (acpService !== undefined)
         server.mount("acp", acpPlugin({ service: acpService }, applied("acp")));
-      if (memory !== undefined)
-        server.mount(
-          "memory",
-          memoryPlugin({ client: memory }, applied("memory")),
-        );
       let timer: ReturnType<typeof setTimeout> | undefined;
       const late = new Promise<never>((_, reject) => {
         timer = setTimeout(
