@@ -1,18 +1,43 @@
 import { safeAreaInsets, View } from "nsh";
-import { colors, grow, Label, row } from "../../components";
-import { space } from "../../components/tokens";
+import { normalizeHostOrigin, useSavedHosts } from "../../app/saved-hosts";
+import {
+  Button,
+  colors,
+  grow,
+  Label,
+  row,
+  SmoothScroll,
+} from "../../components";
+import { control, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 
-export function PhoneHostSetup(props: { noModel: boolean; hostName?: string }) {
+export function PhoneHostSetup(props: {
+  noModel: boolean;
+  hostName?: string;
+  onContinue?: () => void;
+  onConnect?: () => void;
+}) {
   const c = colors();
   const insets = safeAreaInsets();
+  const savedHosts = useSavedHosts();
   const hostname = () => {
-    if (!props.hostName) return "This host";
-    const name = new URL(props.hostName).hostname;
-    return /^\d+\./.test(name) ? name : name.split(".")[0];
+    if (!props.hostName) return uiText("thisHost");
+    const normalized = normalizeHostOrigin(props.hostName);
+    if (normalized) {
+      const saved = savedHosts
+        .hosts()
+        .find((item) => item.origin === normalized);
+      if (saved?.name) return saved.name;
+    }
+    try {
+      const name = new URL(props.hostName).hostname;
+      return /^\d+\./.test(name) ? name : (name.split(".")[0] ?? name);
+    } catch {
+      return props.hostName;
+    }
   };
   return (
-    <View style={grow}>
+    <SmoothScroll style={grow} contentStyle={{ flexGrow: 1 }}>
       <View
         style={{
           paddingHorizontal: space[16],
@@ -46,18 +71,40 @@ export function PhoneHostSetup(props: { noModel: boolean; hostName?: string }) {
         />
       </View>
       <View style={{ ...grow }} />
-      <Label
-        variant="small"
-        tone="muted"
+      <View
         style={{
           paddingHorizontal: space[16],
           paddingTop: space[16],
-          paddingBottom: Math.max(4, 34 - insets().bottom),
+          paddingBottom: Math.max(space[16], space[32] - insets().bottom),
+          gap: space[12],
         }}
       >
-        {uiText("thisPageUpdatesByItselfWhen")}
-      </Label>
-    </View>
+        <Label variant="small" tone="muted">
+          {uiText("thisPageUpdatesByItselfWhen")}
+        </Label>
+        <If when={props.onContinue || props.onConnect}>
+          <View style={{ gap: space[8] }}>
+            <If when={props.onContinue}>
+              <Button
+                label={uiText("setUpOnThisPhone")}
+                tone="primary"
+                size={control.touch}
+                labelVariant="body"
+                onPress={props.onContinue!}
+              />
+            </If>
+            <If when={props.onConnect}>
+              <Button
+                label={uiText("changeHost")}
+                size={control.touch}
+                labelVariant="body"
+                onPress={props.onConnect!}
+              />
+            </If>
+          </View>
+        </If>
+      </View>
+    </SmoothScroll>
   );
 }
 

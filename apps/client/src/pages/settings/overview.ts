@@ -9,6 +9,7 @@ import type { IconName } from "../../components/icons";
 import type { Message } from "../../i18n";
 import type { AppearanceProps } from "./appearance";
 import { effect } from "nsh";
+import { useSavedHosts } from "../../app/saved-hosts";
 import { uiText, useText } from "../../i18n";
 import { follow, useHost } from "../../services/host";
 import { createRuntimeListing } from "./runtimes/listing";
@@ -25,6 +26,7 @@ export const sections = [
   ["Network", "globe", "network"],
   ["Archived", "archive", "archived"],
   ["Appearance", "palette", "appearance"],
+  ["Hosts", "link", "hosts"],
   ["Update", "arrowCircleUp", "update"],
 ] as const satisfies readonly (readonly [string, IconName, Message])[];
 
@@ -32,6 +34,7 @@ export type SettingsSection = (typeof sections)[number][0];
 
 export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
   const host = useHost();
+  const savedHosts = useSavedHosts();
   const text = useText();
   const providers = () => host.section<ProvidersView>("providers", "config");
   const machines = () => host.list<MachineView>("machines");
@@ -153,6 +156,14 @@ export function useSettingsOverview(theme: () => AppearanceProps["theme"]) {
         return {
           text: text(theme()),
         };
+      case "Hosts": {
+        const origin = host.address()?.origin;
+        return {
+          text: origin
+            ? savedHosts.displayName(origin)
+            : String(savedHosts.hosts().length),
+        };
+      }
       case "Update": {
         const check = host.upgradeCheck();
         if (!check) return { text: "" };

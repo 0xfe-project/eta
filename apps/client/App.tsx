@@ -11,15 +11,21 @@ import {
   openUrl,
   platform,
   signal,
-  Storage,
+  untracked,
   UrlScheme,
   View,
   windowSize,
 } from "nsh";
 import { createAppearancePreferences } from "./src/app/appearance-preferences";
 import { ClientUpdateNotice } from "./src/app/client-update-notice";
+import {
+  createSavedHosts,
+  needsLocalHostStart,
+  sameHostAddress,
+  SavedHosts,
+} from "./src/app/saved-hosts";
 import { Workspace } from "./src/app/workspace";
-import { showsWorkspace } from "./src/app/workspace-gate";
+import { canReturnToWorkspace, showsWorkspace } from "./src/app/workspace-gate";
 import {
   Button,
   Fonts,
@@ -66,8 +72,6 @@ import {
 } from "./src/services/host";
 import { createPictureMode, PictureModes } from "./src/services/picture-mode";
 
-const connectKey = "eta.host";
-
 function pairingAddress(
   url: string | null | undefined,
 ): HostAddress | undefined {
@@ -83,6 +87,7 @@ function pairingAddress(
 
 function App() {
   const host = createHost();
+  const savedHosts = createSavedHosts({ syncLegacy: platform.os !== "web" });
   resumeComposerOutbox(host);
   const pictureMode = createPictureMode();
   const attachmentFiles = createAttachmentFiles(host);
@@ -134,45 +139,80 @@ function App() {
   const workspaceSettled = settled(() => !loadingWebWorkspace());
   const startingLocal = signal(false);
   const offeredAddress = signal<HostAddress | undefined>(openedWith);
+  const dismissedPhoneSetup = signal<string | undefined>(undefined);
   const dismissCompatibility = signal(false);
   const applicationVersion = appInfo().version ?? undefined;
+  let localLaunchGeneration = 0;
+
+  async function resumeLocalHost(
+    address: HostAddress,
+    options: { disconnectFirst?: boolean } = {},
+  ) {
+    if (!canStartHost) {
+      forcedConnect.set(true);
+      return;
+    }
+    const generation = ++localLaunchGeneration;
+    if (options.disconnectFirst) {
+      offeredAddress.set(undefined);
+      forcedConnect.set(false);
+      host.start(null);
+    }
+    startingLocal.set(true);
+    host.watchUpgrade(address);
+    try {
+      const resumed = await startLocalHost();
+      if (
+        generation === localLaunchGeneration &&
+        !host.address() &&
+        !forcedConnect()
+      ) {
+        host.start({ ...resumed, local: true });
+      }
+    } catch {
+      if (
+        generation === localLaunchGeneration &&
+        !host.address() &&
+        !forcedConnect()
+      ) {
+        if (host.upgrade()?.state === "running") host.start(address);
+        else {
+          host.watchUpgrade(null);
+          forcedConnect.set(true);
+        }
+      }
+    } finally {
+      if (generation === localLaunchGeneration) startingLocal.set(false);
+    }
+  }
+
   cleanup(() => host.start(null));
   clientUpdate.start();
+  const startupHost = savedHosts.load();
   if (initial) host.start(initial);
   if (!initial)
-    void Storage.getItem(connectKey)
-      .then(async (stored) => {
-        if (!stored || host.address() || forcedConnect()) return;
-        const address = JSON.parse(stored) as HostAddress;
+    void startupHost
+      .then(async (address) => {
+        if (!address || host.address() || forcedConnect()) return;
         if (!address.local) {
           host.start(address);
           return;
         }
-        if (!canStartHost) {
-          forcedConnect.set(true);
-          return;
-        }
-        startingLocal.set(true);
-        host.watchUpgrade(address);
-        try {
-          const resumed = await startLocalHost();
-          if (!host.address() && !forcedConnect())
-            host.start({ ...resumed, local: true });
-        } catch {
-          if (!host.address() && !forcedConnect()) {
-            if (host.upgrade()?.state === "running") host.start(address);
-            else {
-              host.watchUpgrade(null);
-              forcedConnect.set(true);
-            }
-          }
-        } finally {
-          startingLocal.set(false);
-        }
+        await resumeLocalHost(address);
       })
       .catch(() => {});
   function connect(address: HostAddress) {
     if (openingWeb()) return;
+    if (
+      sameHostAddress(address, host.address()) &&
+      host.hasConnected() &&
+      host.state().status === "open"
+    ) {
+      offeredAddress.set(undefined);
+      forcedConnect.set(false);
+      savedHosts.remember(address);
+      return;
+    }
     userConnecting.set(true);
     const current = UrlScheme.url();
     if (
@@ -185,10 +225,48 @@ function App() {
     connectInApp(address);
   }
 
+  function switchHost(address: HostAddress) {
+    if (openingWeb() || startingLocal()) return;
+    if (
+      sameHostAddress(address, host.address()) &&
+      host.hasConnected() &&
+      host.state().status === "open"
+    ) {
+      offeredAddress.set(undefined);
+      forcedConnect.set(false);
+      savedHosts.remember(address);
+      return;
+    }
+    if (
+      needsLocalHostStart({
+        address,
+        activeOrigin: host.address()?.origin,
+        activeOpen: host.hasConnected() && host.state().status === "open",
+        canStartHost,
+      })
+    ) {
+      userConnecting.set(true);
+      void resumeLocalHost(address, { disconnectFirst: true });
+      return;
+    }
+    connect(address);
+  }
+
   function connectInApp(address: HostAddress) {
+    localLaunchGeneration++;
     offeredAddress.set(undefined);
     forcedConnect.set(false);
     host.start(address);
+  }
+
+  function openConnection() {
+    localLaunchGeneration++;
+    forcedConnect.set(true);
+  }
+
+  function cancelConnection() {
+    offeredAddress.set(undefined);
+    forcedConnect.set(false);
   }
 
   async function openWebHost(address: HostAddress) {
@@ -210,6 +288,7 @@ function App() {
       await host.action(async () => {
         if (!(await openUrl(next.href)).opened)
           throw new Error("The host address could not be opened.");
+        savedHosts.remember(address);
       });
     } finally {
       openingWeb.set(false);
@@ -230,127 +309,148 @@ function App() {
       }),
     );
   effect(() => {
-    if (platform.os !== "web" && host.hasConnected() && host.address())
-      void Storage.setItem(connectKey, JSON.stringify(host.address())).catch(
-        () => {},
-      );
+    const current = host.address();
+    const origin = current?.origin ?? "";
+    const dismissed = untracked(dismissedPhoneSetup);
+    if (dismissed !== undefined && dismissed !== origin) {
+      dismissedPhoneSetup.set(undefined);
+    }
+    if (host.hasConnected() && current) savedHosts.remember(current);
+  });
+  const gate = () => ({
+    connected: host.hasConnected(),
+    everConnected: host.everConnected(),
+    changingHost: forcedConnect(),
+    settled: workspaceSettled(),
   });
   const c = () => palette(colorScheme(), paletteId(), flavor());
   return (
     <LanguageSettings.Provider value={language}>
       <ElementPicking.Provider value={elementPicker}>
         <Host.Provider value={host}>
-          <PictureModes.Provider value={pictureMode}>
-            <AttachmentFiles.Provider value={attachmentFiles}>
-              <Palette.Provider value={c}>
-                <Fonts.Provider value={fonts}>
-                  <Screen.Provider value={layout}>
-                    <SafeArea
-                      testID="app-safe-area"
-                      style={{ backgroundColor: c().canvas }}
-                    >
-                      <If
-                        when={showsWorkspace({
-                          connected: host.hasConnected(),
-                          everConnected: host.everConnected(),
-                          changingHost: forcedConnect(),
-                          settled: workspaceSettled(),
-                        })}
-                        else={
-                          <If
-                            when={loadingWebWorkspace() || !workspaceSettled()}
-                            else={
-                              <Connection
-                                initial={offeredAddress() ?? host.address()}
-                                layout={layout()}
-                                resuming={startingLocal()}
-                                openingWeb={openingWeb()}
-                                onConnect={connect}
-                              />
-                            }
-                          >
-                            <Revealed>
-                              <WorkspaceSkeleton layout={layout()} />
-                            </Revealed>
-                          </If>
-                        }
+          <SavedHosts.Provider value={savedHosts}>
+            <PictureModes.Provider value={pictureMode}>
+              <AttachmentFiles.Provider value={attachmentFiles}>
+                <Palette.Provider value={c}>
+                  <Fonts.Provider value={fonts}>
+                    <Screen.Provider value={layout}>
+                      <SafeArea
+                        testID="app-safe-area"
+                        style={{ backgroundColor: c().canvas }}
                       >
-                        <Workspace
-                          layout={layout()}
-                          theme={theme()}
-                          onTheme={changeTheme}
-                          paletteId={paletteId()}
-                          onPalette={changePalette}
-                          flavor={flavor()}
-                          onFlavor={changeFlavor}
-                          chatWidth={chatWidth()}
-                          onChatWidth={changeChatWidth}
-                          chatRail={chatRail()}
-                          onChatRail={changeChatRail}
-                          onFonts={changeFonts}
-                          onConnect={() => {
-                            forcedConnect.set(true);
-                            host.start(null);
-                          }}
-                        />
-                      </If>
-                      <If when={!forcedConnect()}>
-                        <HostRestartScreen
-                          onConnect={() => {
-                            forcedConnect.set(true);
-                            host.start(null);
-                          }}
-                        />
-                      </If>
-                      <If
-                        when={
-                          isDesktopPlatform &&
-                          host.hasConnected() &&
-                          !dismissCompatibility() &&
-                          desktopTooOld(applicationVersion)
-                        }
-                      >
-                        <View
-                          role="alert"
-                          style={{
-                            ...row,
-                            flexShrink: 0,
-                            minHeight: space[40],
-                            paddingLeft: space[16],
-                            paddingRight: space[4],
-                            borderTopWidth: 1,
-                            borderColor: c().border,
-                            backgroundColor: c().canvas,
-                            gap: space[8],
-                          }}
+                        <If
+                          when={showsWorkspace(gate())}
+                          else={
+                            <If
+                              when={
+                                loadingWebWorkspace() || !workspaceSettled()
+                              }
+                              else={
+                                <Connection
+                                  initial={
+                                    offeredAddress() ??
+                                    (canReturnToWorkspace(gate())
+                                      ? null
+                                      : host.address())
+                                  }
+                                  layout={layout()}
+                                  resuming={startingLocal()}
+                                  openingWeb={openingWeb()}
+                                  choosingHost={forcedConnect()}
+                                  activeOrigin={host.address()?.origin}
+                                  activeConnected={
+                                    host.hasConnected() &&
+                                    host.state().status === "open"
+                                  }
+                                  onCancel={
+                                    canReturnToWorkspace(gate())
+                                      ? cancelConnection
+                                      : undefined
+                                  }
+                                  onConnect={connect}
+                                />
+                              }
+                            >
+                              <Revealed>
+                                <WorkspaceSkeleton layout={layout()} />
+                              </Revealed>
+                            </If>
+                          }
                         >
-                          <Label style={{ flex: 1 }}>
-                            {uiText("thisHostNeedsTheEtaDesktop", {
-                              MIN_DESKTOP,
-                              applicationVersion,
-                            })}
-                          </Label>
-                          <Button
-                            label={uiText("dismissCompatibilityWarning")}
-                            icon="close"
-                            iconOnly
-                            size={control.lg}
-                            iconSize={icon.md}
-                            tone="ghost"
-                            onPress={() => dismissCompatibility.set(true)}
+                          <Workspace
+                            layout={layout()}
+                            theme={theme()}
+                            onTheme={changeTheme}
+                            paletteId={paletteId()}
+                            onPalette={changePalette}
+                            flavor={flavor()}
+                            onFlavor={changeFlavor}
+                            chatWidth={chatWidth()}
+                            onChatWidth={changeChatWidth}
+                            chatRail={chatRail()}
+                            onChatRail={changeChatRail}
+                            onFonts={changeFonts}
+                            onConnect={openConnection}
+                            onSwitchHost={switchHost}
+                            phoneSetupDismissedFor={dismissedPhoneSetup()}
+                            onDismissPhoneSetup={(origin) =>
+                              dismissedPhoneSetup.set(origin)
+                            }
                           />
-                        </View>
-                      </If>
-                      <ClientUpdateNotice />
-                    </SafeArea>
-                    <NotificationHost />
-                    <ElementPickerOverlay />
-                    {attachmentFiles.writer()}
-                  </Screen.Provider>
-                </Fonts.Provider>
-              </Palette.Provider>
-            </AttachmentFiles.Provider>
-          </PictureModes.Provider>
+                        </If>
+                        <If when={!forcedConnect()}>
+                          <HostRestartScreen onConnect={openConnection} />
+                        </If>
+                        <If
+                          when={
+                            isDesktopPlatform &&
+                            host.hasConnected() &&
+                            !dismissCompatibility() &&
+                            desktopTooOld(applicationVersion)
+                          }
+                        >
+                          <View
+                            role="alert"
+                            style={{
+                              ...row,
+                              flexShrink: 0,
+                              minHeight: space[40],
+                              paddingLeft: space[16],
+                              paddingRight: space[4],
+                              borderTopWidth: 1,
+                              borderColor: c().border,
+                              backgroundColor: c().canvas,
+                              gap: space[8],
+                            }}
+                          >
+                            <Label style={{ flex: 1 }}>
+                              {uiText("thisHostNeedsTheEtaDesktop", {
+                                MIN_DESKTOP,
+                                applicationVersion,
+                              })}
+                            </Label>
+                            <Button
+                              label={uiText("dismissCompatibilityWarning")}
+                              icon="close"
+                              iconOnly
+                              size={control.lg}
+                              iconSize={icon.md}
+                              tone="ghost"
+                              onPress={() => dismissCompatibility.set(true)}
+                            />
+                          </View>
+                        </If>
+                        <ClientUpdateNotice />
+                      </SafeArea>
+                      <NotificationHost />
+                      <ElementPickerOverlay />
+                      {attachmentFiles.writer()}
+                    </Screen.Provider>
+                  </Fonts.Provider>
+                </Palette.Provider>
+              </AttachmentFiles.Provider>
+            </PictureModes.Provider>
+          </SavedHosts.Provider>
         </Host.Provider>
       </ElementPicking.Provider>
     </LanguageSettings.Provider>

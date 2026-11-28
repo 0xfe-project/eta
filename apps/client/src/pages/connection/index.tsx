@@ -3,8 +3,14 @@ import type { HostAddress } from "../../services/host";
 import type { ConnectionFailure } from "./diagnostics";
 import { parseConnectLink } from "@eta/client-contracts/connect-link";
 import { cleanup, effect, platform, signal, View } from "nsh";
+import {
+  needsLocalHostStart,
+  normalizeHostOrigin,
+  useSavedHosts,
+} from "../../app/saved-hosts";
 import { Button, colors, grow, Header, Label, row } from "../../components";
-import { control, opacity, space } from "../../components/tokens";
+import { CloseButton } from "../../components/navigation-buttons";
+import { control, icon, opacity, space } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { isFlatpak } from "../../services/flatpak";
 import { addressFrom, useHost } from "../../services/host";
@@ -21,6 +27,7 @@ import {
   startLocalHost,
 } from "./local-host";
 import { PhoneConnectionForm } from "./phone-form";
+import { SavedHostsList } from "./saved-hosts-list";
 import { Scanner } from "./scanner";
 import { cardWidth, ConnectionMessage, LocationOption } from "./visuals";
 import { WorkspaceSkeleton } from "./workspace-skeleton";
@@ -37,8 +44,12 @@ const failureText = {
 
 function shownAddress(origin?: string) {
   if (!origin) return "";
-  const url = new URL(origin);
-  return url.protocol === "http:" ? url.host : origin;
+  try {
+    const url = new URL(origin);
+    return url.protocol === "http:" ? url.host : origin;
+  } catch {
+    return origin;
+  }
 }
 
 export function Connection(props: {
@@ -47,25 +58,36 @@ export function Connection(props: {
   resuming: boolean;
   openingWeb?: boolean;
   flatpak?: boolean;
+  choosingHost?: boolean;
+  activeOrigin?: string;
+  activeConnected?: boolean;
+  onCancel?: () => void;
   onConnect: (address: HostAddress) => void;
 }) {
   const c = colors();
   const host = useHost();
+  const savedHosts = useSavedHosts();
   const inFlatpak = props.flatpak ?? isFlatpak;
   const allowLocalHost = canStartHost && !inFlatpak;
   const draft = signal(shownAddress(props.initial?.origin));
   const token = signal(props.initial?.token ?? "");
-  const remote = signal(Boolean(props.initial?.origin) || !allowLocalHost);
+  const remote = signal(
+    Boolean(props.initial?.origin) ||
+      Boolean(props.choosingHost) ||
+      !allowLocalHost,
+  );
   const scanned = signal(false);
   const scanFailure = signal<"unavailable" | "invalid" | undefined>(undefined);
   const unavailable = () => uiText("connectScannerUnavailable");
   const starting = signal(false);
   const error = signal("");
   const problem = signal<ConnectionFailure | undefined>(
-    host.paused() ? "lost" : undefined,
+    host.paused() && !props.choosingHost ? "lost" : undefined,
   );
   const attempt = signal<HostAddress | undefined>(
-    host.paused() ? (host.address() ?? undefined) : undefined,
+    host.paused() && !props.choosingHost
+      ? (host.address() ?? undefined)
+      : undefined,
   );
   const phone = () => props.layout === "phone" && !isDesktopPlatform;
   const desktop = () => props.layout === "desktop" || isDesktopPlatform;
@@ -83,7 +105,11 @@ export function Connection(props: {
       ? "That isn't an Eta connect code."
       : unavailable();
   const connecting = () =>
-    props.openingWeb || (!!host.address() && host.failures() === 0);
+    props.openingWeb ||
+    (!props.choosingHost &&
+      !!host.address() &&
+      !host.hasConnected() &&
+      host.failures() === 0);
   const localBusy = () => starting() || props.resuming;
   const busy = () => connecting() || localBusy();
   const failure = () => {
@@ -225,6 +251,76 @@ export function Connection(props: {
     token.set("");
   }
 
+  const activeOrigin = () =>
+    props.activeOrigin
+      ? (normalizeHostOrigin(props.activeOrigin) ?? props.activeOrigin)
+      : undefined;
+
+  function connectSaved(address: HostAddress) {
+    if (busy()) return;
+    draft.set(shownAddress(address.origin));
+    token.set(address.token ?? "");
+    remote.set(true);
+    if (
+      needsLocalHostStart({
+        address,
+        activeOrigin: activeOrigin(),
+        activeOpen: Boolean(props.activeConnected),
+        canStartHost: allowLocalHost,
+      })
+    ) {
+      void launch();
+      return;
+    }
+    begin(address);
+  }
+
+  const savedSection = (boxed: boolean) => (
+    <If when={savedHosts.hosts().length}>
+      <If
+        when={boxed}
+        else={
+          <View style={{ paddingBottom: space[16] }}>
+            <Label
+              variant="caption"
+              tone="muted"
+              tracking="caps"
+              style={{
+                paddingHorizontal: space[16],
+                paddingTop: space[12],
+                paddingBottom: space[8],
+              }}
+            >
+              {uiText("savedHosts")}
+            </Label>
+            <SavedHostsList
+              hosts={savedHosts.hosts()}
+              activeOrigin={props.activeOrigin}
+              activeConnected={props.activeConnected}
+              phone
+              busy={Boolean(busy())}
+              onConnect={connectSaved}
+              onRename={(origin, name) => savedHosts.rename(origin, name)}
+              onRemove={(origin) => savedHosts.remove(origin)}
+            />
+          </View>
+        }
+      >
+        <SavedHostsList
+          hosts={savedHosts.hosts()}
+          activeOrigin={props.activeOrigin}
+          activeConnected={props.activeConnected}
+          phone={false}
+          boxed
+          busy={Boolean(busy())}
+          onConnect={connectSaved}
+          onRename={(origin, name) => savedHosts.rename(origin, name)}
+          onRemove={(origin) => savedHosts.remove(origin)}
+        />
+      </If>
+    </If>
+  );
+
   const scanLabel = "Scan the code on your computer";
   return (
     <View style={{ ...grow, backgroundColor: c().canvas }}>
@@ -286,26 +382,55 @@ export function Connection(props: {
           >
             <If when={desktop()}>
               <Header
-                title={uiText("whereShouldEtaRun")}
+                title={
+                  props.onCancel
+                    ? uiText("switchHost")
+                    : uiText("whereShouldEtaRun")
+                }
                 layout={props.layout}
                 inset={space[16]}
+                end={space[12]}
                 dialog
-              />
+              >
+                <If when={props.onCancel}>
+                  <View style={grow} />
+                  <CloseButton
+                    size={control.sm}
+                    iconSize={icon.md}
+                    style={{ paddingHorizontal: 0 }}
+                    onPress={props.onCancel!}
+                  />
+                </If>
+              </Header>
             </If>
             <If when={tablet()}>
               <Header
                 title={
                   remoteFailure()
                     ? uiText("cantReachThisHost")
-                    : uiText("connectToOneHostReachEvery")
+                    : props.onCancel
+                      ? uiText("switchHost")
+                      : uiText("connectToOneHostReachEvery")
                 }
                 layout={props.layout}
                 inset={space[16]}
+                end={space[12]}
                 dialog
-              />
+              >
+                <If when={props.onCancel}>
+                  <View style={grow} />
+                  <CloseButton
+                    size={control.sm}
+                    iconSize={icon.md}
+                    style={{ paddingHorizontal: 0 }}
+                    onPress={props.onCancel!}
+                  />
+                </If>
+              </Header>
             </If>
             <If when={phone()}>
               <PhoneConnectionForm
+                saved={savedSection(false)}
                 address={draft()}
                 remoteFailure={remoteFailure()}
                 remoteReason={remoteReason()}
@@ -315,6 +440,7 @@ export function Connection(props: {
                 scanNotice={scanNotice()}
                 scanLabel={scanLabel}
                 error={error()}
+                onCancel={props.onCancel}
                 onConnect={connect}
                 onDismissScan={() => scanFailure.set(undefined)}
                 onScan={scan}
@@ -336,6 +462,7 @@ export function Connection(props: {
                   gap: tablet() ? space[16] : space[12],
                 }}
               >
+                {savedSection(true)}
                 <If
                   when={desktop()}
                   else={
@@ -428,29 +555,39 @@ export function Connection(props: {
                 <If when={tablet() && remoteFailure()}>
                   <View style={{ flex: 1 }} />
                 </If>
-                <If when={remote() || !desktop()}>
-                  <Button
-                    label={
-                      remoteFailure() ? uiText("retry") : uiText("connect")
-                    }
-                    tone="primary"
-                    size={tablet() ? control.touch : undefined}
-                    style={
-                      tablet()
-                        ? {
-                            paddingHorizontal: space[24],
-                            opacity:
-                              !draft().trim() || localBusy()
-                                ? opacity.disabled
-                                : 1,
-                          }
-                        : { paddingHorizontal: space[12] }
-                    }
-                    disabled={!draft().trim() || localBusy()}
-                    busy={connecting()}
-                    onPress={connect}
-                  />
-                </If>
+                <View style={{ ...row, gap: space[8] }}>
+                  <If when={props.onCancel}>
+                    <Button
+                      label={uiText("cancel")}
+                      size={tablet() ? control.touch : undefined}
+                      style={{ paddingHorizontal: space[12] }}
+                      onPress={props.onCancel!}
+                    />
+                  </If>
+                  <If when={remote() || !desktop()}>
+                    <Button
+                      label={
+                        remoteFailure() ? uiText("retry") : uiText("connect")
+                      }
+                      tone="primary"
+                      size={tablet() ? control.touch : undefined}
+                      style={
+                        tablet()
+                          ? {
+                              paddingHorizontal: space[24],
+                              opacity:
+                                !draft().trim() || localBusy()
+                                  ? opacity.disabled
+                                  : 1,
+                            }
+                          : { paddingHorizontal: space[12] }
+                      }
+                      disabled={!draft().trim() || localBusy()}
+                      busy={connecting()}
+                      onPress={connect}
+                    />
+                  </If>
+                </View>
               </View>
             </If>
           </View>

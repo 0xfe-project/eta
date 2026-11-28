@@ -1,9 +1,11 @@
 import type { AcpMachineList, ProviderSummary } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
 import type { Layout } from "../../components";
+import type { HostAddress } from "../../services/host";
 import type { AppearanceProps } from "./appearance";
 import type { SettingsSection } from "./overview";
 import { signal, View } from "nsh";
+import { useSavedHosts } from "../../app/saved-hosts";
 import {
   Button,
   colors,
@@ -30,6 +32,7 @@ import {
   ExternalAgentForm,
 } from "./external-agent-form";
 import { ExternalAgentList } from "./external-agent-list";
+import { HostSettings } from "./hosts";
 import { Machines } from "./machines/machines";
 import { McpSettings } from "./mcp/server-list";
 import { AddSource } from "./models/add-source";
@@ -56,6 +59,7 @@ export function Settings(
     initial: SettingsSection;
     layout: Layout;
     onConnect: () => void;
+    onSwitchHost?: (address: HostAddress) => void;
     onTask: (id: string) => void;
     /** Start from a template instead: the workspace opens the template gallery; no link without it. */
     onTemplates?: () => void;
@@ -67,6 +71,7 @@ export function Settings(
   },
 ) {
   const host = useHost();
+  const savedHosts = useSavedHosts();
   const c = colors();
   const text = useText();
   const sectionTitle = (name: SettingsSection) =>
@@ -130,13 +135,17 @@ export function Settings(
         ? sourceCount()
         : name === "External agents"
           ? externalAgents().length
-          : undefined) || undefined;
+          : name === "Hosts"
+            ? savedHosts.hosts().length
+            : undefined) || undefined;
   const sectionHint = (name: SettingsSection) =>
     name === "External agents"
       ? uiText("externalAgentsHint")
       : name === "Runtimes"
         ? uiText("runtimesHint")
-        : undefined;
+        : name === "Hosts"
+          ? uiText("hostsHint")
+          : undefined;
   /** Panes that draw their own header instead of the section header. */
   const ownHeader = (name: SettingsSection) =>
     name === "Machines" || name === "MCP servers" || !!showingProvider();
@@ -176,6 +185,15 @@ export function Settings(
             const target = acpTarget();
             if (target) acpForm.set({ machineId: target.id });
           }}
+        />
+      </If>
+      <If when={name === "Hosts"}>
+        <Button
+          label={uiText("addHost")}
+          size={actionSize()}
+          style={actionStyle()}
+          icon="plus"
+          onPress={props.onConnect}
         />
       </If>
     </>
@@ -445,6 +463,13 @@ export function Settings(
                   chatRail={props.chatRail}
                   onChatRail={props.onChatRail}
                   onFonts={props.onFonts}
+                />
+              </If>
+              <If when={current() === "Hosts"}>
+                <HostSettings
+                  phone={phone()}
+                  onConnect={props.onConnect}
+                  onSwitchHost={props.onSwitchHost}
                 />
               </If>
               <If when={current() === "Update"}>
