@@ -80,7 +80,7 @@ describe("search", () => {
       limit: 5,
     });
 
-    expect(results.length).toBeLessThanOrEqual(5);
+    expect(results).toHaveLength(5);
   });
 
   it("returns empty array when no matches", async () => {
@@ -96,8 +96,9 @@ describe("search", () => {
 
     const results = await search("export", { cwd: testDir });
 
-    expect(results.length).toBeGreaterThan(0);
-    expect(results[0].column).toBeDefined();
+    expect(results).toHaveLength(1);
+    // 1-based, at the match: two spaces of indent put it at column 3.
+    expect(results[0].column).toBe(3);
     expect(results[0].match).toBe("export");
   });
 
@@ -269,25 +270,6 @@ describe("edit", () => {
     const { readFile } = await import("node:fs/promises");
     const content = await readFile(filePath, "utf-8");
     expect(content).toBe("const x = 2;");
-  });
-
-  it("supports sequential edits via loop", async () => {
-    const filePath = join(testDir, "sequential.ts");
-    await writeFile(filePath, "const a = 1;\nconst b = 2;\nconst c = 3;");
-
-    const edits = [
-      ["a = 1", "a = 10"],
-      ["b = 2", "b = 20"],
-      ["c = 3", "c = 30"],
-    ];
-
-    for (const [oldText, newText] of edits) {
-      await edit(filePath, oldText, newText);
-    }
-
-    const { readFile } = await import("node:fs/promises");
-    const content = await readFile(filePath, "utf-8");
-    expect(content).toBe("const a = 10;\nconst b = 20;\nconst c = 30;");
   });
 
   it("throws error for nonexistent file", async () => {

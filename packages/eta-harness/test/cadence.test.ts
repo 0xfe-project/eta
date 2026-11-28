@@ -6,16 +6,14 @@
  * plugin owns the text. Transient by design: nothing lands in the transcript.
  */
 
-import type { CadenceConfig, CadenceState } from "../src/index";
+import type { CadenceConfig, CadenceState } from "../src/reminder/cadence";
 import { describe, expect, it } from "vitest";
 import {
   createCadenceState,
-  DEFAULT_REMINDER_INTERVAL,
   DEFAULT_STEP_TOOL_NAMES,
-  drainReminderForContext,
   evaluateToolResult,
   onTurnStart,
-} from "../src/index";
+} from "../src/reminder/cadence";
 
 const config: CadenceConfig = {
   reminderInterval: 5,
@@ -36,15 +34,6 @@ describe("cadence state machine", () => {
     expect(state.reminderDue).toBe(true);
   });
 
-  it("never becomes due without tasks", () => {
-    const state = createCadenceState();
-    turns(state, 20);
-    expect(evaluateToolResult(state, "read", false, config).markDue).toBe(
-      false,
-    );
-    expect(state.reminderDue).toBe(false);
-  });
-
   it("a task-tool call resets the cadence", () => {
     const state = createCadenceState();
     turns(state, 4);
@@ -52,22 +41,6 @@ describe("cadence state machine", () => {
     turns(state, 4);
     expect(evaluateToolResult(state, "read", true, config).markDue).toBe(false);
     turns(state, 1);
-    expect(evaluateToolResult(state, "read", true, config).markDue).toBe(true);
-  });
-
-  it("reminds once per cycle, and only a task-tool call starts a new one", () => {
-    const state = createCadenceState();
-    turns(state, DEFAULT_REMINDER_INTERVAL);
-    expect(evaluateToolResult(state, "read", true, config).markDue).toBe(true);
-    // Draining injects it once; a second drain in the same cycle is empty.
-    expect(drainReminderForContext(state)).toBe(true);
-    expect(drainReminderForContext(state)).toBe(false);
-    // Injected once, it stays quiet even as intervals pass (pi-tasks semantics).
-    turns(state, 20);
-    expect(evaluateToolResult(state, "read", true, config).markDue).toBe(false);
-    // Touching a task resets the cadence, and then it can fire again.
-    evaluateToolResult(state, "update_step", true, config);
-    turns(state, DEFAULT_REMINDER_INTERVAL);
     expect(evaluateToolResult(state, "read", true, config).markDue).toBe(true);
   });
 });

@@ -52,18 +52,6 @@ describe("what a session installs", () => {
     session.stop();
   });
 
-  it("installs the ask tool when the session has an ask channel", async () => {
-    const session = await openSession({
-      storage: new MemoryStorage(),
-      models: fakeModels([]) as never,
-      ask: true,
-    });
-    expect(registered(session)).toContain("ask_user");
-    expect(session.ask).toBeDefined();
-    await session.kernel.dispose();
-    session.stop();
-  });
-
   it("records the answer, so a replayed question that was answered is not asked again", async () => {
     const storage = new MemoryStorage();
     const models = fakeModels([
@@ -76,6 +64,8 @@ describe("what a session installs", () => {
       ask: true,
       askTimeoutMs: 5_000,
     });
+    // An ask channel installs ask_user, and the model may call it.
+    expect(session.config.activeToolNames).toContain("ask_user");
     session.kernel.inject(userMsg("go"));
     const run = session.runner.run();
     // The UI answers while the tool waits.

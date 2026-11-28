@@ -275,7 +275,7 @@ export interface ModuleMountOptions {
   root: string;
   /** The three-layer capability structure (when using Agent) */
   layers?: EnvLayers;
-  /** Hooks needed for eta module exports (memory, spawn) */
+  /** Hooks needed for eta module exports (ask, platform, state, mcp) */
   hooks?: Hooks;
   /** Approval store for shared layer capability authorization */
   approvalStore?: ApprovalStore;
@@ -530,8 +530,6 @@ export function mountModules(
   function createEtaModule(layer: Layer, identifier: string): vm.Module {
     const registry = capabilityRegistries.get(layer)!;
     const exports = ["default", "define", "modules", "mcp"];
-    if (hooks?.memory) exports.push("memory");
-    if (hooks?.spawn) exports.push("spawn");
     if (hooks?.ask) exports.push("ask");
     if (hooks?.platform) exports.push("platform");
     if (hooks?.state) exports.push("state");
@@ -598,48 +596,21 @@ export function mountModules(
           modules: registry,
         };
 
-        if (hooks?.memory) {
-          const memory = hooks.memory;
-          etaObject.memory = {
-            append: realm.binding("eta.memory.append", (text: string) =>
-              memory.append(text),
-            ),
-            read: realm.binding("eta.memory.read", (query: string) =>
-              memory.read(query),
-            ),
-          };
-        }
-
-        if (hooks?.spawn) {
-          const spawn = hooks.spawn;
-          etaObject.spawn = realm.binding(
-            "eta.spawn",
-            (request: { prompt: string; model?: string }) => spawn(request),
-          );
-        }
-
         if (hooks?.ask && askQueue) {
           etaObject.ask = realm.binding(
             "eta.ask",
-            (prompt: string, options?: { model?: string }) => {
+            (prompt: string, _options?: { model?: string }) => {
               // Build the new stack entry: truncate prompt to 30 chars
               const truncated =
                 prompt.length > 30 ? `${prompt.slice(0, 30)}...` : prompt;
               const entry = `eta.ask("${truncated}")`;
 
               // Pass the parent stack in the request. The host merges this
-              // with the session stack, so depth here counts from this call
-              // down; if the host's own stack is deeper, its count wins.
+              // with the session stack and counts the depth from that.
               const parentStack = [entry];
-              const depth = parentStack.length;
 
               // Enqueue the request through the concurrent queue
-              return askQueue.enqueue({
-                prompt,
-                model: options?.model,
-                parentStack,
-                depth,
-              });
+              return askQueue.enqueue({ prompt, parentStack });
             },
             (prompt, options) =>
               `${prompt.slice(0, 80)}${options?.model !== undefined ? ` [model:${options.model}]` : ""}`,
@@ -673,8 +644,6 @@ export function mountModules(
         // Also export named exports for backward compat
         this.setExport("modules", registry);
         this.setExport("define", defineFn);
-        if (hooks?.memory) this.setExport("memory", etaObject.memory);
-        if (hooks?.spawn) this.setExport("spawn", etaObject.spawn);
         if (hooks?.ask) this.setExport("ask", etaObject.ask);
         if (hooks?.platform) this.setExport("platform", etaObject.platform);
         if (hooks?.state) this.setExport("state", etaObject.state);

@@ -40,17 +40,21 @@ describe("eta:{layer}:memory in a realm", () => {
         `const a = await mem.add("decision", "push to main");\n` +
         `const b = await mem.add("preference", "Use Chinese");\n` +
         `const removed = await mem.remove(b);\n` +
-        `export default { a, removed, got: mem.get(a), all: mem.list(), prefs: mem.list("preference") };`,
+        `const again = await mem.remove(b);\n` +
+        `export default { a, removed, again, got: mem.get(a), all: mem.list(), prefs: mem.list("preference") };`,
     );
     const value = result.value as {
       a: string;
       removed: boolean;
+      again: boolean;
       got: { text: string; section: string };
       all: unknown[];
       prefs: unknown[];
     };
     expect(value.a).toMatch(/^proj~[0-9a-f]{4}#0$/);
     expect(value.removed).toBe(true);
+    // A second remove of the same id finds nothing.
+    expect(value.again).toBe(false);
     expect(value.got).toMatchObject({
       text: "push to main",
       section: "decision",
@@ -78,16 +82,6 @@ describe("eta:{layer}:memory in a realm", () => {
       `import mem from "eta:project:memory";\nexport default mem.list().length;`,
     );
     expect(project.value).toBe(0);
-  });
-
-  it("a hand edit of MEMORY.md shows up on the next read", async () => {
-    const path = join(projectDir, "MEMORY.md");
-    writeFileSync(path, "## decision\n- [proj~0000#4] written by a human\n");
-    const read = `import mem from "eta:project:memory";\nexport default mem.list().map((e) => e.text);`;
-    expect((await agent.run(read)).value).toEqual(["written by a human"]);
-
-    writeFileSync(path, "## lesson\n- edited again\n");
-    expect((await agent.run(read)).value).toEqual(["edited again"]);
   });
 
   it("entries belong to the realm, so they are no way out to the host", async () => {

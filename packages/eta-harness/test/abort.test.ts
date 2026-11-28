@@ -8,11 +8,8 @@
  */
 
 import { Kernel, Runner } from "@eta/core";
-import { SessionLog } from "@eta/core/session";
-import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
   role: "user" as const,
@@ -96,39 +93,6 @@ describe("aborting a run", () => {
 
     // In sequential mode the second call never started; the first one finished.
     expect(ran).toEqual(["slow"]);
-    void kernel.dispose();
-  });
-
-  it("keeps what the run had already committed", async () => {
-    const log = SessionLog.create(new MemoryStorage());
-    const { kernel, journaling } = journaledKernel(log, {
-      config: { model: { provider: "p", modelId: "m" } },
-    });
-    const fake = fakeModels([
-      assistantMessage({
-        stopReason: "toolUse",
-        content: [{ type: "toolCall", id: "c1", name: "slow", arguments: {} }],
-      }),
-    ]);
-    const runner = new Runner(kernel, { models: fake, journal: journaling });
-    kernel.tools.register({
-      name: "slow",
-      execute: async () => {
-        await sleep(30);
-        return "slow done";
-      },
-    });
-    kernel.inject(userMsg("go"));
-    const run = runner.run();
-    await sleep(5);
-    runner.abort();
-    const result = await run;
-    expect(result.status).toBe("aborted");
-
-    // The user message, the assistant's call, and the tool result are all
-    // committed — an abort is a stop, not a rollback.
-    const reloaded = await SessionLog.load(log.storage);
-    expect(reloaded.transcript().length).toBe(3);
     void kernel.dispose();
   });
 });

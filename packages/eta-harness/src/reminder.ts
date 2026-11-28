@@ -7,16 +7,16 @@
  * about it belongs in the turn loop — the runner counts turns for its own
  * reasons, not for this.
  *
- * The signal (`task:reminder-due`) is the kernel's event; the text and the
- * injection belong to the prompts plugin, and the service itself lives in the
- * harness with the rest of the battery. Nothing here lands in the transcript: a
- * reminder is transient by design, so the cache prefix stays intact.
+ * The service only says when a reminder is due (`drain()`); the text and the
+ * injection belong to the session assembler, which drains it while it builds a
+ * request. Nothing here lands in the transcript: a reminder is transient by
+ * design, so the cache prefix stays intact.
  */
 
-import type { Emit, TaskService } from "@eta/core";
+import type { TaskService } from "@eta/core";
 import type { Context } from "cordis";
 import type { CadenceConfig, CadenceState } from "./reminder/cadence";
-import { kernelEmit, kernelOn } from "@eta/core";
+import { kernelOn } from "@eta/core";
 import { Service } from "cordis";
 import {
   createCadenceState,
@@ -40,7 +40,6 @@ export class TaskReminderService extends Service {
   static readonly provide = "taskReminder";
 
   private readonly tasks: TaskService;
-  private readonly emit: Emit;
   private readonly config: CadenceConfig;
   private readonly state: CadenceState = createCadenceState();
   private readonly offs: (() => boolean)[] = [];
@@ -48,7 +47,6 @@ export class TaskReminderService extends Service {
   constructor(ctx: Context, options: TaskReminderServiceOptions) {
     super(ctx, "taskReminder");
     this.tasks = options.tasks;
-    this.emit = kernelEmit(ctx);
     this.config = {
       reminderInterval: options.reminderInterval ?? DEFAULT_REMINDER_INTERVAL,
       stepToolNames: options.stepToolNames ?? DEFAULT_STEP_TOOL_NAMES,
@@ -59,20 +57,14 @@ export class TaskReminderService extends Service {
         onTurnStart(this.state);
       }),
       on("tool:end", (event) => {
-        const due = evaluateToolResult(
+        evaluateToolResult(
           this.state,
           event.toolName,
           this.tasks.list().length > 0,
           this.config,
         );
-        if (due.markDue) this.emitDue();
       }),
     );
-  }
-
-  /** The cadence's current state, for a panel that wants to show it. */
-  get cadence(): Readonly<CadenceState> {
-    return this.state;
   }
 
   /**
@@ -87,9 +79,5 @@ export class TaskReminderService extends Service {
   /** Stop listening (a host that takes the session over). */
   stop(): void {
     for (const off of this.offs.splice(0)) off();
-  }
-
-  private emitDue(): void {
-    this.emit("task:reminder-due", { turn: this.state.currentTurn });
   }
 }

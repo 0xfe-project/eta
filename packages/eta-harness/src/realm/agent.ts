@@ -1,6 +1,6 @@
 import type { ApprovalStore } from "./authorize";
 
-import type { CtxView, Hooks } from "./hooks";
+import type { Hooks } from "./hooks";
 import type { EvaluateOptions, Evaluation } from "./realm";
 import { defaultApprovalStorePath, FileApprovalStore } from "./authorize";
 import { mountFileOps } from "./file-ops";
@@ -152,7 +152,6 @@ export class Agent {
           ...(this.#cwd === undefined ? {} : { cwd: this.#cwd }),
         }),
       onConsole: hooks.onConsole,
-      onEffect: hooks.onEffect,
       authorize: hooks.authorize,
     });
     this.#realms.add(realm);
@@ -160,57 +159,6 @@ export class Agent {
     mountNodeGlobals(realm);
     mountShell(realm, this.#cwd, hooks.signal);
     mountFileOps(realm, this.#cwd);
-    mountNonEtaHooks(realm, hooks);
     return realm;
-  }
-}
-
-/**
- * `ctx`, `emit`, `tools` — the surface a script may use besides `eta`.
- * (`eta`, and with it `eta.platform` and `eta.state`, is a module, not a global.)
- *
- * Only the slots the host filled are mounted. A half-wired host gets a realm
- * that works and simply does not have the parts it did not provide, which keeps
- * the runtime testable on its own.
- */
-function mountNonEtaHooks(realm: Realm, hooks: Hooks): void {
-  if (hooks.ctx !== undefined) {
-    const view: CtxView = hooks.ctx();
-    realm.global("ctx", {
-      frame: view.frame,
-      budget: view.budget,
-      messages: realm.binding("ctx.messages", (count?: number) =>
-        view.messages(count),
-      ),
-    });
-  }
-
-  if (hooks.emit !== undefined) {
-    const emit = hooks.emit;
-    realm.global("emit", {
-      text: realm.binding("emit.text", (text: string) => emit.text?.(text)),
-      progress: realm.binding("emit.progress", (text: string) =>
-        emit.progress?.(text),
-      ),
-      image: realm.binding(
-        "emit.image",
-        (input: { mime: string; base64: string; alt?: string }) =>
-          emit.image?.(input),
-      ),
-    });
-  }
-
-  if (hooks.tools !== undefined) {
-    const tools = hooks.tools;
-    realm.global("tools", {
-      edit: realm.binding(
-        "tools.edit",
-        (request: { path: string; find: string; replace: string }) =>
-          tools.edit?.(request),
-      ),
-      ask: realm.binding("tools.ask", (question: string) =>
-        tools.ask?.(question),
-      ),
-    });
   }
 }

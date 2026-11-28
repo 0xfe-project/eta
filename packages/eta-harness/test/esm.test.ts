@@ -95,8 +95,7 @@ describe("esmrun", () => {
     session.stop();
   });
 
-  it("runs a bare expression in the session cwd, mirrors tools, writes state and saves the script", async () => {
-    if (process.platform === "win32") return;
+  it.skipIf(process.platform === "win32")("runs a bare expression in the session cwd, mirrors tools, writes state and saves the script", async () => {
     const script = [
       'import eta from "eta";',
       'import { writeFile } from "node:fs/promises";',
@@ -603,8 +602,7 @@ describe("cancelling the realm", () => {
     session.stop();
   });
 
-  it("kills real shell child and grandchild processes on abort and records $ as aborted", async () => {
-    if (process.platform === "win32") return;
+  it.skipIf(process.platform === "win32")("kills real shell child and grandchild processes on abort and records $ as aborted", async () => {
     const { session, cwd } = await open([
       call(
         "esmrun",
@@ -667,8 +665,7 @@ describe("cancelling the realm", () => {
     session.stop();
   });
 
-  it("keeps a background $ saved on eta.state alive across normal turns and kills it on session.stop()", async () => {
-    if (process.platform === "win32") return;
+  it.skipIf(process.platform === "win32")("keeps a background $ saved on eta.state alive across normal turns and kills it on session.stop()", async () => {
     const { session } = await open([
       call(
         "esmrun",

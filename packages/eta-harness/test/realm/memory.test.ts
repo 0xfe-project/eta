@@ -129,33 +129,6 @@ describe("createMemoryModule", () => {
     assert.equal(await mem.remove("x#0"), false);
   });
 
-  it("add / list / get / remove, persisted to the file", async () => {
-    const mem = createMemoryModule(file);
-    const a = await mem.add("decision", "first");
-    const b = await mem.add("lesson", "second");
-    assert.match(a, /^proj~[0-9a-f]{4}#0$/);
-    assert.match(b, /#1$/);
-
-    assert.equal(mem.list().length, 2);
-    assert.deepEqual(
-      mem.list("lesson").map((e) => e.text),
-      ["second"],
-    );
-    assert.equal(mem.get(a)?.section, "decision");
-
-    const disk = await readFile(file, "utf8");
-    assert.match(disk, new RegExp(`^- \\[${a}\\] first$`, "m"));
-
-    assert.equal(await mem.remove(a), true);
-    assert.equal(await mem.remove(a), false);
-    assert.deepEqual(
-      createMemoryModule(file)
-        .list()
-        .map((e) => e.id),
-      [b],
-    );
-  });
-
   it("sees a hand edit on the next read, and does not overwrite it", async () => {
     const mem = createMemoryModule(file);
     const id = await mem.add("decision", "kept");

@@ -69,6 +69,7 @@ describe("the default system prompt", () => {
     });
     session.kernel.persona.loadCards([
       { id: "Executor", name: "Executor", content: "Ship it." },
+      { id: "Other", name: "Other", content: "You are someone else." },
     ]);
     session.kernel.persona.setActive(["Executor"]);
     session.kernel.goal.set("land the port");
@@ -109,11 +110,24 @@ describe("the default system prompt", () => {
       "steps",
       "memory",
     ]);
+    // Stable first: a provider cache keeps base…platform; goal, steps and memory
+    // are rewritten every generation.
+    expect(sections.sections.map((section) => section.stable)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+    ]);
     expect(sections.stableChars).toBeGreaterThan(0);
     expect(sections.adaptiveChars).toBeGreaterThan(0);
 
     // Persona is in the prompt once — the runner no longer folds it in as well.
     expect(prompt.split("Ship it.").length - 1).toBe(1);
+    // Only the active persona: a loaded card that is not active stays out.
+    expect(prompt).not.toContain("You are someone else.");
     await session.kernel.dispose();
     session.stop();
   });

@@ -18,12 +18,10 @@ export {
   type AskObserver,
   AskRegistry,
   type AskResponse,
-  askResponseText,
   askSchema,
   type AskUserToolDeps,
   createAskUserTool,
   type HeadlessAsk,
-  normalizeAskOptions,
 } from "./ask";
 export {
   type CompactionEntrySource,
@@ -32,14 +30,12 @@ export {
   type CompactionServiceOptions,
 } from "./compaction-service";
 export {
-  calculateContextTokens,
   type ContextUsageEstimate,
   type CutPointResult,
   DEFAULT_MAX_CONTEXT_TOKENS,
   estimateContextTokens,
   estimateTokens,
   findCutPoint,
-  findTurnStartIndex,
   fitCompactionSettings,
   shouldCompact,
 } from "./estimation";
@@ -86,14 +82,12 @@ export {
   type TranscriptLike,
 } from "./memory";
 export { MetricsService } from "./metrics";
-export { OutputRate } from "./metrics/output-rate";
 export {
   type OpenSession,
   openSession,
   type OpenSessionOptions,
   type SessionMemoryOptions,
 } from "./open";
-export { dirnameEnvPath, formatSkillInvocation } from "./prompt-blocks";
 export * from "./prompts";
 export { RunPump, type RunPumpOptions } from "./pump";
 export type {
@@ -107,19 +101,8 @@ export {
   type TaskReminderServiceOptions,
 } from "./reminder";
 export {
-  type CadenceConfig,
-  type CadenceState,
-  createCadenceState,
-  DEFAULT_REMINDER_INTERVAL,
-  DEFAULT_STEP_TOOL_NAMES,
-  drainReminderForContext,
-  evaluateToolResult,
-  onTurnStart,
-} from "./reminder/cadence";
-export {
   formatSkillName,
   loadSkills,
-  loadSourcedSkills,
   parseSkillText,
   type Skill,
   type SkillDiagnostic,

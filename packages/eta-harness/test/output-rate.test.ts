@@ -5,7 +5,7 @@
  * message's own output is what used to put 25000 tok/s in the panel.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { OutputRate } from "../src/index";
+import { OutputRate } from "../src/metrics/output-rate";
 
 describe("output rate", () => {
   beforeEach(() => {
