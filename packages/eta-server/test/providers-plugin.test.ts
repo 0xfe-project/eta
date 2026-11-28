@@ -1046,6 +1046,16 @@ describe("billing.readSourceSummaries", () => {
     );
     const warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
     await h.load();
+    await until(() => h.config() !== undefined);
+    // A batch joins an in-flight read only if it reads the config before that read ends,
+    // so release the upstream only after both batches have read it.
+    const readConfig = h.store.read.bind(h.store);
+    let configReads = 0;
+    vi.spyOn(h.store, "read").mockImplementation(async () => {
+      const config = await readConfig();
+      configReads++;
+      return config;
+    });
     const batch = async () =>
       (
         (await h.wire.dispatch(
@@ -1061,7 +1071,7 @@ describe("billing.readSourceSummaries", () => {
     try {
       const one = batch();
       const two = batch();
-      await until(() => active === 4);
+      await until(() => active === 4 && configReads === 2);
       release.resolve();
       expect(await two).toEqual(await one);
       expect((await one)[0]?.value).toEqual({
