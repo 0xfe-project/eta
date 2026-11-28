@@ -16,6 +16,8 @@ import type {
   TriggerCatalogItem,
   TriggerProviderStatus,
 } from "@eta/client-contracts";
+import type { AgentRecord } from "../src/agents/store";
+import type { ConversationRecord } from "../src/conversations/store";
 import type { HostOptions } from "../src/host";
 import type {
   IncomingTriggerEvent,
@@ -46,10 +48,112 @@ const step = (request: ModelRequest): number =>
   request.transcript.filter((line) => line.startsWith("assistant:")).length;
 const report = (title: string, body: string) => call("report", { title, body });
 
+interface Origin {
+  groupId: string | null;
+  groupName: string | null;
+  groupKind: "group" | "captain" | null;
+  creator: string | null;
+  creatorName: string | null;
+}
+
+const NO_ORIGIN: Origin = {
+  groupId: null,
+  groupName: null,
+  groupKind: null,
+  creator: null,
+  creatorName: null,
+};
+
+/** What the group, creator and assignee dropdowns list: two groups (one archived), Captain's chat, three agents. */
+function directory() {
+  const conversation = (
+    id: string,
+    kind: string,
+    name: string,
+    archived: boolean,
+  ) => ({ id, kind, name, archived }) as ConversationRecord;
+  const conversations = [
+    conversation("g-eng", "group", "eng", false),
+    conversation("g-old", "group", "old", true),
+    conversation("c-captain", "captain", "Captain chat", false),
+  ];
+  const agents = [
+    { id: "agent-forge", name: "Forge", systemRole: null },
+    { id: "agent-atlas", name: "Atlas", systemRole: null },
+    { id: "agent-captain", name: "Captain", systemRole: "captain" },
+  ] as AgentRecord[];
+  return {
+    conversations: {
+      ofKind: (kind: string) => conversations.filter((c) => c.kind === kind),
+    },
+    agents: { list: () => agents },
+  };
+}
+
+const statusEvent = (
+  eventId: string,
+  origin: Partial<Origin>,
+  assignee = { id: "agent-forge", name: "Forge" },
+) =>
+  ({
+    type: TASK_STATUS_CHANGED_TRIGGER,
+    eventId,
+    occurredAt: 1,
+    payload: {
+      taskId: "t1",
+      number: 1,
+      title: "Task One",
+      from: "in_progress",
+      to: "in_review",
+      assignee: assignee.id,
+      assigneeName: assignee.name,
+      ...NO_ORIGIN,
+      ...origin,
+      actor: { kind: "user", agentId: null },
+      reason: null,
+      occurredAt: 1,
+    },
+  }) as const;
+
+const runEvent = (eventId: string, origin: Partial<Origin>) =>
+  ({
+    type: TASK_RUN_FINISHED_TRIGGER,
+    eventId,
+    occurredAt: 1,
+    payload: {
+      taskId: "t1",
+      number: 1,
+      title: "Task One",
+      runId: "run-1",
+      status: "completed",
+      reason: null,
+      errorCode: null,
+      agentId: null,
+      assignee: "agent-forge",
+      assigneeName: "Forge",
+      ...NO_ORIGIN,
+      ...origin,
+      startedAt: 0,
+      finishedAt: 1,
+      occurredAt: 1,
+    },
+  }) as const;
+
+const binding = (
+  routineId: string,
+  trigger: string,
+  config: Record<string, unknown>,
+): TriggerBinding => ({
+  routineId,
+  enabled: true,
+  instanceId: `eta-events:${routineId}`,
+  trigger: { provider: "eta-events", source: "tasks", trigger, config },
+});
+
 describe("eta-events unit: catalog, config validation, filtering, and lifecycle", () => {
   it("lists extensible internal events and filters by source and query", async () => {
     const bus = new EtaEventBus();
-    const provider = new EtaEventsTriggerProvider({ bus });
+    const provider = new EtaEventsTriggerProvider({ bus, ...directory() });
 
     expect(provider.status()).toEqual({
       provider: "eta-events",
@@ -73,7 +177,7 @@ describe("eta-events unit: catalog, config validation, filtering, and lifecycle"
 
   it("rejects invalid trigger config in provision() with readable errors", async () => {
     const bus = new EtaEventBus();
-    const provider = new EtaEventsTriggerProvider({ bus });
+    const provider = new EtaEventsTriggerProvider({ bus, ...directory() });
 
     const invalidCases: {
       trigger: Parameters<EtaEventsTriggerProvider["provision"]>[0]["trigger"];
@@ -187,6 +291,7 @@ describe("eta-events unit: catalog, config validation, filtering, and lifecycle"
     const now = () => 1_700_000_000_000;
     const provider1 = new EtaEventsTriggerProvider({
       bus,
+      ...directory(),
       now,
       warn: (msg) => warnings.push(msg),
     });
@@ -241,6 +346,7 @@ describe("eta-events unit: catalog, config validation, filtering, and lifecycle"
         to: "done",
         assignee: "agent-forge",
         assigneeName: "Forge",
+        ...NO_ORIGIN,
         actor: { kind: "agent", agentId: "agent-forge" },
         reason: null,
         occurredAt: 100,
@@ -259,6 +365,7 @@ describe("eta-events unit: catalog, config validation, filtering, and lifecycle"
         to: "in_review",
         assignee: "agent-other",
         assigneeName: "Atlas",
+        ...NO_ORIGIN,
         actor: { kind: "agent", agentId: "agent-other" },
         reason: null,
         occurredAt: 101,
@@ -277,6 +384,7 @@ describe("eta-events unit: catalog, config validation, filtering, and lifecycle"
         to: "in_review",
         assignee: "agent-forge",
         assigneeName: "Forge",
+        ...NO_ORIGIN,
         actor: { kind: "agent", agentId: "agent-forge" },
         reason: null,
         occurredAt: 102,
@@ -298,6 +406,7 @@ describe("eta-events unit: catalog, config validation, filtering, and lifecycle"
         agentId: null,
         assignee: "agent-forge",
         assigneeName: "Forge",
+        ...NO_ORIGIN,
         startedAt: 90,
         finishedAt: 103,
         occurredAt: 103,
@@ -319,6 +428,7 @@ describe("eta-events unit: catalog, config validation, filtering, and lifecycle"
         agentId: null,
         assignee: "agent-forge",
         assigneeName: "Forge",
+        ...NO_ORIGIN,
         startedAt: 95,
         finishedAt: 104,
         occurredAt: 104,
@@ -347,6 +457,7 @@ describe("eta-events unit: catalog, config validation, filtering, and lifecycle"
           to: "blocked",
           assignee: "agent-forge",
           assigneeName: "Forge",
+          ...NO_ORIGIN,
           actor: { kind: "agent", agentId: "agent-forge" },
           reason: "Waiting",
           occurredAt: 105,
@@ -376,6 +487,7 @@ describe("eta-events unit: catalog, config validation, filtering, and lifecycle"
         to: "in_review",
         assignee: "agent-forge",
         assigneeName: "Forge",
+        ...NO_ORIGIN,
         actor: { kind: "agent", agentId: "agent-forge" },
         reason: null,
         occurredAt: 106,
@@ -386,6 +498,7 @@ describe("eta-events unit: catalog, config validation, filtering, and lifecycle"
     // Restart with a fresh provider instance restores bindings from host.bindings().
     const provider2 = new EtaEventsTriggerProvider({
       bus,
+      ...directory(),
       now,
       warn: (msg) => warnings.push(msg),
     });
@@ -409,6 +522,7 @@ describe("eta-events unit: catalog, config validation, filtering, and lifecycle"
         to: "in_review",
         assignee: "agent-forge",
         assigneeName: "Forge",
+        ...NO_ORIGIN,
         actor: { kind: "agent", agentId: "agent-forge" },
         reason: null,
         occurredAt: 107,
@@ -416,6 +530,201 @@ describe("eta-events unit: catalog, config validation, filtering, and lifecycle"
     });
     expect(emitted2.map((e) => e.eventId)).toEqual(["ev-post-restart"]);
     provider2.stop();
+  });
+
+  it("lists group, creator and assignee as dropdowns built from the current groups and agents", async () => {
+    const provider = new EtaEventsTriggerProvider({
+      bus: new EtaEventBus(),
+      ...directory(),
+    });
+    for (const item of await provider.listTriggers()) {
+      const properties = (
+        item.configSchema as { properties: Record<string, any> }
+      ).properties;
+      expect(properties.group).toMatchObject({
+        type: "string",
+        enum: ["g-eng", "c-captain"],
+        enumNames: ["eng", "Captain chat"],
+      });
+      expect(properties.creator).toMatchObject({
+        type: "string",
+        enum: ["agent-forge", "agent-atlas", "agent-captain"],
+        enumNames: ["Forge", "Atlas", "Captain"],
+      });
+      expect(properties.assignee).toMatchObject({
+        type: "string",
+        enum: ["agent-forge", "agent-atlas"],
+        enumNames: ["Forge", "Atlas"],
+      });
+    }
+    const [status, run] = await provider.listTriggers();
+    expect(Object.keys((status!.configSchema as any).properties)).toEqual([
+      "to",
+      "from",
+      "group",
+      "creator",
+      "assignee",
+    ]);
+    expect(Object.keys((run!.configSchema as any).properties)).toEqual([
+      "status",
+      "group",
+      "creator",
+      "assignee",
+    ]);
+  });
+
+  it("filters by group, creator and assignee, and combines them with and", async () => {
+    const bus = new EtaEventBus();
+    const provider = new EtaEventsTriggerProvider({ bus, ...directory() });
+    const bindings = [
+      binding("r-all", TASK_STATUS_CHANGED_TRIGGER, {}),
+      binding("r-group", TASK_STATUS_CHANGED_TRIGGER, { group: "g-eng" }),
+      binding("r-captain", TASK_STATUS_CHANGED_TRIGGER, { group: "c-captain" }),
+      binding("r-creator", TASK_STATUS_CHANGED_TRIGGER, {
+        creator: "agent-atlas",
+      }),
+      binding("r-legacy", TASK_STATUS_CHANGED_TRIGGER, { assignee: "forge" }),
+      binding("r-and", TASK_STATUS_CHANGED_TRIGGER, {
+        group: "g-eng",
+        creator: "agent-atlas",
+        assignee: "agent-forge",
+      }),
+      binding("r-gone", TASK_STATUS_CHANGED_TRIGGER, { group: "g-deleted" }),
+    ];
+    const hits: string[] = [];
+    provider.start({
+      bindings: () => bindings,
+      onEvent: (ev) => hits.push(`${ev.eventId}>${ev.routineId}`),
+      onBindingsChanged: () => undefined,
+    });
+    expect(provider.armedCount()).toBe(bindings.length);
+
+    const inEng = {
+      groupId: "g-eng",
+      groupName: "eng",
+      groupKind: "group",
+    } as const;
+    const byAtlas = { creator: "agent-atlas", creatorName: "Atlas" };
+    bus.emit(statusEvent("none", {}));
+    bus.emit(statusEvent("eng", inEng));
+    bus.emit(
+      statusEvent("captain", {
+        groupId: "c-captain",
+        groupName: "Captain chat",
+        groupKind: "captain",
+      }),
+    );
+    bus.emit(statusEvent("atlas", byAtlas));
+    bus.emit(statusEvent("eng-atlas", { ...inEng, ...byAtlas }));
+    bus.emit(
+      statusEvent(
+        "eng-atlas-other-assignee",
+        { ...inEng, ...byAtlas },
+        {
+          id: "agent-atlas",
+          name: "Atlas",
+        },
+      ),
+    );
+
+    const by = (routineId: string) =>
+      hits
+        .filter((h) => h.endsWith(`>${routineId}`))
+        .map((h) => h.split(">")[0]!);
+    // No filter: every event. A user's task (no creator) and a task without a group still pass.
+    expect(by("r-all")).toEqual([
+      "none",
+      "eng",
+      "captain",
+      "atlas",
+      "eng-atlas",
+      "eng-atlas-other-assignee",
+    ]);
+    expect(by("r-group")).toEqual([
+      "eng",
+      "eng-atlas",
+      "eng-atlas-other-assignee",
+    ]);
+    expect(by("r-captain")).toEqual(["captain"]);
+    expect(by("r-creator")).toEqual([
+      "atlas",
+      "eng-atlas",
+      "eng-atlas-other-assignee",
+    ]);
+    // A saved assignee name from before the dropdown still matches.
+    expect(by("r-legacy")).toEqual([
+      "none",
+      "eng",
+      "captain",
+      "atlas",
+      "eng-atlas",
+    ]);
+    expect(by("r-and")).toEqual(["eng-atlas"]);
+    // A group that no longer exists arms without error and never matches.
+    expect(by("r-gone")).toEqual([]);
+    provider.stop();
+  });
+
+  it("does not match a group or creator filter on a run whose task is gone", async () => {
+    const bus = new EtaEventBus();
+    const provider = new EtaEventsTriggerProvider({ bus, ...directory() });
+    const bindings = [
+      binding("r-all", TASK_RUN_FINISHED_TRIGGER, {}),
+      binding("r-group", TASK_RUN_FINISHED_TRIGGER, { group: "g-eng" }),
+      binding("r-creator", TASK_RUN_FINISHED_TRIGGER, {
+        creator: "agent-atlas",
+      }),
+    ];
+    const hits: string[] = [];
+    provider.start({
+      bindings: () => bindings,
+      onEvent: (ev) => hits.push(ev.routineId!),
+      onBindingsChanged: () => undefined,
+    });
+    bus.emit(runEvent("gone", {}));
+    expect(hits).toEqual(["r-all"]);
+    bus.emit(
+      runEvent("found", {
+        groupId: "g-eng",
+        groupName: "eng",
+        groupKind: "group",
+        creator: "agent-atlas",
+        creatorName: "Atlas",
+      }),
+    );
+    expect(hits).toEqual(["r-all", "r-all", "r-group", "r-creator"]);
+    provider.stop();
+  });
+
+  it("stores group and creator in the trigger config, drops empty ones, and rejects bad values", async () => {
+    const provider = new EtaEventsTriggerProvider({
+      bus: new EtaEventBus(),
+      ...directory(),
+    });
+    const provision = (config: Record<string, unknown>) =>
+      provider.provision({
+        routineId: "r-config",
+        trigger: binding("r-config", TASK_RUN_FINISHED_TRIGGER, config).trigger,
+        enabled: true,
+        existingInstanceId: null,
+      });
+
+    expect(
+      (await provision({ group: " g-eng ", creator: "", assignee: "forge" }))
+        .config,
+    ).toEqual({
+      group: "g-eng",
+      assignee: "forge",
+    });
+    await expect(provision({ group: 7 })).rejects.toThrow(
+      /Filter "group" must be a string/,
+    );
+    await expect(provision({ creator: ["a"] })).rejects.toThrow(
+      /Filter "creator" must be a string/,
+    );
+    await expect(provision({ group: "x".repeat(201) })).rejects.toThrow(
+      /Filter "group" must be at most 200 characters/,
+    );
   });
 });
 
@@ -808,5 +1117,134 @@ describe("eta-events e2e with TaskBoard, TaskRunner, TriggerHub, and host restar
     expect(routinePrompts[0]).toContain("task.run.finished");
     expect(routinePrompts[0]).toContain("Build feature X");
     expect(routinePrompts[0]).toContain('"status": "completed"');
+  }, 30_000);
+
+  it("puts the source group, Captain's chat and the creator on the event payload and filters on them", async () => {
+    const dataDir = await tempDir("eta-events-origin-");
+    const clock = { value: Date.parse("2026-11-28T12:00:00Z") };
+    const { models } = scriptedModels((req) =>
+      isRoutineRun(req) && step(req) === 0
+        ? report("Seen", "Seen.")
+        : say("ok"),
+    );
+    const w = await world({
+      dataDir,
+      captain: true,
+      models,
+      tasks: { runs: false },
+      routines: { now: () => clock.value, timer: false, coalesceMs: 10 },
+    });
+    closeHost = async () => {
+      await w.client.close();
+      await w.host.close();
+    };
+    w.client.subscribe("routines");
+    const act = async <A extends keyof RoutineArgs, R = unknown>(
+      action: A,
+      args: RoutineArgs[A],
+    ): Promise<R> => (await w.client.call("routines", action, args)) as R;
+
+    const ada = await w.agent("Ada");
+    const bob = await w.agent("Bob");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id, bob.id], "eng");
+    const { conversationId: captainConversationId } = (await w.client.call(
+      "captain",
+      "direct",
+      {},
+    )) as { conversationId: string };
+
+    const create = async (name: string, config: Record<string, unknown>) =>
+      (
+        await act<"create", { routine: RoutineSummary }>("create", {
+          name,
+          brief: "Record the event.",
+          schedule: null,
+          trigger: {
+            provider: "eta-events",
+            source: "tasks",
+            trigger: "task.status.changed",
+            config,
+          },
+          timezone: "UTC",
+        })
+      ).routine;
+    const all = await create("All", {});
+    const inGroup = await create("Group", { group: group.id });
+    const inCaptain = await create("Captain", { group: captainConversationId });
+    const byBob = await create("Creator", { creator: bob.id });
+    const bad = await create("Bad", { group: 7 });
+    for (const routine of [all, inGroup, inCaptain, byBob, bad]) {
+      w.client.subscribe(`routines.${routine.id}`);
+      await until(
+        () => w.client.section(`routines.${routine.id}`, "info") !== undefined,
+      );
+    }
+    const info = (id: string) =>
+      w.client.section<RoutineSections["info"]>(`routines.${id}`, "info")!;
+    expect(info(bad.id).trigger?.status).toBe("error");
+    expect(info(bad.id).trigger?.lastError).toMatch(
+      /Filter "group" must be a string/,
+    );
+
+    const board = w.host.product.board;
+    const inEng = board.create(
+      {
+        title: "In group",
+        conversationId: group.id,
+        workspace: "local",
+        assignee: ada.id,
+      },
+      { kind: "agent", agentId: bob.id },
+    );
+    const inCaptainChat = board.create(
+      {
+        title: "In Captain's chat",
+        conversationId: captainConversationId,
+        workspace: "local",
+        assignee: ada.id,
+      },
+      { kind: "agent", agentId: ada.id },
+    );
+    board.update(
+      inEng.id,
+      { status: "in_progress" },
+      { kind: "user", agentId: null },
+    );
+    board.update(
+      inCaptainChat.id,
+      { status: "in_progress" },
+      { kind: "user", agentId: null },
+    );
+
+    const payloads = (id: string) =>
+      w.host.product.routines.store
+        .triggerEventsOfRoutine(id)
+        .map((event) => event.payload as Record<string, unknown>);
+    await until(() => payloads(all.id).length === 2);
+    expect(payloads(all.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "In group",
+          groupId: group.id,
+          groupName: "eng",
+          groupKind: "group",
+          creator: bob.id,
+          creatorName: "Bob",
+        }),
+        expect.objectContaining({
+          title: "In Captain's chat",
+          groupId: captainConversationId,
+          groupKind: "captain",
+          creator: ada.id,
+          creatorName: "Ada",
+        }),
+      ]),
+    );
+    expect(payloads(inGroup.id).map((p) => p.title)).toEqual(["In group"]);
+    expect(payloads(inCaptain.id).map((p) => p.title)).toEqual([
+      "In Captain's chat",
+    ]);
+    expect(payloads(byBob.id).map((p) => p.title)).toEqual(["In group"]);
   }, 30_000);
 });

@@ -34,6 +34,7 @@ import type { FileWatchFn, FileWatchFs } from "./routines/file-watch-triggers";
 import type { RssFetch } from "./routines/rss-triggers";
 import type { WebMonitorFetch } from "./routines/web-monitor-triggers";
 import type { SessionHooks } from "./session-hooks";
+import type { TaskRecord } from "./tasks/store";
 import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
 import { homedir, hostname, platform } from "node:os";
@@ -58,6 +59,7 @@ import { CaptainAudit } from "./captain/audit";
 import { CaptainMemory } from "./captain/memory";
 import { repairCaptainToolPin } from "./captain/pin";
 import { captainPlugin } from "./captain/plugin";
+import { CAPTAIN_KIND } from "./captain/policy";
 import { redactToolResult } from "./captain/redact";
 import { CaptainService } from "./captain/service";
 import { CaptainStore } from "./captain/store";
@@ -677,6 +679,8 @@ export function createProduct(options: {
   const etaEventBus = new EtaEventBus({ warn });
   const etaEventsTriggers = new EtaEventsTriggerProvider({
     bus: etaEventBus,
+    conversations,
+    agents,
     now,
     warn,
   });
@@ -1023,6 +1027,25 @@ export function createProduct(options: {
     captainSupervisor.requestTick();
     wire?.pushNow("captain");
   });
+  // Where a task was proposed and who made it, for the events the routines filter on.
+  const taskOriginOf = (task: TaskRecord | undefined) => {
+    const originId = task?.originConversationId ?? null;
+    const group = originId === null ? undefined : conversations.get(originId);
+    const creator = task?.createdBy.agentId ?? null;
+    return {
+      groupId: group?.id ?? null,
+      groupName: group?.name ?? null,
+      groupKind:
+        group === undefined
+          ? null
+          : group.kind === CAPTAIN_KIND
+            ? ("captain" as const)
+            : ("group" as const),
+      creator,
+      creatorName:
+        creator === null ? null : (agents.get(creator)?.name ?? null),
+    };
+  };
   board.onStatusChange((change) => {
     const assigneeId = executorOf(change.task);
     const assigneeName =
@@ -1040,6 +1063,7 @@ export function createProduct(options: {
         to: change.to,
         assignee: assigneeId,
         assigneeName,
+        ...taskOriginOf(change.task),
         actor: change.actor,
         reason: change.reason,
         occurredAt,
@@ -1074,6 +1098,7 @@ export function createProduct(options: {
         agentId: run.agentId,
         assignee: assigneeId,
         assigneeName,
+        ...taskOriginOf(task),
         startedAt: run.startedAt,
         finishedAt: run.finishedAt,
         occurredAt,

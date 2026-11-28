@@ -469,3 +469,60 @@ test("parseTriggerConfigSchema, validateTriggerField, and buildTriggerConfigPayl
   });
   expect(buildTriggerConfigPayload(fields, { to: [] }, {})).toEqual({});
 });
+
+test("eta-events group, creator, and assignee string enums with enumNames render as dropdowns, store the id, and drop the key when cleared", () => {
+  const dropdown = (title: string, ids: string[], names: string[]) => ({
+    type: "string",
+    title,
+    enum: ids,
+    enumNames: names,
+  });
+  const fields = parseTriggerConfigSchema({
+    type: "object",
+    properties: {
+      group: dropdown(
+        "Source group",
+        ["g-eng", "c-captain"],
+        ["eng", "Captain chat"],
+      ),
+      creator: dropdown(
+        "Creator",
+        ["agent-forge", "agent-captain"],
+        ["Forge", "Captain"],
+      ),
+      assignee: dropdown("Assignee", ["agent-forge"], ["Forge"]),
+    },
+  });
+
+  expect(
+    fields.map((field) => [field.key, field.kind, field.required]),
+  ).toEqual([
+    ["group", "enum", false],
+    ["creator", "enum", false],
+    ["assignee", "enum", false],
+  ]);
+  const group = fields.find((field) => field.key === "group")!;
+  expect(group.options.map((option) => option.label)).toEqual([
+    "eng",
+    "Captain chat",
+  ]);
+  expect(group.options.map((option) => option.raw)).toEqual([
+    "g-eng",
+    "c-captain",
+  ]);
+
+  // Selecting an option stores its id, not the label.
+  const selected = { group: group.options[1]!.raw, assignee: "agent-forge" };
+  expect(enumSelectionValue(group, selected.group)).toBe("opt:1");
+  expect(buildTriggerConfigPayload(fields, selected, {})).toEqual({
+    group: "c-captain",
+    assignee: "agent-forge",
+  });
+
+  // Clearing sets the key to undefined: it leaves the payload, and nothing is selected.
+  const cleared = { ...selected, group: undefined };
+  expect(enumSelectionValue(group, cleared.group)).toBeNull();
+  expect(buildTriggerConfigPayload(fields, cleared, {})).toEqual({
+    assignee: "agent-forge",
+  });
+});

@@ -6,7 +6,7 @@
  *   - `task.status.changed`: emitted after a task's status change is committed to SQLite
  *   - `task.run.finished`: emitted after a task run finishes (`completed` / `failed` / `interrupted`)
  * - Validates trigger slug, source, mode, and optional filter conditions (`to`, `from`, `status`,
- *   `assignee`) inside `provision()` so invalid configs surface `status: "error"` + `lastError`.
+ *   `group`, `creator`, `assignee`) inside `provision()` so invalid configs surface `status: "error"` + `lastError`.
  * - Wraps subscriber delivery in `try/catch` + `warn` so event dispatch never disrupts task flows.
  */
 import type {
@@ -16,12 +16,15 @@ import type {
   TriggerCatalogItem,
   TriggerProviderStatus,
 } from "@eta/client-contracts";
+import type { AgentStore } from "../agents/store";
+import type { ConversationStore } from "../conversations/store";
 import type {
   TriggerProvider,
   TriggerProviderHost,
   TriggerProvisionResult,
 } from "./triggers";
 import { TASK_STATUSES } from "@eta/client-contracts";
+import { CAPTAIN_KIND } from "../captain/policy";
 
 const ETA_EVENTS_PROVIDER_ID = "eta-events";
 const TASKS_SOURCE_SLUG = "tasks";
@@ -35,7 +38,16 @@ type TaskFinishedRunStatus = (typeof RUN_FINISHED_STATUSES)[number];
 
 const MAX_ASSIGNEE_CHARS = 200;
 
-interface TaskStatusChangedPayload {
+/** Where a task came from and who made it; all null when the task is gone. */
+interface TaskOriginPayload {
+  groupId: string | null;
+  groupName: string | null;
+  groupKind: "group" | "captain" | null;
+  creator: string | null;
+  creatorName: string | null;
+}
+
+interface TaskStatusChangedPayload extends TaskOriginPayload {
   taskId: string;
   number: number;
   title: string;
@@ -48,7 +60,7 @@ interface TaskStatusChangedPayload {
   occurredAt: number;
 }
 
-interface TaskRunFinishedPayload {
+interface TaskRunFinishedPayload extends TaskOriginPayload {
   taskId: string;
   number: number;
   title: string;
@@ -110,17 +122,29 @@ interface ParsedEventFilter {
   to?: readonly BoardTaskStatus[];
   from?: readonly BoardTaskStatus[];
   status?: readonly TaskFinishedRunStatus[];
+  group?: string | null;
+  creator?: string | null;
   assignee?: string | null;
 }
 
 interface EtaEventSpec {
-  readonly catalogItem: TriggerCatalogItem;
+  readonly catalogItem: Omit<TriggerCatalogItem, "configSchema">;
+  /** The fixed config fields; the group, creator and assignee dropdowns are added per listing. */
+  readonly configProperties: Record<string, unknown>;
   parseConfig: (rawConfig: Record<string, unknown>) => {
     filter: ParsedEventFilter;
     persistedConfig: Record<string, unknown>;
   };
   matches: (filter: ParsedEventFilter, event: EtaInternalEvent) => boolean;
 }
+
+const ORIGIN_PAYLOAD_PROPERTIES = {
+  groupId: { type: ["string", "null"] },
+  groupName: { type: ["string", "null"] },
+  groupKind: { type: ["string", "null"], enum: ["group", "captain", null] },
+  creator: { type: ["string", "null"] },
+  creatorName: { type: ["string", "null"] },
+};
 
 const ETA_EVENT_SPECS: readonly EtaEventSpec[] = [
   {
@@ -133,40 +157,6 @@ const ETA_EVENT_SPECS: readonly EtaEventSpec[] = [
       description:
         "Triggers when a task changes status (for example moving into in_review, done, or blocked).",
       modes: [],
-      configSchema: {
-        type: "object",
-        properties: {
-          to: {
-            type: "array",
-            title: "Target statuses",
-            description:
-              "Optional target statuses to match (leave empty to match any status change).",
-            items: {
-              type: "string",
-              enum: [...TASK_STATUSES],
-            },
-            examples: ["in_review, done, blocked"],
-          },
-          from: {
-            type: "array",
-            title: "Previous statuses",
-            description:
-              "Optional previous statuses to match (leave empty to match any).",
-            items: {
-              type: "string",
-              enum: [...TASK_STATUSES],
-            },
-            examples: ["in_progress"],
-          },
-          assignee: {
-            type: "string",
-            title: "Assignee",
-            description:
-              "Optional executor agent id or name to match (leave empty for any assignee).",
-            examples: ["forge"],
-          },
-        },
-      },
       payloadSchema: {
         type: "object",
         properties: {
@@ -179,26 +169,55 @@ const ETA_EVENT_SPECS: readonly EtaEventSpec[] = [
           assigneeName: { type: ["string", "null"] },
           actor: { type: "object" },
           reason: { type: ["string", "null"] },
+          ...ORIGIN_PAYLOAD_PROPERTIES,
           occurredAt: { type: "integer" },
         },
       },
       accounts: [],
     },
+    configProperties: {
+      to: {
+        type: "array",
+        title: "Target statuses",
+        description:
+          "Optional target statuses to match (leave empty to match any status change).",
+        items: {
+          type: "string",
+          enum: [...TASK_STATUSES],
+        },
+        examples: ["in_review, done, blocked"],
+      },
+      from: {
+        type: "array",
+        title: "Previous statuses",
+        description:
+          "Optional previous statuses to match (leave empty to match any).",
+        items: {
+          type: "string",
+          enum: [...TASK_STATUSES],
+        },
+        examples: ["in_progress"],
+      },
+    },
     parseConfig(rawConfig) {
       checkAllowedKeys(
         rawConfig,
-        ["to", "from", "assignee"],
+        ["to", "from", "group", "creator", "assignee"],
         TASK_STATUS_CHANGED_TRIGGER,
       );
       const to = parseEnumFilter(rawConfig.to, "to", TASK_STATUSES);
       const from = parseEnumFilter(rawConfig.from, "from", TASK_STATUSES);
-      const assignee = parseAssigneeFilter(rawConfig.assignee);
+      const group = parseStringFilter(rawConfig.group, "group");
+      const creator = parseStringFilter(rawConfig.creator, "creator");
+      const assignee = parseStringFilter(rawConfig.assignee, "assignee");
       const persistedConfig: Record<string, unknown> = {};
       if (to !== undefined && to.length > 0) persistedConfig.to = to;
       if (from !== undefined && from.length > 0) persistedConfig.from = from;
+      if (group !== null) persistedConfig.group = group;
+      if (creator !== null) persistedConfig.creator = creator;
       if (assignee !== null) persistedConfig.assignee = assignee;
       return {
-        filter: { to, from, assignee },
+        filter: { to, from, group, creator, assignee },
         persistedConfig,
       };
     },
@@ -219,6 +238,7 @@ const ETA_EVENT_SPECS: readonly EtaEventSpec[] = [
       ) {
         return false;
       }
+      if (!matchesOrigin(filter, payload)) return false;
       if (
         !matchesAssignee(
           filter.assignee ?? null,
@@ -241,29 +261,6 @@ const ETA_EVENT_SPECS: readonly EtaEventSpec[] = [
       description:
         "Triggers when a task run ends (completed, failed, or interrupted).",
       modes: [],
-      configSchema: {
-        type: "object",
-        properties: {
-          status: {
-            type: "array",
-            title: "Run statuses",
-            description:
-              "Optional run outcomes to match (leave empty to match any finished run).",
-            items: {
-              type: "string",
-              enum: [...RUN_FINISHED_STATUSES],
-            },
-            examples: ["failed, interrupted"],
-          },
-          assignee: {
-            type: "string",
-            title: "Assignee",
-            description:
-              "Optional executor agent id or name to match (leave empty for any assignee).",
-            examples: ["forge"],
-          },
-        },
-      },
       payloadSchema: {
         type: "object",
         properties: {
@@ -277,6 +274,7 @@ const ETA_EVENT_SPECS: readonly EtaEventSpec[] = [
           agentId: { type: ["string", "null"] },
           assignee: { type: ["string", "null"] },
           assigneeName: { type: ["string", "null"] },
+          ...ORIGIN_PAYLOAD_PROPERTIES,
           startedAt: { type: ["integer", "null"] },
           finishedAt: { type: ["integer", "null"] },
           occurredAt: { type: "integer" },
@@ -284,10 +282,23 @@ const ETA_EVENT_SPECS: readonly EtaEventSpec[] = [
       },
       accounts: [],
     },
+    configProperties: {
+      status: {
+        type: "array",
+        title: "Run statuses",
+        description:
+          "Optional run outcomes to match (leave empty to match any finished run).",
+        items: {
+          type: "string",
+          enum: [...RUN_FINISHED_STATUSES],
+        },
+        examples: ["failed, interrupted"],
+      },
+    },
     parseConfig(rawConfig) {
       checkAllowedKeys(
         rawConfig,
-        ["status", "assignee"],
+        ["status", "group", "creator", "assignee"],
         TASK_RUN_FINISHED_TRIGGER,
       );
       const status = parseEnumFilter(
@@ -295,13 +306,17 @@ const ETA_EVENT_SPECS: readonly EtaEventSpec[] = [
         "status",
         RUN_FINISHED_STATUSES,
       );
-      const assignee = parseAssigneeFilter(rawConfig.assignee);
+      const group = parseStringFilter(rawConfig.group, "group");
+      const creator = parseStringFilter(rawConfig.creator, "creator");
+      const assignee = parseStringFilter(rawConfig.assignee, "assignee");
       const persistedConfig: Record<string, unknown> = {};
       if (status !== undefined && status.length > 0)
         persistedConfig.status = status;
+      if (group !== null) persistedConfig.group = group;
+      if (creator !== null) persistedConfig.creator = creator;
       if (assignee !== null) persistedConfig.assignee = assignee;
       return {
-        filter: { status, assignee },
+        filter: { status, group, creator, assignee },
         persistedConfig,
       };
     },
@@ -315,6 +330,7 @@ const ETA_EVENT_SPECS: readonly EtaEventSpec[] = [
       ) {
         return false;
       }
+      if (!matchesOrigin(filter, payload)) return false;
       if (
         !matchesAssignee(
           filter.assignee ?? null,
@@ -348,6 +364,10 @@ interface ArmedBinding {
 
 export interface EtaEventsTriggerProviderOptions {
   bus: EtaEventBus;
+  /** Where the group dropdown reads its options from. */
+  conversations: Pick<ConversationStore, "ofKind">;
+  /** Where the creator and assignee dropdowns read their options from. */
+  agents: Pick<AgentStore, "list">;
   now?: (() => number) | undefined;
   warn?: ((message: string) => void) | undefined;
 }
@@ -356,6 +376,8 @@ export class EtaEventsTriggerProvider implements TriggerProvider {
   readonly id = ETA_EVENTS_PROVIDER_ID;
 
   readonly #bus: EtaEventBus;
+  readonly #conversations: Pick<ConversationStore, "ofKind">;
+  readonly #agents: Pick<AgentStore, "list">;
   readonly #now: () => number;
   readonly #warn: (message: string) => void;
 
@@ -368,6 +390,8 @@ export class EtaEventsTriggerProvider implements TriggerProvider {
 
   constructor(options: EtaEventsTriggerProviderOptions) {
     this.#bus = options.bus;
+    this.#conversations = options.conversations;
+    this.#agents = options.agents;
     this.#now = options.now ?? Date.now;
     this.#warn = options.warn ?? ((message) => console.warn(message));
   }
@@ -383,7 +407,16 @@ export class EtaEventsTriggerProvider implements TriggerProvider {
   }): Promise<TriggerCatalogItem[]> {
     const sourceFilter = filter?.source?.trim();
     const query = filter?.query?.trim().toLowerCase();
-    return ETA_EVENT_SPECS.map((spec) => spec.catalogItem).filter((item) => {
+    const dropdowns = this.#dropdownProperties();
+    return ETA_EVENT_SPECS.map(
+      (spec): TriggerCatalogItem => ({
+        ...spec.catalogItem,
+        configSchema: {
+          type: "object",
+          properties: { ...spec.configProperties, ...dropdowns },
+        },
+      }),
+    ).filter((item) => {
       if (
         sourceFilter !== undefined &&
         sourceFilter !== "" &&
@@ -406,6 +439,32 @@ export class EtaEventsTriggerProvider implements TriggerProvider {
       }
       return true;
     });
+  }
+
+  /** The group, creator and assignee fields, with the options as they are now. */
+  #dropdownProperties(): Record<string, unknown> {
+    const agents = this.#agents.list();
+    const groups = [
+      ...this.#conversations.ofKind("group").filter((group) => !group.archived),
+      ...this.#conversations.ofKind(CAPTAIN_KIND),
+    ];
+    return {
+      group: dropdownProperty(
+        "Source group",
+        "Optional group chat the task was proposed in, Captain's included (leave empty for any).",
+        groups,
+      ),
+      creator: dropdownProperty(
+        "Creator",
+        "Optional agent that created the task (leave empty for any creator).",
+        agents,
+      ),
+      assignee: dropdownProperty(
+        "Assignee",
+        "Optional executor agent to match (leave empty for any assignee).",
+        agents.filter((agent) => agent.systemRole !== "captain"),
+      ),
+    };
   }
 
   async provision(input: {
@@ -637,19 +696,44 @@ function parseEnumFilter<T extends string>(
   return out;
 }
 
-function parseAssigneeFilter(raw: unknown): string | null {
+function parseStringFilter(raw: unknown, fieldName: string): string | null {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== "string") {
-    throw new TypeError('Filter "assignee" must be a string');
+    throw new TypeError(`Filter "${fieldName}" must be a string`);
   }
   const trimmed = raw.trim();
   if (trimmed === "") return null;
   if (trimmed.length > MAX_ASSIGNEE_CHARS) {
     throw new Error(
-      `Filter "assignee" must be at most ${MAX_ASSIGNEE_CHARS} characters`,
+      `Filter "${fieldName}" must be at most ${MAX_ASSIGNEE_CHARS} characters`,
     );
   }
   return trimmed;
+}
+
+function dropdownProperty(
+  title: string,
+  description: string,
+  options: readonly { id: string; name: string }[],
+): Record<string, unknown> {
+  return {
+    type: "string",
+    title,
+    description,
+    enum: options.map((option) => option.id),
+    enumNames: options.map((option) => option.name),
+  };
+}
+
+function matchesOrigin(
+  filter: ParsedEventFilter,
+  payload: TaskOriginPayload,
+): boolean {
+  const group = filter.group ?? null;
+  if (group !== null && group !== payload.groupId) return false;
+  const creator = filter.creator ?? null;
+  if (creator !== null && creator !== payload.creator) return false;
+  return true;
 }
 
 function matchesAssignee(
