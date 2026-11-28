@@ -39,6 +39,7 @@
 - [137] Eta 聊天过程窗口的 loading 态与内容态必须保持同一尺寸、边框和 padding；first token 到达时应填充同一个窗口，不重新挂载造成布局跳动。
 - [143] Eta main->web native channel: desktop sends `window.__etaNative?.({kind, action})` via `webview.executeJavascript`; web must implement `window.__etaNative` listener to handle menu/context-menu actions.
 - [144] Eta web keydown handling: currently only sidebar toggle and mobile drawer Escape exist; no global command-palette/shortcut dispatcher registry yet.
+- [152] Eta 聊天回复流式中无法判断正在写的文字是不是最后一段（后面可能还有工具调用或思考），所以：回复在 streaming（working/queued/stopping）时，永远只显示过程框（ProcessBox），写出来的文字也放在框里，不要把最后一段文字拿到框外当「流式答案」；只有结束后才把结尾文字（行的 text，同 `splitReply`）作为答案显示。不要写成简单的二元判断，要兜底：结束瞬间（host 一次写入 status+text）、中途停止（已写文字作答案 + Stopped）、以工具调用结束或失败（无答案）、尚未出字/排队/停止中（框标题 Working/Queued/Stopping，Stop 在框里）、流式中重新加载看不到会话（用保存的步骤）、纯文字回复结束（0 步不显示过程行）。这条原则被反复遗忘（#992、#510 原型都违反过），改动实时回复前先对照。(#510)
 
 ## preference
 
