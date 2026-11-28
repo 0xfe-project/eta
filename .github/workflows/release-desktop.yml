@@ -190,7 +190,9 @@ jobs:
         if: matrix.target == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder xvfb dbus
+          # libgtk-4-dev: nsh-directories is a native module, so the Linux runner is
+          # built here and links GTK 4. The image has no glib/gtk dev files.
+          sudo apt-get install -y flatpak flatpak-builder xvfb dbus pkg-config libgtk-4-dev
 
       - name: Cache Flatpak GNOME 49 runtime
         if: matrix.target == 'linux'
@@ -209,6 +211,16 @@ jobs:
           if [[ "$CACHE_HIT" != "true" ]]; then
             flatpak install --user --noninteractive -y flathub org.gnome.Platform//49 org.gnome.Sdk//49
           fi
+
+      # The host rustup has no cross targets. nsh-directories is compiled into the
+      # device binaries, and rustc stops before the linker without these.
+      - name: Rust targets for native modules
+        if: matrix.target == 'android' || matrix.target == 'ios'
+        run: |
+          case "$ETA_DESKTOP_TARGET" in
+            android) rustup target add aarch64-linux-android armv7-linux-androideabi ;;
+            ios) rustup target add aarch64-apple-ios ;;
+          esac
 
       # A release key when the repository has one; nsh's debug key otherwise, which the notes say.
       - name: Android signing
