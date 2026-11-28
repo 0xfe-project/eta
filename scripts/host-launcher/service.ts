@@ -22,7 +22,7 @@ import type { Subprocess } from "bun";
 import { Buffer } from "node:buffer";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { copyFile, readFile, rm } from "node:fs/promises";
+import { copyFile, rm } from "node:fs/promises";
 import { connect } from "node:net";
 import { join } from "node:path";
 import process from "node:process";
@@ -41,10 +41,7 @@ export interface LocalHostOptions {
   command: string[];
   cwd: string;
   env: NodeJS.ProcessEnv;
-  /** The optional script ahead of the host and the runtime that runs it. */
-  wrapper?: string;
-  bun?: string;
-  /** Where the wrapper writes the host's first line. */
+  /** Named to the host as `ETA_DESKTOP_SUMMARY`: it is how the host knows this app runs it. */
   summary: string;
 }
 
@@ -114,26 +111,23 @@ export class LocalHost {
 
   /** Start it on the port it had, any free one the first time. */
   async spawn(): Promise<void> {
-    const { bun, command, cwd, env, summary, wrapper } = this.#options;
+    const { command, cwd, env, summary } = this.#options;
     await rm(summary, { force: true });
     this.#pipe = stopPipe();
     this.#stopping = false;
     this.#readyLine = "";
-    const wrapped = Boolean(bun && wrapper);
-    const argv = [...command, "--port", String(this.#port)];
-    const child = Bun.spawn(wrapped ? [bun!, wrapper!, ...argv] : argv, {
+    const child = Bun.spawn([...command, "--port", String(this.#port)], {
       cwd,
       env: {
         ...env,
         ETA_DESKTOP_SUMMARY: summary,
         ...(this.#pipe === undefined ? {} : { ETA_STOP_PIPE: this.#pipe }),
       },
-      stdout: wrapped ? "inherit" : "pipe",
+      stdout: "pipe",
       stderr: "inherit",
     });
     this.#child = child;
-    if (child.stdout)
-      void this.#readOutput(child, child.stdout).catch(() => {});
+    void this.#readOutput(child, child.stdout).catch(() => {});
   }
 
   async #readOutput(child: Subprocess, stream: ReadableStream<Uint8Array>) {
@@ -163,10 +157,7 @@ export class LocalHost {
     if (child === undefined) throw new Error("the host is not running");
     const deadline = Date.now() + READY_MS;
     for (;;) {
-      // The launcher owns this process's stdout, so the wrapper writes the line to a file.
-      const text = this.#options.wrapper
-        ? await readFile(this.#options.summary, "utf8").catch(() => "")
-        : this.#readyLine;
+      const text = this.#readyLine;
       if (text.includes("\n")) {
         const { port } = JSON.parse(text.slice(0, text.indexOf("\n"))) as {
           port: number;

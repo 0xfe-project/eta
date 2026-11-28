@@ -142,10 +142,6 @@ export class Peer {
     return this.#chunking;
   }
 
-  get reassemblingCount(): number {
-    return this.#reassembling.size;
-  }
-
   /** Enable outbound chunking once the remote peer advertises chunk support. */
   enableChunking(options?: { maxMessageBytes?: number | undefined }): void {
     this.#chunking = true;
