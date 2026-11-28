@@ -819,6 +819,15 @@ export class Plugins {
         const agent = this.#agents.get(id);
         return agent === undefined ? [] : [{ id, name: agent.name }];
       }),
+      bundledAgents: (plugin?.agents ?? []).map(
+        ({ id, name, description, path, instructions }) => ({
+          id,
+          name,
+          description,
+          path,
+          instructions,
+        }),
+      ),
     };
   }
 
