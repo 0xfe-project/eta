@@ -13,6 +13,7 @@ import {
 import { Spinner } from "../../components/spinner";
 import { icon, layer, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { ProcessDetails } from "../../services/process-detail";
 import { ToolOutput } from "./run/tool-code";
 import { toolTitle } from "./run/transcript-line";
 
@@ -164,7 +165,8 @@ export function ProcessStep(props: { value: RunBlock }) {
 
 /**
  * A thought or something the agent said on the way: a small title that opens
- * to it. A thought starts folded, words start open, in small type.
+ * to it. Words start open, in small type; a thought starts folded, or open
+ * when the process shows in detail. Once toggled, the reader's choice holds.
  */
 function TextStep(props: {
   id: string;
@@ -173,9 +175,15 @@ function TextStep(props: {
 }) {
   const c = colors();
   const rowBox = stepRow();
-  // Toggled away from how it starts, for the step it was toggled on.
-  const toggled = signal<string | undefined>(undefined);
-  const open = () => (props.kind === "note") !== (toggled() === props.id);
+  const processDetail = ProcessDetails();
+  const opensAtFirst = () =>
+    props.kind === "note" || processDetail.detail() === "detailed";
+  // What the reader set it to, for the step they set.
+  const chosen = signal<{ id: string; open: boolean } | undefined>(undefined);
+  const open = () => {
+    const choice = chosen();
+    return choice?.id === props.id ? choice.open : opensAtFirst();
+  };
   const label = () =>
     uiText(props.kind === "thinking" ? "runThinking" : "processNote");
   return (
@@ -189,7 +197,7 @@ function TextStep(props: {
         accessibilityState={{ expanded: open() }}
         onPress={() => {
           if (open() && props.kind === "thinking") rowBox.reveal();
-          toggled.set(toggled() === props.id ? undefined : props.id);
+          chosen.set({ id: props.id, open: !open() });
         }}
         style={{
           ...row,
@@ -229,6 +237,95 @@ function TextStep(props: {
           </If>
         </View>
       </If>
+    </View>
+  );
+}
+
+/** A reply's tool calls by kind, most first, ties by name. */
+function toolTally(steps: readonly RunBlock[]) {
+  const counts = new Map<string, number>();
+  for (const step of steps) {
+    if (step.type !== "tool") continue;
+    const { name } = toolTitle(step);
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) =>
+      a.count !== b.count ? b.count - a.count : a.name < b.name ? -1 : 1,
+    );
+}
+
+/** The most kinds a tally line names before the rest becomes "+N more". */
+const tallyKinds = 3;
+/** Wide enough for any tally line, so an unseen one lays out at its own width. */
+const unboundedWidth = 10000; // design-value: a measuring width, never drawn
+
+/**
+ * A step count followed by the reply's tool calls by kind, on one line: as
+ * many kinds as fit, down to one, and the count alone when none does. Each
+ * candidate line is laid out unseen to learn its width.
+ */
+export function ProcessTally(props: {
+  count: string;
+  steps: readonly RunBlock[];
+  line: (text: string) => JSX.Element;
+  align?: "flex-start" | "flex-end";
+}) {
+  const tally = () => toolTally(props.steps);
+  const text = (kinds: number) => {
+    const named = tally().slice(0, kinds);
+    const rest = tally().length - named.length;
+    return [
+      props.count,
+      ...named.map((kind) => uiText("processToolCount", kind)),
+      ...(rest && kinds ? [uiText("processToolMore", { count: rest })] : []),
+    ].join(" · ");
+  };
+  const choices = () =>
+    Array.from(
+      { length: Math.min(tallyKinds, tally().length) },
+      (_, index) => index + 1,
+    );
+  const room = signal(0);
+  const widths = signal<Record<number, number>>({});
+  const kinds = () =>
+    choices()
+      .filter((kinds) => (widths()[kinds] ?? Infinity) <= room())
+      .at(-1) ?? 0;
+  return (
+    <View
+      style={{ flex: 1, minWidth: 0, alignItems: props.align }}
+      onLayout={(event) => room.set(event.bounds.size.width)}
+    >
+      {props.line(text(kinds()))}
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={{
+          position: "absolute",
+          width: 0,
+          height: 0,
+          overflow: "hidden",
+        }}
+      >
+        <View style={{ width: unboundedWidth, alignItems: "flex-start" }}>
+          <Each of={choices()} key={(kinds) => String(kinds)}>
+            {(kinds) => (
+              <View
+                onLayout={(event) =>
+                  widths.update((known) => ({
+                    ...known,
+                    [kinds()]: event.bounds.size.width,
+                  }))
+                }
+              >
+                {props.line(text(kinds()))}
+              </View>
+            )}
+          </Each>
+        </View>
+      </View>
     </View>
   );
 }

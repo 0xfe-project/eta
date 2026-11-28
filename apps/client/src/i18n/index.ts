@@ -76,6 +76,13 @@ const messages = {
   ],
   picturesCompact: ["Compact", "紧凑"],
   picturesExpanded: ["Expanded", "展开"],
+  processDetail: ["Process detail", "过程显示"],
+  processDetailHint: [
+    "How much of a reply's work steps to show",
+    "回复里的工作步骤显示多少",
+  ],
+  processBrief: ["Brief", "简洁"],
+  processDetailed: ["Detailed", "详细"],
   extraNarrow: ["Extra narrow", "最窄"],
   narrow: ["Narrow", "窄"],
   standard: ["Standard", "标准"],

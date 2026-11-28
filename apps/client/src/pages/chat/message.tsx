@@ -61,6 +61,7 @@ import { uiText } from "../../i18n";
 import { clock, follow, useHost } from "../../services/host";
 import { PictureModes } from "../../services/picture-mode";
 import { problemReason } from "../../services/problem-text";
+import { ProcessDetails } from "../../services/process-detail";
 import { Card, Popover } from "../../ui";
 import { subtasksOf, TaskSummary } from "../tasks/status";
 import { Proposal, Question } from "./approvals";
@@ -70,7 +71,7 @@ import { cardOpen, setCardOpen } from "./card-folds";
 import { DeliveryLine } from "./composer-delivery";
 import { activeReply } from "./member-status";
 import { messageTime } from "./message-time";
-import { ProcessStep, ProcessWindow } from "./process-step";
+import { ProcessStep, ProcessTally, ProcessWindow } from "./process-step";
 import { MemberRun } from "./run/member-run";
 import { RunPanel } from "./run/run-panel";
 import { draftTitle } from "./task-draft-detail";
@@ -309,6 +310,10 @@ export function Message(props: {
   const process = signal(false);
   /** The live process window above the streaming answer can be collapsed by the reader. */
   const processCollapsed = signal(false);
+  /** Brief: the live process window is its count row alone, with nothing to open. */
+  const processDetail = ProcessDetails();
+  const brief = () => processDetail.detail() === "brief";
+  const stepsShown = () => !brief() && !processCollapsed();
   /** Downward-only minimum height reservation while the answer streams so height never jumps up. */
   const minAnswerHeight = signal(0);
   const item = () => props.item;
@@ -369,6 +374,15 @@ export function Message(props: {
   /** The steps a count says: a trace of an insert is not one. */
   const stepCount = () =>
     processSteps().filter((step) => step.type !== "steer").length;
+  const liveCount = () =>
+    stepCount() === 1
+      ? uiText("processOneStep")
+      : uiText("processSteps", { length: stepCount() });
+  const finishedCount = () =>
+    `${props.phone ? "· " : ""}${uiText(
+      stepCount() === 1 ? "oneProcessStep" : "processStepCount",
+      { count: stepCount() },
+    )}`;
   /** The answer text: streams live as it arrives, or shows the final saved reply text. */
   const answer = () => {
     if (item().status === "failed") return undefined;
@@ -894,14 +908,30 @@ export function Message(props: {
                   text={uiText("thinkingProcess")}
                   style={{ color: c().faint }}
                 />
-                <View style={{ flex: 1 }} />
-                <Caption
-                  style={{ color: c().faint }}
-                  text={`${props.phone ? "· " : ""}${uiText(
-                    stepCount() === 1 ? "oneProcessStep" : "processStepCount",
-                    { count: stepCount() },
-                  )}`}
-                />
+                <If
+                  when={brief()}
+                  else={
+                    <>
+                      <View style={{ flex: 1 }} />
+                      <Caption
+                        style={{ color: c().faint }}
+                        text={finishedCount()}
+                      />
+                    </>
+                  }
+                >
+                  <ProcessTally
+                    count={finishedCount()}
+                    steps={processSteps()}
+                    align="flex-end"
+                    // Tool names read as their step rows write them: not in capitals.
+                    line={(text) => (
+                      <Label variant="caption" tone="faint" lines={1}>
+                        {text}
+                      </Label>
+                    )}
+                  />
+                </If>
               </View>
             </If>
           }
@@ -920,40 +950,61 @@ export function Message(props: {
                 height: space[24],
                 paddingLeft: space[12],
                 justifyContent: "space-between",
-                borderBottomWidth: !processCollapsed() ? 1 : 0,
+                borderBottomWidth: stepsShown() ? 1 : 0,
                 borderColor: c().border,
               }}
             >
               <View
-                role="button"
+                role={brief() ? undefined : "button"}
                 accessibilityLabel={uiText("thinkingProcess")}
-                accessibilityState={{ expanded: !processCollapsed() }}
-                onPress={() => processCollapsed.set(!processCollapsed())}
+                accessibilityState={
+                  brief() ? undefined : { expanded: !processCollapsed() }
+                }
+                onPress={
+                  brief()
+                    ? undefined
+                    : () => processCollapsed.set(!processCollapsed())
+                }
                 style={{
                   ...row,
                   gap: space[4],
                   paddingRight: space[8],
                   flex: 1,
                   minWidth: 0,
-                  cursor: "pointer",
+                  cursor: brief() ? undefined : "pointer",
                 }}
               >
-                <Icon
-                  name={processCollapsed() ? "right" : "down"}
-                  size={icon.sm}
-                  tone="muted"
-                />
-                <Label variant="caption" tone="muted" lines={1}>
-                  {stepCount()
-                    ? stepCount() === 1
-                      ? uiText("processOneStep")
-                      : uiText("processSteps", { length: stepCount() })
-                    : item().status === "queued"
-                      ? uiText("queued")
-                      : item().status === "stopping"
-                        ? uiText("stopping")
-                        : uiText("working")}
-                </Label>
+                <If when={!brief()}>
+                  <Icon
+                    name={processCollapsed() ? "right" : "down"}
+                    size={icon.sm}
+                    tone="muted"
+                  />
+                </If>
+                <If
+                  when={brief() && stepCount()}
+                  else={
+                    <Label variant="caption" tone="muted" lines={1}>
+                      {stepCount()
+                        ? liveCount()
+                        : item().status === "queued"
+                          ? uiText("queued")
+                          : item().status === "stopping"
+                            ? uiText("stopping")
+                            : uiText("working")}
+                    </Label>
+                  }
+                >
+                  <ProcessTally
+                    count={liveCount()}
+                    steps={processSteps()}
+                    line={(text) => (
+                      <Label variant="caption" tone="muted" lines={1}>
+                        {text}
+                      </Label>
+                    )}
+                  />
+                </If>
               </View>
               <Button
                 label={uiText("stop")}
@@ -987,7 +1038,7 @@ export function Message(props: {
                 }}
               />
             </View>
-            <If when={!processCollapsed()}>
+            <If when={stepsShown()}>
               <ProcessWindow height={processWindowHeight}>
                 <Each of={processSteps()} key={(step) => step.id}>
                   {(step) => <ProcessStep value={step()} />}

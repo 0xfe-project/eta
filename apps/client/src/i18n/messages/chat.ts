@@ -240,6 +240,8 @@ export const chatMessages = {
   ],
   processSteps: ["Process · {{length}} steps", "过程 · {{length}} 步"],
   processOneStep: ["Process · 1 step", "过程 · 1 步"],
+  processToolCount: ["{{name}} ×{{count}}", "{{count}} 次 {{name}}"],
+  processToolMore: ["+{{count}} more", "等 {{count}} 项"],
   processNote: ["Note", "说明"],
   processViewMore: ["View more", "查看全部"],
   processOf: ["{{name}} process", "{{name}} 的过程"],
