@@ -75,30 +75,33 @@ export default 1;`,
 });
 
 describe("eta.ask effect ledger", () => {
-  it.skipIf(process.platform === "win32")("records the call site and a prompt summary", async () => {
-    const hooks: Hooks = {
-      ask: async (request: AskRequest): Promise<AskResult> => ({
-        text: "answer",
-        effects: [],
-        stack: request.parentStack ?? ["main"],
-        status: "completed",
-      }),
-    };
+  it.skipIf(process.platform === "win32")(
+    "records the call site and a prompt summary",
+    async () => {
+      const hooks: Hooks = {
+        ask: async (request: AskRequest): Promise<AskResult> => ({
+          text: "answer",
+          effects: [],
+          stack: request.parentStack ?? ["main"],
+          status: "completed",
+        }),
+      };
 
-    const agent = new Agent({ root, hooks });
-    const result = await agent.run(
-      `import eta from "eta";
+      const agent = new Agent({ root, hooks });
+      const result = await agent.run(
+        `import eta from "eta";
 const r = await eta.ask("find the failing test");
 export default r;`,
-      { identifier: join(root, "ledger.js") },
-    );
+        { identifier: join(root, "ledger.js") },
+      );
 
-    const ask = result.effects.find((e) => e.name === "eta.ask");
-    expect(ask).toBeDefined();
-    expect(ask?.status).toBe("ok");
-    expect(ask?.detail).toContain("find the failing test");
-    expect(ask?.at.line).toBe(2);
-  });
+      const ask = result.effects.find((e) => e.name === "eta.ask");
+      expect(ask).toBeDefined();
+      expect(ask?.status).toBe("ok");
+      expect(ask?.detail).toContain("find the failing test");
+      expect(ask?.at.line).toBe(2);
+    },
+  );
 
   it("records a failed ask as failed, and it still throws into the script", async () => {
     const hooks: Hooks = {

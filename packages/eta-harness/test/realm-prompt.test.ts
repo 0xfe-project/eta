@@ -87,7 +87,9 @@ describe("the realm prompt", () => {
       for (const script of example.scripts) expect(text).toContain(script);
   });
 
-  it.skipIf(process.platform === "win32").each(REALM_EXAMPLES.map((e) => [e.title, e.scripts] as const))(
+  it
+    .skipIf(process.platform === "win32")
+    .each(REALM_EXAMPLES.map((e) => [e.title, e.scripts] as const))(
     "runs: %s",
     async (_title, scripts) => {
       const results = await runExample([...scripts]);
@@ -99,18 +101,22 @@ describe("the realm prompt", () => {
     30_000,
   );
 
-  it.skipIf(process.platform === "win32")("the examples produce what they say", async () => {
-    const [shell] = await runExample(REALM_EXAMPLES[1]!.scripts);
-    expect(shell!.text).toMatch(/killed: (?:SIGTERM|143)/);
-    expect(shell!.text).toContain('"a",');
-    expect(shell!.text).toContain('"ok": true');
-    const [quoting] = await runExample(REALM_EXAMPLES[0]!.scripts);
-    expect(quoting!.text).toContain("my notes; rm -rf ~");
-    const [edited] = await runExample(REALM_EXAMPLES[2]!.scripts);
-    expect(edited!.text).toContain("1: const port = Number(config.port);");
-    const state = await runExample(REALM_EXAMPLES[3]!.scripts);
-    expect(state[1]!.text).toContain("hello-world");
-  }, 60_000);
+  it.skipIf(process.platform === "win32")(
+    "the examples produce what they say",
+    async () => {
+      const [shell] = await runExample(REALM_EXAMPLES[1]!.scripts);
+      expect(shell!.text).toMatch(/killed: (?:SIGTERM|143)/);
+      expect(shell!.text).toContain('"a",');
+      expect(shell!.text).toContain('"ok": true');
+      const [quoting] = await runExample(REALM_EXAMPLES[0]!.scripts);
+      expect(quoting!.text).toContain("my notes; rm -rf ~");
+      const [edited] = await runExample(REALM_EXAMPLES[2]!.scripts);
+      expect(edited!.text).toContain("1: const port = Number(config.port);");
+      const state = await runExample(REALM_EXAMPLES[3]!.scripts);
+      expect(state[1]!.text).toContain("hello-world");
+    },
+    60_000,
+  );
 
   it("the MCP example runs", async () => {
     const fakeSink: McpSink = {

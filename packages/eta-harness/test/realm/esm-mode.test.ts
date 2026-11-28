@@ -123,28 +123,31 @@ describe("realm", () => {
     expect((prefixed as Error).message).toContain("not mounted");
   });
 
-  it.skipIf(process.platform === "win32")("effects carry the line and column that made the call", async () => {
-    const realm = new Realm({
-      name: "test",
-      mounts: (r) => mountModules(r, { root }),
-    });
-    await writeFile(join(root, "note.txt"), "hello");
+  it.skipIf(process.platform === "win32")(
+    "effects carry the line and column that made the call",
+    async () => {
+      const realm = new Realm({
+        name: "test",
+        mounts: (r) => mountModules(r, { root }),
+      });
+      await writeFile(join(root, "note.txt"), "hello");
 
-    const result = await realm.evaluate(
-      `import { readFile } from "node:fs/promises";\n\nconst text = await readFile(${JSON.stringify(join(root, "note.txt"))});\nexport default text;`,
-      { identifier: join(root, "probe.js") },
-    );
+      const result = await realm.evaluate(
+        `import { readFile } from "node:fs/promises";\n\nconst text = await readFile(${JSON.stringify(join(root, "note.txt"))});\nexport default text;`,
+        { identifier: join(root, "probe.js") },
+      );
 
-    expect(result.value).toBe("hello");
-    expect(result.effects).toHaveLength(1);
-    expect(result.effects[0]?.name).toBe("fs.readFile");
-    expect(result.effects[0]?.at.line).toBe(3);
-    // 1-based, at the callee: `const text = await |readFile(`.
-    expect(result.effects[0]?.at.column).toBe(
-      "const text = await readFile(".indexOf("readFile") + 1,
-    );
-    expect(result.effects[0]?.status).toBe("ok");
-  });
+      expect(result.value).toBe("hello");
+      expect(result.effects).toHaveLength(1);
+      expect(result.effects[0]?.name).toBe("fs.readFile");
+      expect(result.effects[0]?.at.line).toBe(3);
+      // 1-based, at the callee: `const text = await |readFile(`.
+      expect(result.effects[0]?.at.column).toBe(
+        "const text = await readFile(".indexOf("readFile") + 1,
+      );
+      expect(result.effects[0]?.status).toBe("ok");
+    },
+  );
 
   it("a failed binding is recorded and still throws into the script", async () => {
     const effects: Effect[] = [];
@@ -419,25 +422,31 @@ describe("waking", () => {
 });
 
 describe("$", () => {
-  it.skipIf(process.platform === "win32")("the shell is there without importing anything", async () => {
-    const agent = new Agent({ root });
-    const script =
-      "const out = await $`echo hi`;\nexport default { stdout: out.stdout.trim(), code: out.exitCode };";
-    const result = await agent.run(script, {
-      identifier: join(root, "probe.js"),
-    });
-    expect(result.value).toEqual({ stdout: "hi", code: 0 });
-  });
+  it.skipIf(process.platform === "win32")(
+    "the shell is there without importing anything",
+    async () => {
+      const agent = new Agent({ root });
+      const script =
+        "const out = await $`echo hi`;\nexport default { stdout: out.stdout.trim(), code: out.exitCode };";
+      const result = await agent.run(script, {
+        identifier: join(root, "probe.js"),
+      });
+      expect(result.value).toEqual({ stdout: "hi", code: 0 });
+    },
+  );
 
-  it.skipIf(process.platform === "win32")("a failing command throws the way zx throws", async () => {
-    const agent = new Agent({ root });
-    const script = "await $`exit 3`;\nexport default 0;";
-    const error = (await agent
-      .run(script, { identifier: join(root, "probe.js") })
-      .catch((e: Error) => e)) as Error;
-    // Bun and Node word the same failure differently; both name the code.
-    expect(error.message).toMatch(/zx error|exit code:? 3/);
-  });
+  it.skipIf(process.platform === "win32")(
+    "a failing command throws the way zx throws",
+    async () => {
+      const agent = new Agent({ root });
+      const script = "await $`exit 3`;\nexport default 0;";
+      const error = (await agent
+        .run(script, { identifier: join(root, "probe.js") })
+        .catch((e: Error) => e)) as Error;
+      // Bun and Node word the same failure differently; both name the code.
+      expect(error.message).toMatch(/zx error|exit code:? 3/);
+    },
+  );
 
   it("the chained methods a prompt promises work inside the realm", async () => {
     const agent = new Agent({ root });
@@ -463,103 +472,112 @@ describe("$", () => {
     });
   });
 
-  it.skipIf(process.platform === "win32")("commands record $ effects with callsite and status", async () => {
-    const agent = new Agent({ root });
-    const result = await agent.run(
-      [
-        "await $`true`;",
-        "await $`exit 3`.nothrow();",
-        "await $({ nothrow: true })`exit 2`;",
-        "$.sync`echo sync`;",
-        "export default 1;",
-      ].join("\n"),
-      {
-        identifier: join(root, "probe.js"),
-      },
-    );
-    expect(result.effects).toHaveLength(4);
-    expect(result.effects[0]).toMatchObject({
-      name: "$",
-      status: "ok",
-      detail: "true",
-      at: { line: 1 },
-    });
-    expect(result.effects[1]).toMatchObject({
-      name: "$",
-      status: "failed",
-      detail: "exit 3",
-      at: { line: 2 },
-    });
-    expect(result.effects[2]).toMatchObject({
-      name: "$",
-      status: "failed",
-      detail: "exit 2",
-      at: { line: 3 },
-    });
-    expect(result.effects[3]).toMatchObject({
-      name: "$",
-      status: "ok",
-      detail: "echo sync",
-      at: { line: 4 },
-    });
-    agent.dispose();
-  });
-
-  it.skipIf(process.platform === "win32")(".timeout() kills background grandchildren holding stdout and settles promptly", async () => {
-    const agent = new Agent({ root, cwd: root });
-    const started = Date.now();
-    const res = await agent.run(
-      [
-        "const out = await $`sh -c 'sleep 30 & echo $! > bg1.pid; echo ok'`.timeout('300ms');",
-        "let waitTimedOut = false;",
-        "try { await $`sh -c 'sleep 30 & echo $! > bg2.pid; wait'`.timeout('300ms'); } catch { waitTimedOut = true; }",
-        "export default { stdout: out.stdout.trim(), waitTimedOut };",
-      ].join("\n"),
-      { identifier: join(root, "timeout.js") },
-    );
-    const elapsed = Date.now() - started;
-    expect(elapsed).toBeLessThan(2000);
-    expect(res.value).toEqual({ stdout: "ok", waitTimedOut: true });
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    for (const file of ["bg1.pid", "bg2.pid"]) {
-      const pid = Number((await readFile(join(root, file), "utf8")).trim());
-      let alive = true;
-      try {
-        process.kill(pid, 0);
-      } catch (error) {
-        alive = (error as NodeJS.ErrnoException).code !== "ESRCH";
-      }
-      expect(alive).toBe(false);
-    }
-    agent.dispose();
-  });
-
-  it.skipIf(process.platform === "win32")("respects an explicit caller signal option without overriding it", async () => {
-    const neverAborted = new AbortController();
-    const customAc = new AbortController();
-    const agent = new Agent({
-      root,
-      cwd: root,
-      hooks: {
-        state: { customSignal: customAc.signal },
-        signal: () => neverAborted.signal,
-      },
-    });
-    setTimeout(() => customAc.abort(new Error("caller abort")), 40);
-    const started = Date.now();
-    const error = await agent
-      .run(
+  it.skipIf(process.platform === "win32")(
+    "commands record $ effects with callsite and status",
+    async () => {
+      const agent = new Agent({ root });
+      const result = await agent.run(
         [
-          'import eta from "eta";',
-          "await $({ signal: eta.state.customSignal })`sleep 10`;",
+          "await $`true`;",
+          "await $`exit 3`.nothrow();",
+          "await $({ nothrow: true })`exit 2`;",
+          "$.sync`echo sync`;",
+          "export default 1;",
         ].join("\n"),
-        { identifier: join(root, "custom-signal.js") },
-      )
-      .catch((e: Error) => e);
-    expect(error).toBeInstanceOf(Error);
-    expect(Date.now() - started).toBeLessThan(2000);
-    agent.dispose();
-  });
+        {
+          identifier: join(root, "probe.js"),
+        },
+      );
+      expect(result.effects).toHaveLength(4);
+      expect(result.effects[0]).toMatchObject({
+        name: "$",
+        status: "ok",
+        detail: "true",
+        at: { line: 1 },
+      });
+      expect(result.effects[1]).toMatchObject({
+        name: "$",
+        status: "failed",
+        detail: "exit 3",
+        at: { line: 2 },
+      });
+      expect(result.effects[2]).toMatchObject({
+        name: "$",
+        status: "failed",
+        detail: "exit 2",
+        at: { line: 3 },
+      });
+      expect(result.effects[3]).toMatchObject({
+        name: "$",
+        status: "ok",
+        detail: "echo sync",
+        at: { line: 4 },
+      });
+      agent.dispose();
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    ".timeout() kills background grandchildren holding stdout and settles promptly",
+    async () => {
+      const agent = new Agent({ root, cwd: root });
+      const started = Date.now();
+      const res = await agent.run(
+        [
+          "const out = await $`sh -c 'sleep 30 & echo $! > bg1.pid; echo ok'`.timeout('300ms');",
+          "let waitTimedOut = false;",
+          "try { await $`sh -c 'sleep 30 & echo $! > bg2.pid; wait'`.timeout('300ms'); } catch { waitTimedOut = true; }",
+          "export default { stdout: out.stdout.trim(), waitTimedOut };",
+        ].join("\n"),
+        { identifier: join(root, "timeout.js") },
+      );
+      const elapsed = Date.now() - started;
+      expect(elapsed).toBeLessThan(2000);
+      expect(res.value).toEqual({ stdout: "ok", waitTimedOut: true });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      for (const file of ["bg1.pid", "bg2.pid"]) {
+        const pid = Number((await readFile(join(root, file), "utf8")).trim());
+        let alive = true;
+        try {
+          process.kill(pid, 0);
+        } catch (error) {
+          alive = (error as NodeJS.ErrnoException).code !== "ESRCH";
+        }
+        expect(alive).toBe(false);
+      }
+      agent.dispose();
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "respects an explicit caller signal option without overriding it",
+    async () => {
+      const neverAborted = new AbortController();
+      const customAc = new AbortController();
+      const agent = new Agent({
+        root,
+        cwd: root,
+        hooks: {
+          state: { customSignal: customAc.signal },
+          signal: () => neverAborted.signal,
+        },
+      });
+      setTimeout(() => customAc.abort(new Error("caller abort")), 40);
+      const started = Date.now();
+      const error = await agent
+        .run(
+          [
+            'import eta from "eta";',
+            "await $({ signal: eta.state.customSignal })`sleep 10`;",
+          ].join("\n"),
+          { identifier: join(root, "custom-signal.js") },
+        )
+        .catch((e: Error) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect(Date.now() - started).toBeLessThan(2000);
+      agent.dispose();
+    },
+  );
 });
 
 describe("fetch abort", () => {

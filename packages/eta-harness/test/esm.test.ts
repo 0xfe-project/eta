@@ -95,41 +95,44 @@ describe("esmrun", () => {
     session.stop();
   });
 
-  it.skipIf(process.platform === "win32")("runs a bare expression in the session cwd, mirrors tools, writes state and saves the script", async () => {
-    const script = [
-      'import eta from "eta";',
-      'import { writeFile } from "node:fs/promises";',
-      'await writeFile("hello.txt", "hi");',
-      'eta.state.k = "v";',
-      'const said = await eta.platform.echo({ text: "x" });',
-      "const pwd = (await $`pwd`).stdout.trim();",
-      '({ said, pwd, seen: await view("hello.txt") })',
-    ].join("\n");
-    const { session, root, cwd } = await open([
-      call("esmrun", { script }),
-      stop(),
-    ]);
-    session.kernel.nextRun(userMsg("go"));
-    await session.runner.run();
-    const text = resultOf(session, "c-esmrun");
-    expect(text).toContain('"said": "echo:x"');
-    expect(text).toContain('"seen": "1: hi"');
-    expect(text).toContain(cwd.split("/").at(-1)!);
-    expect(existsSync(join(cwd, "hello.txt"))).toBe(true);
-    // The history holds the code; a run leaves no script file behind.
-    expect(
-      existsSync(join(root, "runs")) &&
-        readdirSync(join(root, "runs")).some((f) => f.endsWith(".js")),
-    ).toBe(false);
-    expect(
-      await session.kernel.tools.execute(
-        "read_state",
-        { key: "k" },
-        { turn: 1, toolCallId: "r" },
-      ),
-    ).toMatchObject({ content: [{ text: "k: v" }] });
-    session.stop();
-  });
+  it.skipIf(process.platform === "win32")(
+    "runs a bare expression in the session cwd, mirrors tools, writes state and saves the script",
+    async () => {
+      const script = [
+        'import eta from "eta";',
+        'import { writeFile } from "node:fs/promises";',
+        'await writeFile("hello.txt", "hi");',
+        'eta.state.k = "v";',
+        'const said = await eta.platform.echo({ text: "x" });',
+        "const pwd = (await $`pwd`).stdout.trim();",
+        '({ said, pwd, seen: await view("hello.txt") })',
+      ].join("\n");
+      const { session, root, cwd } = await open([
+        call("esmrun", { script }),
+        stop(),
+      ]);
+      session.kernel.nextRun(userMsg("go"));
+      await session.runner.run();
+      const text = resultOf(session, "c-esmrun");
+      expect(text).toContain('"said": "echo:x"');
+      expect(text).toContain('"seen": "1: hi"');
+      expect(text).toContain(cwd.split("/").at(-1)!);
+      expect(existsSync(join(cwd, "hello.txt"))).toBe(true);
+      // The history holds the code; a run leaves no script file behind.
+      expect(
+        existsSync(join(root, "runs")) &&
+          readdirSync(join(root, "runs")).some((f) => f.endsWith(".js")),
+      ).toBe(false);
+      expect(
+        await session.kernel.tools.execute(
+          "read_state",
+          { key: "k" },
+          { turn: 1, toolCallId: "r" },
+        ),
+      ).toMatchObject({ content: [{ text: "k: v" }] });
+      session.stop();
+    },
+  );
 
   it("hands the model the images a mirrored tool answered with, beside the script's result", async () => {
     const { session } = await open([
@@ -602,108 +605,116 @@ describe("cancelling the realm", () => {
     session.stop();
   });
 
-  it.skipIf(process.platform === "win32")("kills real shell child and grandchild processes on abort and records $ as aborted", async () => {
-    const { session, cwd } = await open([
-      call(
-        "esmrun",
-        {
-          script:
-            "await $`sh -c 'echo $$ > shell.pid; sleep 30 & echo $! > grand.pid; wait'`;",
-        },
-        "c-shell-abort",
-      ),
-      stop(),
-    ]);
-    session.kernel.nextRun(userMsg("go"));
-    const run = session.runner.run();
+  it.skipIf(process.platform === "win32")(
+    "kills real shell child and grandchild processes on abort and records $ as aborted",
+    async () => {
+      const { session, cwd } = await open([
+        call(
+          "esmrun",
+          {
+            script:
+              "await $`sh -c 'echo $$ > shell.pid; sleep 30 & echo $! > grand.pid; wait'`;",
+          },
+          "c-shell-abort",
+        ),
+        stop(),
+      ]);
+      session.kernel.nextRun(userMsg("go"));
+      const run = session.runner.run();
 
-    expect(
-      await until(
-        () =>
-          existsSync(join(cwd, "shell.pid")) &&
-          existsSync(join(cwd, "grand.pid")),
-        5000,
-      ),
-    ).toBe(true);
-    const shellPid = Number(
-      (await readFile(join(cwd, "shell.pid"), "utf8")).trim(),
-    );
-    const grandPid = Number(
-      (await readFile(join(cwd, "grand.pid"), "utf8")).trim(),
-    );
+      expect(
+        await until(
+          () =>
+            existsSync(join(cwd, "shell.pid")) &&
+            existsSync(join(cwd, "grand.pid")),
+          5000,
+        ),
+      ).toBe(true);
+      const shellPid = Number(
+        (await readFile(join(cwd, "shell.pid"), "utf8")).trim(),
+      );
+      const grandPid = Number(
+        (await readFile(join(cwd, "grand.pid"), "utf8")).trim(),
+      );
 
-    const started = Date.now();
-    session.runner.abort();
-    const res = await run;
-    expect(res.status).toBe("aborted");
-    expect(Date.now() - started).toBeLessThan(1500);
+      const started = Date.now();
+      session.runner.abort();
+      const res = await run;
+      expect(res.status).toBe("aborted");
+      expect(Date.now() - started).toBeLessThan(1500);
 
-    const isDead = (pid: number): boolean => {
-      try {
-        process.kill(pid, 0);
-        return false;
-      } catch (error) {
-        return (error as NodeJS.ErrnoException).code === "ESRCH";
-      }
-    };
-    expect(await until(() => isDead(shellPid) && isDead(grandPid), 2000)).toBe(
-      true,
-    );
+      const isDead = (pid: number): boolean => {
+        try {
+          process.kill(pid, 0);
+          return false;
+        } catch (error) {
+          return (error as NodeJS.ErrnoException).code === "ESRCH";
+        }
+      };
+      expect(
+        await until(() => isDead(shellPid) && isDead(grandPid), 2000),
+      ).toBe(true);
 
-    const entry = session.runner
-      .getTranscript()
-      .find(
-        (m) => m.role === "toolResult" && m.toolCallId === "c-shell-abort",
-      ) as
-      | { details?: { effects?: { name: string; status: string }[] } }
-      | undefined;
-    expect(entry?.details?.effects).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: "$", status: "aborted" }),
-      ]),
-    );
-    session.stop();
-  });
+      const entry = session.runner
+        .getTranscript()
+        .find(
+          (m) => m.role === "toolResult" && m.toolCallId === "c-shell-abort",
+        ) as
+        | { details?: { effects?: { name: string; status: string }[] } }
+        | undefined;
+      expect(entry?.details?.effects).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "$", status: "aborted" }),
+        ]),
+      );
+      session.stop();
+    },
+  );
 
-  it.skipIf(process.platform === "win32")("keeps a background $ saved on eta.state alive across normal turns and kills it on session.stop()", async () => {
-    const { session } = await open([
-      call(
-        "esmrun",
-        {
-          script:
-            'import eta from "eta";\nconst p = $`sleep 30`;\neta.state.srv = p;\np.pid',
-        },
-        "c-bg-start",
-      ),
-      stop("started"),
-      call("esmrun", { script: '"still-here"' }, "c-bg-check"),
-      stop("checked"),
-    ]);
+  it.skipIf(process.platform === "win32")(
+    "keeps a background $ saved on eta.state alive across normal turns and kills it on session.stop()",
+    async () => {
+      const { session } = await open([
+        call(
+          "esmrun",
+          {
+            script:
+              'import eta from "eta";\nconst p = $`sleep 30`;\neta.state.srv = p;\np.pid',
+          },
+          "c-bg-start",
+        ),
+        stop("started"),
+        call("esmrun", { script: '"still-here"' }, "c-bg-check"),
+        stop("checked"),
+      ]);
 
-    session.kernel.nextRun(userMsg("start"));
-    const r1 = await session.runner.run();
-    expect(r1.status).toBe("completed");
-    const pid = Number(resultOf(session, "c-bg-start").split("\n")[0]?.trim());
-    expect(Number.isInteger(pid) && pid > 0).toBe(true);
-    expect(() => process.kill(pid, 0)).not.toThrow();
+      session.kernel.nextRun(userMsg("start"));
+      const r1 = await session.runner.run();
+      expect(r1.status).toBe("completed");
+      const pid = Number(
+        resultOf(session, "c-bg-start").split("\n")[0]?.trim(),
+      );
+      expect(Number.isInteger(pid) && pid > 0).toBe(true);
+      expect(() => process.kill(pid, 0)).not.toThrow();
 
-    session.kernel.nextRun(userMsg("next"));
-    const r2 = await session.runner.run();
-    expect(r2.status).toBe("completed");
-    expect(resultOf(session, "c-bg-check")).toContain("still-here");
-    expect(() => process.kill(pid, 0)).not.toThrow();
+      session.kernel.nextRun(userMsg("next"));
+      const r2 = await session.runner.run();
+      expect(r2.status).toBe("completed");
+      expect(resultOf(session, "c-bg-check")).toContain("still-here");
+      expect(() => process.kill(pid, 0)).not.toThrow();
 
-    session.stop();
-    const dead = await until(() => {
-      try {
-        process.kill(pid, 0);
-        return false;
-      } catch (error) {
-        return (error as NodeJS.ErrnoException).code === "ESRCH";
-      }
-    }, 2000);
-    expect(dead).toBe(true);
-  });
+      session.stop();
+      const dead = await until(() => {
+        try {
+          process.kill(pid, 0);
+          return false;
+        } catch (error) {
+          return (error as NodeJS.ErrnoException).code === "ESRCH";
+        }
+      }, 2000);
+      expect(dead).toBe(true);
+    },
+  );
 
   it("esmrunandkeep aborted mid-run does not register the capability and cleans up the new file", async () => {
     const { session, root, cwd } = await open([
