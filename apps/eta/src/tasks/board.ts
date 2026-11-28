@@ -336,6 +336,10 @@ export class TaskBoard {
     return this.#deps.tasks.activity(id);
   }
 
+  lastStatusEntry(id: string): TaskActivityView | undefined {
+    return this.#deps.tasks.lastStatusEntry(id);
+  }
+
   /* ---------------------------------------------------------------- changes */
 
   /**
