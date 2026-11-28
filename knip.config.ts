@@ -86,6 +86,8 @@ export default {
         // The Native Shell runtime provides them; nothing installs them.
         "nsh",
         "websocket",
+        // An nshm module: nsh.json "dependencies" installs it, not package.json.
+        "nsh-directories",
         // scripts/nsh-client.ts stages these packages as bundled WebView assets.
         "es-module-lexer",
         "html2canvas-pro",
