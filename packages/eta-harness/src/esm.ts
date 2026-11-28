@@ -57,8 +57,13 @@ export const ESM_TOOL_NAMES = [
 /** Tools a script cannot call through `eta.platform`. */
 const NOT_MIRRORED = new Set<string>([...ESM_TOOL_NAMES, "finish_task"]);
 
-/** Past this, a result goes to a file and the model is handed the path. */
+/**
+ * The budget one result's whole visible text gets across every section (value, console, asks,
+ * effects), not only the script's value. Head and tail are kept; the middle is cut.
+ */
 const RESULT_CHARS = 20_000;
+/** How much of the tail is kept when the middle is cut. */
+const RESULT_TAIL_CHARS = 4_000;
 /** Images one esmrun result carries at most; the rest are named in its text. */
 const RESULT_IMAGES = 8;
 /** A nested turn that keeps calling tools is stopped here; the text so far is returned. */
@@ -595,6 +600,31 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     let scopeHandle: EffectScopeHandle | undefined;
     let sealedOnAbort = false;
 
+    const outPath = `${file.replace(/\.js$/, "")}.out.txt`;
+    /**
+     * Head and tail of `text` fit the budget; `full` holds the whole assembled text — every
+     * section, not only what the first bound saw, which is what used to leak the rest.
+     */
+    const spillText = (
+      sections: readonly string[],
+      full: string,
+    ): { text: string; path?: string } => {
+      const text = sections.join("\n\n");
+      if (text.length <= RESULT_CHARS) return { text };
+      mkdirSync(dirname(full), { recursive: true });
+      writeFileSync(full, text, "utf8");
+      const shown = `… (${text.length} chars; full output: ${full})`;
+      const head = text.slice(
+        0,
+        Math.max(0, RESULT_CHARS - RESULT_TAIL_CHARS - shown.length - 2),
+      );
+      const tail = text.slice(text.length - RESULT_TAIL_CHARS);
+      return {
+        text: `${head}\n${shown}\n${tail}`,
+        path: full,
+      };
+    };
+
     const buildAbortResult = (): ToolResult => {
       sealedOnAbort = true;
       const snapshotEffects = scopeHandle?.seal() ?? [];
@@ -608,9 +638,10 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       for (const one of frame.asks)
         abortSections.push(`eta.ask [${one.status}] ${one.stack.join(" > ")}`);
       abortSections.push(`script: ${file}`);
+      const { text, path } = spillText(abortSections, outPath);
       return {
         isError: true,
-        content: [{ type: "text", text: abortSections.join("\n\n") }],
+        content: [{ type: "text", text }],
         details: {
           aborted: true,
           file,
@@ -618,6 +649,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
           calls: frame.calls.slice(),
           asks: frame.asks.slice(),
           stack: frame.stack.slice(),
+          ...(path === undefined ? {} : { fullOutputPath: path }),
         },
       };
     };
@@ -677,14 +709,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     }
     // Thrown after the flush: what the script already changed is still saved.
     if (cancelled) throw cancellation;
-    let text = parts.join("\n");
-    if (text.length > RESULT_CHARS) {
-      const full = `${file.replace(/\.js$/, "")}.out.txt`;
-      mkdirSync(dirname(full), { recursive: true });
-      writeFileSync(full, text, "utf8");
-      text = `${text.slice(0, RESULT_CHARS)}\n… (${text.length} chars; full output: ${full})`;
-    }
-    const sections = [text];
+    const sections = [parts.join("\n")];
     if (frame.console.length > 0)
       sections.push(`console:\n${frame.console.join("\n")}`);
     for (const one of frame.asks)
@@ -696,9 +721,10 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       sections.push(
         `images: the tools answered with ${frame.images.length}; the first ${images.length} are attached, ${frame.images.length - images.length} left out. Fetch fewer per script to see the rest.`,
       );
+    const { text, path } = spillText(sections, outPath);
     return {
       content: [
-        { type: "text", text: sections.join("\n\n") },
+        { type: "text", text },
         ...images.map((image) => ({ type: "image" as const, ...image })),
       ],
       details: {
@@ -707,6 +733,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
         calls: frame.calls,
         asks: frame.asks,
         stack: frame.stack,
+        ...(path === undefined ? {} : { fullOutputPath: path }),
       },
       ...(isError ? { isError: true } : {}),
     };

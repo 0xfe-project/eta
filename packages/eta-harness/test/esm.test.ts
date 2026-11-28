@@ -954,3 +954,55 @@ describe("a session opened with the realm", () => {
     session.stop();
   });
 });
+
+describe("esmrun result bounds (#829)", () => {
+  /** The tool result entry for `id`, as the transcript persists it. */
+  const entryOf = (
+    session: Awaited<ReturnType<typeof openSession>>,
+    id: string,
+  ) =>
+    session.runner
+      .getTranscript()
+      .find((m) => m.role === "toolResult" && m.toolCallId === id) as
+      | {
+          content: { type: string; text?: string }[];
+          details?: Record<string, unknown> & {
+            effects?: { name: string; detail: string }[];
+            calls?: { tool: string; details: unknown; isError: boolean }[];
+            asks?: { stack: string[]; text: string; status: string }[];
+            omitted?: { effects?: number; calls?: number; asks?: number };
+            detailsPath?: string;
+            fullOutputPath?: string;
+          };
+        }
+      | undefined;
+
+  it("bounds the whole visible text and spills every section, not only the value", async () => {
+    const { session } = await open([
+      call(
+        "esmrun",
+        {
+          script:
+            "for (let i = 0; i < 2000; i++) console.log('line-' + i + '-' + 'x'.repeat(20));\n'result-value'",
+        },
+        "c-huge-console",
+      ),
+      stop(),
+    ]);
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    const entry = entryOf(session, "c-huge-console");
+    const text = entry?.content[0]?.text ?? "";
+    expect(text.length).toBeLessThanOrEqual(21_000);
+    expect(text).toContain("console:");
+    expect(text).toMatch(/… \(\d+ chars; full output: /);
+    const full = `${entry?.details?.fullOutputPath}`;
+    expect(full).toMatch(/\.out\.txt$/);
+    // The spill file holds the whole assembled result: the value and the console.
+    const spilled = await readFile(full, "utf8");
+    expect(spilled).toContain("result-value");
+    expect(spilled).toContain("console:");
+    expect(spilled).toContain("line-1999");
+    session.stop();
+  });
+});
