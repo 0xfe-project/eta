@@ -112,7 +112,7 @@ The bundle runs on `org.gnome.Platform//49` (with Flathub runtime-repo metadata 
 
 ### Phone packages
 
-The phone apps get the same version as the desktop app; their build number (Android's version code) is the workflow's run number, which only grows, so a newer APK installs over an older one signed with the same key.
+The phone apps get the same version as the desktop app, except an iOS pre-release: App Store Connect rejects a hyphen in `CFBundleShortVersionString`, so `desktop-v0.1.1-rc.2` packages the IPA as `0.1.1`. Their build number (Android's version code, and the iOS build) is the workflow's run number, which only grows, so a newer APK installs over an older one signed with the same key, and each pre-release is a new TestFlight build of that short version.
 
 The packages are signed with what the repository's Actions secrets provide. Missing secrets don't fail the release; the package is built anyway and a note at the top of the release notes says how it was signed:
 

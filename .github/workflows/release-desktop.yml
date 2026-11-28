@@ -333,7 +333,14 @@ jobs:
         run: |
           out="$RUNNER_TEMP/eta-desktop"
           mkdir -p "$out" "$RUNNER_TEMP/try"
-          args=(--target "$ETA_DESKTOP_TARGET" --app-version "$ETA_DESKTOP_VERSION" --out "$out")
+          # A prerelease tag is `0.1.1-rc.2`. App Store Connect rejects that in
+          # CFBundleShortVersionString, so the IPA's short version is `0.1.1`.
+          # The run number is the build, which is how TestFlight tells them apart.
+          version="$ETA_DESKTOP_VERSION"
+          if [[ $ETA_DESKTOP_TARGET == ios ]]; then
+            version="${ETA_DESKTOP_VERSION%%-*}"
+          fi
+          args=(--target "$ETA_DESKTOP_TARGET" --app-version "$version" --out "$out")
           case "$ETA_DESKTOP_TARGET" in
             android)
               args+=(--build "$ETA_CLIENT_BUILD")
