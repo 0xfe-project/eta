@@ -74,6 +74,11 @@ const messages = {
     "Compact shows the image name where it was inserted; hover (tap on touch) to see it. Expanded shows image cards under the text. Saved on this device.",
     "紧凑：图片名留在原位，悬停（触屏上轻点）查看图片。展开：图片以卡片排在正文下方。仅保存在此设备。",
   ],
+  picturePlaces: ["Show where an image was", "指出图片在原文的位置"],
+  picturePlacesHint: [
+    "When you hover an image card, or hold it on a touch screen, its place in the text is marked. Saved on this device.",
+    "悬停图片卡片（触屏上长按）时，标出它在原文里的位置。仅保存在此设备。",
+  ],
   picturesCompact: ["Compact", "紧凑"],
   picturesExpanded: ["Expanded", "展开"],
   extraNarrow: ["Extra narrow", "最窄"],

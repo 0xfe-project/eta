@@ -8,7 +8,9 @@ import { Message } from "../../src/pages/chat/message";
 import { createHost, Host } from "../../src/services/host";
 import {
   createPictureMode,
+  createPicturePlaces,
   PictureModes,
+  PicturePlaces,
 } from "../../src/services/picture-mode";
 
 // A user message as the composer sends it (a mention, a folded paste, two pictures and a PDF), a
@@ -79,6 +81,7 @@ function Fixture() {
         ? { id, name: "Opus" }
         : undefined) as typeof host.agent;
   const pictures = createPictureMode();
+  const places = createPicturePlaces();
   const opened = signal("");
   const saved = signal("");
   // Saving is the app's (a download, the share sheet): here it says what it was asked for.
@@ -113,64 +116,66 @@ function Fixture() {
     <Host.Provider value={host}>
       <AttachmentFiles.Provider value={files}>
         <PictureModes.Provider value={pictures}>
-          <View style={{ flex: 1, flexDirection: "row" }}>
-            <View style={{ flex: 1 }}>
-              {message(sent)}
-              {message(reply)}
-              <If when={opened()}>
-                <Label>{`Opened member ${opened()}`}</Label>
-              </If>
-              <If when={saved()}>
-                <Label>{`Saved file ${saved()}`}</Label>
-              </If>
-              <chatText.View
-                text={{ text: `Note: ${log}`, blocks: [[6, 6 + log.length]] }}
-                label="Note"
-              />
-              <chatText.View
-                text={{ text: streamed() }}
-                streaming={streaming()}
-                label="Streaming reply"
-              />
-              <View
-                role="button"
-                accessibilityLabel="More"
-                onPress={() =>
-                  streamed.set(
-                    `${streamed()}\n\n- step one\n- step two\n\n\`\`\`ts\nconst a`,
-                  )
-                }
-              >
-                <Label>More</Label>
+          <PicturePlaces.Provider value={places}>
+            <View style={{ flex: 1, flexDirection: "row" }}>
+              <View style={{ flex: 1 }}>
+                {message(sent)}
+                {message(reply)}
+                <If when={opened()}>
+                  <Label>{`Opened member ${opened()}`}</Label>
+                </If>
+                <If when={saved()}>
+                  <Label>{`Saved file ${saved()}`}</Label>
+                </If>
+                <chatText.View
+                  text={{ text: `Note: ${log}`, blocks: [[6, 6 + log.length]] }}
+                  label="Note"
+                />
+                <chatText.View
+                  text={{ text: streamed() }}
+                  streaming={streaming()}
+                  label="Streaming reply"
+                />
+                <View
+                  role="button"
+                  accessibilityLabel="More"
+                  onPress={() =>
+                    streamed.set(
+                      `${streamed()}\n\n- step one\n- step two\n\n\`\`\`ts\nconst a`,
+                    )
+                  }
+                >
+                  <Label>More</Label>
+                </View>
+                <View
+                  role="button"
+                  accessibilityLabel="Done"
+                  onPress={() => {
+                    streamed.set(`${streamed()} = 1;\n\`\`\`\n\nAll done.`);
+                    streaming.set(false);
+                  }}
+                >
+                  <Label>Done</Label>
+                </View>
               </View>
-              <View
-                role="button"
-                accessibilityLabel="Done"
-                onPress={() => {
-                  streamed.set(`${streamed()} = 1;\n\`\`\`\n\nAll done.`);
-                  streaming.set(false);
-                }}
-              >
-                <Label>Done</Label>
+              <View style={{ width: 420 }}>
+                <Appearance
+                  phone={false}
+                  theme="system"
+                  onTheme={() => {}}
+                  paletteId="default"
+                  onPalette={() => {}}
+                  flavor="mocha"
+                  onFlavor={() => {}}
+                  chatWidth="standard"
+                  onChatWidth={() => {}}
+                  chatRail={false}
+                  onChatRail={() => {}}
+                  onFonts={() => {}}
+                />
               </View>
             </View>
-            <View style={{ width: 420 }}>
-              <Appearance
-                phone={false}
-                theme="system"
-                onTheme={() => {}}
-                paletteId="default"
-                onPalette={() => {}}
-                flavor="mocha"
-                onFlavor={() => {}}
-                chatWidth="standard"
-                onChatWidth={() => {}}
-                chatRail={false}
-                onChatRail={() => {}}
-                onFonts={() => {}}
-              />
-            </View>
-          </View>
+          </PicturePlaces.Provider>
         </PictureModes.Provider>
       </AttachmentFiles.Provider>
     </Host.Provider>

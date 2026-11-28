@@ -15,170 +15,108 @@ const network = {
   [`GET http://example.invalid/attachments/${OLD}`]: picture("image/png"),
 };
 
-const desktop = (reducedMotion = false, width = 1024) =>
+const desktop = (
+  options: { reducedMotion?: boolean; storage?: Record<string, string> } = {},
+) =>
   open("./fixtures/picture-anchors.tsx", {
     platform: "macos",
-    width,
+    width: 1024,
     height: 768,
     network,
     clock: {},
-    reducedMotion,
+    ...options,
+  });
+const phone = () =>
+  open("./fixtures/picture-anchors.tsx", {
+    platform: "ios",
+    network,
+    clock: {},
   });
 type App = Awaited<ReturnType<typeof desktop>>;
 
 const shotCard = "label:View picture shot.png · 2.0 KB";
 const photoCard = "label:View picture photo.jpg · 3.0 KB";
-const thirdCard = "label:View picture third.png · 4.0 KB";
 const oldCard = "label:View picture old.png · 1.0 KB";
-const strokes = "id:picture-link-stroke";
-const caret = "id:picture-link-caret";
-const corners = "id:picture-link-corner";
-/** The lines drawn: two strokes (along and rise) make one. */
-const lines = (app: App) => app.count(strokes) / 2;
+const blinking = "id:picture-caret-blinking";
+const still = "id:picture-caret-still";
+const viewer = "text:1 / 3 · shot.png · 2.0 KB";
+const ring = "id:picture-card-ring";
+const between = "text:￼Between them, a few words.";
+const after = "text:￼And after the second.";
+/** The carets drawn, blinking or still. */
+const carets = (app: App) => app.count(blinking) + app.count(still);
+const caretBox = (app: App) =>
+  app.layout(app.count(blinking) ? blinking : still)!;
 const rest = 120;
-const stretch = 240;
-const hop = 280;
-const retract = 160;
+const linger = 1500;
+const leave = 120;
 
 async function hover(app: App, selector: string) {
   await app.hover(selector);
-  await app.clock!.runFor(rest + stretch);
+  await app.clock!.runFor(rest + 20);
 }
 
-test("at rest the words hold no mark and nothing is drawn", async () => {
+test("at rest no caret is drawn", async () => {
   const app = await desktop();
-  expect(lines(app)).toBe(0);
-  expect(app.count(caret)).toBe(0);
-  expect(app.texts().join(" ")).not.toContain("Where");
+  expect(carets(app)).toBe(0);
 });
 
-test("resting on a card draws a line along its top edge and up a lane beside the words, to a caret at its place", async () => {
+test("resting on a card grows a blinking hairline caret, a line tall, at its place between the characters, and no character moves", async () => {
   const app = await desktop();
+  const before = app.layout(between)!;
   await app.hover(shotCard);
   await app.clock!.runFor(rest - 20);
-  expect(lines(app)).toBe(0);
-  await app.clock!.runFor(20 + stretch);
-  expect(lines(app)).toBe(1);
-  expect(app.count(corners)).toBe(1);
-  const card = app.layout(shotCard)!;
-  const [along, rise] = [0, 1].map(
-    (at) => app.layout(`${strokes} >> nth=${at}`)!,
-  );
-  // Along the card's top edge, from its corner nearest the lane.
-  expect(along.height).toBe(1);
-  expect(Math.round(along.y)).toBe(Math.round(card.y));
-  expect(along.x).toBeGreaterThan(card.x);
-  // The lane is 6 points past the words' right edge, and nothing is drawn over the words.
-  const words = app.layout("text:￼Between them, a few words.")!;
-  const edge = Math.max(
-    ...[
-      "text:￼Before the first.",
-      "text:￼Between them, a few words.",
-      "text:￼And after the second.",
-    ].map((q) => {
-      const box = app.layout(q)!;
-      return box.x + box.width;
-    }),
-  );
-  expect(Math.round(rise.x - edge)).toBe(6);
-  expect(rise.width).toBe(1);
-  // The caret is 2 by 16 on the lane, on the line of words the picture stood in, and the rise
-  // ends at its bottom.
-  const at = app.layout(caret)!;
-  expect([at.width, at.height]).toEqual([2, 16]);
-  expect(Math.abs(at.x + at.width / 2 - rise.x)).toBeLessThan(1);
-  expect(at.y).toBeGreaterThanOrEqual(words.y - 4);
-  expect(at.y + at.height).toBeLessThanOrEqual(words.y + words.height + 4);
-  expect(Math.round(rise.y)).toBe(Math.round(at.y + at.height));
+  expect(carets(app)).toBe(0);
+  await app.clock!.runFor(40);
+  expect(app.count(blinking)).toBe(1);
+  const at = caretBox(app);
+  // A hairline a line of text tall, centred on the place: the start of "Between".
+  expect([at.width, at.height]).toEqual([1, 22]);
+  expect(Math.abs(at.x + at.width / 2 - before.x)).toBeLessThan(1);
+  expect(Math.abs(at.y + at.height / 2 - (before.y + 11))).toBeLessThan(4);
+  expect(app.layout(between)).toEqual(before);
+  // The ring blinking with it lies on the card's outline.
+  expect(app.layout(ring)).toEqual(app.layout(shotCard));
 });
 
-test("moving to the other card moves the same line: one line, never drawn back, ending at the other place", async () => {
+test("moving to another card moves the caret to that card's place: one caret, blinking", async () => {
   const app = await desktop();
   await hover(app, shotCard);
-  const first = app.layout(caret)!;
-  const laneBefore = app.layout(`${strokes} >> nth=1`)!.x;
+  const first = caretBox(app);
   await app.hover(photoCard);
-  // Half way, and at every step, there is one line and one caret, and the line has length.
-  for (let step = 0; step < 6; step++) {
-    await app.clock!.runFor(stretch / 6);
-    expect(lines(app)).toBe(1);
-    expect(app.count(caret)).toBe(1);
-    expect(app.layout(`${strokes} >> nth=1`)!.height).toBeGreaterThan(0);
-  }
-  await app.clock!.runFor(50);
-  const card = app.layout(photoCard)!;
-  const at = app.layout(caret)!;
-  // The second picture stood in the last paragraph: lower in the words.
+  await app.clock!.runFor(20);
+  expect(carets(app)).toBe(1);
+  expect(app.count(blinking)).toBe(1);
+  const at = caretBox(app);
+  const last = app.layout(after)!;
   expect(at.y).toBeGreaterThan(first.y);
-  const last = app.layout("text:￼And after the second.")!;
-  expect(at.y).toBeGreaterThanOrEqual(last.y);
-  expect(at.y + at.height).toBeLessThanOrEqual(last.y + last.height);
-  // Only the length changes: the lane stays where it was, and so does the line's right end.
-  const along = app.layout(`${strokes} >> nth=0`)!;
-  const rise = app.layout(`${strokes} >> nth=1`)!;
-  expect(rise.x).toBe(laneBefore);
-  expect(Math.round(along.y)).toBe(Math.round(card.y));
+  expect(Math.abs(at.x + at.width / 2 - last.x)).toBeLessThan(1);
+  expect(app.count(ring)).toBe(1);
+  expect(app.layout(ring)).toEqual(app.layout(photoCard));
 });
 
-test("moving to a card on another row stretches the same line down to it", async () => {
-  const app = await desktop(false, 480);
-  await hover(app, shotCard);
-  const lane = app.layout(`${strokes} >> nth=1`)!;
-  const before = app.layout(`${strokes} >> nth=0`)!;
-  await app.hover(thirdCard);
-  await app.clock!.runFor(hop + 50);
-  expect(lines(app)).toBe(1);
-  const along = app.layout(`${strokes} >> nth=0`)!;
-  expect(app.layout(`${strokes} >> nth=1`)!.x).toBe(lane.x);
-  // The third card is on the second row: its top edge is lower.
-  expect(along.y).toBeGreaterThan(before.y);
-  expect(Math.round(along.y)).toBe(Math.round(app.layout(thirdCard)!.y));
-});
-
-test("moving on again half way lands on the last card, not on one passed", async () => {
-  const app = await desktop();
-  await hover(app, shotCard);
-  const first = app.layout(caret)!;
-  await app.hover(photoCard);
-  await app.clock!.runFor(stretch / 2);
-  await app.hover(shotCard);
-  await app.clock!.runFor(stretch + 50);
-  expect(lines(app)).toBe(1);
-  expect(app.layout(caret)!.y).toBe(first.y);
-});
-
-test("leaving waits out the grace, draws the line back into the card, then the caret goes", async () => {
+test("leaving waits out the grace, then the caret fades and goes", async () => {
   const app = await desktop();
   await hover(app, shotCard);
   await app.hover("label:Elsewhere");
-  // Another card within the grace would take the line over: it stays as it is.
   await app.clock!.runFor(rest - 60);
-  expect(lines(app)).toBe(1);
-  expect(app.count(caret)).toBe(1);
-  // Drawn back, it has no length left, and then the caret has gone too.
-  await app.clock!.runFor(60 + retract / 2);
-  expect(lines(app)).toBe(0);
-  await app.clock!.runFor(retract);
-  expect(app.count(caret)).toBe(0);
-  // The other card has a line of its own, from nothing.
-  await hover(app, photoCard);
-  expect(lines(app)).toBe(1);
+  expect(app.count(blinking)).toBe(1);
+  await app.clock!.runFor(60 + leave + 20);
+  expect(carets(app)).toBe(0);
+  expect(app.count(ring)).toBe(0);
 });
 
-test("a place out of sight in the messages' box has no line", async () => {
+test("a place out of sight in the messages' box has no caret", async () => {
   const app = await desktop();
   await app.press("label:Look away");
-  await app.hover(shotCard);
-  await app.clock!.runFor(rest + stretch + 100);
-  expect(lines(app)).toBe(0);
-  expect(app.shows(caret)).toBe(false);
+  await hover(app, shotCard);
+  expect(carets(app)).toBe(0);
 });
 
-test("a picture that stood nowhere draws no line", async () => {
+test("a picture that stood nowhere shows no caret", async () => {
   const app = await desktop();
-  await app.hover(oldCard);
-  await app.clock!.runFor(rest + stretch + 100);
-  expect(lines(app)).toBe(0);
+  await hover(app, oldCard);
+  expect(carets(app)).toBe(0);
 });
 
 test("keyboard focus on a card counts as resting on it", async () => {
@@ -188,34 +126,50 @@ test("keyboard focus on a card counts as resting on it", async () => {
   const drawn: number[] = [];
   for (let step = 0; step < 4; step++) {
     await app.keyboard.press("tab");
-    await app.clock!.runFor(rest + stretch + retract + 100);
-    drawn.push(lines(app));
+    await app.clock!.runFor(rest + leave + 100);
+    drawn.push(carets(app));
   }
   expect(drawn).toEqual([0, 0, 1, 1]);
 });
 
-test("with reduced motion the line and the caret are there at once, move at once and go at once", async () => {
-  const app = await desktop(true);
-  await app.hover(shotCard);
-  await app.clock!.runFor(rest + 20);
-  expect(lines(app)).toBe(1);
-  expect(app.count(caret)).toBe(1);
-  const first = app.layout(caret)!;
+test("with reduced motion the caret is there at once and stays still, moves at once and goes at once", async () => {
+  const app = await desktop({ reducedMotion: true });
+  await hover(app, shotCard);
+  expect(app.count(still)).toBe(1);
+  expect(app.count(blinking)).toBe(0);
+  const first = caretBox(app);
   await app.hover(photoCard);
   await app.clock!.runFor(20);
-  expect(app.layout(caret)!.y).toBeGreaterThan(first.y);
+  expect(app.count(still)).toBe(1);
+  expect(caretBox(app).y).toBeGreaterThan(first.y);
   await app.hover("label:Elsewhere");
   await app.clock!.runFor(rest + 20);
-  expect(lines(app)).toBe(0);
+  expect(carets(app)).toBe(0);
 });
 
-test("on a touch screen nothing is drawn: a tap still opens the picture", async () => {
-  const app = await open("./fixtures/picture-anchors.tsx", {
-    platform: "ios",
-    network,
-    clock: {},
+test("turned off in Settings, resting on a card shows nothing", async () => {
+  const app = await desktop({
+    storage: { "eta.messages.picturePlaces": "off" },
   });
+  await hover(app, shotCard);
+  expect(carets(app)).toBe(0);
+  expect(app.count(ring)).toBe(0);
+});
+
+test("on a touch screen, holding a card shows its caret without opening the picture; it stays a moment after the finger lifts", async () => {
+  const app = await phone();
+  await app.longPress(shotCard);
+  expect(app.count(blinking)).toBe(1);
+  expect(app.shows(viewer)).toBe(false);
+  await app.clock!.runFor(linger / 2);
+  expect(carets(app)).toBe(1);
+  await app.clock!.runFor(linger / 2 + leave + 20);
+  expect(carets(app)).toBe(0);
+});
+
+test("on a touch screen a tap opens the picture and shows no caret", async () => {
+  const app = await phone();
   await app.press(shotCard);
-  await app.waitFor("text:1 / 3 · shot.png · 2.0 KB");
-  expect(lines(app)).toBe(0);
+  await app.waitFor(viewer);
+  expect(carets(app)).toBe(0);
 });

@@ -35,3 +35,31 @@ export const PictureModes = context<ReturnType<typeof createPictureMode>>({
   mode: () => "compact",
   set: () => {},
 });
+
+const placesKey = "eta.messages.picturePlaces";
+
+/** Settings › Appearance › Show where an image was: while an image card is hovered (or held, on
+ * touch), its place in the text is pointed out. On unless turned off; kept on this device. */
+export function createPicturePlaces() {
+  const on = signal(true);
+  let changed = false;
+  void Storage.getItem(placesKey)
+    .then((stored) => {
+      if (!changed && stored === "off") on.set(false);
+    })
+    .catch(() => {});
+  return {
+    on: () => on(),
+    set(next: boolean) {
+      changed = true;
+      on.set(next);
+      void Storage.setItem(placesKey, next ? "on" : "off").catch(() => {});
+    },
+  };
+}
+
+/** Whether an image card points out its place in the text; on where nothing provides it. */
+export const PicturePlaces = context<ReturnType<typeof createPicturePlaces>>({
+  on: () => true,
+  set: () => {},
+});

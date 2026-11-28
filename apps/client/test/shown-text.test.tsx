@@ -98,6 +98,19 @@ test("the choice is kept on the device", async () => {
   expect(app.shows("text:Expanded")).toBe(true);
 });
 
+test("with Expanded, Show where an image was is on, and turning it off is kept on the device", async () => {
+  const app = await start();
+  expect(app.shows("label:Show where an image was")).toBe(false);
+  await app.press("label:Images in messages");
+  await app.press("text:Expanded");
+  await app.waitFor("label:Show where an image was");
+  expect(app.storage()["eta.messages.picturePlaces"]).toBeUndefined();
+  await app.press("label:Show where an image was");
+  await app.waitUntil(
+    () => app.storage()["eta.messages.picturePlaces"] === "off",
+  );
+});
+
 test("a reply being written shows each chunk as it comes, then the whole of it", async () => {
   const app = await start();
   await app.waitFor("label:Streaming reply");

@@ -11,15 +11,23 @@ export const motion = {
   /** A wait shorter than this shows nothing: a spinner or a skeleton appears only once a wait
    * has lasted this long (#380). */
   reveal: 300,
-  /** The line from a picture card to the place its picture stood in the text: how long the
-   * pointer or the focus rests on a card before the line is drawn, and how long it waits after
-   * the pointer leaves before drawing back, so moving to another card within it moves the same
-   * line instead (`rest`); the line stretching, from the card at first and to another card's
-   * place on the same row of cards (`stretch`), and to a card on another row, which is twice as
-   * far (`hop`); drawing back into the card (`retract`); and the caret at its end coming in or
-   * going out, within the last of `stretch` and `retract` (`caret`). */
-  connector: { rest: 120, stretch: 240, hop: 280, retract: 160, caret: 90 },
-  /** One blink of a text caret (the streaming answer's, and the one a picture's line ends in). */
+  /** A picture card pointing out the place its picture stood in the message's words, with a caret
+   * at that place: how long the pointer or the focus rests on a card before the caret comes, and
+   * how long it stays after the pointer leaves, so moving to another card moves it at once
+   * (`rest`); how long a finger holds a card before it comes (`hold`) and how long it stays after
+   * the finger lifts (`linger`); the spring it grows up from the baseline on, critically damped so
+   * it settles in about 160 ms without overshooting the line (`grow`); its blink, which the card's
+   * outline shares: once every `blink.period`, from fully lit down to `blink.low` and back
+   * (`blink`); and its fade when the card is left (`leave`). */
+  pictureCue: {
+    rest: 120,
+    hold: 300,
+    linger: 1500,
+    grow: { stiffness: 600, damping: 49, mass: 1 },
+    blink: { period: 900, low: 0.55 },
+    leave: 120,
+  },
+  /** One blink of the streaming answer's caret. */
   caretBlink: 900,
   /** A spinner or a skeleton that appeared stays at least this long, so it never flashes. */
   minShown: 500,
@@ -59,8 +67,6 @@ export const motion = {
   shift: space[16],
   /** In and out of a screen: `cubic-bezier(.32,.72,0,1)`, the spec's opening curve. */
   open: [0.32, 0.72, 0, 1] as Easing,
-  /** Moving within a screen: ease in and out, as layout moves do. */
-  move: [0.42, 0, 0.58, 1] as Easing,
   /** Going away: eases in, so it leaves quickly once it starts. */
   close: [0.32, 0, 0.67, 0] as Easing,
   /** The avatar editor: each face passing over before one lands, the landed face settling, a
@@ -136,14 +142,6 @@ export function menuMotion(align: "start" | "end", reduced: boolean) {
     } satisfies ViewStyle,
   };
 }
-
-/** A picture card's outline taking the accent as the line reaches it, and giving it up as the line
- * moves on, over the time the line takes to move. */
-export const outlineMotion = {
-  transitionProperty: "border-color",
-  transitionDuration: motion.connector.stretch,
-  transitionTimingFunction: curve(motion.move),
-} satisfies ViewStyle;
 
 /** A curve as a style's `cubic-bezier()`. */
 function curve(points: Easing) {
