@@ -954,3 +954,117 @@ describe("a session opened with the realm", () => {
     session.stop();
   });
 });
+
+describe("esmrun result bounds (#829)", () => {
+  /** The tool result entry for `id`, as the transcript persists it. */
+  const entryOf = (
+    session: Awaited<ReturnType<typeof openSession>>,
+    id: string,
+  ) =>
+    session.runner
+      .getTranscript()
+      .find((m) => m.role === "toolResult" && m.toolCallId === id) as
+      | {
+          content: { type: string; text?: string }[];
+          details?: Record<string, unknown> & {
+            effects?: { name: string; detail: string }[];
+            calls?: { tool: string; details: unknown; isError: boolean }[];
+            asks?: { stack: string[]; text: string; status: string }[];
+            omitted?: { effects?: number; calls?: number; asks?: number };
+            detailsPath?: string;
+            fullOutputPath?: string;
+          };
+        }
+      | undefined;
+
+  it("bounds the whole visible text and spills every section, not only the value", async () => {
+    const { session } = await open([
+      call(
+        "esmrun",
+        {
+          script:
+            "for (let i = 0; i < 2000; i++) console.log('line-' + i + '-' + 'x'.repeat(20));\n'result-value'",
+        },
+        "c-huge-console",
+      ),
+      stop(),
+    ]);
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    const entry = entryOf(session, "c-huge-console");
+    const text = entry?.content[0]?.text ?? "";
+    expect(text.length).toBeLessThanOrEqual(21_000);
+    expect(text).toContain("console:");
+    expect(text).toMatch(/… \(\d+ chars; full output: /);
+    const full = `${entry?.details?.fullOutputPath}`;
+    expect(full).toMatch(/\.out\.txt$/);
+    // The spill file holds the whole assembled result: the value and the console.
+    const spilled = await readFile(full, "utf8");
+    expect(spilled).toContain("result-value");
+    expect(spilled).toContain("console:");
+    expect(spilled).toContain("line-1999");
+    session.stop();
+  }, 30_000);
+
+  it("bounds details.effects as whole entries and spills the full list", async () => {
+    const writes = Array.from(
+      { length: 3000 },
+      (_, i) => `await writeFile('e${i}.txt', 'x')`,
+    ).join(";\n");
+    const { session } = await open([
+      call(
+        "esmrun",
+        {
+          script: `import { writeFile } from "node:fs/promises";\n${writes};\n'done'`,
+        },
+        "c-many-effects",
+      ),
+      stop(),
+    ]);
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    const entry = entryOf(session, "c-many-effects");
+    const effects = entry?.details?.effects ?? [];
+    expect(effects.length).toBeLessThan(3000);
+    expect(entry?.details?.omitted?.effects).toBe(3000 - effects.length);
+    // Kept entries stay the shape the UI reads: a name and a string detail.
+    for (const effect of effects) {
+      expect(typeof effect.name).toBe("string");
+      expect(typeof effect.detail).toBe("string");
+    }
+    const path = `${entry?.details?.detailsPath}`;
+    expect(path).toMatch(/\.details\.json$/);
+    const spilled = JSON.parse(await readFile(path, "utf8")) as {
+      effects: { name: string; detail: string }[];
+    };
+    expect(spilled.effects).toHaveLength(3000);
+    expect(spilled.effects[2999]?.detail).toContain("e2999.txt");
+    session.stop();
+  }, 30_000);
+
+  it("bounds one oversized metadata entry itself", async () => {
+    const { session } = await open([
+      call(
+        "esmrun",
+        {
+          script: `import eta from "eta";\nawait eta.platform.echo({ text: '${"z".repeat(120_000)}' });\n'ok'`,
+        },
+        "c-big-call",
+      ),
+      stop(),
+    ]);
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    const entry = entryOf(session, "c-big-call");
+    const calls = entry?.details?.calls ?? [];
+    expect(calls).toHaveLength(1);
+    const detail = calls[0]?.details;
+    expect(JSON.stringify(detail).length).toBeLessThan(3_000);
+    expect(entry?.details?.detailsPath).toMatch(/\.details\.json$/);
+    const spilled = JSON.parse(
+      await readFile(`${entry?.details?.detailsPath}`, "utf8"),
+    ) as { calls: { details: { echoed: string } }[] };
+    expect(spilled.calls[0]?.details.echoed).toHaveLength(120_000);
+    session.stop();
+  }, 30_000);
+});
