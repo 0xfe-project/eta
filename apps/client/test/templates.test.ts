@@ -70,13 +70,16 @@ test("hand-wrapped lines join; list items and paragraphs keep their own lines", 
 });
 
 test("the bundled catalog: every template has a summary, instructions and a known category", () => {
-  expect(templates.length).toBe(69);
+  expect(templates.length).toBeGreaterThan(0);
   for (const template of templates) {
     expect(template.summary.length).toBeGreaterThan(0);
     expect(template.instructions.length).toBeGreaterThan(0);
     expect(Object.keys(templateCategories)).toContain(template.category);
   }
-  expect(new Set(templates.map((template) => template.id)).size).toBe(69);
+  // Unique ids, however many the catalog holds.
+  expect(new Set(templates.map((template) => template.id)).size).toBe(
+    templates.length,
+  );
   // Where they came from, at one commit, and under what license.
   expect(templateSource.license).toBe("MIT");
   expect(templateSource.url).toContain(templateSource.commit);

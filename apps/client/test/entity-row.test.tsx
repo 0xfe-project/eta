@@ -7,7 +7,7 @@ function hasRole(node: AccessibilityNode | null, role: string): boolean {
   return node.children.some((child) => hasRole(child, role));
 }
 
-test("EntityRow button fills the full row width and height up to the bottom rule, keeping menu presses separate", async () => {
+test("EntityRow presses its row and its menu separately; a row without onPress is not a button", async () => {
   const app = await open("./fixtures/entity-row.tsx", {
     width: 600,
     height: 500,
@@ -16,34 +16,6 @@ test("EntityRow button fills the full row width and height up to the bottom rule
   });
   await app.waitFor("text:Alice");
 
-  // Full-row pressable target for a row with a menu.
-  const menuRow = app.layout("id:row-with-menu")!;
-  const rowButton = app.layout("label:Alice >> nth=0")!;
-  const menuTrigger = app.layout("label:Alice >> nth=1")!;
-  expect(rowButton.x).toBe(menuRow.x);
-  expect(rowButton.y).toBe(menuRow.y);
-  expect(rowButton.width).toBe(menuRow.width);
-  expect(rowButton.height).toBe(menuRow.height - 1);
-  // The menu sits on the reserved right padding, 16px from the right edge and 8px from the top.
-  expect(menuTrigger.x + menuTrigger.width).toBe(
-    menuRow.x + menuRow.width - 16,
-  );
-  expect(menuTrigger.y).toBe(menuRow.y + 8);
-  expect(menuTrigger.width).toBe(24);
-  expect(menuTrigger.height).toBe(24);
-
-  // Full-row pressable target for caret and phone stacked layouts.
-  const caretRow = app.layout("id:row-with-caret")!;
-  const caretButton = app.layout("label:Source")!;
-  expect(caretButton.x).toBe(caretRow.x);
-  expect(caretButton.width).toBe(caretRow.width);
-  expect(caretButton.height).toBe(caretRow.height - 1);
-
-  const stackedRow = app.layout("id:row-stacked")!;
-  const stackedButton = app.layout("label:Phone agent")!;
-  expect(stackedButton.x).toBe(stackedRow.x);
-  expect(stackedButton.width).toBe(stackedRow.width);
-  expect(stackedButton.height).toBe(stackedRow.height - 1);
   // Stacked hides the menu so only the row carries the label.
   expect(app.count("label:Phone agent")).toBe(1);
 

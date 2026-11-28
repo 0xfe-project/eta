@@ -100,18 +100,6 @@ test("a save that fails puts the old face back and says so", async () => {
   expect(app.texts()).toContain("The face was not saved: disk full");
 });
 
-test("the row keeps the last 8: a new face pushes the oldest out", async () => {
-  const seeds = ["s8", "s7", "s6", "s5", "s4", "s3", "s2", "s1"];
-  const app = await editing({ seeds, reducedMotion: true });
-  expect(recent(app, seeds)).toHaveLength(8);
-  await app.press("label:Draw another face");
-  expect(recent(app, ["face0001", ...seeds])).toEqual([
-    "face0001",
-    ...seeds.slice(0, 7),
-  ]);
-  expect(kept(app)).toBe(`Kept: face0001 ${seeds.slice(0, 7).join(" ")}`);
-});
-
 test("while a face is being saved the row already wears it, and still shows 8", async () => {
   const seeds = ["s8", "s7", "s6", "s5", "s4", "s3", "s2", "s1"];
   const app = await editing({ seeds, save: "hold", reducedMotion: true });

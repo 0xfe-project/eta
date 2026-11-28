@@ -11,15 +11,13 @@ import {
 import { NotificationHost } from "../../src/components/notifications";
 import { settled, shownWhile } from "../../src/components/pending";
 import { startProgress } from "../../src/components/progress-notification";
-import { SpinningIcon } from "../../src/components/spinner";
 import { showToast } from "../../src/components/toast";
-import { icon, space } from "../../src/components/tokens";
+import { space } from "../../src/components/tokens";
 
 function Fixture() {
   const c = () => palette("light");
   const busy = signal(false);
   const ready = signal(true);
-  const spinRunning = signal(false);
   const events = signal<string[]>([]);
   const waiting = shownWhile(busy);
   const isSettled = settled(ready);
@@ -53,17 +51,6 @@ function Fixture() {
                 ready.set(true);
               }}
             />
-
-            {/* SpinningIcon */}
-            <View testID="spin-host">
-              <SpinningIcon
-                name="refresh"
-                running={spinRunning()}
-                size={icon.md}
-              />
-            </View>
-            <Button label="Start spin" onPress={() => spinRunning.set(true)} />
-            <Button label="Stop spin" onPress={() => spinRunning.set(false)} />
 
             {/* Toasts */}
             <Button

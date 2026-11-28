@@ -1,4 +1,4 @@
-export { Badge, dotSize, StatusDot } from "./badge";
+export { Badge } from "./badge";
 export { BackButton, Button, CloseButton } from "./button";
 export { Callout, WarningLine } from "./callout";
 export { Chip } from "./chip";

@@ -116,10 +116,6 @@ const agents = [
   agent("silent", "eta", "proxy:silent", null),
   /** Saved before levels were checked: `ultra` on a model that declares high and max. */
   agent("stale", "eta", "proxy:flash", "ultra"),
-  {
-    ...agent("cody", "claude", "claude:sonnet", "ultra"),
-    machineId: "m-primary",
-  },
 ];
 
 function Fixture() {

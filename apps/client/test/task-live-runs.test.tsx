@@ -22,13 +22,13 @@ for (const [name, width, height] of sizes) {
   test(`a mentioned agent's line opens its own session's log (${name})`, async () => {
     const app = await open(fixture, { width, height, locale: "en-US" });
     await app.waitUntil(() => has(app.texts(), "Bo is answering"));
+    expect(app.texts()).not.toContain("Bo");
     await app.press("label:Execution log · Bo");
     await app.waitUntil(() => app.shows("Bo looks the question up."));
     expect(app.shows("Ada reads the footer.")).toBe(false);
     // Its title says whose run it is: Bo's, not the executor's.
-    expect(
-      app.texts().includes("Bo") || has(app.texts(), "Bo (mentioned)"),
-    ).toBe(true);
+    expect(app.texts()).toContain("Bo");
+    expect(app.texts()).toContain("Read-only. Reply on the task to steer Bo.");
     expect(has(app.texts(), "steer Ada")).toBe(false);
   });
 

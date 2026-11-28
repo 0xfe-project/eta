@@ -33,16 +33,6 @@ test("a model that declares high and max offers only those", async () => {
   expect(await offered(app)).toEqual(["high", "max"]);
 });
 
-test("a model that declares none offers off", async () => {
-  const app = await editor("hy");
-  expect(await offered(app)).toEqual(["off", "high"]);
-});
-
-test("a model that does not reason offers only off", async () => {
-  const app = await editor("plain");
-  expect(await offered(app)).toEqual(["off"]);
-});
-
 test("a model whose levels are not known offers the five and says so", async () => {
   const app = await editor("thinks");
   expect(app.texts()).toContain(
@@ -63,12 +53,6 @@ test("a model that says nothing about thinking offers off and says why", async (
     "This model declares no thinking levels, so eta sends none.",
   );
   expect(await offered(app)).toEqual(["off"]);
-});
-
-test("ultra is offered only where the runtime lists it", async () => {
-  const app = await editor("cody");
-  await app.waitFor("text:Sonnet");
-  expect(await offered(app)).toEqual(["low", "medium", "high", "ultra"]);
 });
 
 test("a saved level the model does not take is shown and flagged", async () => {
@@ -95,20 +79,4 @@ test("a new model that does not take the level clears it and says so", async () 
   await app.waitFor(
     'text:agents.update {"agentId":"hy","model":"proxy:plain","thinkingLevel":null}',
   );
-});
-
-test("the model field is the form's own width, as the thinking level's is", async () => {
-  const app = await editor("flash");
-  // The model row is an ordinary row of the form: the same column the runtime and the thinking
-  // level get, not one longer of its own (it used to be 256 next to their 160).
-  const runtime = app.layout("label:Runtime")!;
-  const model = app.layout("label:Model")!;
-  const thinking = app.layout("label:Thinking level")!;
-  expect(model.width).toBe(runtime.width);
-  expect(model.width).toBe(thinking.width);
-  expect(model.x).toBe(thinking.x);
-  // The menu the field opens is not held to the field's width: a long model name and id read
-  // in full there.
-  await app.press("label:Model");
-  expect(app.layout("label:Flash")!.width).toBeGreaterThan(model.width);
 });

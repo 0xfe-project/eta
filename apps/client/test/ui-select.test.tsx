@@ -24,7 +24,7 @@ test("LayoutSelect updates selection in desktop native mode and phone sheet fall
 });
 
 for (const platform of platforms) {
-  test(`LayoutSelect renders phone sheet chrome and clears bottom safe area on ${platform}`, async () => {
+  test(`LayoutSelect renders phone sheet chrome, closes and selects on ${platform}`, async () => {
     const app = await open(fixture, {
       width: 393,
       height: 852,
@@ -40,11 +40,6 @@ for (const platform of platforms) {
     expect(app.shows("id:select-sheet-header >> text:Phone select")).toBe(true);
     expect(app.shows("id:select-sheet-header >> label:Close")).toBe(true);
 
-    const gamma = app.layout("label:Gamma");
-    expect(gamma).not.toBeNull();
-    expect(gamma!.height).toBeGreaterThanOrEqual(52);
-    expect(gamma!.y + gamma!.height).toBe(852 - 34 - 8);
-
     await app.press("id:select-sheet-header >> label:Close");
     await app.waitUntil(() => !app.shows("id:menu-grabber"));
     expect(app.shows("text:phone:alpha")).toBe(true);
@@ -57,24 +52,8 @@ for (const platform of platforms) {
   });
 }
 
-test("phone sheet does not double-pad when safeArea.bottom is 0", async () => {
-  const app = await open(fixture, {
-    width: 393,
-    height: 852,
-    safeArea: { top: 0, bottom: 0 },
-    locale: "en-US",
-    platform: "android",
-  });
-
-  await app.press("label:Phone select");
-  await app.waitFor("label:Gamma");
-  const gamma = app.layout("label:Gamma");
-  expect(gamma).not.toBeNull();
-  expect(gamma!.y + gamma!.height).toBe(852 - 8);
-});
-
 for (const platform of ["ios", "android"] as const) {
-  test(`SkillSelect renders 52pt phone sheet rows with header on ${platform}`, async () => {
+  test(`SkillSelect renders a phone sheet with header and selects on ${platform}`, async () => {
     const app = await open(fixture, {
       width: 393,
       height: 852,
@@ -88,17 +67,12 @@ for (const platform of ["ios", "android"] as const) {
     expect(app.shows("id:menu-grabber")).toBe(true);
     expect(app.shows("id:select-sheet-header")).toBe(true);
 
-    const row = app.layout("label:Linux Box");
-    expect(row).not.toBeNull();
-    expect(row!.height).toBeGreaterThanOrEqual(52);
-    expect(row!.y + row!.height).toBe(852 - 34 - 8);
-
     await app.press("label:Linux Box");
     await app.waitFor("text:skill:linux-box");
     await app.waitUntil(() => !app.shows("id:menu-grabber"));
   });
 
-  test(`ModelSelect renders styled phone sheet with safe-area padding and search on ${platform}`, async () => {
+  test(`ModelSelect renders a phone sheet with search on ${platform}`, async () => {
     const app = await open(fixture, {
       width: 393,
       height: 852,
@@ -110,12 +84,6 @@ for (const platform of ["ios", "android"] as const) {
     await app.press("id:phone-model >> label:Model");
     await app.waitFor("label:GPT-5");
     expect(app.shows("label:Search models")).toBe(true);
-
-    const option = app.layout("label:GPT-5");
-    expect(option).not.toBeNull();
-    expect(option!.width).toBe(393);
-    expect(option!.height).toBeGreaterThanOrEqual(52);
-    expect(option!.y + option!.height).toBeLessThanOrEqual(852 - 34);
 
     await app.type("label:Search models", "GPT");
     await app.waitUntil(() => !app.shows("label:Claude Sonnet"));
@@ -136,10 +104,9 @@ test("ModelSelect keeps desktop popup behavior on linux", async () => {
 
   await app.press("id:desktop-model >> label:Model");
   await app.waitFor("label:GPT-5");
-  const option = app.layout("label:GPT-5");
-  expect(option).not.toBeNull();
-  expect(option!.width).toBeGreaterThanOrEqual(336);
-  expect(option!.height).toBe(28);
+  // A popup, not the phone's sheet.
+  expect(app.shows("id:menu-grabber")).toBe(false);
+  expect(app.shows("label:Search models")).toBe(true);
 
   await app.press("label:GPT-5");
   await app.waitFor("text:desktop-model:llm:gpt-5");

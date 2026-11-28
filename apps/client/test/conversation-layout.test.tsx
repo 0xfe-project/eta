@@ -47,10 +47,22 @@ test("the chat rail offers a jump for both the prompt and the agent reply", asyn
   const app = await open(fixture, {
     width: 1440,
     height: 900,
-    urlScheme: "eta://fixture/short",
+    locale: "en-US",
+    urlScheme: "eta://fixture/long",
   });
-  await app.press("label:Reply 1");
+  await app.waitFor("text:Answer 20");
+  // The rail lists the last 12 of each (Prompt 1 is the 9th question, Reply 1 the 9th answer)
+  // and marks the one at the top of the transcript; it opens at the end.
+  const selected = (label: string) =>
+    app.accessibility(`label:${label}`)?.selected === true;
+  expect(app.shows("label:Prompt 13")).toBe(false);
+  expect(selected("Prompt 1")).toBe(false);
   await app.press("label:Prompt 1");
+  await app.waitUntil(() => selected("Prompt 1"));
+  expect(selected("Reply 1")).toBe(false);
+  await app.press("label:Reply 1");
+  await app.waitUntil(() => selected("Reply 1"));
+  expect(selected("Prompt 1")).toBe(false);
 });
 
 test("a phone that lost the host before any message shows the error in the message area", async () => {

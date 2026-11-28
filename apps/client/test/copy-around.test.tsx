@@ -3,7 +3,10 @@ import { expect, open, test } from "nsh/test";
 // ⌘C / Ctrl+C on text selected in a reply (#385). A headless run selects nothing (it draws no
 // text), so these copies are checked on the real platforms: `nsh test --target macos`, where both
 // copied nothing, and `--target linux`. A browser's own copy does not reach the test's clipboard,
-// so the web is left out.
+// so the web is left out. The two reply-selection tests are declared skipped so the headless
+// run (CI) reports them as skipped rather than as passes; to run them, change `onRealPlatform`
+// to `test` and run `nsh test --target macos test/copy-around.test.tsx` (or `--target linux`).
+const onRealPlatform = test.skip;
 
 const fixture = () =>
   open("./fixtures/copy-around.tsx", { width: 700, height: 500 });
@@ -21,26 +24,32 @@ async function selectEnd(app: App, text: string) {
   return selected();
 }
 
-test("⌘C copies the text selected in a reply while the composer has the focus", async () => {
-  const app = await fixture();
-  if (app.shows("text:platform: web")) return;
-  await app.type("id:eta-editor", "draft");
-  const selected = await selectEnd(app, "Ship the rollout on Monday.");
-  if (!selected) return;
-  await app.keyboard.press("mod+c");
-  await app.waitUntil(() => app.clipboard() === selected);
-  expect(app.clipboard()).toBe(selected);
-});
+onRealPlatform(
+  "⌘C copies the text selected in a reply while the composer has the focus",
+  async () => {
+    const app = await fixture();
+    if (app.shows("text:platform: web")) return;
+    await app.type("id:eta-editor", "draft");
+    const selected = await selectEnd(app, "Ship the rollout on Monday.");
+    expect(selected).toBeTruthy();
+    await app.keyboard.press("mod+c");
+    await app.waitUntil(() => app.clipboard() === selected);
+    expect(app.clipboard()).toBe(selected);
+  },
+);
 
-test("⌘C copies the text selected in a reply inside a view that took the focus", async () => {
-  const app = await fixture();
-  if (app.shows("text:platform: web")) return;
-  const selected = await selectEnd(app, "Keep the old flag until week 3.");
-  if (!selected) return;
-  await app.keyboard.press("mod+c");
-  await app.waitUntil(() => app.clipboard() === selected);
-  expect(app.clipboard()).toBe(selected);
-});
+onRealPlatform(
+  "⌘C copies the text selected in a reply inside a view that took the focus",
+  async () => {
+    const app = await fixture();
+    if (app.shows("text:platform: web")) return;
+    const selected = await selectEnd(app, "Keep the old flag until week 3.");
+    expect(selected).toBeTruthy();
+    await app.keyboard.press("mod+c");
+    await app.waitUntil(() => app.clipboard() === selected);
+    expect(app.clipboard()).toBe(selected);
+  },
+);
 
 test("⌘C in the composer copies its own selection as Markdown, after a reply's too", async () => {
   const app = await fixture();

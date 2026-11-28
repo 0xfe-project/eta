@@ -88,8 +88,14 @@ test("the time zone list falls back to the routine's own zone without Intl.suppo
 });
 
 test("the time zone list keeps the routine's zone in front when the runtime does not list it", () => {
-  const zones = timeZones("Mars/Olympus");
-  expect(zones[0]).toBe("Mars/Olympus");
-  if (typeof Intl.supportedValuesOf === "function")
-    expect(zones.length).toBe(Intl.supportedValuesOf("timeZone").length + 1);
+  // A runtime that lists its zones (the native one does not: stand one in, whatever it has).
+  const listed = ["Asia/Shanghai", "Europe/Paris"];
+  const original = Reflect.get(Intl, "supportedValuesOf");
+  Reflect.set(Intl, "supportedValuesOf", () => [...listed]);
+  try {
+    expect(timeZones("Mars/Olympus")).toEqual(["Mars/Olympus", ...listed]);
+    expect(timeZones("Europe/Paris")).toEqual(listed);
+  } finally {
+    Reflect.set(Intl, "supportedValuesOf", original);
+  }
 });
