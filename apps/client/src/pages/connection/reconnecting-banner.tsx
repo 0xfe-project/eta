@@ -40,17 +40,12 @@ export function ReconnectingBanner(props: {
           ? uiText("connectionLostReconnectingWhatYouSee")
           : uiText("connectionLostReconnecting")}
       </Label>
-      <If when={!props.phone}>
-        {/* Not in the design; kept so the host
-            can be changed without waiting for the Lost dialog. Drawn over
-            the 16px text line so the strip keeps the design's height. */}
-        <Button
-          label={uiText("changeHost")}
-          size={control.sm}
-          style={{ marginVertical: -space[4] }}
-          onPress={props.onConnect}
-        />
-      </If>
+      <Button
+        label={uiText("changeHost")}
+        size={props.phone ? control.md : control.sm}
+        style={props.phone ? undefined : { marginVertical: -space[4] }}
+        onPress={props.onConnect}
+      />
     </View>
   );
 }

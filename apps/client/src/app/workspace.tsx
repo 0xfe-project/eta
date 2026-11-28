@@ -13,6 +13,7 @@ import type { PluginsTab } from "../pages/plugins/plugins";
 import type { ChatWidth, Theme } from "../pages/settings/appearance";
 import type { SettingsSection } from "../pages/settings/overview";
 import type { ImportedBotDraft } from "../pages/templates/local-import";
+import type { HostAddress } from "../services/host";
 import {
   cleanup,
   effect,
@@ -55,6 +56,7 @@ import { requestedTemplate } from "../pages/templates/link";
 import { follow, useHost } from "../services/host";
 import { dismissTop, topDismissable } from "../ui/behaviors";
 import { backAction } from "./back";
+import { showsPhoneHostSetup } from "./workspace-gate";
 
 /** The conversation list on a tablet narrower than 960. */
 const narrowListWidth = 280;
@@ -75,6 +77,10 @@ export function Workspace(props: {
   onChatRail: (on: boolean) => void;
   onFonts: (fonts: { interface: string; mono: string }) => void;
   onConnect: () => void;
+  onSwitchHost?: (address: HostAddress) => void;
+  /** Host origin whose phone setup gate was dismissed by the parent app (survives Connection round-trips). */
+  phoneSetupDismissedFor?: string;
+  onDismissPhoneSetup?: (origin: string) => void;
 }) {
   const host = useHost();
   const c = colors();
@@ -207,14 +213,33 @@ export function Workspace(props: {
   let checkedSetup = false;
   const models = useModels();
   const phoneTabs = () => phone() && !keyboardShown();
+  const localDismissedPhoneSetup = signal<string | undefined>(undefined);
+  effect(() => {
+    if (props.onDismissPhoneSetup) return;
+    const origin = host.address()?.origin ?? "";
+    const dismissed = untracked(localDismissedPhoneSetup);
+    if (dismissed !== undefined && dismissed !== origin) {
+      localDismissedPhoneSetup.set(undefined);
+    }
+  });
+  const dismissedPhoneSetupFor = () =>
+    props.onDismissPhoneSetup
+      ? props.phoneSetupDismissedFor
+      : localDismissedPhoneSetup();
   const waitingForHost = () =>
-    phone() &&
-    start.page === "chat" &&
-    host.state().status === "open" &&
-    Boolean(host.section("providers", "config")) &&
-    Boolean(host.state().targets.agents) &&
-    !host.people().length &&
-    !host.conversations().some((item) => item.kind === "group");
+    showsPhoneHostSetup({
+      phone: phone(),
+      startPage: start.page,
+      hostOpen: host.state().status === "open",
+      providersLoaded: Boolean(host.section("providers", "config")),
+      agentsLoaded: Boolean(host.state().targets.agents),
+      agentCount: host.people().length,
+      hasGroupConversation: host
+        .conversations()
+        .some((item) => item.kind === "group"),
+      hostOrigin: host.address()?.origin,
+      dismissedForOrigin: dismissedPhoneSetupFor(),
+    });
   follow(() => "agents");
   follow(() => "conversations");
   follow(() => "projects");
@@ -676,6 +701,7 @@ export function Workspace(props: {
                 step("end");
               }}
               onSettings={() => showSettings()}
+              onHosts={() => showSettings("Hosts")}
             />
           </If>
         </View>
@@ -733,6 +759,7 @@ export function Workspace(props: {
                   openTask(id);
                 }}
                 onConnect={props.onConnect}
+                onSwitchHost={props.onSwitchHost}
                 onClose={() => closeSettings(section())}
                 onTemplates={() => {
                   closeSettings(section());
@@ -830,6 +857,13 @@ export function Workspace(props: {
       <PhoneHostSetup
         noModel={!models().length}
         hostName={host.address()?.origin}
+        onContinue={() => {
+          const origin = host.address()?.origin ?? "";
+          if (props.onDismissPhoneSetup) props.onDismissPhoneSetup(origin);
+          else localDismissedPhoneSetup.set(origin);
+          showSettings();
+        }}
+        onConnect={props.onConnect}
       />
     </If>
   );

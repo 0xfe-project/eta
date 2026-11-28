@@ -57,6 +57,8 @@ export const onboardingMessages = {
   previousStep: ["Previous", "上一步"],
   retryInstall: ["Retry install", "重试安装"],
   setUpEta: ["Set up eta", "设置 Eta"],
+  setUpOnThisPhone: ["Set up on this phone", "在此设备设置"],
+  thisHost: ["This host", "当前主机"],
   theHostDidntAnswerCheckYour: [
     "The host didn't answer. Check your connection to the host.",
     "主机没有响应，请检查与主机的连接。",

@@ -16,6 +16,7 @@ const messages = {
   externalAgents: ["External agents", "外部智能体"],
   runtimes: ["Runtimes", "运行方式"],
   archived: ["Archived", "已归档"],
+  hosts: ["Hosts", "主机"],
   update: ["Update", "更新"],
   network: ["Network", "网络"],
   more: ["More", "更多"],
