@@ -1,14 +1,36 @@
 import type {
   AgentRuntimeInfo,
   AgentView,
+  PluginBundledAgentView,
   PluginView,
 } from "@eta/client-contracts";
+import type { ImportedBotDraft } from "../../src/pages/templates/local-import";
 import { mount, signal, Storage, Text, View } from "nsh";
 import { Button } from "../../src/components";
 import { NotificationHost } from "../../src/components/notifications";
 import { openAgentChat } from "../../src/pages/templates/agent-chat";
-import { TemplateGallery } from "../../src/pages/templates/gallery";
+import {
+  pluginBundledAgentDraft,
+  TemplateGallery,
+} from "../../src/pages/templates/gallery";
 import { createHost, Host } from "../../src/services/host";
+
+const slackBundledAgent: PluginBundledAgentView = {
+  id: "standup-bot",
+  name: "Standup Bot",
+  description: "Collects daily team standup notes in Slack.",
+  path: "agents/standup-bot.md",
+  instructions:
+    "Collect concise daily standup updates and summarize blockers in Slack.",
+};
+
+const githubBundledAgent: PluginBundledAgentView = {
+  id: "pr-guard",
+  name: "PR Guard",
+  description: "Checks pull requests against repo policies.",
+  path: "agents/pr-guard.md",
+  instructions: "Review every pull request for security and test coverage.",
+};
 
 const readyPlugin: PluginView = {
   name: "slack-tools",
@@ -26,6 +48,7 @@ const readyPlugin: PluginView = {
   fields: [],
   headers: [],
   agents: [],
+  bundledAgents: [slackBundledAgent],
 };
 
 const unconfiguredPlugin: PluginView = {
@@ -56,6 +79,7 @@ const unconfiguredPlugin: PluginView = {
   headers: [],
   env: [],
   agents: [],
+  bundledAgents: [githubBundledAgent],
 };
 
 const externalRuntimes: AgentRuntimeInfo[] = [
@@ -69,14 +93,41 @@ const externalRuntimes: AgentRuntimeInfo[] = [
   },
 ];
 
+const presetDrafts: Record<string, ImportedBotDraft> = {
+  "plugin-ready": pluginBundledAgentDraft("slack-tools", slackBundledAgent),
+  "plugin-needs-config": pluginBundledAgentDraft(
+    "github-tools",
+    githubBundledAgent,
+  ),
+  "local-json": {
+    sourceKind: "json",
+    filename: "release-bot.json",
+    template: {
+      id: "local-release-bot",
+      name: "Release Bot",
+      category: "Local",
+      summary: "Automates release checklists.",
+      owns: [],
+      doesNotOwn: [],
+      needsApproval: [],
+      instructions: "Draft release notes and verify tags before publishing.",
+      recommendedPlugins: ["slack-tools"],
+    },
+    persona: "Calm release coordinator",
+    thinkingLevel: "high",
+    plugins: ["slack-tools"],
+  },
+};
+
 // The template gallery over a host with one model, `source:model`. Storage `phone` opens the
-// phone layout, `initial` the template a link named, `models` "0" takes the models away,
-// `create` "fail" makes the host refuse the agent, `chat` "fail" refuses the chat made for it,
-// `plugins` "1" populates installed plugins, `external` "1" advertises Claude Code, and `existing`
-// seeds an existing agent of that name.
+// phone layout, `initial` the template a link named, `draft` a preset initialDraft, `models` "0"
+// takes the models away, `create` "fail" makes the host refuse the agent, `chat` "fail" refuses
+// the chat made for it, `plugins` "1" populates installed plugins, `external` "1" advertises
+// Claude Code, and `existing` seeds an existing agent of that name.
 function Fixture(props: {
   phone: boolean;
   initial?: string;
+  draft?: ImportedBotDraft;
   models: boolean;
   fail: boolean;
   chatFail: boolean;
@@ -90,6 +141,7 @@ function Fixture(props: {
   const opened = signal("");
   const marketOpened = signal(false);
   const activeInitial = signal<string | undefined>(props.initial);
+  const activeDraft = signal<ImportedBotDraft | undefined>(props.draft);
   const existingAgents: AgentView[] = props.existing
     ? [
         {
@@ -198,17 +250,23 @@ function Fixture(props: {
   return (
     <Host.Provider value={host}>
       <View style={{ flex: 1 }}>
-        <Text>{`Sent: ${sent().join(" | ")}`}</Text>
-        <Text>{`Created: ${created()}`}</Text>
-        <Text>{`Opened: ${opened()}`}</Text>
-        <Text>{`Market: ${marketOpened() ? "open" : "closed"}`}</Text>
         <Button
           label="Switch link"
           onPress={() => activeInitial.set("pr-reviewer")}
         />
+        <Button
+          label="Switch draft"
+          onPress={() => activeDraft.set(presetDrafts["plugin-ready"])}
+        />
+        <Text>{`Sent: ${sent().join(" | ")}`}</Text>
+        <Text>{`Count: ${sent().filter((entry) => entry.startsWith("agents.create ")).length}`}</Text>
+        <Text>{`Created: ${created()}`}</Text>
+        <Text>{`Opened: ${opened()}`}</Text>
+        <Text>{`Market: ${marketOpened() ? "open" : "closed"}`}</Text>
         <TemplateGallery
           phone={props.phone}
           initialId={activeInitial()}
+          initialDraft={activeDraft()}
           onClose={noop}
           onCreated={(agent) => {
             created.set(`${agent.id}@${agent.homeProjectId}`);
@@ -226,23 +284,36 @@ function Fixture(props: {
 void Promise.all([
   Storage.getItem("phone"),
   Storage.getItem("initial"),
+  Storage.getItem("draft"),
   Storage.getItem("models"),
   Storage.getItem("create"),
   Storage.getItem("chat"),
   Storage.getItem("plugins"),
   Storage.getItem("external"),
   Storage.getItem("existing"),
-]).then(([phone, initial, models, create, chat, plugins, external, existing]) =>
-  mount(() => (
-    <Fixture
-      phone={phone === "1"}
-      initial={initial || undefined}
-      models={models !== "0"}
-      fail={create === "fail"}
-      chatFail={chat === "fail"}
-      plugins={plugins === "1"}
-      external={external === "1"}
-      existing={existing || undefined}
-    />
-  )),
+]).then(
+  ([
+    phone,
+    initial,
+    draft,
+    models,
+    create,
+    chat,
+    plugins,
+    external,
+    existing,
+  ]) =>
+    mount(() => (
+      <Fixture
+        phone={phone === "1"}
+        initial={initial || undefined}
+        draft={draft ? presetDrafts[draft] : undefined}
+        models={models !== "0"}
+        fail={create === "fail"}
+        chatFail={chat === "fail"}
+        plugins={plugins === "1"}
+        external={external === "1"}
+        existing={existing || undefined}
+      />
+    )),
 );
