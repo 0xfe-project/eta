@@ -105,6 +105,17 @@ export function nextRunAfter(
   return next === null ? undefined : next.getTime();
 }
 
+/** Validate an IANA time zone name on its own (used even when a routine has no schedule). */
+export function checkTimezone(timezone: string): void {
+  if (timezone.trim() === "" || timezone.length > MAX_ZONE_LENGTH)
+    throw new Error("timezone must be an IANA zone such as Asia/Shanghai");
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).resolvedOptions();
+  } catch {
+    throw new Error(`unknown time zone: ${timezone}`);
+  }
+}
+
 /**
  * Whether a schedule and zone can be put on the clock, or the reason they cannot. A schedule that
  * has no next time is refused here: accepting it would make a routine that is "enabled" and never
@@ -115,8 +126,7 @@ export function checkSchedule(
   timezone: string,
   now: number,
 ): void {
-  if (timezone.trim() === "" || timezone.length > MAX_ZONE_LENGTH)
-    throw new Error("timezone must be an IANA zone such as Asia/Shanghai");
+  checkTimezone(timezone);
   let next: number | undefined;
   try {
     next = nextRunAfter(schedule, timezone, now);

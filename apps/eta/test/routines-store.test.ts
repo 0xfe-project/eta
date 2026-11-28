@@ -431,3 +431,143 @@ describe("feedback and the revisions it leads to", () => {
     expect(store.briefs(id)).toHaveLength(2);
   });
 });
+
+describe("external triggers and coalescing event queue", () => {
+  it("stores nullable schedule + trigger bindings, deduplicates events, enforces TTL & cap, and claims batches", () => {
+    const db = openDatabase(":memory:");
+    open.push(db);
+    applyMigrations(db, loadMigrations());
+    let now = 1_000_000;
+    const store = new RoutineStore(db, () => now);
+
+    const routine = store.create({
+      name: "PR Watcher",
+      brief: "Inspect new commits.",
+      schedule: null,
+      trigger: {
+        provider: "composio",
+        source: "github",
+        trigger: "GITHUB_COMMIT_EVENT",
+        accountId: "ca_1",
+        config: { owner: "acme", repo: "app" },
+        mode: "webhook",
+      },
+      timezone: "UTC",
+      enabled: true,
+    });
+    expect(routine.schedule).toBeNull();
+    expect(store.triggerView(routine.id)).toMatchObject({
+      provider: "composio",
+      source: "github",
+      trigger: "GITHUB_COMMIT_EVENT",
+      accountId: "ca_1",
+      config: { owner: "acme", repo: "app" },
+      mode: "webhook",
+      status: "disabled",
+    });
+
+    store.updateTriggerState(routine.id, {
+      instanceId: "ti_1",
+      accountId: "ca_1",
+      effectiveMode: "webhook",
+      status: "active",
+      lastError: null,
+    });
+    expect(
+      store.findTriggerRoutines({ provider: "composio", instanceId: "ti_1" }),
+    ).toHaveLength(1);
+
+    // Enqueue 4 events with cap 3 -> 1st oldest is dropped; duplicate eventId is ignored.
+    const ttl = 24 * 60 * 60_000;
+    expect(
+      store.enqueueTriggerEvent({
+        routineId: routine.id,
+        provider: "composio",
+        eventId: "msg_1",
+        instanceId: "ti_1",
+        triggerSlug: "GITHUB_COMMIT_EVENT",
+        occurredAt: now,
+        payloadJson: JSON.stringify({ seq: 1 }),
+        ttlMs: ttl,
+        maxPending: 3,
+      }),
+    ).toEqual({ inserted: true, expired: 0, dropped: 0 });
+    expect(
+      store.enqueueTriggerEvent({
+        routineId: routine.id,
+        provider: "composio",
+        eventId: "msg_1",
+        instanceId: "ti_1",
+        triggerSlug: "GITHUB_COMMIT_EVENT",
+        occurredAt: now + 1,
+        payloadJson: JSON.stringify({ seq: 1 }),
+        ttlMs: ttl,
+        maxPending: 3,
+      }),
+    ).toEqual({ inserted: false, expired: 0, dropped: 0 });
+    for (const seq of [2, 3, 4]) {
+      now += 10;
+      store.enqueueTriggerEvent({
+        routineId: routine.id,
+        provider: "composio",
+        eventId: `msg_${seq}`,
+        instanceId: "ti_1",
+        triggerSlug: "GITHUB_COMMIT_EVENT",
+        occurredAt: now,
+        payloadJson: JSON.stringify({ seq }),
+        ttlMs: ttl,
+        maxPending: 3,
+      });
+    }
+
+    const statesBefore = store
+      .triggerEventsOfRoutine(routine.id)
+      .map((e) => [e.eventId, e.state]);
+    expect(statesBefore).toContainEqual(["msg_1", "dropped"]);
+
+    const batch = store.claimTriggerBatch({
+      routineId: routine.id,
+      ttlMs: ttl,
+      maxBatch: 10,
+    });
+    expect(batch).toBeDefined();
+    expect(batch!.run.startedBy).toBe("trigger");
+    expect(batch!.droppedCount).toBe(1);
+    expect(batch!.events.map((e) => e.eventId)).toEqual([
+      "msg_2",
+      "msg_3",
+      "msg_4",
+    ]);
+
+    // Interrupted run reclaims still-fresh dispatched events back to pending; expired events expire.
+    store.finishRun(
+      batch!.run.id,
+      { status: "failed", error: "interrupted" },
+      { keepTriggerEventsPending: true, eventTtlMs: ttl },
+    );
+    expect(
+      store
+        .triggerEventsOfRoutine(routine.id)
+        .filter((e) => e.state === "pending")
+        .map((e) => e.eventId),
+    ).toEqual(["msg_2", "msg_3", "msg_4"]);
+
+    // Advance past 24h TTL and recover another interrupted run -> expired instead of pending.
+    const batch2 = store.claimTriggerBatch({
+      routineId: routine.id,
+      ttlMs: ttl,
+      maxBatch: 10,
+    })!;
+    now += ttl + 5_000;
+    const recovered = store.recover("restarted", ttl);
+    expect(recovered).toEqual([routine.id]);
+    expect(
+      store
+        .triggerEventsOfRoutine(routine.id)
+        .filter((e) => e.eventId.startsWith("msg_") && e.eventId !== "msg_1")
+        .every((e) => e.state === "expired"),
+    ).toBe(true);
+    expect(store.pendingTriggerRoutines(ttl)).toEqual([]);
+    void batch2;
+  });
+});

@@ -8,9 +8,11 @@
  * (`session-owner.ts`) and works in a directory of the routine's own (`<dataDir>/routines/<id>/`).
  * The rules:
  *
- * - **Captain off, no run.** A time that comes while Captain is off (its supervisor switched off,
- *   or no model) is written as a `skipped` run that says why, and nothing starts. Times missed
- *   that way are not made up when Captain is back.
+ * - **Captain off, no scheduled run.** A scheduled time that comes while Captain is off (its
+ *   supervisor switched off, or no model) is written as a `skipped` run that says why, and nothing
+ *   starts. Times missed that way are not made up when Captain is back. (External trigger events,
+ *   by contrast, stay queued in `routine_trigger_event` up to their TTL and drain when Captain is
+ *   back on.)
  * - **A run tells the user something or fails.** `report` or `no_news` decides. A run that stops
  *   without either is asked once more; if it still says nothing, it has failed. What it said in
  *   passing is never taken for a report: that is how a note to itself would reach the user.
@@ -34,6 +36,7 @@ import type {
 import type { AgentMessage, KernelTool } from "@eta/core";
 import type { ManagedSession, SessionMeta, SessionsService } from "@eta/server";
 import type { SessionHandle } from "../conversations/places";
+import type { PromptTriggerBatch } from "./prompts";
 import type {
   FeedbackRecord,
   RoutineRecord,
@@ -105,8 +108,11 @@ export interface RunnerOptions {
   timeoutMs?: number | undefined;
   /** How long one revision of a brief may take. */
   reviseTimeoutMs?: number | undefined;
+  eventTtlMs?: number | undefined;
   /** Say that a routine's state moved. */
   changed: (routineId: string) => void;
+  /** Called after a run finishes and its slot is free (used by `TriggerHub` to drain queued events). */
+  onRunFinished?: ((routineId: string) => void) | undefined;
   warn: (message: string) => void;
 }
 
@@ -126,7 +132,9 @@ export class RoutineRunner {
   readonly #now: () => number;
   readonly #timeoutMs: number;
   readonly #reviseTimeoutMs: number;
+  readonly #eventTtlMs: number | undefined;
   readonly #changed: RunnerOptions["changed"];
+  #onRunFinished: RunnerOptions["onRunFinished"];
   readonly #warn: (message: string) => void;
 
   #sessions: SessionsService | undefined;
@@ -146,8 +154,17 @@ export class RoutineRunner {
     this.#now = options.now ?? Date.now;
     this.#timeoutMs = options.timeoutMs ?? RUN_TIMEOUT_MS;
     this.#reviseTimeoutMs = options.reviseTimeoutMs ?? REVISE_TIMEOUT_MS;
+    this.#eventTtlMs = options.eventTtlMs;
     this.#changed = options.changed;
+    this.#onRunFinished = options.onRunFinished;
     this.#warn = options.warn;
+  }
+
+  /** Register a listener invoked after any run settles and frees its slot. */
+  setRunFinishedListener(
+    listener: ((routineId: string) => void) | undefined,
+  ): void {
+    this.#onRunFinished = listener;
   }
 
   /** The session host this runner works on; set when the plugin is applied. */
@@ -232,6 +249,15 @@ export class RoutineRunner {
     return this.#captain.status();
   }
 
+  /** Whether the runner is currently attached, open, and Captain is on. */
+  canStart(): boolean {
+    return (
+      this.#sessions !== undefined &&
+      !this.#closing &&
+      this.#captain.status().captainOn
+    );
+  }
+
   /**
    * The clock says a routine is due. With Captain on, a run starts (true); with Captain off, the
    * time is written down as a skipped run and nothing starts (false).
@@ -254,27 +280,47 @@ export class RoutineRunner {
    */
   start(routineId: string, startedBy: RunTrigger): RunRecord | undefined {
     const routine = this.#store.get(routineId);
-    if (
-      this.#sessions === undefined ||
-      this.#closing ||
-      routine === undefined ||
-      !this.#captain.status().captainOn
-    )
-      return undefined;
+    if (!this.canStart() || routine === undefined) return undefined;
     const run = this.#store.startRun(routineId, startedBy);
     if (run === undefined) return undefined;
-    this.#changed(routineId);
-    const task = this.#execute(routine, run).catch((error: unknown) => {
-      this.#warn(
-        `[eta] routine ${routineId}: run ${run.id} could not be settled: ${messageOf(error)}`,
-      );
-    });
-    this.#runs.add(task);
-    void task.finally(() => this.#runs.delete(task));
+    this.#launch(routine, run);
     return run;
   }
 
-  async #execute(routine: RoutineRecord, run: RunRecord): Promise<void> {
+  /**
+   * Execute a trigger run whose `routine_run` row and coalesced event batch were claimed
+   * atomically by `RoutineStore.claimTriggerBatch`.
+   */
+  launchTrigger(
+    routine: RoutineRecord,
+    run: RunRecord,
+    triggerEvents: PromptTriggerBatch,
+  ): void {
+    this.#launch(routine, run, triggerEvents);
+  }
+
+  #launch(
+    routine: RoutineRecord,
+    run: RunRecord,
+    triggerEvents?: PromptTriggerBatch,
+  ): void {
+    this.#changed(routine.id);
+    const task = this.#execute(routine, run, triggerEvents).catch(
+      (error: unknown) => {
+        this.#warn(
+          `[eta] routine ${routine.id}: run ${run.id} could not be settled: ${messageOf(error)}`,
+        );
+      },
+    );
+    this.#runs.add(task);
+    void task.finally(() => this.#runs.delete(task));
+  }
+
+  async #execute(
+    routine: RoutineRecord,
+    run: RunRecord,
+    triggerEvents?: PromptTriggerBatch,
+  ): Promise<void> {
     const active: Active = {};
     this.#active.set(run.id, active);
     let outcome: RunOutcome;
@@ -314,6 +360,8 @@ export class RoutineRunner {
         runPrompt({
           name: routine.name,
           schedule: routine.schedule,
+          trigger: this.#store.triggerView(routine.id) ?? null,
+          triggerEvents,
           timezone: routine.timezone,
           now: this.#now(),
           previousRunAt: previous?.startedAt,
@@ -350,7 +398,15 @@ export class RoutineRunner {
     }
     // Put away before the row says the run is over, so whoever sees it over finds it put away.
     if (sessionId !== undefined) await this.#putAway(sessionId);
-    const ended = this.#store.finishRun(run.id, outcome);
+    const keepTriggerEventsPending =
+      stopped() === "closing" ||
+      (outcome.status === "failed" && outcome.error === INTERRUPTED);
+    const ended = this.#store.finishRun(run.id, outcome, {
+      keepTriggerEventsPending,
+      ...(this.#eventTtlMs === undefined
+        ? {}
+        : { eventTtlMs: this.#eventTtlMs }),
+    });
     this.#changed(routine.id);
     if (ended?.status === "sent")
       await this.#captain.reported(routine, ended).catch((error: unknown) => {
@@ -358,6 +414,7 @@ export class RoutineRunner {
           `[eta] routine ${routine.id}: the report could not be announced: ${messageOf(error)}`,
         );
       });
+    if (!this.#closing) this.#onRunFinished?.(routine.id);
   }
 
   /** How a run ended, from what its session did. */

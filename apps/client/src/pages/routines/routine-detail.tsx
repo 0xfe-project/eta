@@ -1,4 +1,9 @@
-import type { BriefView, RoutineInfo, RunView } from "@eta/client-contracts";
+import type {
+  BriefView,
+  RoutineInfo,
+  RoutineTriggerView,
+  RunView,
+} from "@eta/client-contracts";
 import type { Layout } from "../../components";
 import { View } from "nsh";
 import {
@@ -16,17 +21,93 @@ import { EmptyState } from "../../components/empty-state";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { Badge, Callout, WarningLine } from "../../ui";
 import { EarlierReportCard, LatestReportCard } from "./history";
 import {
   clockDistance,
   clockTime,
   dayWord,
+  feedTime,
+  formatTriggerConfigSummary,
   scheduleFor,
   shortDate,
+  triggerModeLabel,
+  triggerStatusMeta,
+  triggerTargetLabel,
 } from "./schedule";
 
 /** The schedule and brief labels, and the time column of the timeline under them. */
 const labelWidth = 72;
+
+function TriggerSummaryDetail(props: {
+  trigger: RoutineTriggerView;
+  compact?: boolean;
+}) {
+  const modeText = () =>
+    triggerModeLabel(props.trigger.mode, props.trigger.pollingIntervalMinutes);
+  const statusMeta = () => triggerStatusMeta(props.trigger.status);
+  const configSummary = () => formatTriggerConfigSummary(props.trigger.config);
+  return (
+    <View style={{ flex: 1, minWidth: 0, gap: space[4] }}>
+      <View
+        style={{
+          ...row,
+          gap: space[8],
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        <Label
+          variant="small"
+          tone="mutedInk"
+          style={{ flexShrink: 1, minWidth: 0 }}
+        >
+          {triggerTargetLabel(props.trigger)}
+        </Label>
+        <Badge
+          label={statusMeta().label}
+          tone={statusMeta().tone}
+          size="caption"
+        />
+        <If when={modeText()}>
+          {(mode) => <Badge label={mode()} tone="neutral" size="caption" />}
+        </If>
+        <Label variant="caption" tone="muted">
+          {props.trigger.lastEventAt
+            ? uiText("triggerLastEventAt", {
+                time: feedTime(props.trigger.lastEventAt),
+              })
+            : uiText("triggerNoEventsYet")}
+        </Label>
+      </View>
+      <If when={configSummary()}>
+        {(summary) => (
+          <Label variant="caption" tone="muted">
+            {summary()}
+          </Label>
+        )}
+      </If>
+      <If when={props.trigger.fallbackReason}>
+        {(reason) => (
+          <WarningLine
+            text={uiText("triggerFallbackNotice", { reason: reason() })}
+            outline={!props.compact}
+          />
+        )}
+      </If>
+      <If when={props.trigger.lastError}>
+        {(err) => (
+          <Callout
+            tone="danger"
+            icon="warning"
+            title={uiText("triggerErrorSummary")}
+            description={err()}
+          />
+        )}
+      </If>
+    </View>
+  );
+}
 
 export function RoutineDetail(props: {
   routine: RoutineInfo;
@@ -48,6 +129,7 @@ export function RoutineDetail(props: {
   const c = colors();
   const phone = () => props.layout === "phone";
   const inset = () => (phone() ? space[16] : space[24]);
+  const trigger = () => props.routine.trigger ?? null;
   const latest = () => props.runs.find((run) => run.status === "sent");
   const earlier = () => props.runs.filter((run) => run.id !== latest()?.id);
   // Two cards a row on the desktop, one on the narrower layouts.
@@ -58,6 +140,33 @@ export function RoutineDetail(props: {
       rows.push(earlier().slice(index, index + perRow));
     return rows;
   };
+  const nextStatusText = () => {
+    if (props.routine.nextRunAt) {
+      return uiText("nextReportOn", {
+        // The phone has no time column, so the time joins the day.
+        day: phone()
+          ? `${dayWord(props.routine.nextRunAt)} ${clockTime(props.routine.nextRunAt)}`
+          : dayWord(props.routine.nextRunAt),
+        clockDistance: clockDistance(props.routine.nextRunAt),
+      });
+    }
+    if (!props.routine.enabled) return uiText("paused");
+    const activeTrigger = trigger();
+    if (props.routine.schedule === null && activeTrigger) {
+      if (activeTrigger.status === "error")
+        return uiText("triggerErrorDetailHint");
+      if (activeTrigger.status === "disabled")
+        return uiText("triggerStatusDisabled");
+      return uiText("triggerWaitingForEvents");
+    }
+    return uiText("noUpcomingRun");
+  };
+  const nextStatusTone = () =>
+    props.routine.enabled &&
+    props.routine.schedule === null &&
+    trigger()?.status === "error"
+      ? ("red" as const)
+      : ("mutedInk" as const);
   return (
     <View style={grow}>
       <If when={props.layout !== "phone"}>
@@ -118,14 +227,32 @@ export function RoutineDetail(props: {
               </ActionMenu>
             </View>
           </View>
-          <View style={{ ...row, gap: space[12] }}>
-            <Label variant="small" tone="muted" style={{ width: labelWidth }}>
-              {uiText("schedule")}
-            </Label>
-            <Label variant="small" tone="mutedInk" style={{ flex: 1 }}>
-              {scheduleFor(props.routine.schedule, props.routine.timezone)}
-            </Label>
-          </View>
+          <If when={props.routine.schedule !== null}>
+            <View style={{ ...row, gap: space[12] }}>
+              <Label variant="small" tone="muted" style={{ width: labelWidth }}>
+                {uiText("schedule")}
+              </Label>
+              <Label variant="small" tone="mutedInk" style={{ flex: 1 }}>
+                {scheduleFor(props.routine.schedule, props.routine.timezone)}
+              </Label>
+            </View>
+          </If>
+          <If when={trigger()}>
+            {(entry) => (
+              <View
+                style={{ ...row, alignItems: "flex-start", gap: space[12] }}
+              >
+                <Label
+                  variant="small"
+                  tone="muted"
+                  style={{ width: labelWidth, flexShrink: 0 }}
+                >
+                  {uiText("triggerLabel")}
+                </Label>
+                <TriggerSummaryDetail trigger={entry()} />
+              </View>
+            )}
+          </If>
           <View style={{ ...row, gap: space[12] }}>
             <Label variant="small" tone="muted" style={{ width: labelWidth }}>
               {uiText("briefV", {
@@ -171,14 +298,36 @@ export function RoutineDetail(props: {
               borderColor: c().border,
             }}
           >
-            <View style={{ ...row, alignItems: "baseline", gap: space[12] }}>
-              <Label variant="small" tone="muted" style={{ width: space[64] }}>
-                {uiText("schedule")}
-              </Label>
-              <Label variant="small" tone="mutedInk" style={{ flex: 1 }}>
-                {scheduleFor(props.routine.schedule, props.routine.timezone)}
-              </Label>
-            </View>
+            <If when={props.routine.schedule !== null}>
+              <View style={{ ...row, alignItems: "baseline", gap: space[12] }}>
+                <Label
+                  variant="small"
+                  tone="muted"
+                  style={{ width: space[64] }}
+                >
+                  {uiText("schedule")}
+                </Label>
+                <Label variant="small" tone="mutedInk" style={{ flex: 1 }}>
+                  {scheduleFor(props.routine.schedule, props.routine.timezone)}
+                </Label>
+              </View>
+            </If>
+            <If when={trigger()}>
+              {(entry) => (
+                <View
+                  style={{ ...row, alignItems: "flex-start", gap: space[12] }}
+                >
+                  <Label
+                    variant="small"
+                    tone="muted"
+                    style={{ width: space[64], flexShrink: 0 }}
+                  >
+                    {uiText("triggerLabel")}
+                  </Label>
+                  <TriggerSummaryDetail trigger={entry()} compact />
+                </View>
+              )}
+            </If>
             <View style={{ ...row, alignItems: "baseline", gap: space[12] }}>
               <Label variant="small" tone="muted" style={{ width: space[64] }}>
                 {uiText("briefV", { value1: props.brief?.version ?? 1 })}
@@ -208,18 +357,8 @@ export function RoutineDetail(props: {
               </Label>
             )}
           </If>
-          <Label variant="small" tone="mutedInk" style={{ flex: 1 }}>
-            {props.routine.nextRunAt
-              ? uiText("nextReportOn", {
-                  // The phone has no time column, so the time joins the day.
-                  day: phone()
-                    ? `${dayWord(props.routine.nextRunAt!)} ${clockTime(props.routine.nextRunAt!)}`
-                    : dayWord(props.routine.nextRunAt!),
-                  clockDistance: clockDistance(props.routine.nextRunAt!),
-                })
-              : props.routine.enabled
-                ? uiText("noUpcomingRun")
-                : uiText("paused")}
+          <Label variant="small" tone={nextStatusTone()} style={{ flex: 1 }}>
+            {nextStatusText()}
           </Label>
           <Button
             label={uiText("runNow")}
@@ -242,7 +381,9 @@ export function RoutineDetail(props: {
                 ? uiText("routineNoRunsYetNext", {
                     time: `${dayWord(props.routine.nextRunAt)} ${clockTime(props.routine.nextRunAt)}`,
                   })
-                : uiText("routineNoRunsYet"),
+                : props.routine.schedule === null && trigger()
+                  ? uiText("routineNoRunsYetTrigger")
+                  : uiText("routineNoRunsYet"),
             }}
             style={{
               paddingVertical: space[16],

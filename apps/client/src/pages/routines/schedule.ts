@@ -1,4 +1,11 @@
-import type { RoutineSchedule, RoutineSummary } from "@eta/client-contracts";
+import type {
+  RoutineSchedule,
+  RoutineSummary,
+  RoutineTrigger,
+  RoutineTriggerMode,
+  RoutineTriggerStatus,
+  RunTrigger,
+} from "@eta/client-contracts";
 import { formatLocale, localizedText, uiText } from "../../i18n";
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -9,7 +16,8 @@ export function weekday(day: number) {
     : weekdays[day]!;
 }
 
-export function scheduleLabel(schedule: RoutineSchedule) {
+export function scheduleLabel(schedule: RoutineSchedule | null) {
+  if (!schedule) return localizedText("Event trigger", "事件触发");
   switch (schedule.kind) {
     case "daily":
       return uiText("routineEveryDayAt", { time: schedule.time });
@@ -233,10 +241,11 @@ function zoneName(timeZone: string, date: Date) {
  * the routine's zone reads differently: "Daily at 16:30 (Daily at 09:30 Germany Time)".
  */
 export function scheduleFor(
-  schedule: RoutineSchedule,
+  schedule: RoutineSchedule | null,
   timeZone: string,
   now = new Date(),
 ) {
+  if (!schedule) return scheduleLabel(null);
   const viewer = viewerTimeZone();
   if (schedule.kind === "hourly" || sameClock(timeZone, viewer, now))
     return scheduleLabel(schedule);
@@ -297,10 +306,11 @@ export function feedTime(at: number) {
 
 /** The next few times as the form previews them: "11-23 08:00 AM, 11-30 08:00 AM…". */
 export function upcomingTimes(
-  schedule: RoutineSchedule,
+  schedule: RoutineSchedule | null,
   timeZone: string,
   count = 3,
 ) {
+  if (!schedule) return "";
   const now = new Date();
   let times: Date[] = [];
   try {
@@ -323,4 +333,83 @@ export function upcomingTimes(
         )}`,
     )
     .join(", ")}…`;
+}
+
+export function providerLabel(provider: string) {
+  const trimmed = provider.trim();
+  if (!trimmed) return "";
+  if (trimmed.toLowerCase() === "rss") return "RSS";
+  if (/^[a-z0-9_-]+$/.test(trimmed)) {
+    return trimmed
+      .split(/[-_]+/)
+      .filter(Boolean)
+      .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+  return trimmed;
+}
+
+export function triggerTargetLabel(
+  trigger: Pick<RoutineTrigger, "provider" | "source" | "trigger">,
+) {
+  return `${trigger.provider} / ${trigger.source} / ${trigger.trigger}`;
+}
+
+export function triggerModeLabel(
+  mode: RoutineTriggerMode | null | undefined,
+  pollingIntervalMinutes?: number | null,
+) {
+  if (mode === "poll") {
+    return pollingIntervalMinutes
+      ? uiText("triggerPollingEvery", { minutes: pollingIntervalMinutes })
+      : uiText("triggerModePollShort");
+  }
+  if (mode === "webhook") return uiText("triggerModeWebhookShort");
+  return "";
+}
+
+export function triggerStatusMeta(status: RoutineTriggerStatus) {
+  switch (status) {
+    case "active":
+      return { tone: "green" as const, label: uiText("triggerStatusActive") };
+    case "disabled":
+      return {
+        tone: "neutral" as const,
+        label: uiText("triggerStatusDisabled"),
+      };
+    case "error":
+      return { tone: "red" as const, label: uiText("triggerStatusError") };
+  }
+}
+
+export function runStartedByLabel(startedBy: RunTrigger) {
+  switch (startedBy) {
+    case "trigger":
+      return uiText("runStartedByTrigger");
+    case "schedule":
+      return uiText("runStartedBySchedule");
+    case "user":
+      return uiText("runStartedByUser");
+  }
+}
+
+export function formatTriggerConfigSummary(
+  config: Record<string, unknown> | undefined,
+) {
+  if (!config) return "";
+  const entries = Object.entries(config).filter(
+    ([, value]) => value !== undefined && value !== null && value !== "",
+  );
+  if (!entries.length) return "";
+  return entries
+    .map(([key, value]) => {
+      const text =
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+          ? String(value)
+          : JSON.stringify(value);
+      return `${key}=${text}`;
+    })
+    .join(", ");
 }

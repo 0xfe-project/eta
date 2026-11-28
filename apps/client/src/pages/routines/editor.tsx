@@ -3,10 +3,14 @@ import type {
   RoutineInfo,
   RoutineResults,
   RoutineSchedule,
+  RoutineTrigger,
+  RoutineTriggerMode,
+  TriggerCatalogItem,
+  TriggerProviderStatus,
 } from "@eta/client-contracts";
-import type { JSX, ViewStyle } from "nsh";
+import type { JSX } from "nsh";
 import { HOURLY_STEPS } from "@eta/client-contracts";
-import { signal, View } from "nsh";
+import { effect, signal, untracked, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -25,13 +29,6 @@ import {
   textStyle,
 } from "../../components";
 import {
-  canHover,
-  MenuFrame,
-  MenuRow,
-  touchRow,
-  touchScreen,
-} from "../../components/menu";
-import {
   control as controlHeight,
   icon,
   opacity,
@@ -40,19 +37,21 @@ import {
 } from "../../components/tokens";
 import { formatLocale, uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-import { TimeField } from "../../ui";
+import { problemText } from "../../services/problem-text";
+import { Segmented, TimeField } from "../../ui";
 import { timeZones, upcomingTimes, weekday } from "./schedule";
+import {
+  buildTriggerConfigPayload,
+  initialTriggerConfigState,
+  parseTriggerConfigSchema,
+  validateTriggerField,
+} from "./trigger-config";
+import { EditorSelect, PhoneSelect, TriggerSection } from "./trigger-fields";
 
-interface ScheduleOption {
-  label: string;
-  checked: boolean;
-  onSelect: () => void;
-}
+type RoutineTriggerKind = "schedule" | "trigger" | "both";
 
-/** A schedule select's menu. */
-const selectMenuWidth = { phone: 240, tablet: 200, desktop: 180 } as const;
-/** A row of that menu off touch screens. */
-const optionHeight = { tablet: 36, desktop: 32 } as const;
+const MAX_POLL_MINUTES = 7 * 24 * 60;
+
 /** The time of day beside the frequency. */
 const timeFieldWidth = { sheet: 140, tablet: 112, desktop: 116 } as const;
 /** The phone sheet's frequency and interval selects. */
@@ -66,234 +65,87 @@ const briefHeight = { edit: 96, create: 124, wide: 112 } as const;
 /** The inline form's column. */
 const formWidth = 800;
 
-/**
- * The phone form's select: a 44pt trigger, opening the design's titled
- * bottom sheet of 48pt rows with the selected one tinted.
- */
-function PhoneSelect(props: {
-  label: string;
-  title: string;
-  value: string;
-  options: ScheduleOption[];
-  triggerStyle?: ViewStyle;
-}) {
-  const c = colors();
-  return (
-    <MenuFrame
-      popupStyle={{
-        width: selectMenuWidth.phone,
-        borderWidth: 1,
-        borderColor: c().strong,
-        backgroundColor: c().canvas,
-      }}
-      sheetStyle={{ paddingBottom: space[24] }}
-      sheetHeader={
-        <View
-          style={{
-            ...row,
-            height: controlHeight.touch,
-            paddingHorizontal: space[16],
-          }}
-        >
-          <Label weight={weight.strong}>{props.title}</Label>
-        </View>
-      }
-      trigger={
-        <View
-          accessibilityLabel={props.label}
-          hoverStyle={canHover ? { backgroundColor: c().selected } : undefined}
-          focusVisibleStyle={focusRing(c(), "inset")}
-          style={{
-            ...row,
-            height: controlHeight.touch,
-            gap: space[8],
-            paddingHorizontal: space[12],
-            cursor: "pointer",
-            borderWidth: 1,
-            borderColor: c().border,
-            backgroundColor: c().canvas,
-            ...props.triggerStyle,
-          }}
-        >
-          <Label lines={1} style={{ flex: 1, minWidth: 0 }}>
-            {props.value}
-          </Label>
-          <Icon name="down" size={icon.md} tone="muted" />
-        </View>
-      }
-    >
-      <Each of={props.options}>
-        {(option) => (
-          <MenuRow
-            role="menuitemradio"
-            checked={option().checked}
-            label={option().label}
-            style={{
-              ...row,
-              height: space[48],
-              flexShrink: 0,
-              paddingHorizontal: space[16],
-              borderTopWidth: 1,
-              borderColor: c().border,
-              backgroundColor: option().checked ? c().selected : undefined,
-            }}
-            onSelect={option().onSelect}
-          >
-            <Label style={{ flex: 1 }}>{option().label}</Label>
-            <View
-              style={{ width: space[16], height: space[16], flexShrink: 0 }}
-            >
-              <If when={option().checked}>
-                <Icon name="check" size={icon.md} />
-              </If>
-            </View>
-          </MenuRow>
-        )}
-      </Each>
-    </MenuFrame>
-  );
-}
-
-/**
- * The form's selects. In the tablet and desktop layouts they open as the
- * design's popover under the trigger's left edge (so they never cover the
- * routine list), whatever the platform; the phone form has its own titled
- * sheet.
- */
-function ScheduleSelect(props: {
-  label: string;
-  /** The phone sheet's title. */
-  title?: string;
-  value: string;
-  options: ScheduleOption[];
-  tablet?: boolean;
-  phone?: boolean;
-  triggerStyle?: ViewStyle;
-}) {
-  const c = colors();
-  return (
-    <If
-      when={!props.phone}
-      else={
-        <PhoneSelect
-          label={props.label}
-          title={props.title ?? props.label}
-          value={props.value}
-          options={props.options}
-          triggerStyle={props.triggerStyle}
-        />
-      }
-    >
-      <MenuFrame
-        popupStyle={{
-          width: props.tablet
-            ? selectMenuWidth.tablet
-            : selectMenuWidth.desktop,
-          borderWidth: 1,
-          borderColor: c().strong,
-          backgroundColor: c().canvas,
-        }}
-        trigger={
-          <View
-            accessibilityLabel={props.label}
-            hitSlop={touchScreen ? 6 : undefined}
-            hoverStyle={
-              canHover ? { backgroundColor: c().selected } : undefined
-            }
-            focusVisibleStyle={focusRing(c(), "inset")}
-            style={{
-              ...row,
-              justifyContent: "space-between",
-              gap: props.tablet ? space[12] : space[8],
-              cursor: "pointer",
-              borderWidth: 1,
-              borderColor: c().border,
-              backgroundColor: c().canvas,
-              ...props.triggerStyle,
-            }}
-          >
-            <Label variant="small" lines={1} style={{ minWidth: 0 }}>
-              {props.value}
-            </Label>
-            <Icon
-              name="down"
-              size={icon.sm}
-              tone={props.tablet ? "ink" : "muted"}
-            />
-          </View>
-        }
-      >
-        <Each of={props.options}>
-          {(option) => (
-            <MenuRow
-              role="menuitemradio"
-              checked={option().checked}
-              label={option().label}
-              style={{
-                ...row,
-                height: touchScreen
-                  ? touchRow
-                  : props.tablet
-                    ? optionHeight.tablet
-                    : optionHeight.desktop,
-                gap: space[8],
-                paddingHorizontal: space[12],
-                backgroundColor: option().checked ? c().selected : undefined,
-              }}
-              onSelect={option().onSelect}
-            >
-              <Label variant="small" style={{ flex: 1 }}>
-                {option().label}
-              </Label>
-              <View
-                style={{ width: space[12], height: space[12], flexShrink: 0 }}
-              >
-                <If when={option().checked}>
-                  <Icon name="check" size={icon.sm} />
-                </If>
-              </View>
-            </MenuRow>
-          )}
-        </Each>
-      </MenuFrame>
-    </If>
-  );
-}
-
 export function RoutineEditor(props: {
   phone: boolean;
   inline?: boolean;
   tablet?: boolean;
   item?: RoutineInfo;
   brief?: string;
+  onPlugins?: () => void;
+  onPluginSettings?: () => void;
   onClose: () => void;
   onSave: (id: string) => void;
 }) {
   const host = useHost();
   const name = signal(props.item?.name ?? "");
   const brief = signal(props.brief ?? "");
-  const existing = props.item?.schedule;
-  const kind = signal<RoutineSchedule["kind"]>(existing?.kind ?? "weekly");
+  const existingSchedule = props.item?.schedule ?? null;
+  const existingTrigger = props.item?.trigger ?? null;
+  const initialKind: RoutineTriggerKind =
+    existingSchedule !== null && existingTrigger !== null
+      ? "both"
+      : existingTrigger !== null
+        ? "trigger"
+        : "schedule";
+  const triggerKind = signal<RoutineTriggerKind>(initialKind);
+
+  const kind = signal<RoutineSchedule["kind"]>(
+    existingSchedule?.kind ?? "weekly",
+  );
   const at = signal(
-    existing?.kind === "daily" || existing?.kind === "weekly"
-      ? existing.time
+    existingSchedule?.kind === "daily" || existingSchedule?.kind === "weekly"
+      ? existingSchedule.time
       : "08:00",
   );
   const days = signal<number[]>(
-    existing?.kind === "weekly" ? existing.days : [1],
+    existingSchedule?.kind === "weekly" ? existingSchedule.days : [1],
   );
   const every = signal<(typeof HOURLY_STEPS)[number]>(
-    existing?.kind === "hourly" ? existing.every : 1,
+    existingSchedule?.kind === "hourly" ? existingSchedule.every : 1,
   );
-  const cron = signal(existing?.kind === "cron" ? existing.cron : "");
+  const cron = signal(
+    existingSchedule?.kind === "cron" ? existingSchedule.cron : "",
+  );
   const kinds = {
     daily: "dailySchedule",
     weekly: "weeklySchedule",
     hourly: "hourlySchedule",
     cron: "cronSchedule",
   } as const;
+
+  const catalogTriggers = signal<TriggerCatalogItem[]>([]);
+  const catalogProviders = signal<TriggerProviderStatus[]>([]);
+  const catalogLoading = signal(false);
+  const catalogLoaded = signal(false);
+  const catalogError = signal("");
+  let catalogSeq = 0;
+
+  const triggerProvider = signal(existingTrigger?.provider ?? "");
+  const triggerSource = signal(existingTrigger?.source ?? "");
+  const triggerSlug = signal(existingTrigger?.trigger ?? "");
+  const triggerAccountId = signal<string | null>(
+    existingTrigger?.accountId ?? null,
+  );
+  const triggerMode = signal<RoutineTriggerMode | null>(
+    existingTrigger?.mode ?? null,
+  );
+  const pollingIntervalText = signal(
+    existingTrigger?.pollingIntervalMinutes
+      ? String(existingTrigger.pollingIntervalMinutes)
+      : "",
+  );
+  const triggerConfig = signal<Record<string, unknown>>(
+    existingTrigger?.config ? { ...existingTrigger.config } : {},
+  );
+  const triggerDrafts = signal<Record<string, string>>({});
+  const triggerTouched = signal<Record<string, boolean>>({});
+
   const c = colors();
   const type = textFaces();
+
+  const usesSchedule = () => triggerKind() !== "trigger";
+  const usesTrigger = () => triggerKind() !== "schedule";
+
   function schedule(): RoutineSchedule | undefined {
     switch (kind()) {
       case "daily":
@@ -316,27 +168,240 @@ export function RoutineEditor(props: {
         return undefined;
     }
   }
+
+  const selectedCatalogItem = () =>
+    catalogTriggers().find(
+      (item) =>
+        item.provider === triggerProvider() &&
+        item.source === triggerSource() &&
+        item.trigger === triggerSlug(),
+    );
+
+  const triggerFields = () =>
+    parseTriggerConfigSchema(
+      selectedCatalogItem()?.configSchema,
+      triggerConfig(),
+    );
+
+  function selectProvider(provider: string) {
+    if (triggerProvider() === provider) return;
+    triggerProvider.set(provider);
+    triggerSource.set("");
+    triggerSlug.set("");
+    triggerAccountId.set(null);
+    triggerMode.set(null);
+    pollingIntervalText.set("");
+    triggerConfig.set({});
+    triggerDrafts.set({});
+    triggerTouched.set({});
+
+    const sources = [
+      ...new Set(
+        catalogTriggers()
+          .filter((item) => item.provider === provider)
+          .map((item) => item.source),
+      ),
+    ];
+    if (sources.length === 1) selectSource(sources[0]!);
+  }
+
+  function selectSource(source: string) {
+    if (triggerSource() === source) return;
+    triggerSource.set(source);
+    triggerSlug.set("");
+    triggerAccountId.set(null);
+    triggerMode.set(null);
+    pollingIntervalText.set("");
+    triggerConfig.set({});
+    triggerDrafts.set({});
+    triggerTouched.set({});
+
+    const provider = triggerProvider();
+    const matched = catalogTriggers().filter(
+      (item) => item.provider === provider && item.source === source,
+    );
+    if (matched.length === 1) selectTriggerItem(matched[0]!);
+  }
+
+  function selectTriggerItem(item: TriggerCatalogItem) {
+    triggerProvider.set(item.provider);
+    triggerSource.set(item.source);
+    triggerSlug.set(item.trigger);
+    triggerAccountId.set(
+      item.accounts.length === 1 ? item.accounts[0]!.id : null,
+    );
+    triggerMode.set(item.modes.length > 0 ? item.modes[0]! : null);
+    pollingIntervalText.set("");
+    const parsed = parseTriggerConfigSchema(item.configSchema);
+    const nextState = initialTriggerConfigState(parsed);
+    triggerConfig.set(nextState.config);
+    triggerDrafts.set(nextState.drafts);
+    triggerTouched.set({});
+  }
+
+  async function loadTriggers(refresh = false) {
+    const seq = ++catalogSeq;
+    catalogLoading.set(true);
+    catalogError.set("");
+    try {
+      const result = await host.call<RoutineResults["triggers"]>(
+        "routines",
+        "triggers",
+        refresh ? { refresh: true } : {},
+      );
+      if (seq !== catalogSeq) return;
+      const items = Array.isArray(result.triggers) ? result.triggers : [];
+      const providers = Array.isArray(result.providers) ? result.providers : [];
+      catalogTriggers.set(items);
+      catalogProviders.set(providers);
+      catalogLoaded.set(true);
+
+      const matched = items.find(
+        (item) =>
+          item.provider === untracked(triggerProvider) &&
+          item.source === untracked(triggerSource) &&
+          item.trigger === untracked(triggerSlug),
+      );
+      if (matched) {
+        const existingConfig = untracked(triggerConfig);
+        const existingDrafts = untracked(triggerDrafts);
+        const touchedFields = untracked(triggerTouched);
+        const fields = parseTriggerConfigSchema(
+          matched.configSchema,
+          existingConfig,
+        );
+        const reconciled = initialTriggerConfigState(fields, existingConfig);
+        const nextDrafts = { ...reconciled.drafts };
+        for (const [key, value] of Object.entries(existingDrafts)) {
+          if (touchedFields[key] || !Object.hasOwn(nextDrafts, key)) {
+            nextDrafts[key] = value;
+          }
+        }
+        triggerConfig.set(reconciled.config);
+        triggerDrafts.set(nextDrafts);
+        if (!untracked(triggerAccountId) && matched.accounts.length === 1) {
+          triggerAccountId.set(matched.accounts[0]!.id);
+        }
+        if (!untracked(triggerMode) && matched.modes.length > 0) {
+          triggerMode.set(matched.modes[0]!);
+        }
+      } else if (!untracked(triggerProvider)) {
+        const providerIds = [...new Set(items.map((item) => item.provider))];
+        if (providerIds.length === 1) selectProvider(providerIds[0]!);
+      }
+    } catch (error) {
+      if (seq !== catalogSeq) return;
+      catalogError.set(problemText(error));
+    } finally {
+      if (seq === catalogSeq) catalogLoading.set(false);
+    }
+  }
+
+  effect(() => {
+    if (!usesTrigger()) return;
+    untracked(() => {
+      if (!catalogLoaded() && !catalogLoading()) void loadTriggers(false);
+    });
+  });
+
   const timezone = signal(
     props.item?.timezone ??
       new Intl.DateTimeFormat().resolvedOptions().timeZone ??
       "UTC",
   );
   const busy = signal(false);
+
   const preview = () => {
+    if (!usesSchedule()) return "";
     const selected = schedule();
     return selected ? upcomingTimes(selected, timezone()) : "";
   };
+
+  const effectiveTriggerMode = (): RoutineTriggerMode | null => {
+    const item = selectedCatalogItem();
+    return (
+      triggerMode() ?? (item && item.modes.length === 1 ? item.modes[0]! : null)
+    );
+  };
+
+  const pollingError = () => {
+    if (!usesTrigger() || effectiveTriggerMode() === "webhook") return "";
+    const raw = pollingIntervalText().trim();
+    if (raw === "") return "";
+    const num = Number(raw);
+    if (!Number.isInteger(num) || num < 1 || num > MAX_POLL_MINUTES) {
+      return uiText("triggerPollingIntervalInvalid");
+    }
+    return "";
+  };
+
+  const triggerValid = () => {
+    if (!usesTrigger()) return true;
+    if (
+      !triggerProvider().trim() ||
+      !triggerSource().trim() ||
+      !triggerSlug().trim()
+    ) {
+      return false;
+    }
+    const item = selectedCatalogItem();
+    if (item && item.accounts.length > 1 && !triggerAccountId()) return false;
+    if (pollingError() !== "") return false;
+    const fields = triggerFields();
+    const config = triggerConfig();
+    const drafts = triggerDrafts();
+    return fields.every(
+      (field) => validateTriggerField(field, config, drafts) === undefined,
+    );
+  };
+
   const valid = () =>
-    name().trim() && brief().trim() && timezone().trim() && schedule();
+    Boolean(
+      name().trim() &&
+        brief().trim() &&
+        timezone().trim() &&
+        (!usesSchedule() || schedule()) &&
+        triggerValid(),
+    );
+
   async function save() {
-    const selected = schedule();
-    if (!selected || !valid() || busy()) return;
+    const selectedSchedule = usesSchedule() ? schedule() : null;
+    if ((usesSchedule() && !selectedSchedule) || !valid() || busy()) return;
     busy.set(true);
+
+    let nextTrigger: RoutineTrigger | null = null;
+    if (usesTrigger()) {
+      const effectiveMode = effectiveTriggerMode();
+      const pollText = pollingIntervalText().trim();
+      const pollingIntervalMinutes =
+        effectiveMode !== "webhook" && pollText !== ""
+          ? Number(pollText)
+          : null;
+      nextTrigger = {
+        provider: triggerProvider().trim(),
+        source: triggerSource().trim(),
+        trigger: triggerSlug().trim(),
+        accountId: triggerAccountId() || null,
+        config: buildTriggerConfigPayload(
+          triggerFields(),
+          triggerConfig(),
+          triggerDrafts(),
+        ),
+        mode: effectiveMode,
+        pollingIntervalMinutes,
+      };
+    }
+
     const fields: RoutineFields = {
       name: name().trim(),
       brief: brief().trim(),
       timezone: timezone().trim(),
-      schedule: selected,
+      schedule: selectedSchedule ?? null,
+      ...(props.item
+        ? { trigger: nextTrigger }
+        : nextTrigger !== null
+          ? { trigger: nextTrigger }
+          : {}),
     };
     const result = await host.action(() =>
       host.call<RoutineResults["create"]>(
@@ -351,6 +416,7 @@ export function RoutineEditor(props: {
       props.onSave(result.routine.id);
     }
   }
+
   const zones = () => timeZones(timezone());
   // The phone sheet: 36px controls with 14px text, a footer bar under the fields.
   const sheet = () => props.phone && !props.inline;
@@ -540,156 +606,231 @@ export function RoutineEditor(props: {
         </Label>
       </If>
       {field(
-        uiText("schedule"),
-        <>
-          <View style={{ ...row, gap: space[8], flexWrap: "wrap" }}>
-            <ScheduleSelect
-              label={uiText("scheduleFrequency")}
-              title={uiText("frequency")}
-              value={uiText(kinds[kind()])}
-              tablet={props.tablet}
-              phone={props.phone}
-              triggerStyle={
-                sheet()
-                  ? kind() === "hourly"
-                    ? { flex: 1, minWidth: 0 }
-                    : {
-                        width:
-                          kind() === "cron"
-                            ? frequencyWidth.cron
-                            : frequencyWidth.other,
-                        flexShrink: 0,
-                      }
-                  : select()
-              }
-              options={(Object.keys(kinds) as RoutineSchedule["kind"][]).map(
-                (option) => ({
-                  label: uiText(kinds[option]),
-                  checked: kind() === option,
-                  onSelect: () => kind.set(option),
-                }),
-              )}
-            />
-            <If when={kind() === "weekly"}>
-              <View
-                style={{
-                  ...row,
-                  height: control(),
-                  borderWidth: 1,
-                  borderColor: props.tablet ? c().border : c().strong,
-                }}
-              >
-                <Each of={[1, 2, 3, 4, 5, 6, 0]}>
-                  {(day) => (
-                    <View
-                      role="button"
-                      accessibilityLabel={weekday(day())}
-                      accessibilityState={{
-                        selected: days().includes(day()),
-                      }}
-                      onPress={() =>
-                        days.update((previous) =>
-                          previous.includes(day())
-                            ? previous.filter((item) => item !== day())
-                            : [...previous, day()],
-                        )
-                      }
-                      focusVisibleStyle={focusRing(c(), "inset")}
-                      style={{
-                        ...(props.tablet
-                          ? { paddingHorizontal: space[8] }
-                          : { width: controlHeight.md }),
-                        alignSelf: "stretch",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        cursor: "pointer",
-                        backgroundColor: days().includes(day())
-                          ? c().button
-                          : undefined,
-                      }}
-                    >
-                      <Label
-                        variant="small"
-                        tone={
-                          days().includes(day())
-                            ? "buttonInk"
-                            : props.tablet
-                              ? "mutedInk"
-                              : "muted"
-                        }
-                      >
-                        {weekday(day())}
-                      </Label>
-                    </View>
-                  )}
-                </Each>
-              </View>
-            </If>
-            <If when={!props.tablet}>{time()}</If>
-            <If when={kind() === "hourly"}>
-              <ScheduleSelect
-                label={uiText("repeatEvery")}
-                value={interval(every())}
+        uiText("triggerKindLabel"),
+        <View style={{ alignItems: "flex-start" }}>
+          <Segmented<RoutineTriggerKind>
+            value={triggerKind()}
+            height={sheet() ? controlHeight.lg : controlHeight.md}
+            paddingHorizontal={sheet() ? space[8] : space[12]}
+            strong={Boolean(props.tablet)}
+            options={[
+              { value: "schedule", label: uiText("triggerKindSchedule") },
+              { value: "trigger", label: uiText("triggerKindEvent") },
+              { value: "both", label: uiText("triggerKindBoth") },
+            ]}
+            onChange={triggerKind.set}
+          />
+        </View>,
+      )}
+      <If when={usesTrigger()}>
+        <TriggerSection
+          phone={props.phone}
+          sheet={sheet()}
+          tablet={Boolean(props.tablet)}
+          controlHeight={control()}
+          controlInset={controlInset()}
+          catalogLoading={catalogLoading()}
+          catalogLoaded={catalogLoaded()}
+          catalogError={catalogError()}
+          triggers={catalogTriggers()}
+          providers={catalogProviders()}
+          provider={triggerProvider()}
+          source={triggerSource()}
+          triggerSlug={triggerSlug()}
+          accountId={triggerAccountId()}
+          mode={triggerMode()}
+          pollingIntervalText={pollingIntervalText()}
+          pollingError={pollingError()}
+          config={triggerConfig()}
+          drafts={triggerDrafts()}
+          touched={triggerTouched()}
+          fields={triggerFields()}
+          selectedItem={selectedCatalogItem()}
+          editingExisting={Boolean(existingTrigger)}
+          onRefresh={() => void loadTriggers(true)}
+          onSelectProvider={selectProvider}
+          onSelectSource={selectSource}
+          onSelectTrigger={selectTriggerItem}
+          onSelectAccount={(id) => triggerAccountId.set(id)}
+          onSelectMode={(mode) => {
+            triggerMode.set(mode);
+            if (mode !== "poll") pollingIntervalText.set("");
+          }}
+          onChangePollingInterval={pollingIntervalText.set}
+          onChangeConfig={(key, value) =>
+            triggerConfig.update((prev) => {
+              const next = { ...prev };
+              if (value === undefined) delete next[key];
+              else next[key] = value;
+              return next;
+            })
+          }
+          onChangeDraft={(key, text) => {
+            triggerDrafts.update((prev) => ({ ...prev, [key]: text }));
+            triggerTouched.update((prev) => ({ ...prev, [key]: true }));
+          }}
+          onBlurField={(key) =>
+            triggerTouched.update((prev) => ({ ...prev, [key]: true }))
+          }
+          onOpenPlugins={props.onPlugins}
+          onOpenPluginSettings={props.onPluginSettings}
+        />
+      </If>
+      <If when={usesSchedule()}>
+        {field(
+          triggerKind() === "both"
+            ? uiText("scheduleFallbackLabel")
+            : uiText("schedule"),
+          <>
+            <View style={{ ...row, gap: space[8], flexWrap: "wrap" }}>
+              <EditorSelect
+                label={uiText("scheduleFrequency")}
+                title={uiText("frequency")}
+                value={uiText(kinds[kind()])}
                 tablet={props.tablet}
                 phone={props.phone}
                 triggerStyle={
                   sheet()
-                    ? { width: frequencyWidth.other, flexShrink: 0 }
+                    ? kind() === "hourly"
+                      ? { flex: 1, minWidth: 0 }
+                      : {
+                          width:
+                            kind() === "cron"
+                              ? frequencyWidth.cron
+                              : frequencyWidth.other,
+                          flexShrink: 0,
+                        }
                     : select()
                 }
-                options={HOURLY_STEPS.map((hours) => ({
-                  label: interval(hours),
-                  checked: every() === hours,
-                  onSelect: () => every.set(hours),
-                }))}
+                options={(Object.keys(kinds) as RoutineSchedule["kind"][]).map(
+                  (option) => ({
+                    label: uiText(kinds[option]),
+                    checked: kind() === option,
+                    onSelect: () => kind.set(option),
+                  }),
+                )}
               />
-            </If>
-            <If when={kind() === "cron"}>
-              <Field
-                label={uiText("cronExpression")}
-                placeholder="0 8 * * 1-5"
-                value={cron()}
-                onChange={cron.set}
-                style={{
-                  ...input(),
-                  ...(sheet()
-                    ? { flex: 1, minWidth: 0 }
-                    : { width: cronWidth }),
-                }}
-              />
-            </If>
-          </View>
-          <If when={kind() === "cron" && !props.tablet}>
-            <Label variant="small" tone="muted">
-              {uiText("minuteHourDayOfMonthMonth")}
-            </Label>
-          </If>
-          <If
-            when={props.tablet}
-            else={
-              <If when={preview()}>
-                <Label variant="small" tone="muted">
-                  {preview()}
-                </Label>
+              <If when={kind() === "weekly"}>
+                <View
+                  style={{
+                    ...row,
+                    height: control(),
+                    borderWidth: 1,
+                    borderColor: props.tablet ? c().border : c().strong,
+                  }}
+                >
+                  <Each of={[1, 2, 3, 4, 5, 6, 0]}>
+                    {(day) => (
+                      <View
+                        role="button"
+                        accessibilityLabel={weekday(day())}
+                        accessibilityState={{
+                          selected: days().includes(day()),
+                        }}
+                        onPress={() =>
+                          days.update((previous) =>
+                            previous.includes(day())
+                              ? previous.filter((item) => item !== day())
+                              : [...previous, day()],
+                          )
+                        }
+                        focusVisibleStyle={focusRing(c(), "inset")}
+                        style={{
+                          ...(props.tablet
+                            ? { paddingHorizontal: space[8] }
+                            : { width: controlHeight.md }),
+                          alignSelf: "stretch",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                          backgroundColor: days().includes(day())
+                            ? c().button
+                            : undefined,
+                        }}
+                      >
+                        <Label
+                          variant="small"
+                          tone={
+                            days().includes(day())
+                              ? "buttonInk"
+                              : props.tablet
+                                ? "mutedInk"
+                                : "muted"
+                          }
+                        >
+                          {weekday(day())}
+                        </Label>
+                      </View>
+                    )}
+                  </Each>
+                </View>
               </If>
-            }
-          >
-            <View style={{ ...row, gap: space[8], flexWrap: "wrap" }}>
-              {time()}
+              <If when={!props.tablet}>{time()}</If>
+              <If when={kind() === "hourly"}>
+                <EditorSelect
+                  label={uiText("repeatEvery")}
+                  value={interval(every())}
+                  tablet={props.tablet}
+                  phone={props.phone}
+                  triggerStyle={
+                    sheet()
+                      ? { width: frequencyWidth.other, flexShrink: 0 }
+                      : select()
+                  }
+                  options={HOURLY_STEPS.map((hours) => ({
+                    label: interval(hours),
+                    checked: every() === hours,
+                    onSelect: () => every.set(hours),
+                  }))}
+                />
+              </If>
               <If when={kind() === "cron"}>
-                <Label variant="caption" tone="muted">
-                  {uiText("minuteHourDayOfMonthMonth")}
-                </Label>
-              </If>
-              <If when={preview()}>
-                <Label variant="caption" tone="muted" style={{ flex: 1 }}>
-                  {preview()}
-                </Label>
+                <Field
+                  label={uiText("cronExpression")}
+                  placeholder="0 8 * * 1-5"
+                  value={cron()}
+                  onChange={cron.set}
+                  style={{
+                    ...input(),
+                    ...(sheet()
+                      ? { flex: 1, minWidth: 0 }
+                      : { width: cronWidth }),
+                  }}
+                />
               </If>
             </View>
-          </If>
-        </>,
-      )}
+            <If when={kind() === "cron" && !props.tablet}>
+              <Label variant="small" tone="muted">
+                {uiText("minuteHourDayOfMonthMonth")}
+              </Label>
+            </If>
+            <If
+              when={props.tablet}
+              else={
+                <If when={preview()}>
+                  <Label variant="small" tone="muted">
+                    {preview()}
+                  </Label>
+                </If>
+              }
+            >
+              <View style={{ ...row, gap: space[8], flexWrap: "wrap" }}>
+                {time()}
+                <If when={kind() === "cron"}>
+                  <Label variant="caption" tone="muted">
+                    {uiText("minuteHourDayOfMonthMonth")}
+                  </Label>
+                </If>
+                <If when={preview()}>
+                  <Label variant="caption" tone="muted" style={{ flex: 1 }}>
+                    {preview()}
+                  </Label>
+                </If>
+              </View>
+            </If>
+          </>,
+        )}
+      </If>
       {field(
         uiText("timeZone"),
         <If

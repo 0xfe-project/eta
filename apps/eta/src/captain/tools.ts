@@ -1388,10 +1388,95 @@ export function captainSessionTools(
       { description: "When it runs, in timezone's wall clock" },
     );
 
+    const triggerSchema = Type.Object(
+      {
+        provider: Type.String({
+          description:
+            "Trigger provider id (e.g. 'composio' or 'rss'). Discover via list_triggers.",
+        }),
+        source: Type.String({
+          description: "External toolkit or source slug (e.g. 'github').",
+        }),
+        trigger: Type.String({
+          description: "Trigger slug (e.g. 'GITHUB_COMMIT_EVENT').",
+        }),
+        accountId: Type.Optional(
+          Type.Union([
+            Type.String({
+              description:
+                "Connected account id from list_triggers when multiple accounts exist.",
+            }),
+            Type.Null(),
+          ]),
+        ),
+        config: Type.Optional(
+          Type.Record(Type.String(), Type.Unknown(), {
+            description:
+              "Trigger parameters matching the trigger's configSchema.",
+          }),
+        ),
+        mode: Type.Optional(
+          Type.Union([
+            Type.Literal("webhook"),
+            Type.Literal("poll"),
+            Type.Null(),
+          ]),
+        ),
+        pollingIntervalMinutes: Type.Optional(
+          Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+        ),
+      },
+      {
+        description:
+          "External event trigger configuration. Omit or set null for schedule-only routines.",
+      },
+    );
+
+    const listTriggers = defineTool({
+      name: "list_triggers",
+      description:
+        "List available external event triggers from registered providers (such as Composio and built-in RSS). Shows provider status and triggers with source toolkit, trigger slug, configSchema, payloadSchema, and active connected accounts. Call this before proposing a triggered routine.",
+      parameters: Type.Object({
+        provider: Type.Optional(
+          Type.String({
+            description: "Filter by provider id, e.g. 'composio' or 'rss'",
+          }),
+        ),
+        source: Type.Optional(
+          Type.String({
+            description: "Filter by toolkit/source slug, e.g. 'github'",
+          }),
+        ),
+        query: Type.Optional(
+          Type.String({
+            description: "Search keyword across name/description",
+          }),
+        ),
+        refresh: Type.Optional(
+          Type.Boolean({ description: "Refresh catalog bypassing cache" }),
+        ),
+      }),
+      execute: async (args) => {
+        try {
+          const catalog = await deps.service.routines.triggers({
+            ...(args.provider === undefined ? {} : { provider: args.provider }),
+            ...(args.source === undefined ? {} : { source: args.source }),
+            ...(args.query === undefined ? {} : { query: args.query }),
+            ...(args.refresh === undefined ? {} : { refresh: args.refresh }),
+          });
+          return text(json(catalog));
+        } catch (error) {
+          return toolError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    });
+
     const listRoutines = defineTool({
       name: "list_routines",
       description:
-        "List the routines: the work you run on a schedule. Each has its id, name, schedule, time zone, whether it is enabled, its current brief and its latest runs (status and report title).",
+        "List the routines: work you run on a schedule and/or external event trigger. Each has its id, name, schedule, trigger binding, time zone, whether it is enabled, its current brief and its latest runs.",
       parameters: Type.Object({}),
       execute() {
         const routines = deps.service.routines;
@@ -1401,11 +1486,13 @@ export function captainSessionTools(
               id: routine.id,
               name: routine.name,
               schedule: routine.schedule,
+              trigger: routines.store.triggerView(routine.id) ?? null,
               timezone: routine.timezone,
               enabled: routine.enabled,
               brief: routines.store.brief(routine.id),
               runs: routines.store.runs(routine.id, 5).map((run) => ({
                 id: run.id,
+                startedBy: run.startedBy,
                 status: run.status,
                 startedAt: new Date(run.startedAt).toISOString(),
                 title: run.title,
@@ -1420,23 +1507,36 @@ export function captainSessionTools(
     const proposeRoutine = defineTool({
       name: "propose_routine",
       description: [
-        "Propose a routine: work you will do on a schedule, each time in a new session of your own with all your tools. Nothing is created yet: the proposal appears as a card in this conversation, and only the user's confirmation creates it.",
-        'Use it when the user asks for something to be done regularly ("every Monday morning, …").',
-        "brief is what each run is asked to do, written as instructions to yourself: what to check or do, and what to report. If the user wants the result sent somewhere (a group), say so in the brief; there is no other setting for it. A routine has no agent and no model: it is yours.",
+        "Propose a routine: work you will do on a schedule and/or external event trigger, each time in a new session of your own. Nothing is created yet: the proposal appears as a card in this conversation, and only the user's confirmation creates it.",
+        'Use it for recurring tasks ("every Monday morning, …") or event-driven watches ("whenever a GitHub commit lands, …"). Provide schedule, trigger, or both (at least one is required).',
+        "When configuring an event trigger, call list_triggers first to inspect exact provider/source/trigger slugs, required config fields, and connected account IDs.",
+        "brief is what each run is asked to do, written as instructions to yourself: what to check or do, and what to report. If the user wants external actions executed (or deep API reads beyond the trigger payload), delegate to an agent that holds those plugins using dispatch_task, or send results to a group.",
         "timezone is an IANA zone such as Asia/Shanghai: ask the user if you do not know theirs.",
         "Do not wait for the decision: end your turn. A message here will tell you the outcome.",
       ].join(" "),
       parameters: Type.Object({
         name: Type.String({ description: "A short name" }),
         brief: Type.String({ description: "What each run is asked to do" }),
-        schedule,
+        schedule: Type.Optional(
+          Type.Union([schedule, Type.Null()], {
+            description:
+              "Cron/clock schedule in timezone's wall clock, or null/omitted for trigger-only routines.",
+          }),
+        ),
+        trigger: Type.Optional(Type.Union([triggerSchema, Type.Null()])),
         timezone: Type.String(),
       }),
       execute: async (args) => {
         try {
           const { operation } = await deps.service.proposals.propose(
             deps.service.propose.routine,
-            args,
+            {
+              name: args.name,
+              brief: args.brief,
+              schedule: args.schedule ?? null,
+              ...(args.trigger === undefined ? {} : { trigger: args.trigger }),
+              timezone: args.timezone,
+            },
             await proposalOrigin(),
           );
           return text(
@@ -1454,19 +1554,20 @@ export function captainSessionTools(
     const updateRoutine = defineTool({
       name: "update_routine",
       description:
-        "Change a routine the user already has: rename it, rewrite its brief (written as a new version; the old ones are kept), change its schedule or time zone, or disable and enable it. Only what you give changes. Do it when the user asks you to.",
+        "Change a routine the user already has: rename it, rewrite its brief (written as a new version; the old ones are kept), change or clear its schedule or trigger, change its time zone, or disable and enable it. Only what you give changes. Do it when the user asks you to.",
       parameters: Type.Object({
         routineId: Type.String(),
         name: Type.Optional(Type.String()),
         brief: Type.Optional(Type.String()),
-        schedule: Type.Optional(schedule),
+        schedule: Type.Optional(Type.Union([schedule, Type.Null()])),
+        trigger: Type.Optional(Type.Union([triggerSchema, Type.Null()])),
         timezone: Type.Optional(Type.String()),
         enabled: Type.Optional(Type.Boolean()),
       }),
       execute: async (args) => {
         try {
           const { routineId, ...patch } = args;
-          const routine = deps.service.routines.update(routineId, patch);
+          const routine = await deps.service.routines.update(routineId, patch);
           await deps.service.audit.record({
             action: "captain.routine.update",
             actorAgentId: captain.agentId,
@@ -1477,6 +1578,8 @@ export function captainSessionTools(
               id: routine.id,
               name: routine.name,
               schedule: routine.schedule,
+              trigger:
+                deps.service.routines.store.triggerView(routine.id) ?? null,
               timezone: routine.timezone,
               enabled: routine.enabled,
               briefVersion: deps.service.routines.store.brief(routine.id)
@@ -1527,6 +1630,7 @@ export function captainSessionTools(
       requestDeleteAgent,
       recommendAcceptance,
       post,
+      listTriggers,
       listRoutines,
       proposeRoutine,
       updateRoutine,

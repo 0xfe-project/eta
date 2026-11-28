@@ -629,6 +629,8 @@ export function Workspace(props: {
           <If when={page() === "routines"}>
             <Routines
               onCaptain={() => navigate("captain")}
+              onPlugins={() => navigate("plugins")}
+              onPluginSettings={() => showSettings("Plugins")}
               initialId={routineId()}
               layout={props.layout}
               onBack={

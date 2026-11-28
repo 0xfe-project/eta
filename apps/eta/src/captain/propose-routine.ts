@@ -10,13 +10,28 @@
 import type {
   CaptainRoutineProposal,
   CaptainRoutineResult,
+  RoutineSchedule,
+  RoutineTrigger,
 } from "@eta/client-contracts";
 import type { RoutineFieldsInput, RoutineService } from "../routines/service";
 import type { ProposalKind, ProposalOrigin } from "./proposals";
+import { describeTrigger } from "../routines/prompts";
 import { describeSchedule } from "../routines/schedule";
 
 /** A routine proposal as it is stored, without where it was proposed. */
 type RoutineProposal = Omit<CaptainRoutineProposal, keyof ProposalOrigin>;
+
+function describeWhen(
+  schedule: RoutineSchedule | null,
+  trigger: RoutineTrigger | null,
+): string {
+  if (schedule !== null && trigger !== null) {
+    return `${describeSchedule(schedule)} + ${describeTrigger(trigger)}`;
+  }
+  if (schedule !== null) return describeSchedule(schedule);
+  if (trigger !== null) return `on ${describeTrigger(trigger)}`;
+  return "";
+}
 
 export function routineProposals(deps: {
   routines: () => RoutineService;
@@ -25,33 +40,52 @@ export function routineProposals(deps: {
     kind: "create_routine",
     noun: "routine",
 
-    /** Refused: what the routines page refuses (no name or brief, a zone or schedule that cannot run). */
+    /** Refused: what the routines page refuses (no name or brief, a zone or schedule/trigger that cannot run). */
     async check(input) {
       const fields = deps.routines().check(input);
-      return { ...fields, scheduleText: describeSchedule(fields.schedule) };
+      return {
+        name: fields.name,
+        brief: fields.brief,
+        schedule: fields.schedule,
+        ...(fields.trigger === null ? {} : { trigger: fields.trigger }),
+        timezone: fields.timezone,
+        scheduleText: describeWhen(fields.schedule, fields.trigger),
+      };
     },
 
     again: (proposal) => ({
       name: proposal.name,
       brief: proposal.brief,
       schedule: proposal.schedule,
+      ...(proposal.trigger === undefined ? {} : { trigger: proposal.trigger }),
       timezone: proposal.timezone,
     }),
 
     async apply(proposal) {
-      const routine = deps.routines().create({
+      const routine = await deps.routines().create({
         name: proposal.name,
         brief: proposal.brief,
         schedule: proposal.schedule,
+        ...(proposal.trigger === undefined
+          ? {}
+          : { trigger: proposal.trigger }),
         timezone: proposal.timezone,
         enabled: true,
       });
       return { routineId: routine.id, name: routine.name };
     },
 
-    created: (_proposal, result) => [
-      `routineId: ${result.routineId}`,
-      "It is on the clock now. Each run is a new session of yours, given its brief; list_routines and update_routine change it.",
-    ],
+    created: (proposal, result) => {
+      const when =
+        proposal.trigger === undefined || proposal.trigger === null
+          ? "It is on the clock now."
+          : proposal.schedule !== null
+            ? "It is on the clock and subscribed to its event trigger now."
+            : "It is subscribed to its event trigger now.";
+      return [
+        `routineId: ${result.routineId}`,
+        `${when} Each run is a new session of yours, given its brief; list_routines and update_routine change it.`,
+      ];
+    },
   };
 }

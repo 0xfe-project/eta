@@ -14,6 +14,7 @@ import { EmptyState } from "../../components/empty-state";
 import { StatusDot } from "../../components/status-dot";
 import { space } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { RunSourceBadge } from "./history";
 import { routineTime } from "./schedule";
 
 export function PendingReports(props: {
@@ -71,7 +72,7 @@ export function PendingReports(props: {
                   borderColor: c().strong,
                 }}
               >
-                <View style={{ ...row, gap: space[4] }}>
+                <View style={{ ...row, gap: space[4], flexWrap: "wrap" }}>
                   <StatusDot
                     color={entry().run.status === "sent" ? c().blue : c().red}
                   />
@@ -82,6 +83,7 @@ export function PendingReports(props: {
                       routineTime: routineTime(entry().run.startedAt),
                     })}
                   </Label>
+                  <RunSourceBadge startedBy={entry().run.startedBy} />
                 </View>
                 <Label variant="small">{`${entry().routine.name}: ${entry().run.title ?? uiText("noReport")}`}</Label>
                 <View
