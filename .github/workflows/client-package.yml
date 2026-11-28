@@ -27,11 +27,12 @@ jobs:
           - target: macos
             runner: macos-latest
             file: Eta.zip
+          # Same glibc bound as the desktop release: the shell is linked on this runner.
           - target: linux
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             file: Eta.tar.gz
           - target: linux
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             file: Eta.flatpak
             format: flatpak
           - target: windows

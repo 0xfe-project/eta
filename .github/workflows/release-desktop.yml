@@ -130,8 +130,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # 24.04, not ubuntu-latest. nsh-directories is compiled into this shell, so the
+          # binary takes the runner's glibc. ubuntu-latest's is 2.43, which
+          # org.gnome.Platform//49 does not have; 24.04's is old enough for that runtime.
           - target: linux
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             desktop: eta-desktop-linux-x64.tar.gz
           - target: macos
             runner: macos-latest

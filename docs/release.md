@@ -104,7 +104,7 @@ flatpak install --user eta-desktop-linux-x64.flatpak
 flatpak run dev.eta.client
 ```
 
-The bundle runs on `org.gnome.Platform//49` (with Flathub runtime-repo metadata embedded), so GTK 4 and WebKitGTK 6.0 come from the Flatpak runtime rather than the host OS.
+The bundle runs on `org.gnome.Platform//49` (with Flathub runtime-repo metadata embedded), so GTK 4 and WebKitGTK 6.0 come from the Flatpak runtime rather than the host OS. The Linux package is built on Ubuntu 24.04: `nsh-directories` is compiled into the shell, and a newer runner's glibc (2.43 on the current `ubuntu-latest`) is not in that runtime.
 
 - **Sandbox permissions**: uses Native Shell's minimal defaults (`--share=ipc`, `--socket=wayland`, `--socket=fallback-x11`, `--device=dri`, `--share=network`).
 - **Connecting to a host**: works seamlessly with **Connect to an existing host**, including an `eta-host` running on this machine (`http://127.0.0.1:8787`) or a remote/Tailscale host. Inside Flatpak, Eta detects the sandbox (`FLATPAK_ID` / `/app/`), disables **Run on this computer** in the connection screen, and prompts you to install `eta-host` directly on the host OS (see [Self-hosting](self-hosting.md)) so agents can reach your real workspaces, tools, and systemd user services.
