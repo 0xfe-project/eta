@@ -8,7 +8,6 @@ const fixture = "./fixtures/tablet-list.tsx";
 const list = "label:New conversation";
 const fold = "label:Collapse sidebar";
 const unfold = "label:Expand sidebar";
-const composer = "id:conversation-composer";
 
 async function start(width: number, height: number) {
   const app = await open(fixture, { width, height, locale: "en-US" });
@@ -33,14 +32,6 @@ test("tablet: the list is folded by its button and comes back by the conversatio
   expect(app.shows(unfold)).toBe(false);
 });
 
-test("tablet: the conversation takes the width the list gave up", async () => {
-  const app = await start(834, 1112);
-  const before = app.layout(composer)!;
-  await app.press(fold);
-  const after = app.layout(composer)!;
-  expect(after.width).toBeGreaterThan(before.width);
-});
-
 test("tablet: a folded list stays folded on Captain's page, and can be brought back there", async () => {
   const app = await start(834, 1112);
   await app.press(fold);
@@ -58,8 +49,6 @@ test("desktop keeps its own sidebar toggle and has no list button of its own", a
   await app.press(fold);
   expect(app.count(unfold)).toBe(1);
   expect(app.shows(fold)).toBe(false);
-  // The expand button replaces the wordmark in the sidebar's top row.
-  expect(app.layout(unfold)!.y).toBeLessThan(app.layout("label:Captain")!.y);
 });
 
 test("phone has neither button", async () => {

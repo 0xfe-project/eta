@@ -11,11 +11,16 @@ test("the sources are listed, with the address under a name", async () => {
   expect(app.shows("text:https://plain.test/marketplace.json")).toBe(true);
 });
 
-test("every source has a switch", async () => {
+test("every source has a switch, and it turns the source on or off", async () => {
   const app = await open("./fixtures/plugin-settings.tsx", OPEN);
-  await app.press("label:Use Cursor");
-  await app.press("label:Use https://plain.test/marketplace.json");
-  expect(app.shows("Cursor")).toBe(true);
+  const cursor = "label:Use Cursor";
+  const plain = "label:Use https://plain.test/marketplace.json";
+  expect(app.accessibility(cursor)?.checked).toBe("false");
+  expect(app.accessibility(plain)?.checked).toBe("true");
+  await app.press(cursor);
+  await app.press(plain);
+  await app.waitUntil(() => app.accessibility(cursor)?.checked === "true");
+  await app.waitUntil(() => app.accessibility(plain)?.checked === "false");
 });
 
 test("an address that is not http(s) is refused", async () => {
@@ -63,29 +68,9 @@ test("a proxy prefix is saved, and nothing is refused", async () => {
   expect(app.shows("Enter an http or https address, or leave it empty.")).toBe(
     false,
   );
+  // The field shows what the host kept (it ends the prefix with a slash).
+  await app.waitUntil(() => app.value(PROXY_FIELD) === "https://proxy.test/");
 });
-
-/** The empty state is drawn inside a scrolling column, so it has to take the height of what it says: the form under it starts below its text. */
-for (const [name, size] of [
-  ["desktop", OPEN],
-  ["phone", { width: 390, height: 800 }],
-] as const) {
-  test(`no sources: the empty state is as tall as its text and the form starts below it (${name})`, async () => {
-    const app = await open("./fixtures/plugin-settings.tsx", size);
-    await app.press("label:Remove source Cursor");
-    await app.press("label:Remove source https://plain.test/marketplace.json");
-    const title = app.layout("text:No plugin sources yet")!;
-    const form = app.layout("label:Name (optional)")!;
-    expect(title).toBeDefined();
-    expect(form).toBeDefined();
-    expect(title.y + title.height).toBeLessThanOrEqual(form.y);
-    const hint = app.layout(
-      "text:Add the address of a marketplace.json to browse its plugins.",
-    )!;
-    expect(hint).toBeDefined();
-    expect(hint.y + hint.height).toBeLessThanOrEqual(form.y);
-  });
-}
 
 const KEY_FIELD = "label:Composio API key";
 

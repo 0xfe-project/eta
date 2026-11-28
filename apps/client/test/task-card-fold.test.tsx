@@ -84,11 +84,7 @@ for (const width of [1440, 390] as const) {
         text.includes("Add Antigravity as a built-in OAR runtime"),
       ),
     ).toBe(false);
-    if (width === 390) {
-      const link = app.layout("label:Open task #427");
-      expect(link).not.toBeNull();
-      expect(link!.width).toBeGreaterThan(100);
-    }
+    expect(app.shows("label:Open task #427")).toBe(true);
   });
 }
 

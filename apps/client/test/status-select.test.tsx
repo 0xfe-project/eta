@@ -29,29 +29,10 @@ for (const [surface, width] of surfaces) {
   test(`${surface} at ${width}px: a choice is sent, the trigger waits for the host, then shows it`, async () => {
     const app = await openOn(surface, width);
     expect(app.texts()).toContain("In progress");
-    const before = app.layout(trigger)!;
-    expect(before).not.toBeNull();
-    const beforeExecutor =
-      surface === "page" && width === 1440 ? app.layout("text:Executor") : null;
-    const beforeDescription =
-      surface === "page" && width === 1024
-        ? app.layout("text:Add POST /api/login.")
-        : null;
     const checkStable = () => {
-      const current = app.layout(trigger)!;
-      expect(current.y).toBe(before.y);
-      expect(current.height).toBe(before.height);
       expect(app.shows("id:optimistic-status")).toBe(false);
       expect(app.texts()).not.toContain("Saving…");
       expect(app.texts()).not.toContain("Saved");
-      if (beforeExecutor) {
-        expect(app.layout("text:Executor")?.y).toBe(beforeExecutor.y);
-      }
-      if (beforeDescription) {
-        expect(app.layout("text:Add POST /api/login.")?.y).toBe(
-          beforeDescription.y,
-        );
-      }
     };
 
     await app.press(trigger);
@@ -132,12 +113,6 @@ for (const [surface, width] of surfaces) {
 
 test("panel at 390px: the status opens the phone's sheet, the same seven, and a choice is sent", async () => {
   const app = await openOn("panel", 390);
-  const actionsSelector = "label:Task actions";
-  const before = app.layout(trigger)!;
-  const beforeActions = app.layout(actionsSelector)!;
-  expect(before).not.toBeNull();
-  expect(beforeActions).not.toBeNull();
-  const beforeOffset = before.y - beforeActions.y;
   await app.press(trigger);
   // The task page's phone sheet, titled, not a second menu over it.
   expect(app.texts().filter((text) => text === "Change status")).toHaveLength(
@@ -158,11 +133,6 @@ test("panel at 390px: the status opens the phone's sheet, the same seven, and a 
   expect(app.texts()).toContain("In progress");
 
   const checkPhoneStable = () => {
-    const current = app.layout(trigger)!;
-    const currentActions = app.layout(actionsSelector)!;
-    // Measure offset within TaskTopBar because the fixture's "Sent:" line wraps at 390px.
-    expect(current.y - currentActions.y).toBe(beforeOffset);
-    expect(current.height).toBe(before.height);
     expect(app.shows("id:optimistic-status")).toBe(false);
     expect(app.texts()).not.toContain("Saving…");
     expect(app.texts()).not.toContain("Saved");

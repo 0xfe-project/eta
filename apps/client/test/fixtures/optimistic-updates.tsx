@@ -457,24 +457,15 @@ function Fixture(props: { mode: string }) {
         <If when={props.mode === "plugin"}>
           <View testID="plugin-compact" style={{ ...row, gap: space[8] }}>
             <PluginEnabled item={compactPlugin()} compact />
-            <View testID="plugin-compact-after">
-              <Label>After compact</Label>
-            </View>
           </View>
           <View testID="plugin-full">
             <PluginEnabled item={fullPlugin()} />
-          </View>
-          <View testID="plugin-after">
-            <Label>After plugin</Label>
           </View>
           <View testID="composio-row" style={{ ...row, gap: space[8] }}>
             <ComposioPluginSwitch
               view={composioPlugin()}
               onChanged={() => {}}
             />
-          </View>
-          <View testID="composio-after">
-            <Label>After composio</Label>
           </View>
           <View style={{ ...row, gap: space[8] }}>
             <StewardMenu
@@ -485,9 +476,6 @@ function Fixture(props: { mode: string }) {
               ]}
               current={steward()}
             />
-            <View testID="steward-after">
-              <Label>After steward</Label>
-            </View>
           </View>
         </If>
 

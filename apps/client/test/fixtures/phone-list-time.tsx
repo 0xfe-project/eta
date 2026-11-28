@@ -6,11 +6,10 @@ import type {
   ProjectView,
 } from "@eta/client-contracts";
 import { mount, Storage, View } from "nsh";
-import { grow, Label, Screen } from "../../src/components";
-import { space } from "../../src/components/tokens";
+import { grow, Screen } from "../../src/components";
 import { ChatList } from "../../src/navigation/chat-list";
 import { Pending } from "../../src/pages/chat/pending";
-import { createHost, Host, relativeTime } from "../../src/services/host";
+import { createHost, Host } from "../../src/services/host";
 
 const agentTemplate: Omit<AgentView, "id" | "name" | "systemRole"> = {
   instructions: "",
@@ -51,7 +50,7 @@ const projects: ProjectView[] = [
   },
 ];
 
-function Fixture(props: { mode: string; showRefs: boolean }) {
+function Fixture(props: { mode: string }) {
   const now = Date.now();
   const times = [
     now - 10_000,
@@ -247,31 +246,12 @@ function Fixture(props: { mode: string; showRefs: boolean }) {
               />
             </If>
           </View>
-          <If when={props.showRefs}>
-            <View
-              testID="time-refs"
-              style={{
-                alignItems: "flex-start",
-                paddingHorizontal: space[16],
-                paddingVertical: space[4],
-              }}
-            >
-              <Each of={[...times]}>
-                {(at) => (
-                  <Label variant="caption" tone="muted" lines={1}>
-                    {relativeTime(at())}
-                  </Label>
-                )}
-              </Each>
-            </View>
-          </If>
         </View>
       </Host.Provider>
     </Screen.Provider>
   );
 }
 
-void Promise.all([Storage.getItem("mode"), Storage.getItem("refs")]).then(
-  ([mode, refs]) =>
-    mount(() => <Fixture mode={mode ?? "groups"} showRefs={refs === "1"} />),
+void Storage.getItem("mode").then((mode) =>
+  mount(() => <Fixture mode={mode ?? "groups"} />),
 );

@@ -58,6 +58,18 @@ const catalog: ThinkingCatalog = {
         },
       ],
     },
+    {
+      id: "claude",
+      status: "available",
+      models: [
+        {
+          id: "sonnet",
+          name: "Sonnet",
+          default: true,
+          efforts: ["low", "medium", "high", "ultra"],
+        },
+      ],
+    },
   ],
 };
 
@@ -119,6 +131,13 @@ describe("the levels an agent can be set to", () => {
       "ultra",
     ]);
     expect(levels("codex", null)).toEqual(["off", "low", "high", "ultra"]);
+    // A Claude Code model that lists ultra but no `none`: ultra, and no off.
+    expect(levels("claude", "claude:sonnet")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "ultra",
+    ]);
     expect(levels("eta", "proxy:deepseek-v4.1-flash")).not.toContain("ultra");
   });
 

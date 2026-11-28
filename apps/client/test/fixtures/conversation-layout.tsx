@@ -125,7 +125,7 @@ function captainReviewTimeline(): TimelineSection {
 
 /**
  * The conversation page in one of its states, picked by the opening URL:
- * eta://fixture/loading (no timeline yet), /empty, /short, /offline (a phone
+ * eta://fixture/loading (no timeline yet), /empty, /short, /long (40 messages, for the rail), /offline (a phone
  * that lost the host before any message arrived), /held (Ada busy, one message
  * waiting for her, with the reply the host queued for it; "Deliver" hands it
  * to her lane as the host does), /captain-review (Captain replying to a
@@ -148,11 +148,21 @@ function Fixture() {
             hasMore: false,
             held: [],
           }
-        : scenario === "held"
-          ? heldTimeline(false)
-          : scenario === "captain-review"
-            ? captainReviewTimeline()
-            : undefined;
+        : scenario === "long"
+          ? {
+              messages: Array.from({ length: 40 }, (_, i) =>
+                i % 2 === 0
+                  ? message(i + 1, "user", `Question ${i / 2 + 1}`)
+                  : message(i + 1, "agent", `Answer ${(i + 1) / 2}`),
+              ),
+              hasMore: false,
+              held: [],
+            }
+          : scenario === "held"
+            ? heldTimeline(false)
+            : scenario === "captain-review"
+              ? captainReviewTimeline()
+              : undefined;
   host.state.update((s) => ({
     ...s,
     status: scenario === "offline" ? "reconnecting" : "open",
@@ -286,7 +296,7 @@ function Fixture() {
         <Conversation
           id={conversationId}
           captain={scenario === "captain-review"}
-          rail={scenario === "short"}
+          rail={scenario === "short" || scenario === "long"}
           layout={layout()}
           onTask={noop}
           onRelatedTask={noop}

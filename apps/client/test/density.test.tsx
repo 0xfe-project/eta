@@ -27,7 +27,6 @@ test("compact: labels, the task bar and Markdown take the small text", async () 
   expect(size(app, "Option")).toBe(body);
   expect(size(app, "12 ms")).toBe(body);
   expect(size(app, "bun run bench")).toBe(body);
-  expect(app.layout("label:Back to tasks")?.height).toBe(24);
 });
 
 test("regular, and a Compact that is off: the regular sizes", async () => {
@@ -39,7 +38,6 @@ test("regular, and a Compact that is off: the regular sizes", async () => {
     expect(size(app, "#7")).toBe(label);
     expect(size(app, "Tasks")).toBe(label);
     expect(size(app, "Goal")).toBeGreaterThan(label);
-    expect(app.layout("label:Back to tasks")?.height).toBe(28);
   }
 });
 

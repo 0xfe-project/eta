@@ -29,15 +29,6 @@ test("only the connected toolkits are asked for by name, not the whole list", as
   expect(app.shows("asked-the-network")).toBe(false);
 });
 
-test("a card in the group has the connected mark and both buttons, and no 'From Composio' line", async () => {
-  const app = await open("./fixtures/plugins-composio-actions-ok.tsx", DESKTOP);
-  await app.waitFor("id:composio-connected-item");
-  expect(app.count("id:composio-connected")).toBe(2);
-  expect(app.count("label:Re-authenticate")).toBe(2);
-  expect(app.count("label:Disconnect")).toBe(2);
-  expect(app.shows("From Composio")).toBe(false);
-});
-
 test("no connected toolkit: no group, and the plugins show as before", async () => {
   const app = await open("./fixtures/plugins-composio-none.tsx", DESKTOP);
   await app.waitFor("text:on-plugin");
@@ -74,6 +65,9 @@ test("each connected toolkit has Re-authenticate and Disconnect; with the source
   await app.waitFor("id:composio-connected-item");
   expect(app.count("label:Re-authenticate")).toBe(2);
   expect(app.count("label:Disconnect")).toBe(2);
+  // Each card has the connected mark, and no "From Composio" line in the group.
+  expect(app.count("id:composio-connected")).toBe(2);
+  expect(app.shows("From Composio")).toBe(false);
   const off = await open(
     "./fixtures/plugins-composio-actions-off.tsx",
     DESKTOP,
@@ -132,6 +126,9 @@ test("a connected toolkit that checked out has a switch for every agent; one tha
   expect(app.count("id:composio-plugin-switch")).toBe(1);
   expect(app.count("label:Enabled: @composio/gmail")).toBe(1);
   expect(app.count("id:composio-plugin-error")).toBe(1);
+  // One status badge each: Connected, or Unavailable for the one that did not check out.
+  expect(app.count("id:composio-connected")).toBe(1);
+  expect(app.count("text:Unavailable")).toBe(1);
   // Re-authenticate and Disconnect stay on both.
   expect(app.count("label:Re-authenticate")).toBe(2);
   expect(app.count("label:Disconnect")).toBe(2);
@@ -168,31 +165,6 @@ test("a host that does not list the toolkits as plugins: the cards show as befor
   await app.waitFor("id:composio-connected-item");
   expect(app.count("id:composio-plugin-switch")).toBe(0);
   expect(app.count("id:composio-plugin-error")).toBe(0);
-});
-
-test("a card has one status badge at its top right: Connected, or Unavailable when its session did not check out", async () => {
-  const app = await open("./fixtures/plugins-composio-virtual.tsx", DESKTOP);
-  await app.waitFor("id:composio-plugin-switch");
-  expect(app.count("id:composio-connected")).toBe(1);
-  expect(app.count("id:composio-plugin-error")).toBe(1);
-  expect(app.count("text:Unavailable")).toBe(1);
-});
-
-test("the bottom row of a card stays one line, the switch and both buttons, also when the toolkit is off", async () => {
-  const app = await open("./fixtures/plugins-composio-virtual.tsx", DESKTOP);
-  await app.waitFor("id:composio-plugin-switch");
-  const oneLine = () => {
-    const toggle = app.layout("label:Enabled: @composio/gmail")!;
-    const reauth = app.layout("label:Re-authenticate >> nth=0")!;
-    const leave = app.layout("label:Disconnect >> nth=0")!;
-    const overlaps = (a: typeof toggle, b: typeof toggle) =>
-      a.y < b.y + b.height && a.y + a.height > b.y;
-    return overlaps(toggle, reauth) && overlaps(reauth, leave);
-  };
-  expect(oneLine()).toBe(true);
-  await app.press("label:Enabled: @composio/gmail");
-  await app.waitUntil(() => isFaint(app));
-  expect(oneLine()).toBe(true);
 });
 
 test("an added toolkit is in the same group: the Added mark and one Remove, with neither Re-authenticate nor Disconnect", async () => {

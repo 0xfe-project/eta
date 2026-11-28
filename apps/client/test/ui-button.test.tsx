@@ -10,6 +10,8 @@ test("ui Button uses createPressable to guard busy presses and supports Back/Clo
   expect(app.shows("text:count:1 nav:")).toBe(true);
 
   await app.press("Toggle busy");
+  // Busy stays enabled (keyboard reachable); only the press is ignored.
+  expect(app.enabled("label:Save")).toBe(true);
   await app.press("Save");
   expect(app.shows("text:count:1 nav:")).toBe(true);
 
