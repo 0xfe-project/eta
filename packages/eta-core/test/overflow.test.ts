@@ -21,7 +21,7 @@ import {
   fakeModels,
 } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { Kernel, Runner } from "../src/index";
+import { Kernel, kernelOn, Runner } from "../src/index";
 
 const userMsg = (text: string) => ({
   role: "user" as const,
@@ -110,8 +110,16 @@ describe("context overflow", () => {
       overflowError(),
       ok("fits now"),
     ]);
+    const retries: string[] = [];
+    const on = kernelOn(kernel.ctx);
+    const offs = (["retry:scheduled", "retry:start", "retry:end"] as const).map(
+      (name) => on(name, () => void retries.push(name)),
+    );
     kernel.inject(userMsg("go"));
     const result = await runner.run();
+    for (const off of offs) off();
+    // No backoff was scheduled: waiting cannot make a request fit.
+    expect(retries).toEqual([]);
 
     expect(result.error).toBeUndefined();
     expect(driver.compactions).toEqual(["overflow"]);

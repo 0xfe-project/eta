@@ -2,18 +2,17 @@ import type { RecordedAssistantMessage } from "../src/index";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import {
-  ConfigService,
   DEFAULT_COMPACTION_SETTINGS,
   DEFAULT_RETRY_POLICY,
-  defaultKernelConfig,
   Kernel,
   kernelOn,
   Runner,
+} from "../src/index";
+import {
   validateCompactionSettings,
-  validateKernelConfig,
   validateRetryPolicy,
   validateToolNames,
-} from "../src/index";
+} from "../src/kernel/config";
 
 const userMsg = (text: string) => ({
   role: "user" as const,
@@ -67,35 +66,6 @@ describe("config validation", () => {
       validateToolNames([{ name: "bash" }, { name: "bash" }]),
     ).toThrow(TypeError);
   });
-
-  it("validateKernelConfig checks the tool list and the nested settings", () => {
-    // A fresh config is valid: a session may exist before a model is chosen.
-    expect(() => validateKernelConfig(defaultKernelConfig())).not.toThrow();
-    expect(() =>
-      validateKernelConfig(
-        defaultKernelConfig({ activeToolNames: ["a", "a"] }),
-      ),
-    ).toThrow(TypeError);
-    expect(() =>
-      validateKernelConfig(
-        defaultKernelConfig({ activeToolNames: ["a"], thinkingLevel: "high" }),
-      ),
-    ).not.toThrow();
-    expect(() =>
-      validateKernelConfig(
-        defaultKernelConfig({
-          retryPolicy: { ...DEFAULT_RETRY_POLICY, baseDelayMs: Number.NaN },
-        }),
-      ),
-    ).toThrow(RangeError);
-    expect(() =>
-      validateKernelConfig(
-        defaultKernelConfig({
-          compaction: { ...DEFAULT_COMPACTION_SETTINGS, reserveTokens: -1 },
-        }),
-      ),
-    ).toThrow(RangeError);
-  });
 });
 
 describe("configService", () => {
@@ -132,6 +102,12 @@ describe("configService", () => {
     expect(kernel.config.read("compaction")).toEqual(
       DEFAULT_COMPACTION_SETTINGS,
     );
+    // The tool list is checked too: a name selected twice is refused.
+    const tools = kernel.config.read("activeToolNames");
+    expect(() =>
+      kernel.config.update({ activeToolNames: ["bash", "bash"] }),
+    ).toThrow(TypeError);
+    expect(kernel.config.read("activeToolNames")).toEqual(tools);
     void kernel.dispose();
   });
 
@@ -162,19 +138,6 @@ describe("configService", () => {
     kernel.config.update({ thinkingLevel: "high" });
     expect(updates).toEqual([]);
     off();
-    void kernel.dispose();
-  });
-
-  it("setModel replaces the configured model", () => {
-    const kernel = Kernel.create({
-      config: { model: { provider: "p", modelId: "m" } },
-    });
-    expect(kernel.config).toBeInstanceOf(ConfigService);
-    kernel.config.setModel("other", "model-2");
-    expect(kernel.config.read("model")).toEqual({
-      provider: "other",
-      modelId: "model-2",
-    });
     void kernel.dispose();
   });
 });

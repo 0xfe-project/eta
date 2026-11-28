@@ -27,11 +27,6 @@ export class MemoryStorage implements StorageService {
   private closed = false;
   private bytes = 0;
 
-  /** Repeated entry/usage ids seen, forwarded from the shared state. */
-  get repeated(): number {
-    return this.state.repeated;
-  }
-
   async commit(writes: StorageWrite[]): Promise<CommitResult> {
     this.assertOpen();
     this.bytes += writes.length * 64;

@@ -14,6 +14,9 @@ describe("entry union", () => {
     >().not.toHaveProperty("seq");
     expectTypeOf<
       import("../src/types/entries.ts").NewEntry<MessageEntry>
+    >().not.toHaveProperty("timestamp");
+    expectTypeOf<
+      import("../src/types/entries.ts").NewEntry<MessageEntry>
     >().toHaveProperty("type");
   });
 });

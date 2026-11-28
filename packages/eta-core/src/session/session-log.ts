@@ -17,17 +17,12 @@ import type {
   UsageRow,
   ValueWrite,
 } from "../storage/types";
-import type {
-  Entry,
-  MergeEntry,
-  MessageEntry,
-  NewEntry,
-} from "../types/entries";
+import type { Entry, MessageEntry, NewEntry } from "../types/entries";
 import type { AgentMessage } from "../types/messages";
-import type { MergeOptions, RollbackResult } from "./merge";
+import type { RollbackResult } from "./merge";
 import { setValue, value } from "../storage/types";
 import { EntryGraph } from "./graph";
-import { mergeTip, rollback } from "./merge";
+import { rollback } from "./merge";
 
 /**
  * Where the branch tip lives in the journal.
@@ -102,17 +97,6 @@ export class SessionLog {
     // The commit carries the tip, exactly like any other.
     await this.commit();
     return result;
-  }
-
-  /**
-   * Merge a tip this journal already holds: one merge entry, whose second
-   * parent makes the side chain part of the branch path.
-   */
-  async merge(mergedTipId: string, options: MergeOptions): Promise<MergeEntry> {
-    const entry = mergeTip(this.graph, mergedTipId, options);
-    this.staged.push(entry);
-    await this.commit();
-    return entry;
   }
 
   /** Entries whose parent the journal does not hold; their branch ends there. */
@@ -205,9 +189,7 @@ export class SessionLog {
    * at that point. The messages before the cut stay in the journal — they are
    * history — but they are no longer what the model is sent.
    */
-  transcript(
-    projectors?: Record<string, (entry: Entry) => AgentMessage | undefined>,
-  ): AgentMessage[] {
+  transcript(): AgentMessage[] {
     let messages: AgentMessage[] = [];
     for (const entry of this.graph.pathOldestFirst()) {
       if (entry.type === "message") {
@@ -237,13 +219,7 @@ export class SessionLog {
         ];
         continue;
       }
-      // A plugin's own entry kind: it taught the transcript about it through a
-      // projector, so the history reads the way that plugin defined it.
-      const projector = projectors?.[entry.type];
-      if (projector !== undefined) {
-        const projected = projector(entry);
-        if (projected !== undefined) messages.push(projected);
-      }
+      // Any other kind (a plugin's own entry) is journal-only: not sent.
     }
     return messages;
   }

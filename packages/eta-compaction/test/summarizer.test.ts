@@ -15,6 +15,7 @@ import type {
 import type { Entry } from "@eta/core/session";
 import type { Usage } from "@eta/core/storage";
 import { describe, expect, it } from "vitest";
+import { toolResultShare } from "../src/deterministic";
 import {
   etaCompaction,
   planCompaction,
@@ -209,6 +210,7 @@ describe("the cut", () => {
     // The prompt is the first-time one, with the format the next reader needs.
     const prompt = JSON.stringify(calls[0]!.messages);
     expect(prompt).toContain(SUMMARIZATION_PROMPT.split("\n")[0]!.slice(0, 40));
+    expect(prompt).not.toContain("<previous-summary>");
     expect(calls[0]!.systemPrompt).toBe(SUMMARIZATION_SYSTEM_PROMPT);
   });
 
@@ -232,6 +234,7 @@ describe("the cut", () => {
   it("drops tool noise from the prefix, in whole pairs", () => {
     // A prefix that is mostly tool results: fifty percent here.
     const messages = [call("c1"), result("c1"), call("c2"), result("c2")];
+    expect(toolResultShare(messages)).toBe(50);
     const plan = planCompaction({
       entries: entriesOf(messages),
       settings: { enabled: true, reserveTokens: 100, keepRecentTokens: 1 },
@@ -327,14 +330,6 @@ describe("incremental summaries", () => {
     expect(prompt).toContain("ship the compaction");
     expect(prompt).toContain(UPDATE_SUMMARY_PROMPT_MARKER);
     expect(outcome?.summary).toContain("cut the history");
-  });
-
-  it("uses the first-time prompt when there are no previous notes", async () => {
-    const { ask, calls } = asker(["notes"]);
-    await etaCompaction().summarize(request(longHistory(), ask));
-    const prompt = JSON.stringify(calls[0]!.messages);
-    expect(prompt).not.toContain("<previous-summary>");
-    expect(prompt).toContain(SUMMARIZATION_PROMPT.split("\n")[0]!.slice(0, 40));
   });
 });
 
@@ -526,6 +521,16 @@ describe("when the summarizer refuses", () => {
       (outcome?.details as { summarization?: { path: string } }).summarization
         ?.path,
     ).toBe("digested");
+  });
+
+  it("a request that throws fails the summary; the kernel reports it", async () => {
+    // Not digested: a throw is the transport failing, and compaction:end says so.
+    const ask: CompactionRequest["ask"] = async () => {
+      throw new Error("the summarizer exploded");
+    };
+    await expect(
+      etaCompaction().summarize(request(longHistory(), ask)),
+    ).rejects.toThrow("the summarizer exploded");
   });
 
   it("digests the history when the request fails, rather than losing it", async () => {

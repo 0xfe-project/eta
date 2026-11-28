@@ -9,6 +9,7 @@
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { KernelConfig } from "@eta/core";
+import type { MergeEntry, NewEntry } from "@eta/core/session";
 import type { StorageService } from "@eta/core/storage";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage, setValue, value } from "@eta/core/storage";
@@ -80,7 +81,13 @@ async function livedSession(storage: StorageService) {
   const side = log.recordMessage(userMsg("side exploration"));
   log.graph.setTip(tip);
   await log.commit();
-  await log.merge(side.id, { summary: "merge the side exploration" });
+  log.record<MergeEntry>({
+    parentId: tip,
+    type: "merge",
+    mergedParentId: side.id,
+    summary: "merge the side exploration",
+  } as NewEntry<MergeEntry>);
+  await log.commit();
   await log.rollback(tip);
   opened.stop();
   void opened.kernel.dispose();

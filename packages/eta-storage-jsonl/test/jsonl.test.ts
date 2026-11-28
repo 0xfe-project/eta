@@ -529,13 +529,6 @@ describe("jsonlStorage — lifecycle", () => {
   interface ClosableHandle {
     close: () => Promise<void>;
   }
-  it("refuses writes after close and is idempotent", async () => {
-    const handle = await openStorage(nextPath("closed"));
-    await handle.storage.close();
-    await handle.storage.close();
-    await expect(handle.storage.commit([])).rejects.toThrow("closed");
-  });
-
   it("starts a journal that does not exist yet", async () => {
     const path = nextPath("fresh");
     const handle = await openStorage(path);

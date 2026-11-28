@@ -172,7 +172,7 @@ describe("the resolution chain", () => {
     void kernel.dispose();
   });
 
-  it("entryProjectors teach the transcript about plugin entry kinds", async () => {
+  it("an entry kind the kernel does not know is left out of the transcript", async () => {
     const storage = new MemoryStorage();
     // A plugin-added entry kind, written straight to the journal.
     await storage.commit([
@@ -197,20 +197,8 @@ describe("the resolution chain", () => {
     ]);
     const log = await SessionLog.load(storage);
 
-    // Without a projector the unknown kind is simply not part of the transcript.
+    // A plugin-written kind stays in the journal, but is not sent to the model.
     expect(log.transcript().map((message) => message.role)).toEqual(["user"]);
-
-    const projected = log.transcript({
-      note: (entry) => ({
-        role: "user",
-        content: [
-          { type: "text", text: (entry as unknown as { text: string }).text },
-        ],
-        timestamp: 0,
-      }),
-    });
-    expect(projected.map((message) => message.role)).toEqual(["user", "user"]);
-    expect(JSON.stringify(projected)).toContain("remember this");
   });
 
   it("a missing projection for a summary still fails loudly", async () => {

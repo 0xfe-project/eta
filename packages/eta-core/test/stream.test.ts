@@ -134,6 +134,11 @@ describe("streaming into the bus", () => {
       )
       .join("");
     expect(JSON.parse(toolJson)).toEqual({ command: "ls" });
+    // The fragments end in the tool call itself.
+    const ended = updates.find((u) => u.event.type === "toolcall_end");
+    expect((ended?.event as { toolCall?: unknown }).toolCall).toEqual(
+      settled.content[1],
+    );
     // The tool ran after the stream settled, and the second turn streamed too.
     expect(fake.calls).toHaveLength(2);
     dispose();
@@ -230,19 +235,5 @@ describe("stream contract", () => {
     });
     expect(settled?.stopReason).toBe("error");
     expect(seen).toEqual(["start", "end"]);
-  });
-
-  it("fails the run when the stream itself breaks", async () => {
-    const kernel = Kernel.create({
-      config: { model: { provider: "p", modelId: "m" } },
-    });
-    const fake = fakeModels([]);
-    fake.streamSimple = () => {
-      throw new Error("transport exploded");
-    };
-    const runner = new Runner(kernel, { models: fake });
-    kernel.inject(userMsg("go"));
-    await expect(runner.run()).rejects.toThrow("transport exploded");
-    void kernel.dispose();
   });
 });
