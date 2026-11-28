@@ -182,7 +182,18 @@ export interface MachineActionResults {
   info: MachineFacts;
   open: { session: string };
   catalog: Record<string, never>;
-  config: { model: string | undefined; thinkingLevel: string };
+  /**
+   * `input` is what the session's own model layer says the configured model takes (an eta
+   * session's provider catalogue, a runtime session's runtime catalogue; an undeclared input
+   * counts as text-only, the way the request model defaults it). `null` when the layer resolves
+   * no such model, and daemons older than the field omit it — the caller falls back to its own
+   * catalogue either way.
+   */
+  config: {
+    model: string | undefined;
+    thinkingLevel: string;
+    input?: readonly string[] | null;
+  };
   lastSeq: { seq: number };
   which: { found: string[] };
   pluginHave: { missing: string[] };

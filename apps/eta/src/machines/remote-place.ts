@@ -102,6 +102,15 @@ class RemoteHandle implements SessionHandle {
     return (await this.#link.machine("config", { session: this.id })).model;
   }
 
+  async modelInput() {
+    const config = await this.#link.machine("config", { session: this.id });
+    if (config.model === undefined) return undefined;
+    // What the daemon's session layer declared; a daemon that predates the field says nothing,
+    // and the caller falls back to the primary's own catalogue.
+    const id = parseModelId(config.model);
+    return { id, input: config.input ?? undefined };
+  }
+
   async lastSeq(): Promise<number> {
     return (await this.#link.machine("lastSeq", { session: this.id })).seq;
   }

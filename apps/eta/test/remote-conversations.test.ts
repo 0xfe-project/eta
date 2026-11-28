@@ -637,7 +637,7 @@ describe("an agent's model and thinking level on a remote session", () => {
     const first = await r.send(group.id, "one");
     await r.settled(group.id, first.replies[0]!.id);
     const session = sessionOf(r, group.id)!;
-    expect(await configOf(r, session)).toEqual({
+    expect(await configOf(r, session)).toMatchObject({
       model: "fake:first",
       thinkingLevel: "low",
     });
@@ -652,7 +652,7 @@ describe("an agent's model and thinking level on a remote session", () => {
     });
     const second = await r.send(group.id, "two");
     await r.settled(group.id, second.replies[0]!.id);
-    expect(await configOf(r, session)).toEqual({
+    expect(await configOf(r, session)).toMatchObject({
       model: "fake:chosen",
       thinkingLevel: "high",
     });
@@ -662,7 +662,7 @@ describe("an agent's model and thinking level on a remote session", () => {
       model: "fake:second",
       thinkingLevel: "medium",
     });
-    expect(await configOf(r, session)).toEqual({
+    expect(await configOf(r, session)).toMatchObject({
       model: "fake:second",
       thinkingLevel: "medium",
     });
@@ -672,7 +672,7 @@ describe("an agent's model and thinking level on a remote session", () => {
       agentId: agents[0]!.id,
       thinkingLevel: null,
     });
-    expect(await configOf(r, session)).toEqual({
+    expect(await configOf(r, session)).toMatchObject({
       model: "fake:second",
       thinkingLevel: "off",
     });

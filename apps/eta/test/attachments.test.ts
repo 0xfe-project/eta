@@ -2,12 +2,16 @@
  * Files attached to a message: uploaded in chunks over the wire, claimed by the message that
  * carries them, and handed to the agent as files it can open, wherever its session runs.
  */
+import type { ScriptedTurn } from "@botiverse/oar/testing";
 import type { AttachmentView, SendResult } from "@eta/client-contracts";
 import type { World } from "./support/world";
 import { Buffer } from "node:buffer";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createRuntimeRegistry } from "@botiverse/oar";
+import { scriptedRuntime } from "@botiverse/oar/testing";
+import { createOarRuntimes } from "@eta/runtime-oar";
 import { afterEach, describe, expect, it } from "vitest";
 import { tempDir } from "./support/host";
 import { call, say, scriptedModels } from "./support/models";
@@ -479,6 +483,214 @@ describe("on a remote machine", () => {
     expect(done.status).toBe("done");
     expect(requests.at(-1)!.transcript.join("\n")).toContain(
       "could not be put where you can read it",
+    );
+  });
+});
+
+/** One JSON-RPC call to eta's host MCP server from inside a scripted runtime turn. */
+async function callHostTool(
+  turn: ScriptedTurn,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<{
+  isError?: boolean;
+  content: { type: string; text?: string; data?: string; mimeType?: string }[];
+}> {
+  const server = turn.options.mcpServers?.find((entry) => entry.name === "eta");
+  if (server === undefined || !("url" in server))
+    throw new Error("the session was not given eta's tools");
+  const response = await fetch(server.url, {
+    method: "POST",
+    headers: {
+      ...server.headers,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name, arguments: args },
+    }),
+  });
+  return (
+    (await response.json()) as {
+      result: {
+        isError?: boolean;
+        content: {
+          type: string;
+          text?: string;
+          data?: string;
+          mimeType?: string;
+        }[];
+      };
+    }
+  ).result;
+}
+
+describe("read_image capability lookup (#832)", () => {
+  const hostCatalogueWithoutRuntime = () => {
+    const { models } = scriptedModels(() => say("unused"));
+    // The host provider catalogue only knows its own providers, never external runtimes.
+    return {
+      ...models,
+      getModel: (provider: string, id: string) =>
+        provider === "fake" ? models.getModel(provider, id) : undefined,
+    };
+  };
+
+  it("allows read_image on a local external runtime session with an explicit model", async () => {
+    let fileId = "";
+    let answer: Awaited<ReturnType<typeof callHostTool>> | undefined;
+    const w = await world({
+      models: hostCatalogueWithoutRuntime(),
+      runtimes: createOarRuntimes({
+        registry: createRuntimeRegistry([
+          scriptedRuntime({
+            id: "claude",
+            turn: async (turn) => {
+              answer = await callHostTool(turn, "read_image", { file: fileId });
+              turn.say("looked");
+            },
+          }),
+        ]),
+      }),
+    });
+    const agent = await w.agent("Cody", {
+      runtime: "claude",
+      model: "claude:opus",
+    });
+    const project = await w.project();
+    const group = await w.group(project.id, [agent.id]);
+    await w.watch(group.id);
+    const file = await upload(w, group.id, PNG, "pixel.png", "image/png");
+    fileId = file.id;
+    const sent = await w.send(group.id, "inspect", { attachments: [file.id] });
+    await w.settled(group.id, sent.replies[0]!.id);
+    expect(answer?.isError).not.toBe(true);
+    expect(answer?.content[0]).toMatchObject({
+      type: "image",
+      mimeType: "image/png",
+      data: PNG.toString("base64"),
+    });
+  });
+
+  it("allows read_image on an external runtime session running its default model", async () => {
+    let fileId = "";
+    let answer: Awaited<ReturnType<typeof callHostTool>> | undefined;
+    const w = await world({
+      models: hostCatalogueWithoutRuntime(),
+      runtimes: createOarRuntimes({
+        registry: createRuntimeRegistry([
+          scriptedRuntime({
+            id: "claude",
+            turn: async (turn) => {
+              answer = await callHostTool(turn, "read_image", { file: fileId });
+              turn.say("looked");
+            },
+          }),
+        ]),
+      }),
+    });
+    const agent = await w.agent("Cody", { runtime: "claude" });
+    const project = await w.project();
+    const group = await w.group(project.id, [agent.id]);
+    await w.watch(group.id);
+    const file = await upload(w, group.id, PNG, "pixel.png", "image/png");
+    fileId = file.id;
+    const sent = await w.send(group.id, "inspect", { attachments: [file.id] });
+    await w.settled(group.id, sent.replies[0]!.id);
+    expect(answer?.isError).not.toBe(true);
+    expect(answer?.content[0]).toMatchObject({
+      type: "image",
+      mimeType: "image/png",
+      data: PNG.toString("base64"),
+    });
+  });
+
+  it("allows read_image on a remote daemon external runtime session", async () => {
+    let fileId = "";
+    let answer: Awaited<ReturnType<typeof callHostTool>> | undefined;
+    const r = await remoteWorld(
+      { models: hostCatalogueWithoutRuntime() },
+      {
+        node: {
+          runtimes: createOarRuntimes({
+            registry: createRuntimeRegistry([
+              scriptedRuntime({
+                id: "claude",
+                turn: async (turn) => {
+                  answer = await callHostTool(turn, "read_image", {
+                    file: fileId,
+                  });
+                  turn.say("looked");
+                },
+              }),
+            ]),
+          }),
+        },
+      },
+    );
+    const agent = await r.agent("RemoteCody", {
+      runtime: "claude",
+      model: "claude:opus",
+      machineId: r.daemon.machineId,
+    });
+    const group = await r.group(r.remoteProject.id, [agent.id]);
+    await r.watch(group.id);
+    const file = await upload(r, group.id, PNG, "pixel.png", "image/png");
+    fileId = file.id;
+    const sent = await r.send(group.id, "inspect", { attachments: [file.id] });
+    await r.settled(group.id, sent.replies[0]!.id);
+    expect(answer?.isError).not.toBe(true);
+    expect(answer?.content[0]).toMatchObject({
+      type: "image",
+      mimeType: "image/png",
+      data: PNG.toString("base64"),
+    });
+  });
+
+  it("distinguishes an unknown model from a declared text-only model", async () => {
+    let fileId = "";
+    let answer: Awaited<ReturnType<typeof callHostTool>> | undefined;
+    // A closed-name runtime whose catalog lists only another model: neither the runtime layer
+    // nor the host catalogue resolves `pi:unlisted`, so the gate reports unknown capability.
+    const runtimes = createOarRuntimes({
+      registry: createRuntimeRegistry([
+        {
+          ...scriptedRuntime({
+            id: "pi",
+            turn: async (turn) => {
+              answer = await callHostTool(turn, "read_image", { file: fileId });
+              turn.say("looked");
+            },
+          }),
+          listModels: async () => ({
+            kind: "ok" as const,
+            models: [{ id: "listed-only", default: true }],
+          }),
+        },
+      ]),
+    });
+    await runtimes.catalog.list();
+    const w = await world({
+      models: hostCatalogueWithoutRuntime(),
+      runtimes,
+    });
+    const agent = await w.agent("PiAgent", {
+      runtime: "pi",
+      model: "pi:unlisted",
+    });
+    const project = await w.project();
+    const group = await w.group(project.id, [agent.id]);
+    await w.watch(group.id);
+    const file = await upload(w, group.id, PNG, "pixel.png", "image/png");
+    fileId = file.id;
+    const sent = await w.send(group.id, "inspect", { attachments: [file.id] });
+    await w.settled(group.id, sent.replies[0]!.id);
+    expect(answer?.isError).toBe(true);
+    expect(answer?.content[0]?.text).toContain(
+      "cannot tell whether the model you run on supports images",
     );
   });
 });

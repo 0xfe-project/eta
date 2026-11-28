@@ -48,7 +48,6 @@ import { heldFor } from "@eta/client-contracts/routing";
 import { kernelOn } from "@eta/core";
 import { lastSeq, LinkError, listen } from "@eta/daemon";
 import { imageLimitsFor } from "@eta/harness";
-import { parseModelId } from "@eta/server";
 import { externalAgentProjectError } from "../agents/bounds";
 import { explainRunError, missingModel } from "../agents/model";
 import { heldIn } from "../session-owner";
@@ -1060,10 +1059,14 @@ export class Engine {
     const running = this.#running.get(keyOf(conversationId, agentId));
     const limits =
       running === undefined
-        ? undefined
+        ? "unknown"
         : await this.#imageLimits(running.handle);
-    if (limits === undefined)
-      throw new Error("The model you run on does not support images.");
+    if (typeof limits === "string")
+      throw new Error(
+        limits === "unknown"
+          ? "Eta cannot tell whether the model you run on supports images."
+          : "The model you run on does not support images.",
+      );
     const id = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/i.exec(
       ref.split(/[\\/]/).pop()!,
     )?.[0];
@@ -1727,7 +1730,7 @@ export class Engine {
     const placed = await this.#place(files, machine);
     const limits = await this.#imageLimits(handle);
     const prepared =
-      limits === undefined
+      typeof limits === "string"
         ? { images: [], omitted: new Map<string, string>() }
         : await this.#attachments.images(
             files.filter((file) => placed.paths.has(file.id)),
@@ -1742,9 +1745,11 @@ export class Engine {
           ? undefined
           : !image
             ? undefined
-            : limits === undefined
+            : limits === "unseen"
               ? "the model you run on does not support images"
-              : prepared.omitted.get(file.id);
+              : typeof limits === "string"
+                ? "whether the model you run on supports images is unknown"
+                : prepared.omitted.get(file.id);
       if (note !== undefined) unseen = true;
       lines.set(
         file.id,
@@ -1779,17 +1784,32 @@ export class Engine {
     return this.#shell(machine);
   }
 
-  /** The image limits of the session's model, or undefined when it does not accept images. */
-  async #imageLimits(handle: SessionHandle): Promise<ImageLimits | undefined> {
+  /**
+   * The image limits of the session's model. `"unseen"` when the model is declared not to take
+   * images, `"unknown"` when neither the session's layer nor this one can say — `read_image`
+   * tells the two apart, a briefing just drops the images.
+   */
+  async #imageLimits(
+    handle: SessionHandle,
+  ): Promise<ImageLimits | "unseen" | "unknown"> {
     try {
-      const id = await handle.model();
-      if (id === undefined) return undefined;
-      const { provider, modelId } = parseModelId(id);
-      const model = this.#models?.()?.getModel(provider, modelId);
-      if (model?.input?.includes("image") !== true) return undefined;
-      return imageLimitsFor({ provider, modelId });
+      // The session's own model layer first: a runtime session's models are its runtime's
+      // catalogue, which this process's provider catalogue knows nothing about. Only when that
+      // layer cannot say does the host's catalogue answer.
+      const session = await handle.modelInput();
+      if (session === undefined) return "unknown";
+      const host =
+        session.input === undefined
+          ? this.#models?.()?.getModel(session.id.provider, session.id.modelId)
+          : undefined;
+      const input =
+        session.input ??
+        (host === undefined ? undefined : (host.input ?? ["text"]));
+      if (input === undefined) return "unknown";
+      if (input.includes("image") !== true) return "unseen";
+      return imageLimitsFor(session.id);
     } catch {
-      return undefined;
+      return "unknown";
     }
   }
 

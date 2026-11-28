@@ -34,6 +34,19 @@ export interface SessionHandle {
   steer: (text: string, images?: PromptImage[]) => Promise<void>;
   /** The model the session runs on now, as `provider:modelId`; undefined when it cannot say. */
   model: () => Promise<string | undefined>;
+  /**
+   * What the session's own model layer says its model takes: {provider, modelId} and the input
+   * list, with an undeclared input already defaulted to text-only. `input` is undefined when the
+   * layer resolves no such model (or a machine's daemon predates the answer), so the caller
+   * falls back to its own catalogue.
+   */
+  modelInput: () => Promise<
+    | {
+        id: { provider: string; modelId: string };
+        input: readonly string[] | undefined;
+      }
+    | undefined
+  >;
   /** How far the session's journal has got: what its next run writes comes after this. */
   lastSeq: () => Promise<number>;
   /**
@@ -143,6 +156,26 @@ class LocalHandle implements SessionHandle {
     return Promise.resolve(
       formatModelId(this.#managed.session.kernel.config.read("model")),
     );
+  }
+
+  modelInput() {
+    const raw = this.#managed.session.kernel.config.read("model");
+    if (raw === undefined) return Promise.resolve(undefined);
+    // An external runtime with no explicit model runs that runtime's default.
+    const runtime = this.#managed.meta.runtime;
+    const identity =
+      runtime !== undefined && raw.provider !== runtime
+        ? { provider: runtime, modelId: "default" }
+        : raw;
+    const model = this.#managed.session.models.getModel(
+      identity.provider,
+      identity.modelId,
+    );
+    return Promise.resolve({
+      id: { provider: identity.provider, modelId: identity.modelId },
+      // Unresolved is for the caller's own catalogue; undeclared is text-only.
+      input: model === undefined ? undefined : (model.input ?? ["text"]),
+    });
   }
 
   lastSeq(): Promise<number> {
