@@ -268,7 +268,7 @@ export const routinesMessages = {
     "请检查插件配置，或稍后刷新重试。",
   ],
   openPlugins: ["Open Plugins", "前往插件"],
-  openPluginSettings: ["Open Plugin settings", "前往插件设置"],
+  triggerOpenPluginSettings: ["Open Plugin settings", "前往插件设置"],
   triggerStatusActive: ["Active", "已启用"],
   triggerStatusDisabled: ["Disabled", "已停用"],
   triggerStatusError: ["Error", "异常"],
