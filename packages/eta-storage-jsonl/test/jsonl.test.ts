@@ -561,10 +561,15 @@ describe("jsonlStorage — lifecycle", () => {
 
     const written = new Set<ClosableHandle>();
     const closed = new Set<ClosableHandle>();
+    // Earlier writes finish later, as they can on a busy disk (seen on macOS CI):
+    // the journal must still keep commit order.
+    let calls = 0;
     proto.write = async function patchedWrite(
       this: ClosableHandle,
       ...args: unknown[]
     ) {
+      const lag = Math.max(0, 5 - calls++) * 4;
+      await new Promise((resolve) => setTimeout(resolve, lag));
       if (!written.has(this)) {
         written.add(this);
         const origClose = this.close.bind(this);
