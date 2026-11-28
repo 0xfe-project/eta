@@ -187,6 +187,12 @@ try {
       )
         cpSync(join(cwd, file), join(staging, file), { recursive: true });
     }
+    // The staged manifest only registers the HarmonyOS platform. nsh-directories
+    // has no build for it, so the copied import would fail the bundle.
+    writeFileSync(
+      join(staging, "src/pages/chat/artifacts/system-downloads.ts"),
+      `/** HarmonyOS has no nsh-directories build. Saves fall back to ~/Downloads. */\nexport async function namedDownloadDir(): Promise<string | null | undefined> {\n  return undefined;\n}\n`,
+    );
     const harmonyosLock = join(cwd, "harmonyos.nsh.lock");
     if (existsSync(harmonyosLock))
       copyFileSync(harmonyosLock, join(staging, "nsh.lock"));

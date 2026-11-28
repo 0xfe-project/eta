@@ -190,9 +190,9 @@ jobs:
         if: matrix.target == 'linux'
         run: |
           sudo apt-get update
-          # libgtk-4-dev: nsh-directories is a native module, so the Linux runner is
-          # built here and links GTK 4. The image has no glib/gtk dev files.
-          sudo apt-get install -y flatpak flatpak-builder xvfb dbus pkg-config libgtk-4-dev
+          # The native module rebuilds the Linux runner here. GTK 4 and WebKitGTK 6.0
+          # are compile dependencies; the image ships neither set of dev files.
+          sudo apt-get install -y flatpak flatpak-builder xvfb dbus pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libjavascriptcoregtk-6.0-dev
 
       - name: Cache Flatpak GNOME 49 runtime
         if: matrix.target == 'linux'

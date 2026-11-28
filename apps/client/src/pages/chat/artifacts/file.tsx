@@ -11,8 +11,8 @@ import {
 } from "fs/promises";
 import { homedir } from "os";
 import { cleanup, platform, Share, signal, WebView } from "nsh";
-import { Directories } from "nsh-directories";
 import { uiText } from "../../../i18n";
+import { namedDownloadDir } from "./system-downloads";
 
 // NSH expands these placeholders when its file and share APIs access app storage and the home directory.
 const exportsDirectory = `\${dataDir}/artifact-exports`;
@@ -97,14 +97,7 @@ async function downloadsFolder(): Promise<DownloadsFolder> {
   const windows = platform.os === "windows";
   const separator = windows ? "\\" : "/";
   const home = homedir().replace(/[\\/]+$/, "");
-  let named: string | null | undefined;
-  try {
-    // A stand-in answers through a promise even where the module answers at once.
-    if (await Directories.available())
-      named = (await Directories.userDirs())?.downloadDir;
-  } catch {
-    // Not granted or not readable: keep the default below.
-  }
+  const named = await namedDownloadDir();
   if (!named)
     return {
       write: `${homeFolder}/Downloads`,
