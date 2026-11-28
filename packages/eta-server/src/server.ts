@@ -111,8 +111,6 @@ export interface AssembleOptions {
   overlayModels?: ((base: KernelModels) => KernelModels) | undefined;
   monthlySummaries?: ProvidersPluginOptions["monthlySummaries"];
   streamQuotaSummaries?: ProvidersPluginOptions["streamQuotaSummaries"];
-  /** Which bundled plugins to mount. Default: all of them. */
-  plugins?: readonly BundledPluginName[];
   /** The agent's home, for `~/.eta/persona`. Defaults to the real one. */
   home?: string | undefined;
   /**
@@ -145,12 +143,6 @@ export interface AssembleOptions {
   sessionAttach?: SessionManagerOptions["sessionAttach"] | undefined;
   warn?: ((message: string) => void) | undefined;
 }
-
-export type BundledPluginName =
-  | "sessions"
-  | "providers"
-  | "settings"
-  | "personas";
 
 /** The plugin directories, as the layout in SERVER-REFACTOR.md §10 names them. */
 export function pluginDirs(dataDir: string): {
@@ -223,7 +215,6 @@ function createMounter(ctx: Context): {
 /** Mount the bundled plugins, each through the same `ctx.plugin` a user plugin would use. */
 function mountBundled(
   mount: (name: string, plugin: unknown) => void,
-  names: readonly BundledPluginName[],
   deps: {
     manager: SessionManager;
     remote?: RemoteSessions | undefined;
@@ -238,36 +229,28 @@ function mountBundled(
     onModelsChanged?: (() => void | Promise<void>) | undefined;
   },
 ): void {
-  if (names.includes("sessions"))
-    mount(
-      "sessions",
-      sessionsPlugin({
-        manager: deps.manager,
-        ...(deps.remote === undefined ? {} : { remote: deps.remote }),
-      }),
-    );
-  if (names.includes("providers")) {
-    mount(
-      "providers",
-      providersPlugin({
-        store: deps.providers,
-        warn: deps.warn,
-        monthlySummaries: deps.monthlySummaries,
-        streamQuotaSummaries: deps.streamQuotaSummaries,
-        ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
-        ...(deps.onModelsChanged === undefined
-          ? {}
-          : { onModelsChanged: deps.onModelsChanged }),
-      }),
-    );
-  }
-  if (names.includes("settings"))
-    mount("settings", settingsPlugin({ store: deps.settings }));
-  if (names.includes("personas"))
-    mount(
-      "personas",
-      personasPlugin({ manager: deps.manager, home: deps.home }),
-    );
+  mount(
+    "sessions",
+    sessionsPlugin({
+      manager: deps.manager,
+      ...(deps.remote === undefined ? {} : { remote: deps.remote }),
+    }),
+  );
+  mount(
+    "providers",
+    providersPlugin({
+      store: deps.providers,
+      warn: deps.warn,
+      monthlySummaries: deps.monthlySummaries,
+      streamQuotaSummaries: deps.streamQuotaSummaries,
+      ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+      ...(deps.onModelsChanged === undefined
+        ? {}
+        : { onModelsChanged: deps.onModelsChanged }),
+    }),
+  );
+  mount("settings", settingsPlugin({ store: deps.settings }));
+  mount("personas", personasPlugin({ manager: deps.manager, home: deps.home }));
 }
 
 export async function assembleServer(
@@ -521,11 +504,8 @@ export async function assembleServer(
     warn,
   });
 
-  const wanted =
-    options.plugins ??
-    (["sessions", "providers", "settings", "personas"] as const);
   const mounter = createMounter(ctx);
-  mountBundled(mounter.mount, wanted, {
+  mountBundled(mounter.mount, {
     manager: sessions,
     remote: options.remoteSessions,
     providers,

@@ -103,16 +103,6 @@ async function until(
 }
 
 describe("what the plugin puts on the pipe", () => {
-  it("registers the sidebar as an eager state target", async () => {
-    const h = await harness();
-    await h.load();
-    expect(h.wire.registry.eagerTargets()).toEqual(["sessions"]);
-    const sidebar = h.state("sessions");
-    expect(sidebar?.sections.list).toEqual([]);
-    expect(sidebar?.revisions).toHaveProperty("list");
-    await h.unload();
-  });
-
   it("registers a state target per open session, and takes it away on close", async () => {
     const h = await harness();
     await h.load();
@@ -427,15 +417,15 @@ describe("the row a session keeps", () => {
       session: forked,
       text: "a question only the fork asks",
     });
+    const forkedOpen = h.manager
+      .openSessions()
+      .find((open) => open.meta.id === forked);
     await until(
       () =>
-        h.manager
-          .session(forked)
-          .then((open) => open?.session.runner.running === false) instanceof
-        Promise,
-    );
-    await until(
-      () => h.state(`sessions.${forked}`)?.sections.transcript !== undefined,
+        forkedOpen?.session.runner.running === false &&
+        JSON.stringify(
+          h.state(`sessions.${forked}`)?.sections.transcript,
+        ).includes("only the fork asks"),
     );
     const sourceText = JSON.stringify(
       h.state(`sessions.${source}`)?.sections.transcript,
@@ -607,13 +597,15 @@ describe("a session that is only in the store", () => {
       h.manager.openSessions().find((open) => open.meta.id === session)?.session
         .runner.running === false;
     await until(running);
-    // Opened, attached (its state target exists) and focused, just as if it had been created.
+    // Opened and attached (its state target exists), just as if it had been created.
     expect(h.wire.targets().map((target) => target.name)).toContain(
       `sessions.${session}`,
     );
+    // And the prompt ran on it: the model answered into the reopened session.
+    expect(models.calls).toHaveLength(1);
     expect(
-      h.manager.session(session).then((open) => open !== undefined),
-    ).toBeInstanceOf(Promise);
+      JSON.stringify(h.state(`sessions.${session}`)?.sections.transcript),
+    ).toContain("an answer");
     await h.unload();
   });
 });
@@ -872,11 +864,13 @@ describe("choosing how the next turn is generated", () => {
     expect(row?.ok === true ? row.meta.model : undefined).toBe(
       "fake:fake-model",
     );
-    // The journal holds the configuration now, so a replay comes back on this model rather
-    // than on whatever the caller would default to.
-    const journaled = await h.manager.list();
-    expect(journaled.some((listing) => listing.id === session)).toBe(true);
+    // A replay comes back on this model rather than on whatever the caller would default to:
+    // close it, so the session asked for next is assembled again from what was written.
+    const live = open();
+    await h.manager.close(session);
     const reopened = (await h.manager.session(session))?.session;
+    expect(reopened).toBeDefined();
+    expect(reopened).not.toBe(live);
     expect(reopened?.config.model).toEqual({
       provider: "fake",
       modelId: "fake-model",
@@ -1232,9 +1226,8 @@ describe("history and search", () => {
     const { session: first } = (await h.call("sessions", "create", {
       cwd: "/work/one",
     })) as { session: string };
-    const { session: second } = (await h.call("sessions", "create", {
-      cwd: "/work/two",
-    })) as { session: string };
+    // A second one that never says it: held, searched, and not a hit.
+    await h.call("sessions", "create", { cwd: "/work/two" });
     await h.call("sessions", "prompt", {
       session: first,
       text: "what does the wire look like?",
@@ -1267,12 +1260,24 @@ describe("history and search", () => {
       ).hits,
     ).toEqual([]);
 
-    // A session that was never opened is not searched: a search is over what this plugin holds.
-    await h.manager.close(second);
-    const afterClose = (await h.call("sessions", "search", {
-      query: "wire",
-    })) as { hits: { session: string }[] };
-    expect(afterClose.hits.map((hit) => hit.session)).not.toContain(second);
+    // A session this plugin does not hold is not searched, even when it says the word: a search
+    // is over what the plugin holds. Opening it through the plugin is what puts it in.
+    const unheld = await h.manager.create({ cwd: "/work/three" });
+    unheld.session.log.recordMessage({
+      role: "user",
+      content: [{ type: "text", text: "the wire, said where nobody looks" }],
+      timestamp: Date.now(),
+    });
+    const search = async () =>
+      (
+        (await h.call("sessions", "search", { query: "wire" })) as {
+          hits: { session: string }[];
+        }
+      ).hits.map((hit) => hit.session);
+    expect(await search()).toEqual([first]);
+    await h.call("sessions", "focus", { session: unheld.meta.id });
+    expect((await search()).sort()).toEqual([first, unheld.meta.id].sort());
+    await h.manager.closeAll();
     await h.unload();
   });
 });

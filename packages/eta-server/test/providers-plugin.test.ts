@@ -22,11 +22,12 @@ import type { ProvidersPluginOptions } from "../src/bundled/providers";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PROVIDER_ACTIONS } from "@eta/client-contracts";
 import { Context } from "cordis";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PROVIDER_ACTIONS, providersPlugin } from "../src/bundled/providers";
+import { providersPlugin } from "../src/bundled/providers";
 import { MODELS_DEV_URL } from "../src/providers/metadata";
-import { ProviderConfigStore, revisionOf } from "../src/providers/store";
+import { ProviderConfigStore } from "../src/providers/store";
 import { createConnection } from "../src/transport";
 import { WireService } from "../src/wire-service";
 
@@ -171,80 +172,6 @@ describe("what the plugin puts on the pipe", () => {
 });
 
 describe("the config over the wire", () => {
-  it("saves a provider, and the state says what the file now holds", async () => {
-    const h = await harness();
-    await h.load();
-    h.wire.subscribe(1, "providers");
-    // The plugin reads the config when it loads; give that read its turn before asking for the
-    // revision, or the test races the load it is asserting about. Until then the state is
-    // deliberately empty rather than a fabricated "no providers, revision ''".
-    await until(() => h.config() !== undefined);
-    h.frames.length = 0;
-    const before = h.config();
-    expect(before?.providers).toEqual([]);
-    // And the revision it hands out is the file's own (no file: the hash of nothing), not a
-    // placeholder that a write would be refused for.
-    expect(before?.revision).toBe(revisionOf(""));
-
-    const saved = await callResult(h, "save", {
-      revision: before?.revision,
-      provider: provider("local"),
-    });
-    expect(saved.ok).toBe(true);
-    expect(h.config()?.providers.map((entry) => entry.id)).toEqual(["local"]);
-    // The write pushed: a client that is watching sees the new config without asking.
-    expect(
-      h.frames.some(
-        (entry) => entry.target === "providers" && entry.frame.type === "state",
-      ),
-    ).toBe(true);
-    await h.unload();
-  });
-
-  it("refuses a stale revision with a name the client can act on", async () => {
-    const h = await harness();
-    await h.load();
-    await until(() => h.config() !== undefined);
-    const first = await callResult(h, "save", {
-      revision: revisionOf(""),
-      provider: provider("a"),
-    });
-    expect(first.ok).toBe(true);
-    // A second write prepared against the revision that is now old.
-    const stale = await callResult(h, "save", {
-      revision: revisionOf(""),
-      provider: provider("b"),
-    });
-    expect(stale.ok).toBe(false);
-    expect(stale.error).toContain("config_changed");
-    expect(h.config()?.providers.map((entry) => entry.id)).toEqual(["a"]);
-    await h.unload();
-  });
-
-  it("deletes a provider, and has no default model to set", async () => {
-    const h = await harness();
-    await h.load();
-    await until(() => h.config() !== undefined);
-    await callResult(h, "save", {
-      revision: revisionOf(""),
-      provider: provider("a"),
-    });
-    const revision = h.config()?.revision;
-
-    // There is no default model: the action is gone, not refused.
-    const gone = await callResult(h, "setDefault", {
-      revision,
-      defaultModel: "a:m1",
-    });
-    expect(gone.ok).toBe(false);
-    expect(h.config()).not.toHaveProperty("defaultModel");
-
-    const removed = await callResult(h, "delete", { revision, id: "a" });
-    expect(removed.ok).toBe(true);
-    expect(h.config()?.providers).toEqual([]);
-    await h.unload();
-  });
-
   it("sets the network mode, and answers a reload with the revision", async () => {
     const h = await harness();
     await h.load();

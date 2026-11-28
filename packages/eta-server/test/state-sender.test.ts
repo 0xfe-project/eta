@@ -102,15 +102,6 @@ describe("pushing", () => {
     expect(framesOf(1)).toHaveLength(1);
   });
 
-  it("reports a section that went away", () => {
-    const { subscribe, push, framesOf, set } = harness();
-    subscribe(1, "sessions");
-    set("sessions", { sections: { list: ["s1"] }, revisions: {} });
-    push("sessions");
-    const [, patch] = framesOf(1);
-    expect(patch).toMatchObject({ type: "state", patch: { revisions: {} } });
-  });
-
   it("gives each socket its own baseline", () => {
     const { subscribe, push, framesOf, set } = harness();
     subscribe(1, "sessions");

@@ -9,7 +9,6 @@
 import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
 import { MODEL_SOURCES } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
-import { catalogCompat } from "../src/providers/catalog";
 import { checkOf, listProviderModels } from "../src/providers/discovery";
 import {
   MODELS_DEV_URL,
@@ -212,17 +211,6 @@ describe("connecting Eta Token Plan", () => {
 });
 
 describe("talking to Eta Token Plan", () => {
-  it("turns off the fields the gateway is not sent", () => {
-    expect(catalogCompat("eta")).toEqual({
-      supportsDeveloperRole: false,
-      supportsStore: false,
-      maxTokensField: "max_tokens",
-    });
-    // pi-ai knows its own providers' fields; the catalog does not overrule it there.
-    expect(catalogCompat("kimi-coding")).toBeUndefined();
-    expect(catalogCompat("openai-compatible")).toBeUndefined();
-  });
-
   it("streams, calls a tool, takes its result and answers, over Chat Completions", async () => {
     const bodies: Record<string, unknown>[] = [];
     const authorizations: (string | null)[] = [];

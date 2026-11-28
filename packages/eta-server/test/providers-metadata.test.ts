@@ -94,6 +94,7 @@ describe("public model metadata", () => {
       "zhipuai-coding-plan",
     ],
     ["zai", "https://api.z.ai/api/coding/paas/v4", "zai-coding-plan"],
+    ["commandcode", "https://api.commandcode.ai/provider/v1", "commandcode"],
   ])(
     "maps the explicit %s preset to %s (%s)",
     async (kind, baseUrl, providerId) => {

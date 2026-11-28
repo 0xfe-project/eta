@@ -7,8 +7,9 @@
  * not subscribed, a client that resyncs, and a server rebuilt on the same data directory all
  * see that the run failed and why — while the model is never sent any of it.
  *
- * Real sockets and a real data directory; the model layer is either absent (no provider at
- * all, the `model_unavailable` path) or scripted.
+ * Real sockets and a real data directory, with no provider at all (the `model_unavailable`
+ * path). That the failure is recorded once and never sent back on a retry is the harness's
+ * (`packages/eta-harness/test/run-failure.test.ts`); this file owns the wire view of it.
  */
 
 import type {
@@ -17,12 +18,10 @@ import type {
   SessionViewSections,
 } from "@eta/client-contracts";
 import type { ClientFrame } from "@eta/client-wire-proto";
-import type { FakeModels } from "@eta/core/testing";
 import type { AssembledServer } from "../src/server";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { afterEach, describe, expect, it } from "vitest";
 import { JOURNAL_FILE } from "../src/file-store";
 import { assembleServer } from "../src/server";
@@ -108,12 +107,10 @@ function connect(port: number): Promise<Client> {
 
 async function start(
   root: string,
-  models?: FakeModels,
 ): Promise<{ server: AssembledServer; client: Client }> {
   const server = await assembleServer({
     dataDir: root,
     configPath: join(root, "no-such-config.json"),
-    ...(models === undefined ? {} : { models: models as never }),
   });
   servers.push(server);
   const client = await connect(server.server.port);
@@ -210,9 +207,11 @@ describe("a failed run, after the fact", () => {
     expect(seen.transcript.messages.map((row) => row.message.role)).toEqual([
       "user",
     ]);
+    // Reading it again (resync and history) does not write it again.
+    expect((await failureRows(late, session)).view).toHaveLength(1);
     late.close();
 
-    // On disk, in the journal file.
+    // On disk, in the journal file: still the one record.
     const journal = await readFile(
       join(root, "sessions", session, JOURNAL_FILE),
       "utf8",
@@ -228,63 +227,5 @@ describe("a failed run, after the fact", () => {
     ]);
     expect(after.history).toEqual(after.view);
     watcher.close();
-  });
-
-  it("a provider failure is recorded once, never sent back, and a completed retry adds nothing", async () => {
-    const root = await mkdtemp(join(tmpdir(), "eta-run-failed-"));
-    roots.push(root);
-    const models = fakeModels([
-      assistantMessage({
-        content: [{ type: "text", text: "half an answer" }],
-        stopReason: "error",
-        errorMessage: "401 Unauthorized: invalid api key",
-      }),
-      assistantMessage({ content: [{ type: "text", text: "a real answer" }] }),
-    ]);
-    const { client } = await start(root, models);
-    const { session } = (await client.call("sessions", "create", {
-      cwd: "/work/eta",
-    })) as { session: string };
-    client.subscribe(`sessions.${session}`);
-    await until(() =>
-      client.frames.some(
-        (frame) =>
-          frame.type === "state" && frame.target === `sessions.${session}`,
-      ),
-    );
-
-    await promptAndWait(client, session, "first try");
-    const [failed] = runEnds(client, session);
-    expect(failed).toMatchObject({
-      status: "failed",
-      error: "401 Unauthorized: invalid api key",
-    });
-    let seen = await failureRows(client, session);
-    expect(seen.view.map((row) => row.args)).toEqual([
-      { runId: failed!.runId, error: failed!.error },
-    ]);
-    expect(JSON.stringify(seen.transcript)).not.toContain("half an answer");
-
-    await promptAndWait(client, session, "second try");
-    expect(runEnds(client, session).map((end) => end.status)).toEqual([
-      "failed",
-      "completed",
-    ]);
-    // What the retry sent: the user's turns, nothing of the failure.
-    const sent = JSON.stringify(models.calls.at(-1)?.context.messages);
-    expect(sent).toContain("second try");
-    expect(sent).not.toContain("half an answer");
-    expect(sent).not.toContain("401 Unauthorized");
-    // Still the one record: resyncing and reading history do not write.
-    seen = await failureRows(client, session);
-    seen = await failureRows(client, session);
-    expect(seen.view).toHaveLength(1);
-    expect(seen.history).toHaveLength(1);
-    const journal = await readFile(
-      join(root, "sessions", session, JOURNAL_FILE),
-      "utf8",
-    );
-    expect(journal.match(/"run_failed"/g)).toHaveLength(1);
-    client.close();
   });
 });

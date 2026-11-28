@@ -98,6 +98,9 @@ describe("sessions are their own", () => {
 
     expect(await sessions.close(first.meta.id)).toBe(true);
     expect(await sessions.close(first.meta.id)).toBe(false);
+    expect(sessions.openSessions().map((open) => open.meta.id)).toEqual([
+      second.meta.id,
+    ]);
     // The second is still open and still usable, with its journal intact.
     const still = await sessions.session(second.meta.id);
     expect(still?.session).toBe(second.session);
@@ -116,7 +119,7 @@ describe("sessions are their own", () => {
     const { store, manager: sessions } = manager();
     const created = await sessions.create({ cwd: "/work" });
     created.session.log.recordMessage(userMsg("written before the close"));
-    await created.session.journaling.flush();
+    // No flush of its own: closing is what has to make it durable.
     await sessions.close(created.meta.id);
 
     // Re-open the storage the way a restart would, and find the message there.
