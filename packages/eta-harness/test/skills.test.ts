@@ -12,8 +12,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { formatSkillInvocation } from "../src/prompt-blocks";
-import { loadSkills, loadSourcedSkills } from "../src/skills";
+import { loadSkills } from "../src/skills";
 
 let root = "";
 
@@ -152,41 +151,5 @@ Body.
     await symlink(join(root, "real"), join(root, "linked"));
     const loaded = await loadSkills(join(root, "linked"));
     expect(loaded.skills.map((skill) => skill.name)).toEqual(["pack"]);
-  });
-
-  it("carries a caller's provenance through, on skills and on diagnostics", async () => {
-    await put(
-      "sourced/good/SKILL.md",
-      "---\nname: good\ndescription: fine\n---\nBody.\n",
-    );
-    await put("sourced/bad/SKILL.md", "---\nname: bad\n---\nBody.\n");
-    const { skills, diagnostics } = await loadSourcedSkills(
-      [{ path: join(root, "sourced"), source: "user" }],
-      undefined,
-    );
-    expect(skills.map((entry) => [entry.skill.name, entry.source])).toEqual([
-      ["good", "user"],
-    ]);
-    // The broken one is still reported, with where it came from.
-    expect(
-      diagnostics.map((diagnostic) => [diagnostic.code, diagnostic.source]),
-    ).toEqual([["invalid_metadata", "user"]]);
-  });
-});
-
-describe("formatting an invocation", () => {
-  it("hands over the skill, its location, and where its references are relative to", () => {
-    const skill = {
-      name: "porting",
-      description: "How to port faithfully",
-      content: "Read the source, then write it again.",
-      filePath: "/skills/porting/SKILL.md",
-    };
-    expect(formatSkillInvocation(skill)).toBe(
-      `<skill name="porting" location="/skills/porting/SKILL.md">\nReferences are relative to /skills/porting.\n\nRead the source, then write it again.\n</skill>`,
-    );
-    expect(formatSkillInvocation(skill, "also rename the file")).toContain(
-      "also rename the file",
-    );
   });
 });

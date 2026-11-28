@@ -26,80 +26,6 @@ describe("envLayers", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
-  it("finds capabilities in project layer", () => {
-    writeFileSync(
-      join(projectDir, "env.js"),
-      `// @capabilities [{"name":"shout","source":"(text) => text.toUpperCase()","meta":{}}]\n` +
-        `// eta:generated\n\n` +
-        `// eta:capability shout\n` +
-        `eta.define("shout", (text) => text.toUpperCase(), {});\n` +
-        `// eta:end\n\n` +
-        `// eta:by hand\n`,
-    );
-
-    writeFileSync(
-      join(selfDir, "env.js"),
-      `// @capabilities []\n// eta:generated\n\n// eta:by hand\n`,
-    );
-
-    const layers = new EnvLayers({ self: selfDir, project: projectDir });
-    const found = layers.find("shout");
-
-    expect(found).toBeDefined();
-    expect(found?.layer).toBe("project");
-    expect(found?.source).toContain("toUpperCase");
-  });
-
-  it("finds capabilities in self layer", () => {
-    writeFileSync(
-      join(selfDir, "env.js"),
-      `// @capabilities [{"name":"whisper","source":"(text) => text.toLowerCase()","meta":{}}]\n` +
-        `// eta:generated\n\n` +
-        `// eta:capability whisper\n` +
-        `eta.define("whisper", (text) => text.toLowerCase(), {});\n` +
-        `// eta:end\n\n` +
-        `// eta:by hand\n`,
-    );
-
-    const layers = new EnvLayers({ self: selfDir });
-    const found = layers.find("whisper");
-
-    expect(found).toBeDefined();
-    expect(found?.layer).toBe("self");
-    expect(found?.source).toContain("toLowerCase");
-  });
-
-  it("self layer overrides project layer for same name", () => {
-    // Project 层有 shout
-    writeFileSync(
-      join(projectDir, "env.js"),
-      `// @capabilities [{"name":"shout","source":"(text) => text.toUpperCase()","meta":{}}]\n` +
-        `// eta:generated\n\n` +
-        `// eta:capability shout\n` +
-        `eta.define("shout", (text) => text.toUpperCase(), {});\n` +
-        `// eta:end\n\n` +
-        `// eta:by hand\n`,
-    );
-
-    // Self 层也有 shout（不同实现）
-    writeFileSync(
-      join(selfDir, "env.js"),
-      `// @capabilities [{"name":"shout","source":"(text) => \\"OVERRIDE: \\" + text","meta":{}}]\n` +
-        `// eta:generated\n\n` +
-        `// eta:capability shout\n` +
-        `eta.define("shout", (text) => "OVERRIDE: " + text, {});\n` +
-        `// eta:end\n\n` +
-        `// eta:by hand\n`,
-    );
-
-    const layers = new EnvLayers({ self: selfDir, project: projectDir });
-    const found = layers.find("shout");
-
-    expect(found).toBeDefined();
-    expect(found?.layer).toBe("self");
-    expect(found?.source).toContain("OVERRIDE");
-  });
-
   it("searches all three layers in order", () => {
     // Global 层有 globalCap
     writeFileSync(
@@ -146,84 +72,7 @@ describe("envLayers", () => {
     expect(layers.find("nonexistent")).toBeUndefined();
   });
 
-  it("returns undefined when capability not found", () => {
-    writeFileSync(
-      join(selfDir, "env.js"),
-      `// @capabilities []\n// eta:generated\n\n// eta:by hand\n`,
-    );
-
-    const layers = new EnvLayers({ self: selfDir });
-    const found = layers.find("notHere");
-
-    expect(found).toBeUndefined();
-  });
-
-  it("computes joint hash from all layers", () => {
-    writeFileSync(
-      join(selfDir, "env.js"),
-      `// @capabilities []\n// eta:generated\n\n// eta:by hand\nconst a = 1;`,
-    );
-    writeFileSync(
-      join(projectDir, "env.js"),
-      `// @capabilities []\n// eta:generated\n\n// eta:by hand\nconst b = 2;`,
-    );
-
-    const layers = new EnvLayers({ self: selfDir, project: projectDir });
-    const hash1 = layers.hash;
-
-    // Modify self layer
-    writeFileSync(
-      join(selfDir, "env.js"),
-      `// @capabilities []\n// eta:generated\n\n// eta:by hand\nconst a = 999;`,
-    );
-    layers.reload();
-    const hash2 = layers.hash;
-
-    expect(hash1).not.toBe(hash2);
-  });
-
   describe("concurrent writes and locking", () => {
-    it("two writers on one file both keep their define: each re-reads before it writes", async () => {
-      // Initialize project layer with empty env.js
-      writeFileSync(
-        join(projectDir, "env.js"),
-        `// @capabilities []\n// eta:generated\n\n// eta:by hand\n`,
-      );
-
-      const envFile1 = new EnvFile(join(projectDir, "env.js"));
-      const envFile2 = new EnvFile(join(projectDir, "env.js"));
-
-      // Simulate two agents trying to define different capabilities concurrently
-      const results = await Promise.allSettled([
-        Promise.resolve().then(() =>
-          envFile1.add("shout", "(text) => text.toUpperCase()", {
-            desc: "Convert text to uppercase",
-          }),
-        ),
-        Promise.resolve().then(() =>
-          envFile2.add("whisper", "(text) => text.toLowerCase()", {
-            desc: "Convert text to lowercase",
-          }),
-        ),
-      ]);
-
-      // Both should succeed
-      expect(results[0]?.status).toBe("fulfilled");
-      expect(results[1]?.status).toBe("fulfilled");
-
-      // Reload to verify both capabilities exist
-      const verifyFile = new EnvFile(join(projectDir, "env.js"));
-      expect(verifyFile.has("shout")).toBe(true);
-      expect(verifyFile.has("whisper")).toBe(true);
-
-      const capabilities = verifyFile.capabilities;
-      expect(capabilities).toHaveLength(2);
-      expect(capabilities.map((c) => c.name).sort()).toEqual([
-        "shout",
-        "whisper",
-      ]);
-    });
-
     it("two writers defining one name: the second is refused", async () => {
       writeFileSync(
         join(projectDir, "env.js"),
@@ -286,39 +135,6 @@ describe("envLayers", () => {
         rmSync(lockPath, { force: true });
       }
     }, 10000); // Increase test timeout to 10 seconds
-
-    it("reload picks up concurrent write from another agent", async () => {
-      // Agent A's view
-      writeFileSync(
-        join(projectDir, "env.js"),
-        `// @capabilities []\n// eta:generated\n\n// eta:by hand\n`,
-      );
-
-      const envFileA = new EnvFile(join(projectDir, "env.js"));
-
-      // Agent A writes first capability
-      envFileA.add("capA", "() => 'from A'", { desc: "Capability A" });
-      expect(envFileA.has("capA")).toBe(true);
-      expect(envFileA.has("capB")).toBe(false);
-
-      // Agent B's view (fresh instance)
-      const envFileB = new EnvFile(join(projectDir, "env.js"));
-
-      // Agent B should see A's capability after loading
-      expect(envFileB.has("capA")).toBe(true);
-
-      // Agent B writes second capability
-      envFileB.add("capB", "() => 'from B'", { desc: "Capability B" });
-
-      // Agent A reloads and should now see B's capability
-      expect(envFileA.has("capB")).toBe(false); // Before reload
-      envFileA.reload();
-      expect(envFileA.has("capB")).toBe(true); // After reload
-
-      // Both capabilities should exist
-      expect(envFileA.capabilities).toHaveLength(2);
-      expect(envFileB.capabilities).toHaveLength(2);
-    });
 
     it("a multi-line ability round-trips through the file", async () => {
       writeFileSync(

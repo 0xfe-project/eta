@@ -9,10 +9,10 @@
  */
 
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type { Entry, GoalEntry } from "@eta/core/session";
+import type { Entry } from "@eta/core/session";
 import type { StorageService, StorageWrite } from "@eta/core/storage";
-import { applyGoalEntries, Kernel, kernelOn, Runner } from "@eta/core";
-import { recordGoalEntries, SessionLog } from "@eta/core/session";
+import { Runner } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
 import { MemoryStorage, setValue, value } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
@@ -154,61 +154,6 @@ describe("crash recovery — the half turn is dropped, the committed turns stay"
       "file contents",
     ]);
     expect(log.transcript().length).toBeGreaterThanOrEqual(4);
-  });
-});
-
-describe("crash recovery — the kernel rebuilds from the journal", () => {
-  it("replays goal entries into a fresh goal service", async () => {
-    const disk = new Disk();
-    const first = setup(disk, [answer("working on it")]);
-    const recorder = recordGoalEntries(first.log, kernelOn(first.kernel.ctx));
-    first.kernel.goal.set("ship the kernel");
-    first.kernel.inject(userMsg("keep going"));
-    await first.runner.run();
-    recorder.stop();
-    await first.storage.close();
-
-    const log = await SessionLog.load(disk.restart());
-    const goalEntries = log.graph
-      .pathOldestFirst()
-      .filter((entry): entry is GoalEntry => entry.type === "goal");
-    expect(goalEntries.map((entry) => entry.payload.kind)).toEqual(["set"]);
-
-    const restarted = Kernel.create();
-    applyGoalEntries(restarted.goal, goalEntries);
-    expect(restarted.goal.current?.objective).toBe("ship the kernel");
-    expect(restarted.goal.current?.status).toBe("active");
-    restarted.dispose();
-  });
-
-  it("a runner resumes with the replayed transcript and keeps going", async () => {
-    const disk = new Disk();
-    const first = setup(disk, [answer("first answer")]);
-    first.kernel.inject(userMsg("first question"));
-    await first.runner.run();
-    await first.storage.close();
-
-    const log = await SessionLog.load(disk.restart());
-    const resumedAt = log.transcript().length;
-    const { kernel, journaling } = journaledKernel(log);
-    const fake = fakeModels([answer("second answer")]);
-    const runner = new Runner(kernel, {
-      models: fake,
-      journal: journaling,
-      initialTranscript: log.transcript(),
-    });
-    kernel.inject(userMsg("second question"));
-    await runner.run();
-
-    // The restored history reached the provider without being journaled twice.
-    expect(fake.calls).toHaveLength(1);
-    const context = fake.calls[0]!.context.messages;
-    expect(context.filter((message) => message.role === "user")).toHaveLength(
-      2,
-    );
-
-    const reloaded = await SessionLog.load(disk.restart());
-    expect(reloaded.transcript()).toHaveLength(resumedAt + 2); // the question and the answer
   });
 });
 

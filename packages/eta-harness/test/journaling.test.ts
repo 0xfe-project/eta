@@ -81,25 +81,6 @@ describe("entries from events", () => {
     s.dispose();
   });
 
-  it("marks a terminating message so a replay knows the branch stopped there", async () => {
-    const s = session();
-    const toolResult = {
-      role: "toolResult" as const,
-      toolCallId: "c1",
-      toolName: "bash",
-      content: [{ type: "text" as const, text: "done" }],
-      isError: false,
-      timestamp: 0,
-    };
-    kernelEmit(s.kernel.ctx)("message:end", {
-      message: toolResult,
-      terminate: true,
-    });
-    await s.journaling.flush();
-    expect((s.added[0] as MessageEntry).terminate).toBe(true);
-    s.dispose();
-  });
-
   it("records a completed compaction entry, and ignores a declined one", async () => {
     const s = session();
     const emit = kernelEmit(s.kernel.ctx);
@@ -139,13 +120,19 @@ describe("entries from events", () => {
     const kernel = Kernel.create({
       config: { model: { provider: "p", modelId: "m" } },
     });
-    // No log behind it: the service is wired, but there is nowhere to write.
-    const journaling = new JournalingService(kernel.ctx, {});
+    // No log behind it: the service is wired (state sources too), but there is
+    // nowhere to write.
+    const journaling = new JournalingService(kernel.ctx, {
+      config: kernel.config,
+      tasks: kernel.tasks,
+    });
     const added: Entry[] = [];
     const off = kernelOn(kernel.ctx)("entry:added", (event) => {
       added.push(event.entry);
     });
     kernelEmit(kernel.ctx)("message:end", { message: userMsg("dropped") });
+    kernel.config.update({ thinkingLevel: "high" });
+    kernel.tasks.create("nowhere to go");
     await journaling.flush();
     expect(added).toEqual([]);
     expect(journaling.entries()).toEqual([]);

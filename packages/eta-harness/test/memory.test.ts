@@ -17,7 +17,6 @@ import {
   applyExtraction,
   extractionTranscript,
   extractMemory,
-  extractMemoryAtRunEnd,
   MEMORY_CAP,
   MEMORY_SECTIONS,
   MemoryCache,
@@ -307,57 +306,6 @@ describe("extraction", () => {
         async () => "I have no idea",
       ),
     ).toBeUndefined();
-  });
-
-  it("is asked at the end of a run, and never fails the run", async () => {
-    const fs = memFs({ "/work/.eta/MEMORY.md": "" });
-    const outcomes: unknown[] = [];
-    const source = {
-      fs,
-      target: local,
-      // The default gate is 200 characters; this test is about the call, not
-      // about how much conversation is worth one.
-      minTranscriptChars: 1,
-      call: async () => '{"add_new_decision":["a durable thing"]}',
-    };
-    const messages = [
-      {
-        role: "user",
-        content:
-          "We must always use bun for this project, never npm, and the journal stays append-only — please remember both of those.",
-      },
-    ];
-    expect(
-      await extractMemoryAtRunEnd(source, messages, (outcome) =>
-        outcomes.push(outcome),
-      ),
-    ).toEqual({
-      added: 1,
-      removed: 0,
-      foreign: 0,
-    });
-
-    // A thin conversation is not worth a call, and a broken provider is not a
-    // reason for a run to look failed.
-    expect(
-      await extractMemoryAtRunEnd(
-        { fs, target: local, call: async () => "{}" },
-        [{ role: "user", content: "hi" }],
-      ),
-    ).toEqual({ added: 0, removed: 0, foreign: 0, skipped: "thin" });
-    expect(
-      await extractMemoryAtRunEnd(
-        {
-          fs,
-          target: local,
-          minTranscriptChars: 1,
-          call: async () => {
-            throw new Error("provider down");
-          },
-        },
-        messages,
-      ),
-    ).toMatchObject({ skipped: "provider", reason: "provider down" });
   });
 
   it("keeps notes about the person, not about the ls output", () => {

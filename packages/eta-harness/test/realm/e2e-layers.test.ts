@@ -285,5 +285,16 @@ describe("e2e: 两个 agent 共享和覆盖能力", () => {
       export default version();
     `);
     expect(result2.value).toBe("v2");
+
+    // The hash covers every layer: another agent writing to the shared project
+    // layer re-wakes this one too, and what it defined is there.
+    const other = new Agent({ root: agentBRoot, project: projectRoot });
+    other.layers.get("project")!.add("shared", "() => 'from the project'");
+    const result3 = await agent.run(`
+      import shared from "eta:shared";
+      export default shared();
+    `);
+    expect(result3.value).toBe("from the project");
+    other.dispose();
   });
 });

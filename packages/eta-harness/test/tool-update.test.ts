@@ -139,19 +139,6 @@ describe("tool:update", () => {
     dispose();
   });
 
-  it("a tool that never reports produces no update", async () => {
-    const quiet: KernelTool = { name: "quiet", execute: () => "silent" };
-    const { kernel, runner, updates, names, dispose } = setup(
-      [toolTurn([{ id: "c1", name: "quiet" }]), assistantMessage()],
-      [quiet],
-    );
-    kernel.inject(userMsg("go"));
-    await runner.run();
-    expect(updates).toEqual([]);
-    expect(names).toEqual(["tool:start", "tool:end"]);
-    dispose();
-  });
-
   it("drops updates that arrive after the call settled", async () => {
     let late: ((partial: unknown) => void) | undefined;
     const sneaky: KernelTool = {

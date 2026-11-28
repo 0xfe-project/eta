@@ -64,8 +64,8 @@ describe("the reminder reaching a request", () => {
     const session = await openSession({
       storage,
       models: models as never,
-      // Due after one turn without a task tool: the arithmetic is core's and is
-      // tested there; what matters here is the wiring.
+      // Due after one turn without a task tool: the interval arithmetic is
+      // cadence.test.ts's; what matters here is the wiring.
       reminderInterval: 1,
     });
     session.kernel.tools.register(plainTool);

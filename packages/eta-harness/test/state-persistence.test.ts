@@ -9,15 +9,10 @@
  */
 
 import type { KernelConfig, StoredTask } from "@eta/core";
-import {
-  DEFAULT_COMPACTION_SETTINGS,
-  DEFAULT_RETRY_POLICY,
-  Kernel,
-} from "@eta/core";
+import { DEFAULT_COMPACTION_SETTINGS, DEFAULT_RETRY_POLICY } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { describe, expect, it } from "vitest";
-import { JournalingService } from "../src/index";
 import { journaledKernel, SESSION_CONFIG, TASKS_STATE } from "../src/testing";
 
 const userMsg = (text: string) => ({
@@ -181,21 +176,6 @@ describe("the task ledger is durable", () => {
 });
 
 describe("the writes stay out of the way", () => {
-  it("a journaling service with no journal keeps nothing, and does not fail", async () => {
-    const kernel = Kernel.create({
-      config: { model: { provider: "p", modelId: "m" } },
-    });
-    const journaling = new JournalingService(kernel.ctx, {
-      config: kernel.config,
-      tasks: kernel.tasks,
-    });
-    kernel.config.update({ thinkingLevel: "high" });
-    kernel.tasks.create("nowhere to go");
-    await journaling.flush();
-    expect(journaling.entries()).toEqual([]);
-    void kernel.dispose();
-  });
-
   it("state writes do not disturb the branch tip", async () => {
     const { storage, kernel, log, journaling, dispose } = await session();
     log.recordMessage(userMsg("a message"));
