@@ -48,6 +48,7 @@
     "@types/node": "22.19.19",
     "bun-types": "1.4.2",
     "typescript": "5.9.3",
-    "vitest": "4.1.9"
+    "vitest": "4.1.9",
+    "yaml": "2.8.1"
   }
 }
