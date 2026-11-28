@@ -122,9 +122,14 @@ export async function runAndWait(
   keepGoing: () => boolean = () => true,
   images: readonly PromptImage[] = [],
 ): Promise<RunOutcome> {
+  const { kernel, runner } = managed.session;
+  // Wait for any prior run still unwinding (such as a freshly aborted daemon RPC) before queuing
+  // ours so `runner.run()` does not return that dying run's outcome for this prompt.
+  while (runner.running && keepGoing())
+    await runner.run().catch(() => undefined);
+  if (!keepGoing()) return { status: "aborted", text: "", thinking: "" };
   const heard = listen(managed);
   try {
-    const { kernel, runner } = managed.session;
     kernel.nextRun({
       role: "user",
       timestamp: Date.now(),

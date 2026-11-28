@@ -99,19 +99,27 @@ export class PluginRows {
     this.#db
       .query(
         `INSERT INTO plugin_source (name, repo, rev, path, sha, ref, added_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (name) DO UPDATE SET sha = excluded.sha, ref = excluded.ref`,
+         ON CONFLICT (name) DO UPDATE SET repo = excluded.repo, rev = excluded.rev, path = excluded.path, sha = excluded.sha, ref = excluded.ref`,
       )
       .run(row.name, row.repo, row.rev, row.path, row.sha, row.ref, Date.now());
   }
 
-  removeSource(name: string): void {
-    this.#db.query("DELETE FROM plugin_source WHERE name = ?").run(name);
-    this.#db.query("DELETE FROM plugin_disabled WHERE plugin = ?").run(name);
-    this.#db.query("DELETE FROM plugin_header WHERE plugin = ?").run(name);
-    this.#db.query("DELETE FROM plugin_env WHERE plugin = ?").run(name);
-    this.#db
-      .query("DELETE FROM plugin_token_header WHERE plugin = ?")
-      .run(name);
+  removeSource(name: string, keepConfig = false): void {
+    this.#db.transaction(() => {
+      this.#db.query("DELETE FROM plugin_source WHERE name = ?").run(name);
+      if (keepConfig) return;
+      this.#db.query("DELETE FROM plugin_disabled WHERE plugin = ?").run(name);
+      this.#db.query("DELETE FROM plugin_header WHERE plugin = ?").run(name);
+      this.#db.query("DELETE FROM plugin_env WHERE plugin = ?").run(name);
+      this.#db
+        .query("DELETE FROM plugin_token_header WHERE plugin = ?")
+        .run(name);
+      this.#db.query("DELETE FROM plugin_config WHERE plugin = ?").run(name);
+      this.#db
+        .query("DELETE FROM plugin_agent_level WHERE plugin = ?")
+        .run(name);
+      this.#db.query("DELETE FROM agent_plugin WHERE plugin = ?").run(name);
+    })();
   }
 
   /* --------------------------------------------------------------- the switch */

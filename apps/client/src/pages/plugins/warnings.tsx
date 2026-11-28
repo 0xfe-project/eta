@@ -15,6 +15,7 @@ import { EmptyState } from "../../components/empty-state";
 import { CloseButton } from "../../components/navigation-buttons";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
+import { fieldIssueText } from "./config-fields";
 
 import { pluginText as text } from "./labels";
 export interface PluginWarning {
@@ -33,11 +34,25 @@ export function pluginWarnings(item: PluginView): PluginWarning[] {
       : "";
   const blocking = [
     ...(item.problem ? [item.problem] : []),
-    ...item.fields.flatMap((field) =>
-      field.issue?.code !== "required" &&
-      (!field.required || field.set || field.default !== undefined)
-        ? []
-        : [uiText("pluginRequiredMissing", { title: field.title })],
+    ...item.fields.flatMap((field) => {
+      if (field.issue) {
+        if (field.issue.code === "required")
+          return [uiText("pluginRequiredMissing", { title: field.title })];
+        return [
+          uiText("pluginFieldWarning", {
+            title: field.title,
+            reason: fieldIssueText(field, field.issue),
+          }),
+        ];
+      }
+      if (field.required && !field.set && field.default === undefined)
+        return [uiText("pluginRequiredMissing", { title: field.title })];
+      return [];
+    }),
+    ...item.servers.flatMap((server) =>
+      (server.missingEnv ?? []).map((name) =>
+        uiText("pluginEnvMissing", { server: server.name, name }),
+      ),
     ),
     ...(skipped ? [skipped] : []),
   ];

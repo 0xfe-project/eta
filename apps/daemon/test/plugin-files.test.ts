@@ -54,8 +54,11 @@ describe("a plugin's hash", () => {
     await mkdir(join(root, ".git"));
     await writeFile(join(root, ".git", "HEAD"), "ref");
     expect(pluginHash(root)).toBe(first);
-    chmodSync(join(root, "a.txt"), 0o755);
-    expect(pluginHash(root)).not.toBe(first);
+    if (process.platform !== "win32") {
+      // Windows NTFS has no POSIX executable bit, so chmod 0o755 does not change st_mode & 0o111.
+      chmodSync(join(root, "a.txt"), 0o755);
+      expect(pluginHash(root)).not.toBe(first);
+    }
     expect(pluginHash(await tree({ "a.txt": "2" }))).not.toBe(first);
     expect(pluginHash(await tree({ "b.txt": "1" }))).not.toBe(first);
   });
@@ -98,9 +101,11 @@ describe("the copies a daemon keeps", () => {
     send(root, store, hash);
     expect(store.has(hash)).toBe(true);
     expect(pluginHash(store.dir(hash))).toBe(hash);
-    expect(statSync(join(store.dir(hash), "bin", "run")).mode & 0o111).toBe(
-      0o111,
-    );
+    if (process.platform !== "win32") {
+      expect(statSync(join(store.dir(hash), "bin", "run")).mode & 0o111).toBe(
+        0o111,
+      );
+    }
   });
 
   it("moves a file larger than a frame in pieces", async () => {

@@ -372,12 +372,14 @@ export class Composio {
     // Another key may be another project: what was found for the old one is not known for this.
     this.#configs.clear();
     this.#routed.clear();
-    this.#dropAll();
+    this.#dropAll(false);
+    this.#notify();
     this.#triggerEpoch++;
     this.#notifyTriggerContext("auth");
   }
 
   clearKey(): void {
+    const hadKey = this.hasKey();
     this.#credentials.erase(
       CREDENTIAL.integration,
       CREDENTIAL.key,
@@ -385,7 +387,8 @@ export class Composio {
     );
     this.#configs.clear();
     this.#routed.clear();
-    this.#dropAll();
+    const dropped = this.#dropAll(false);
+    if (hadKey || dropped) this.#notify();
     this.#triggerEpoch++;
     this.#notifyTriggerContext("auth");
   }
@@ -599,8 +602,12 @@ export class Composio {
   }
 
   /** Called when what the plugins are changed (a session made, dropped, or the source switched). */
-  onChange(listener: () => void): void {
+  onChange(listener: () => void): () => void {
     this.#listeners.push(listener);
+    return () => {
+      const index = this.#listeners.indexOf(listener);
+      if (index !== -1) this.#listeners.splice(index, 1);
+    };
   }
 
   #notify(): void {
@@ -943,22 +950,27 @@ export class Composio {
     else this.#settings.set(SESSIONS_KEY, rest);
   }
 
-  #drop(set: string): void {
+  #drop(set: string, notify = true): boolean {
     const had = this.#sessions.delete(set);
     this.#forget(set);
-    if (had) this.#notify();
+    if (notify && had) this.#notify();
+    return had;
   }
 
   /** A toolkit is no more: it is not wanted, every session that has it goes, and the sessions of what is left are brought in line. */
-  #dropToolkit(slug: string): void {
+  #dropToolkit(slug: string, notify = true): boolean {
     this.#wanted?.delete(slug);
+    let dropped = false;
     for (const set of new Set([...this.#sessions.keys(), ...this.#keptSets()]))
-      if (set.split(",").includes(slug)) this.#drop(set);
+      if (set.split(",").includes(slug) && this.#drop(set, false))
+        dropped = true;
     this.refresh();
+    if (notify && dropped) this.#notify();
+    return dropped;
   }
 
   /** Every session and every kept id goes: the key they were made with is no more. */
-  #dropAll(): void {
+  #dropAll(notify = true): boolean {
     this.#epoch++;
     const had = this.#sessions.size > 0;
     for (const set of new Set([...this.#sessions.keys(), ...this.#keptSets()]))
@@ -971,7 +983,8 @@ export class Composio {
     this.#making.clear();
     this.#wanted = undefined;
     this.#settings.delete(SESSIONS_KEY);
-    if (had) this.#notify();
+    if (notify && had) this.#notify();
+    return had;
   }
 
   /* ------------------------------------------------------------------- link */
@@ -1075,13 +1088,22 @@ export class Composio {
     if (key === undefined) return { status: "needs_key" };
     if (this.#known(slug)?.auth !== "none")
       throw new PluginError("only a toolkit that needs no sign-in is added");
-    this.#settings.set(ADDED_KEY, [...new Set([...this.#addedSlugs(), slug])]);
+    const beforeAdded = this.#addedSlugs();
+    const nextAdded = [...new Set([...beforeAdded, slug])];
+    const addedChanged = nextAdded.length !== beforeAdded.length;
+    this.#settings.set(ADDED_KEY, nextAdded);
+    let sessionChanged = false;
     if (this.source().enabled) {
       // Before the first `sync` what is wanted is not known: what is kept is then left as it is.
+      const before = this.#snapshot();
       const known = this.#wanted !== undefined;
       this.#wanted = new Set([...(this.#wanted ?? []), slug]);
       await this.#reconcile(key, known);
+      sessionChanged = this.#snapshot() !== before;
     }
+    // `#reconcile` already notifies when the session snapshot moved; notify here only when `added`
+    // changed without a session transition (e.g. source off or session already present).
+    if (addedChanged && !sessionChanged) this.#notify();
     this.#notifyTriggerContext("accounts");
     return { status: "ready" };
   }
@@ -1096,7 +1118,8 @@ export class Composio {
     const rest = added.filter((one) => one !== slug);
     if (rest.length === 0) this.#settings.delete(ADDED_KEY);
     else this.#settings.set(ADDED_KEY, rest);
-    this.#dropToolkit(slug);
+    this.#dropToolkit(slug, false);
+    this.#notify();
     this.#notifyTriggerContext("accounts");
     return { removed: true };
   }
@@ -1140,12 +1163,14 @@ export class Composio {
           throw new Error("Composio did not confirm the delete");
         removed++;
       }
+      const dropped = this.#dropToolkit(slug, false);
+      if (dropped || removed > 0) this.#notify();
       if (removed > 0) {
         this.#notifyTriggerContext("accounts");
       }
-      this.#dropToolkit(slug);
       return { status: "ready", removed };
     } catch (error) {
+      if (removed > 0) this.#notify();
       return { status: this.#failure(error), removed };
     }
   }

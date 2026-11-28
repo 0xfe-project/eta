@@ -165,6 +165,45 @@ describe("finding the project's notes", () => {
     expect(scan.files).toEqual([]);
     expect(scan.target.path).toBe("/work/scratch/.eta/MEMORY.md");
   });
+
+  it("never probes double-slash //.eta/MEMORY.md at root and walks Windows drive paths cleanly", async () => {
+    const probed: string[] = [];
+    const trackingFs: MemoryFs = {
+      async readFile() {
+        return undefined;
+      },
+      async mtime(path) {
+        probed.push(path);
+        return undefined;
+      },
+      async writeFile() {},
+      async listFileNames() {
+        return [];
+      },
+    };
+    await scanMemory(trackingFs, "/work/eta", "/home/lemon");
+    expect(probed).toContain("/.eta/MEMORY.md");
+    expect(probed.some((p) => p.startsWith("//"))).toBe(false);
+
+    probed.length = 0;
+    const winScan = await scanMemory(
+      trackingFs,
+      "C:\\work\\eta",
+      "C:\\Users\\lemon",
+    );
+    expect(probed).toEqual([
+      "C:\\work\\eta\\.eta\\MEMORY.md",
+      "C:\\work\\eta\\.git",
+      "C:\\work\\.eta\\MEMORY.md",
+      "C:\\work\\.git",
+      "C:\\.eta\\MEMORY.md",
+      "C:\\.git",
+    ]);
+    expect(winScan.target.path).toBe("C:\\work\\eta\\.eta\\MEMORY.md");
+    expect(
+      memoryFileLabel("C:\\Users\\lemon\\.eta\\MEMORY.md", "C:\\Users\\lemon"),
+    ).toBe("user");
+  });
 });
 
 describe("the memory cache", () => {

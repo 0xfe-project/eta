@@ -503,7 +503,7 @@ export interface AgentFields {
 /** Valid requests from a client. The server still validates untrusted JSON at runtime. */
 export interface AgentArgs {
   /** Makes the agent, its workspace directory and its home project. */
-  create: AgentFields;
+  create: AgentFields & { avatarSeed?: string };
   /** `avatarSeed` draws its avatar from that seed and puts it at the front of `avatarSeeds`. */
   update: { agentId: string; avatarSeed?: string } & Partial<AgentFields>;
   /** Clears it as steward, archives the chats it was alone in, and leaves its directory on disk. */

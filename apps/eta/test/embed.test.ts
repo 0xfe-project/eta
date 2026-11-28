@@ -127,7 +127,7 @@ describe("the generated table", () => {
     expect(Bun.zstdDecompressSync(packed).toString()).toBe(build);
 
     // The table before the host: this order is what makes it visible to the host's modules.
-    const generated = readFileSync(entry, "utf8");
+    const generated = readFileSync(entry, "utf8").replaceAll("\\\\", "/");
     expect(generated.indexOf("embedded.ts")).toBeLessThan(
       generated.indexOf("src/main.ts"),
     );
@@ -216,7 +216,11 @@ console.log(JSON.stringify({
       "web/assets/app-abc.js",
       "web/index.html",
     ]);
-    expect(report.index).toMatch(/^\/\$bunfs\/root\/index-[^/]+\.html$/);
+    expect(report.index).toMatch(
+      process.platform === "win32"
+        ? /^[A-Z]:\/~BUN\/root\/index-[^/]+\.html$/i
+        : /^\/\$bunfs\/root\/index-[^/]+\.html$/,
+    );
     expect(report.read).toBe("<title>eta</title>");
     expect(report.file).toBe("b1");
     expect(report.web).toEqual(["BUILD", "assets/app-abc.js", "index.html"]);
@@ -246,7 +250,12 @@ console.log(JSON.stringify({
       expect(report.build).toBe(join(dir, "build"));
     }
     expect(readdirSync(dir).sort()).toEqual(["build", "run"]);
-    expect(statSync(join(dir, "run")).mode & 0o777).toBe(0o755);
-    expect(Bun.spawnSync([join(dir, "run")]).stdout.toString()).toBe("ran\n");
+    if (process.platform !== "win32") {
+      // Windows NTFS has no POSIX executable bit and cannot spawn extensionless #!/bin/sh scripts.
+      expect(statSync(join(dir, "run")).mode & 0o777).toBe(0o755);
+      expect(Bun.spawnSync([join(dir, "run")]).stdout.toString()).toBe("ran\n");
+    } else {
+      expect(readFileSync(join(dir, "run"), "utf8")).toContain("echo ran");
+    }
   }, 60_000);
 });

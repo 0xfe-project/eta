@@ -8,6 +8,7 @@
 import type { MessageView } from "@eta/client-contracts";
 import type { RemoteWorld } from "./support/remote";
 import type { World } from "./support/world";
+import process from "node:process";
 import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { createOarRuntimes } from "@eta/runtime-oar";
@@ -198,7 +199,11 @@ describe("a run waiting on a tool that never settles", () => {
         ? call("esmrun", { script: "await new Promise(() => {});" })
         : say("answer after the stop"),
     );
-    const w = await world({ models, replies: { stopGraceMs: GRACE } });
+    // Allow headroom for esmrun abort cleanup on loaded Windows runs while preserving GRACE elsewhere.
+    const w = await world({
+      models,
+      replies: { stopGraceMs: process.platform === "win32" ? 2_000 : GRACE },
+    });
     const { group } = await ada(w);
     const first = await w.send(group.id, "run something that never comes back");
     const reply = first.replies[0]!;

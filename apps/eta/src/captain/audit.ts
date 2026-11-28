@@ -12,12 +12,14 @@ export interface CaptainAuditEntry {
 export class CaptainAudit {
   readonly path: string;
   #tail: Promise<void> = Promise.resolve();
+  #closed = false;
 
   constructor(dataDir: string) {
     this.path = join(dataDir, "captain", "operations.jsonl");
   }
 
   record(entry: Omit<CaptainAuditEntry, "at">): Promise<void> {
+    if (this.#closed) return Promise.resolve();
     const line = `${JSON.stringify({ at: Date.now(), ...entry })}\n`;
     const write = async (): Promise<void> => {
       await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
@@ -32,5 +34,11 @@ export class CaptainAudit {
     const next = this.#tail.then(write, write);
     this.#tail = next.catch(() => undefined);
     return next;
+  }
+
+  /** Flush pending audit writes before shutdown deletes or closes storage. */
+  async close(): Promise<void> {
+    this.#closed = true;
+    await this.#tail;
   }
 }

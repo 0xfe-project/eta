@@ -1,3 +1,4 @@
+import type { FieldIssue, PluginFieldView } from "@eta/client-contracts";
 import { View } from "nsh";
 import {
   colors,
@@ -10,7 +11,47 @@ import {
 } from "../../components";
 import { LayoutSelect } from "../../components/select";
 import { control, icon, space } from "../../components/tokens";
-import { formatLocale } from "../../i18n";
+import { formatLocale, uiText } from "../../i18n";
+
+export function fieldIssueText(
+  field: Pick<PluginFieldView, "type">,
+  issue: FieldIssue,
+): string {
+  switch (issue.code) {
+    case "required":
+      return uiText("pluginFieldRequired");
+    case "type":
+      return field.type === "number"
+        ? uiText("pluginNumberRequired")
+        : uiText("pluginFieldInvalidType");
+    case "pattern":
+      return uiText("pluginFieldPattern");
+    case "minLength":
+      return uiText("pluginFieldMinLength", {
+        limit: String(issue.limit ?? ""),
+      });
+    case "maxLength":
+      return uiText("pluginFieldMaxLength", {
+        limit: String(issue.limit ?? ""),
+      });
+    case "int":
+      return uiText("pluginWholeNumberRequired");
+    case "min":
+      return uiText("pluginBelowMinimum", { value: issue.limit ?? "" });
+    case "max":
+      return uiText("pluginAboveMaximum", { value: issue.limit ?? "" });
+    case "option":
+      return uiText("pluginFieldInvalidOption");
+    case "minItems":
+      return uiText("pluginFieldMinItems", {
+        limit: String(issue.limit ?? ""),
+      });
+    case "maxItems":
+      return uiText("pluginFieldMaxItems", {
+        limit: String(issue.limit ?? ""),
+      });
+  }
+}
 
 const pluginConfigCopy = {
   fields: [

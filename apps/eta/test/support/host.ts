@@ -3,6 +3,7 @@ import type { Host, HostOptions } from "../../src/host";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { afterEach } from "vitest";
 import { startHost } from "../../src/host";
@@ -10,11 +11,28 @@ import { startHost } from "../../src/host";
 const roots: string[] = [];
 const hosts: Host[] = [];
 
+/** Bun's `rm` does not honor Node's `maxRetries` on Windows EBUSY, so retry brief locks explicitly. */
+async function removeWithRetry(path: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rm(path, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (
+        process.platform !== "win32" ||
+        (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") ||
+        attempt >= 20
+      )
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
 afterEach(async () => {
   for (const host of hosts.splice(0)) await host.close();
-  for (const root of roots.splice(0)) {
-    await rm(root, { recursive: true, force: true });
-  }
+  for (const root of roots.splice(0)) await removeWithRetry(root);
 });
 
 /** A fresh empty directory, removed after the test. */

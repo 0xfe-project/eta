@@ -4,6 +4,7 @@
   "license": "MIT",
   "scripts": {
     "build": "rm -rf out/models && FASTEMBED_CACHE_PATH=out/models uv run python -m axp_memory.embedding",
+    "typecheck": "uv run ty check .",
     "lint": "uv run ruff check .",
     "test": "uv run pytest",
     "test:changed": "uv run pytest"

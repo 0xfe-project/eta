@@ -12,6 +12,25 @@ import { cleanupAll, setup, tool } from "./helpers/harness";
 
 afterEach(cleanupAll);
 
+/** Bun's `rm` ignores `maxRetries` on Windows EBUSY, so retry brief locks explicitly. */
+async function removeWithRetry(path: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rm(path, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (
+        process.platform !== "win32" ||
+        (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") ||
+        attempt >= 20
+      )
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
 const spec = { tools: [tool("ping", { behavior: "counter" })] };
 
 function text(result: {
@@ -474,6 +493,7 @@ describe("the child process", () => {
 
   it("starts in the session's directory unless the config names one", async () => {
     const h = await setup();
+    let h2: Awaited<ReturnType<typeof setup>> | undefined;
     const sessionDir = await mkdtemp(join(tmpdir(), "eta-mcp-cwd-"));
     const configured = await mkdtemp(join(tmpdir(), "eta-mcp-cwd-"));
     try {
@@ -481,12 +501,15 @@ describe("the child process", () => {
       expect(await inSession.read("cwd")).toBe(await realpath(sessionDir));
       await h.manager.closeAll();
 
-      const h2 = await setup();
+      h2 = await setup();
       const inConfig = await probe(h2, { cwd: configured }, sessionDir);
       expect(await inConfig.read("cwd")).toBe(await realpath(configured));
     } finally {
-      await rm(sessionDir, { recursive: true, force: true });
-      await rm(configured, { recursive: true, force: true });
+      // Close both managers before removing their temp cwd dirs so Windows releases directory handles.
+      await h.manager.closeAll();
+      await h2?.manager.closeAll();
+      await removeWithRetry(sessionDir);
+      await removeWithRetry(configured);
     }
   });
 

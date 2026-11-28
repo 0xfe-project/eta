@@ -210,4 +210,70 @@ describe("an executor's question on a task", () => {
       r.requests.some((request) => request.agent === "Ada" && onTask(request)),
     ).toBe(false);
   });
+
+  it("completes the maker's run without posting trailing prose as a second comment after answer_task_question", async () => {
+    const r = await room("answer");
+    await until(() => status(r.w, r.task.id) === "in_review");
+    const makerRun = () =>
+      r.w.host.product.board
+        .detail(r.task.id)
+        ?.runs.find((run) => run.agentId === r.ada.id);
+    await until(() => {
+      const run = makerRun();
+      return (
+        run !== undefined &&
+        !["queued", "starting", "running"].includes(run.status)
+      );
+    });
+    expect(makerRun()).toMatchObject({
+      status: "completed",
+      nudged: false,
+      error: null,
+    });
+    const adaComments = r.w.host.product.board
+      .activity(r.task.id)
+      .filter(
+        (entry) => entry.kind === "comment" && entry.actor.agentId === r.ada.id,
+      )
+      .map((entry) => entry.body ?? "");
+    expect(adaComments).toHaveLength(1);
+    expect(adaComments[0]).toContain("Answer: teal");
+    expect(timeline(r.w, r.task.id)).not.toContain("done");
+  });
+
+  it("completes the maker's run without posting trailing prose as a second comment after escalate_task_question", async () => {
+    const r = await room("escalate");
+    const makerRun = () =>
+      r.w.host.product.board
+        .detail(r.task.id)
+        ?.runs.find((run) => run.agentId === r.ada.id);
+    await until(() => {
+      const run = makerRun();
+      return (
+        run !== undefined &&
+        !["queued", "starting", "running"].includes(run.status)
+      );
+    });
+    await until(() => rows(r.w).some((row) => row.status === "pending"));
+    expect(makerRun()).toMatchObject({
+      status: "completed",
+      nudged: false,
+      error: null,
+    });
+    const adaComments = r.w.host.product.board
+      .activity(r.task.id)
+      .filter(
+        (entry) => entry.kind === "comment" && entry.actor.agentId === r.ada.id,
+      )
+      .map((entry) => entry.body ?? "");
+    expect(adaComments).toHaveLength(1);
+    expect(adaComments[0]).toContain("went to the user's Inbox");
+    expect(timeline(r.w, r.task.id)).not.toContain("done");
+    await r.w.client.call("inbox", "answer", {
+      id: rows(r.w).find((entry) => entry.status === "pending")!.id,
+      response: { kind: "freeform", text: "red" },
+    });
+    await until(() => status(r.w, r.task.id) === "in_review");
+    expect(timeline(r.w, r.task.id)).not.toContain("done");
+  });
 });

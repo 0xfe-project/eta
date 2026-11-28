@@ -31,7 +31,8 @@ export class CatalogCache {
   constructor(db: Database, options: CatalogCacheOptions) {
     this.#db = db;
     this.#maxRow = options.maxRowBytes;
-    this.#maxTotal = options.maxTotalBytes ?? 8 * 1024 * 1024;
+    this.#maxTotal =
+      options.maxTotalBytes ?? Math.max(8 * 1024 * 1024, options.maxRowBytes);
     this.#maxRows = options.maxRows ?? 20;
   }
 

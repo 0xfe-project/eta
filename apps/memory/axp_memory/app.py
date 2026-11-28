@@ -78,8 +78,7 @@ def create_app(provider: MemoryProvider):
                 [message],
                 source="agent",
                 infer=False,
-                group_id=ctx.request_context.request.headers.get("X-AXP-Group-Id")
-                or None,
+                group_id=_header(ctx.request_context.request, "X-AXP-Group-Id") or None,
             )
         )
         return _view(added[0]) if added else {}
@@ -90,7 +89,7 @@ def create_app(provider: MemoryProvider):
         found = await anyio.to_thread.run_sync(
             provider.search, agent_of(ctx), query[:MAX_TEXT], max(1, min(limit, 50))
         )
-        group_id = ctx.request_context.request.headers.get("X-AXP-Group-Id")
+        group_id = _header(ctx.request_context.request, "X-AXP-Group-Id")
         return [_recall_view(memory, group_id) for memory in found]
 
     @mcp.tool()
@@ -289,8 +288,12 @@ class _Captures:
                 self.queue.task_done()
 
 
-def _agent(request: Request) -> str:
-    return request.headers.get(AGENT_HEADER, "")
+def _header(request: Request | None, name: str) -> str | None:
+    return request.headers.get(name) if request is not None else None
+
+
+def _agent(request: Request | None) -> str:
+    return _header(request, AGENT_HEADER) or ""
 
 
 def _view(memory: Memory) -> dict:

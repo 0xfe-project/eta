@@ -228,9 +228,15 @@ export class CaptainSupervisor {
     const now = this.#now();
     for (const task of tasks) {
       if (task.status === "blocked") {
+        // Activity within one blocked episode must not raise it again; entering it again must.
+        const blockedEntry =
+          this.#deps.board.lastStatusEntry(task.id) ??
+          this.#deps.board
+            .activity(task.id)
+            .find((entry) => entry.kind === "created");
         this.#deps.store.createReview({
           kind: "task_blocked",
-          dedupeKey: `task-blocked:${task.id}:${task.updatedAt}`,
+          dedupeKey: `task-blocked:${task.id}:${blockedEntry?.id ?? "legacy"}`,
           taskId: task.id,
           body: `Task #${task.number} “${task.title}” is blocked.`,
           data: { taskId: task.id, updatedAt: task.updatedAt },

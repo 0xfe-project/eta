@@ -14,15 +14,20 @@
       "inputs": [
         "$TURBO_EXTENDS$",
         "$TURBO_ROOT$/.github/actions/setup-nsh/action.yml",
-        "$TURBO_ROOT$/scripts/nsh-client.ts"
+        "$TURBO_ROOT$/scripts/nsh-client.ts",
+        "$TURBO_ROOT$/scripts/nsh-client-args.ts"
       ]
     },
     "test": {
       "env": ["ETA_NSH"],
+      // `scripts/nsh-client-args.ts` reads `CI` to pick `-j 1` on CI runners under
+      // Turbo Strict Mode without splitting cache keys from local runs.
+      "passThroughEnv": ["CI"],
       "inputs": [
         "$TURBO_EXTENDS$",
         "$TURBO_ROOT$/.github/actions/setup-nsh/action.yml",
-        "$TURBO_ROOT$/scripts/nsh-client.ts"
+        "$TURBO_ROOT$/scripts/nsh-client.ts",
+        "$TURBO_ROOT$/scripts/nsh-client-args.ts"
       ]
     }
   }

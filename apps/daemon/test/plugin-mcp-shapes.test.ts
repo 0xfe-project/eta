@@ -9,6 +9,7 @@ import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { localWindowsProbe, windowsShell } from "@eta/ssh";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   claimServerNames,
@@ -107,10 +108,14 @@ describe("what an external runtime is given", () => {
     );
     const root = loaded.root;
     const data = join(dataDir, "plugins", "data", "demo.plugin");
+    const shell =
+      process.platform === "win32"
+        ? windowsShell(localWindowsProbe)
+        : "/bin/sh";
     expect(extras.mcpServers).toStrictEqual([
       {
         name: "demo_plugin-local",
-        command: "/bin/sh",
+        command: shell,
         args: [
           "-c",
           'cd "$0" && exec "$@"',
@@ -130,7 +135,7 @@ describe("what an external runtime is given", () => {
       },
       {
         name: "demo_plugin-bare",
-        command: "/bin/sh",
+        command: shell,
         args: ["-c", 'cd "$0" && exec "$@"', root, "node"],
         env: { PLUGIN_ROOT: root, PLUGIN_DATA: data },
       },

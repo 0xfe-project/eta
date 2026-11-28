@@ -397,7 +397,14 @@ export class DaemonNode {
       const stop = (): void => managed.session.runner.abort();
       signal.addEventListener("abort", stop, { once: true });
       try {
-        return await this.#run(managed, text, images, wantsActivity, emit);
+        return await this.#run(
+          managed,
+          text,
+          images,
+          wantsActivity,
+          emit,
+          signal,
+        );
       } finally {
         signal.removeEventListener("abort", stop);
       }
@@ -495,9 +502,11 @@ export class DaemonNode {
     images: DaemonServiceParams["run"]["images"],
     wantsActivity: boolean | undefined,
     emit: (event: unknown) => void,
+    signal: AbortSignal,
   ): Promise<RunOutcome> {
+    const keepGoing = (): boolean => !signal.aborted;
     if (wantsActivity !== true)
-      return await runAndWait(managed, text, undefined, images);
+      return await runAndWait(managed, text, keepGoing, images);
     const on = kernelOn(managed.session.kernel.ctx);
     const activity = (kind: DaemonRunEvent["kind"]): void => {
       try {
@@ -514,7 +523,7 @@ export class DaemonNode {
       on("message:end", () => activity("message")),
     ];
     try {
-      return await runAndWait(managed, text, undefined, images);
+      return await runAndWait(managed, text, keepGoing, images);
     } finally {
       for (const off of offs) off();
     }

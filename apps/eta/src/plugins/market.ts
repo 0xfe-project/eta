@@ -56,11 +56,12 @@ export const PROXY_KEY = "plugins.githubProxy";
 /** The single address an earlier version kept; read once and moved into the list. */
 export const LEGACY_URL_KEY = "plugins.catalogUrl";
 
-const MAX_BYTES = 1024 * 1024;
+const MAX_BYTES = 4 * 1024 * 1024;
 const TIMEOUT_MS = 10_000;
-const MAX_ENTRIES = 500;
+const MAX_ENTRIES = 2000;
 const SHA = /^[0-9a-f]{40}$/;
 const NAME = /^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/;
+const GITHUB_REPO = /^[a-z0-9][\w.-]{0,99}\/[\w.-]{1,100}$/i;
 
 export interface MarketOptions {
   settings: SettingStore;
@@ -122,10 +123,17 @@ function originOf(url: string, metadata: unknown): Origin {
   try {
     const address = new URL(url);
     if (address.hostname === "raw.githubusercontent.com") {
-      const [owner, name, at] = address.pathname.split("/").filter(Boolean);
+      const [owner, name, at, kind, target] = address.pathname
+        .split("/")
+        .filter(Boolean);
       if (owner !== undefined && name !== undefined && at !== undefined) {
         repo = `https://github.com/${owner}/${name}.git`;
-        ref = at;
+        if (at === "refs") {
+          if ((kind === "heads" || kind === "tags") && target !== undefined)
+            ref = target;
+        } else {
+          ref = at;
+        }
       }
     }
   } catch {
@@ -578,17 +586,43 @@ export class Market {
     }
     if (
       !isPlain(source) ||
-      (source.source !== "url" && source.source !== "git-subdir")
+      (source.source !== "url" &&
+        source.source !== "git-subdir" &&
+        source.source !== "github")
     )
       return unsupported(
         `source ${isPlain(source) ? JSON.stringify(source.source) : typeof source}`,
       );
-    const repo = text(source, "url", 512).trim();
+    let repo: string;
+    if (source.source === "github") {
+      const slug = text(source, "repo", 201).trim();
+      const [owner, name] = slug.split("/");
+      if (
+        !GITHUB_REPO.test(slug) ||
+        owner === undefined ||
+        name === undefined ||
+        name === "." ||
+        name === ".." ||
+        name.startsWith("-") ||
+        slug.includes("..")
+      )
+        throw new Error(`repo is not a GitHub owner/repo: ${slug}`);
+      const cleanName = name.endsWith(".git") ? name.slice(0, -4) : name;
+      if (cleanName === "" || cleanName === "." || cleanName === "..")
+        throw new Error(`repo is not a GitHub owner/repo: ${slug}`);
+      repo = `https://github.com/${owner}/${cleanName}.git`;
+    } else {
+      repo = text(source, "url", 512).trim();
+    }
     this.#checkRepo(repo);
     const path =
       source.source === "git-subdir"
         ? cleanPath(text(source, "path", 256))
-        : "";
+        : source.source === "github" &&
+            typeof source.path === "string" &&
+            source.path.trim() !== ""
+          ? cleanPath(source.path)
+          : "";
     let rev: string | null = null;
     if (source.sha !== undefined) {
       if (typeof source.sha !== "string" || !SHA.test(source.sha))
@@ -643,10 +677,15 @@ export class Market {
     if (source === undefined)
       throw new PluginError(`${url} is not one of the plugin sources`);
     const refs = new Map<string, string>();
-    const read = await this.#read(source, proxy, refs);
-    if (read.entries === null)
-      throw new PluginError(read.error ?? "no catalog");
-    const entry = read.entries.find((item) => item.name === name);
+    let read = await this.#read(source, proxy, refs, "cached");
+    let entry = read.entries?.find((item) => item.name === name);
+    if (entry === undefined) {
+      refs.clear();
+      read = await this.#read(source, proxy, refs, "refresh");
+      if (read.entries === null)
+        throw new PluginError(read.error ?? "no catalog");
+      entry = read.entries.find((item) => item.name === name);
+    }
     if (entry === undefined)
       throw new PluginError(`${name} is not in the catalog`);
     if (entry.unsupported !== null)
@@ -672,6 +711,7 @@ export class Market {
       const plugin = await loadPlugin(dir);
       return {
         name: entry.name,
+        manifestName: plugin.manifest.name,
         version: plugin.manifest.version ?? null,
         description: plugin.manifest.description ?? "",
         repo: entry.repo,
@@ -698,6 +738,15 @@ export class Market {
           secret: field.secret === true,
           required: field.required === true,
         })),
+        bundledAgents: plugin.agents.map(
+          ({ id, name, description, path, instructions }) => ({
+            id,
+            name,
+            description,
+            path,
+            instructions,
+          }),
+        ),
       };
     } finally {
       await rm(scratch, { recursive: true, force: true });
@@ -710,7 +759,7 @@ export class Market {
    * shown the new one first. The plugin keeps the name its own manifest gives it.
    */
   async install(name: string, source: string, sha: string): Promise<string> {
-    const { entry } = await this.#listed(name, source);
+    const { entry, ref } = await this.#listed(name, source);
     if (!SHA.test(sha)) throw new PluginError("sha must be a full commit hash");
     if (entry.rev !== null && entry.rev !== sha)
       throw new PluginError(
@@ -718,6 +767,11 @@ export class Market {
       );
     if (entry.installed === "this")
       throw new PluginError(`${name} is installed; use Update`);
-    return await this.#plugins.registry.add(entry.repo, sha, entry.path);
+    return await this.#plugins.registry.add(
+      entry.repo,
+      entry.rev ?? ref,
+      entry.path,
+      sha,
+    );
   }
 }

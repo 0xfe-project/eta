@@ -23,7 +23,6 @@ Architecture notes:
 - [Wire protocol and targets](architecture/wire-protocol.md): WebSocket pipe, frames, targets and actions
 - [Product model](architecture/product-model.md): agents, machines, projects, conversations, the lead agent, wake-up rules
 - [Data](architecture/data.md): SQLite and migrations, session files, data directory layout
-- [Phone app](architecture/mobile.md): the Native Shell client, connecting, scanning, packaging
 - [Machines and daemon](architecture/machines.md): pairing, epochs, model and tool proxying, remote sessions
 - [Access control](architecture/access.md): origin checks, token gate, capability routing
 - [LLM gateway](architecture/llm-gateway.md): subscription accounts (Codex, Grok) and Gemini keys, CLIProxyAPI run as a child process of the host
@@ -104,9 +103,9 @@ bun run check     # everything CI runs
 In the client, add a model service under Settings → Model services first (an API key, or a device-code
 link for a Codex or Grok subscription, or a Google AI Studio key), then create agents and conversations.
 
-`bun run check` is `dprint check`, `bun run lint:repo` (root eslint) and
+`bun run check` is `dprint check`, `bun run lint:repo` (root eslint), `//#typecheck:scripts`, `//#test:scripts`, and
 `turbo run build typecheck lint test knip` (`bun run check:affected` scopes that to what changed).
-`bun run format` formats with dprint. CI runs the same verification suite through turbo's remote cache;
+`bun run format` formats with dprint. CI runs the same verification suite across Linux, Windows, and macOS with per-OS Turborepo caches;
 the local `pre-commit` hook only formats staged files with `dprint`.
 
 ## Running from a checkout

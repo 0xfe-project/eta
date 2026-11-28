@@ -1,6 +1,7 @@
 import type {
   AgentView,
   CaptainResults,
+  PluginBundledAgentView,
   ProvidersView,
 } from "@eta/client-contracts";
 import type { ViewRef } from "nsh";
@@ -8,8 +9,10 @@ import type { Layout } from "../components";
 import type { MotionFrom } from "../components/motion";
 import type { Flavor, PaletteId } from "../components/palettes";
 import type { Page } from "../navigation/routes";
+import type { PluginsTab } from "../pages/plugins/plugins";
 import type { ChatWidth, Theme } from "../pages/settings/appearance";
 import type { SettingsSection } from "../pages/settings/overview";
+import type { ImportedBotDraft } from "../pages/templates/local-import";
 import {
   cleanup,
   effect,
@@ -44,7 +47,10 @@ import { NewTask } from "../pages/tasks/new-task";
 import { TaskDetail } from "../pages/tasks/task-detail";
 import { TaskWorkspace } from "../pages/tasks/task-workspace";
 import { openAgentChat } from "../pages/templates/agent-chat";
-import { TemplateGallery } from "../pages/templates/gallery";
+import {
+  pluginBundledAgentDraft,
+  TemplateGallery,
+} from "../pages/templates/gallery";
 import { requestedTemplate } from "../pages/templates/link";
 import { follow, useHost } from "../services/host";
 import { dismissTop, topDismissable } from "../ui/behaviors";
@@ -169,8 +175,22 @@ export function Workspace(props: {
     mobileOpen.set(shown);
   }
   const newGroup = signal(false);
+  /** Where the Plugins page should open (tab and/or specific plugin). */
+  const pluginsIntent = signal<
+    { tab?: PluginsTab; plugin?: string } | undefined
+  >(undefined);
   /** The template gallery, open on a template id ("" for none in particular). */
   const templateGallery = signal<string | undefined>(undefined);
+  /** A pre-loaded draft (e.g. a plugin-bundled agent) to open the template gallery on. */
+  const templateDraft = signal<ImportedBotDraft | undefined>(undefined);
+  function closeTemplateGallery() {
+    templateGallery.set(undefined);
+    templateDraft.set(undefined);
+  }
+  function openPluginAgent(pluginName: string, agent: PluginBundledAgentView) {
+    templateDraft.set(pluginBundledAgentDraft(pluginName, agent));
+    templateGallery.set("");
+  }
   // A template link (`eta://template?id=…`, `?template=…`) opens the gallery on it.
   effect(() => {
     const id = requestedTemplate();
@@ -179,6 +199,7 @@ export function Workspace(props: {
     // An agent is made in Settings › Agents now: a link gets out of Settings first.
     const section = settings();
     if (section) closeSettings(section);
+    templateDraft.set(undefined);
     templateGallery.set(id);
   });
   const newTask = signal(false);
@@ -294,6 +315,10 @@ export function Workspace(props: {
     const id = await openAgentChat(host, agent);
     if (id) open(id);
   }
+  function openPlugins(intent?: { tab?: PluginsTab; plugin?: string }) {
+    navigate("plugins");
+    pluginsIntent.set(intent);
+  }
   let openingCaptain = false;
   /** Why Captain's conversation did not open: shown in its pane, with Retry. */
   const captainProblem = signal<unknown>(undefined);
@@ -320,6 +345,7 @@ export function Workspace(props: {
       showSettings();
       return;
     }
+    pluginsIntent.set(undefined);
     settings.set(undefined);
     settingsPush.settle();
     chatPush.settle();
@@ -620,7 +646,10 @@ export function Workspace(props: {
           <If when={page() === "plugins"}>
             <Plugins
               layout={props.layout}
+              initialTab={pluginsIntent()?.tab}
+              initialPlugin={pluginsIntent()?.plugin}
               onSettings={() => showSettings("Plugins")}
+              onImportAgent={openPluginAgent}
               onBack={
                 phone()
                   ? () => {
@@ -707,7 +736,16 @@ export function Workspace(props: {
                 onClose={() => closeSettings(section())}
                 onTemplates={() => {
                   closeSettings(section());
+                  templateDraft.set(undefined);
                   templateGallery.set("");
+                }}
+                onOpenMarket={() => {
+                  closeSettings(section());
+                  openPlugins({ tab: "Market" });
+                }}
+                onOpenPlugins={(plugin) => {
+                  closeSettings(section());
+                  openPlugins({ tab: "Plugins", plugin });
                 }}
               />
             </View>
@@ -724,15 +762,25 @@ export function Workspace(props: {
       <If when={templateGallery() !== undefined}>
         <TemplateGallery
           phone={phone()}
+          tablet={props.layout === "tablet"}
           initialId={templateGallery() || undefined}
-          onClose={() => templateGallery.set(undefined)}
+          initialDraft={templateDraft()}
+          onClose={closeTemplateGallery}
           onCreated={(agent) => {
-            templateGallery.set(undefined);
+            closeTemplateGallery();
             void chatWith(agent);
           }}
           onModelServices={() => {
-            templateGallery.set(undefined);
+            closeTemplateGallery();
             showSettings("Model services");
+          }}
+          onOpenMarket={() => {
+            closeTemplateGallery();
+            openPlugins({ tab: "Market" });
+          }}
+          onOpenPlugins={(plugin) => {
+            closeTemplateGallery();
+            openPlugins({ tab: "Plugins", plugin });
           }}
         />
       </If>

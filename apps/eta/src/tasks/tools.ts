@@ -751,7 +751,9 @@ function mentionedTools(
     }),
     async execute(args) {
       try {
-        return text(await asks!.answer(who.agentId, args));
+        const reply = await asks!.answer(who.agentId, args);
+        runner.markReported(who.taskId, who.agentId);
+        return text(reply);
       } catch (error) {
         return failure(error);
       }
@@ -773,9 +775,13 @@ function mentionedTools(
     }),
     execute(args) {
       try {
-        return text(
-          asks!.escalate(who.agentId, args.interactionId, args.reason),
+        const reply = asks!.escalate(
+          who.agentId,
+          args.interactionId,
+          args.reason,
         );
+        runner.markReported(who.taskId, who.agentId);
+        return text(reply);
       } catch (error) {
         return failure(error);
       }

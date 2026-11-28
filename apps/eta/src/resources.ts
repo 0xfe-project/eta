@@ -167,7 +167,13 @@ async function write(
           `${name} unpacked to ${sha256}, not ${expected.sha256}`,
         );
       chmodSync(part, 0o755);
-      renameSync(part, target);
+      try {
+        renameSync(part, target);
+      } catch (error) {
+        // On Windows a concurrent caller putting `target` in place makes MoveFileEx fail with EPERM.
+        if (sizeOf(target) === size) rmSync(part, { force: true });
+        else throw error;
+      }
     } catch (error) {
       rmSync(part, { force: true });
       throw error;

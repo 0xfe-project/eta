@@ -83,9 +83,11 @@ jobs:
           key: flatpak-gnome-49-x86_64-v1
       - name: Set up Flathub remote and GNOME 49 runtime
         if: matrix.target == 'linux' && matrix.format == 'flatpak'
+        env:
+          CACHE_HIT: ${{ steps.flatpak-runtime.outputs.cache-hit }}
         run: |
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          if [[ "${{ steps.flatpak-runtime.outputs.cache-hit }}" != "true" ]]; then
+          if [[ "$CACHE_HIT" != "true" ]]; then
             flatpak install --user --noninteractive -y flathub org.gnome.Platform//49 org.gnome.Sdk//49
           fi
       - run: bun run --cwd apps/client client:check
@@ -110,6 +112,7 @@ jobs:
           flatpak install --user --noninteractive -y "$out/Eta.flatpak"
           flatpak info dev.eta.client
           flatpak info --show-permissions dev.eta.client
+          # shellcheck disable=SC2016
           flatpak run --command=sh dev.eta.client -c '
             set -eu
             test -n "${FLATPAK_ID:-}"

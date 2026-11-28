@@ -112,7 +112,10 @@ function App() {
   const openedWith =
     platform.os === "web" ? undefined : pairingAddress(UrlScheme.url());
   const forcedConnect = signal(Boolean(openedWith));
-  requestedTemplate.set(takeTemplateFromPage());
+  requestedTemplate.set(
+    takeTemplateFromPage() ??
+      (platform.os === "web" ? undefined : templateLinkId(UrlScheme.url())),
+  );
   const userConnecting = signal(false);
   const openingWeb = signal(false);
   const loadingWebWorkspace = () => {

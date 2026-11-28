@@ -4,7 +4,6 @@ import type { SshTransport } from "@eta/ssh";
 import type { SessionHooks } from "../session-hooks";
 import type { Plugins } from "./service";
 import { Buffer } from "node:buffer";
-import { posix } from "node:path";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { shellQuote } from "@eta/ssh";
 import { Type } from "typebox";
@@ -25,10 +24,19 @@ const FILE_PREFIX = "eta-plugin-";
 /** Fresh private directory, file 0600, value on stdin so it is not in any process's arguments. */
 const writeScript = `umask 077
 base="\${TMPDIR:-/tmp}"
-find "$base" -maxdepth 1 -type d -name '${FILE_PREFIX}*' -user "$(id -u)" -mmin +${FILE_TTL_MINUTES} -exec rm -rf {} + 2>/dev/null
+case "$(uname -s)" in
+  # MSYS2 \`find\` stats + queries SIDs on every entry in shared Windows %TEMP%; skip that scan there.
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *) find "$base" -maxdepth 1 -name '${FILE_PREFIX}*' -type d -user "$(id -u)" -mmin +${FILE_TTL_MINUTES} -exec rm -rf {} + 2>/dev/null ;;
+esac
 dir=$(mktemp -d "$base/${FILE_PREFIX}XXXXXX") || exit 1
 cat > "$dir/value" || exit 1
-printf '%s' "$dir/value"`;
+if command -v cygpath >/dev/null 2>&1; then
+  # On Windows/MSYS2, /tmp is virtual to the shell; emit a Windows drive path callers outside sh can open.
+  cygpath -m "$dir/value" | tr -d '\\r\\n'
+else
+  printf '%s' "$dir/value"
+fi`;
 
 async function writeValueFile(
   transport: SshTransport,
@@ -41,12 +49,11 @@ async function writeValueFile(
   if (result.code !== 0 || result.stdout === "")
     throw new Error(result.stderr.trim() || "the file could not be written");
   const path = result.stdout.trim();
+  const dir = path.replace(/[\\/][^\\/]+$/, "");
   // Gone within the hour even if nothing else reads a value on that machine.
   setTimeout(
     () => {
-      void transport
-        .run(`rm -rf ${shellQuote(posix.dirname(path))}`)
-        .catch(() => undefined);
+      void transport.run(`rm -rf ${shellQuote(dir)}`).catch(() => undefined);
     },
     FILE_TTL_MINUTES * 60 * 1000,
   ).unref();

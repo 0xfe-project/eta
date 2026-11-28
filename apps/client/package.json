@@ -10,7 +10,7 @@
     "client:test": "bun ../../scripts/nsh-client.ts test",
     "typecheck": "bun run client:check",
     "test": "bun run client:test",
-    "lint": "ast-grep test --skip-snapshot-tests && bun scripts/check-design-values.ts",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint . && ast-grep test --skip-snapshot-tests && bun scripts/check-design-values.ts",
     "templates": "bun scripts/agent-templates.ts",
     "package": "bun ../../scripts/nsh-client.ts package App.tsx",
     "publish:ios": "bun ../../scripts/nsh-client.ts publish ios",
