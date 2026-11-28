@@ -982,6 +982,9 @@ describe("account balances through the saved source", () => {
       );
       await h.load();
       try {
+        // The first read of the config lands after load(); until it does the
+        // snapshot is empty and has no `checks` section at all.
+        await until(() => h.config() !== undefined);
         const reply = await callResult(h, "readBalance", {
           id: "d",
           refresh: true,
