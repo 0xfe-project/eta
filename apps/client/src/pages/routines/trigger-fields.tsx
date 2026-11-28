@@ -1100,10 +1100,16 @@ export function TriggerSection(props: {
       <If when={showPolling()}>
         <View style={{ gap: space[4] }}>
           <Label variant="small" tone={props.sheet ? "mutedInk" : undefined}>
-            {uiText("triggerPollingInterval")}
+            {props.provider === "file-watch"
+              ? uiText("triggerFileWatchPollingInterval")
+              : uiText("triggerPollingInterval")}
           </Label>
           <Field
-            label={uiText("triggerPollingInterval")}
+            label={
+              props.provider === "file-watch"
+                ? uiText("triggerFileWatchPollingInterval")
+                : uiText("triggerPollingInterval")
+            }
             placeholder={
               props.provider === "rss" || props.provider === "web-monitor"
                 ? "15"
@@ -1121,7 +1127,10 @@ export function TriggerSection(props: {
             })}
           />
           <Label variant="caption" tone={props.pollingError ? "red" : "muted"}>
-            {props.pollingError || uiText("triggerPollingIntervalHint")}
+            {props.pollingError ||
+              (props.provider === "file-watch"
+                ? uiText("triggerFileWatchPollingHint")
+                : uiText("triggerPollingIntervalHint"))}
           </Label>
         </View>
       </If>

@@ -315,6 +315,66 @@ function parseObjectDraft(
   }
 }
 
+function validateFileWatchPath(raw: string): string | undefined {
+  if (raw.includes("\0")) return uiText("triggerFileWatchPathInvalid");
+  if (/^~(?=$|[\\/])/.test(raw)) return undefined;
+  if (raw.startsWith("/")) {
+    return raw.replace(/\/+$/, "") === ""
+      ? uiText("triggerFileWatchPathRootForbidden")
+      : undefined;
+  }
+  if (/^[a-z]:[\\/]/i.test(raw)) {
+    return /^[a-z]:[\\/]+$/i.test(raw)
+      ? uiText("triggerFileWatchPathRootForbidden")
+      : undefined;
+  }
+  if (/^[a-z]:$/i.test(raw)) {
+    return uiText("triggerFileWatchPathRootForbidden");
+  }
+  if (raw.startsWith("\\\\")) {
+    const parts = raw
+      .slice(2)
+      .split(/[\\/]+/)
+      .filter(Boolean);
+    if (parts.length <= 1) return uiText("triggerFileWatchPathInvalid");
+    if (parts.length === 2) return uiText("triggerFileWatchPathRootForbidden");
+    return undefined;
+  }
+  return uiText("triggerFileWatchPathNotAbsolute");
+}
+
+function hasBalancedGlobSyntax(pattern: string): boolean {
+  let braceDepth = 0;
+  let inClass = false;
+  let escaped = false;
+  for (const ch of pattern) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === "[" && !inClass) {
+      inClass = true;
+      continue;
+    }
+    if (ch === "]" && inClass) {
+      inClass = false;
+      continue;
+    }
+    if (!inClass) {
+      if (ch === "{") braceDepth += 1;
+      else if (ch === "}") {
+        braceDepth -= 1;
+        if (braceDepth < 0) return false;
+      }
+    }
+  }
+  return !inClass && braceDepth === 0;
+}
+
 export function validateTriggerField(
   field: TriggerConfigField,
   config: Record<string, unknown>,
@@ -332,6 +392,18 @@ export function validateTriggerField(
       typeof config.jsonPath === "string" ? config.jsonPath.trim() : "";
     if (selectorText !== "" && jsonPathText !== "") {
       return uiText("triggerWebMonitorSelectorConflict");
+    }
+  }
+  if (provider === "file-watch") {
+    const text = typeof current === "string" ? current.trim() : "";
+    if (field.key === "path" && text !== "") {
+      const pathErr = validateFileWatchPath(text);
+      if (pathErr) return pathErr;
+    }
+    if ((field.key === "glob" || field.key === "ignore") && text !== "") {
+      if (text.includes("\0") || !hasBalancedGlobSyntax(text)) {
+        return uiText("triggerFileWatchGlobInvalid");
+      }
     }
   }
   switch (field.kind) {

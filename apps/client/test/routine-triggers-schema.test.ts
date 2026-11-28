@@ -201,6 +201,7 @@ test("providerLabel formats built-in rss and other trigger provider ids", () => 
   expect(providerLabel("rss")).toBe("RSS");
   expect(providerLabel("webhook")).toBe("Webhook");
   expect(providerLabel("web-monitor")).toBe("Web Monitor");
+  expect(providerLabel("file-watch")).toBe("File Watch");
   expect(providerLabel("composio")).toBe("Composio");
   expect(providerLabel("custom_hook")).toBe("Custom Hook");
 });
@@ -322,4 +323,78 @@ test("webhook URL, loopback detection, and curl command helpers handle all auth 
       headerName: "X-Hub-Signature-256",
     }),
   ).toContain("-H 'X-Hub-Signature-256: sha256=<hmac-sha256>'");
+});
+
+test("validateTriggerField checks file-watch path, root rejection, glob syntax, and debounceMs", () => {
+  const fields = parseTriggerConfigSchema({
+    type: "object",
+    required: ["path"],
+    properties: {
+      path: { type: "string", title: "Watch path" },
+      glob: { type: "string", title: "Include glob" },
+      ignore: { type: "string", title: "Ignore glob" },
+      debounceMs: {
+        type: "integer",
+        title: "Debounce (ms)",
+        minimum: 0,
+        maximum: 60000,
+        default: 500,
+      },
+    },
+  });
+
+  const pathField = fields.find((f) => f.key === "path")!;
+  const globField = fields.find((f) => f.key === "glob")!;
+  const debounceField = fields.find((f) => f.key === "debounceMs")!;
+
+  language.set("en");
+  expect(
+    validateTriggerField(pathField, { path: "relative/dir" }, {}, "file-watch"),
+  ).toBe("Enter an absolute path or start with ~ (e.g. ~/Documents).");
+  expect(validateTriggerField(pathField, { path: "/" }, {}, "file-watch")).toBe(
+    "Cannot watch an entire drive or filesystem root.",
+  );
+  expect(
+    validateTriggerField(pathField, { path: "C:\\" }, {}, "file-watch"),
+  ).toBe("Cannot watch an entire drive or filesystem root.");
+  expect(
+    validateTriggerField(
+      pathField,
+      { path: "~/Documents/reports" },
+      {},
+      "file-watch",
+    ),
+  ).toBeUndefined();
+  expect(
+    validateTriggerField(
+      pathField,
+      { path: "/srv/example-docs" },
+      {},
+      "file-watch",
+    ),
+  ).toBeUndefined();
+  expect(
+    validateTriggerField(
+      globField,
+      { path: "~/docs", glob: "**/*.{md,txt" },
+      {},
+      "file-watch",
+    ),
+  ).toBe("Glob pattern has unmatched brackets or braces.");
+  expect(
+    validateTriggerField(
+      debounceField,
+      {},
+      { debounceMs: "70000" },
+      "file-watch",
+    ),
+  ).toBe("Maximum 60000");
+
+  language.set("zh");
+  expect(
+    validateTriggerField(pathField, { path: "docs" }, {}, "file-watch"),
+  ).toBe("请输入绝对路径或以 ~ 开头的路径（例如 ~/Documents）。");
+  expect(
+    validateTriggerField(pathField, { path: "D:" }, {}, "file-watch"),
+  ).toBe("不能监控整个盘符或文件系统根目录。");
 });

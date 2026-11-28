@@ -225,6 +225,30 @@ export const routinesMessages = {
     "Specify either CSS selector or JSON path, not both.",
     "CSS 选择器和 JSON 路径不能同时填写。",
   ],
+  triggerFileWatchPollingInterval: [
+    "Fallback scan interval (minutes)",
+    "兜底扫描间隔（分钟）",
+  ],
+  triggerFileWatchPollingHint: [
+    "Fallback stat scan interval when file watcher misses changes (1–10080 min, default 5).",
+    "文件监听漏报时的兜底扫描间隔（1–10080 分钟，默认 5 分钟）。",
+  ],
+  triggerFileWatchPathNotAbsolute: [
+    "Enter an absolute path or start with ~ (e.g. ~/Documents).",
+    "请输入绝对路径或以 ~ 开头的路径（例如 ~/Documents）。",
+  ],
+  triggerFileWatchPathRootForbidden: [
+    "Cannot watch an entire drive or filesystem root.",
+    "不能监控整个盘符或文件系统根目录。",
+  ],
+  triggerFileWatchPathInvalid: [
+    "Enter a valid file or directory path.",
+    "请输入有效的文件或目录路径。",
+  ],
+  triggerFileWatchGlobInvalid: [
+    "Glob pattern has unmatched brackets or braces.",
+    "Glob 模式中的括号或花括号未成对闭合。",
+  ],
   triggerFieldArrayRequired: ["Enter at least one item.", "请至少填写一项。"],
   triggerFieldExclusiveMin: [
     "Must be greater than {{value}}",
@@ -287,6 +311,15 @@ export const routinesMessages = {
   triggerNotCheckedYet: ["Not checked yet", "尚未抓取"],
   triggerLastChangeAt: ["Last changed · {{time}}", "上次变化 · {{time}}"],
   triggerNoChangesYet: ["No changes yet", "尚未变化"],
+  triggerWatchedPathsCount: [
+    "Watching {{count}} path",
+    "正在监听 {{count}} 个路径",
+  ],
+  triggerWatchedPathsCountPlural: [
+    "Watching {{count}} paths",
+    "正在监听 {{count}} 个路径",
+  ],
+  triggerNotWatching: ["Not watching paths", "尚未监听路径"],
   triggerWaitingForEvents: [
     "Listening for external events",
     "等待外部触发事件",

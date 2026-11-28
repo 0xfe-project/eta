@@ -36,7 +36,9 @@ export interface TriggerProvisionResult {
   pollingIntervalMinutes: number | null;
   fallbackReason: string | null;
   active: boolean;
+  config?: Record<string, unknown>;
   lastCheckedAt?: number | null;
+  watchedCount?: number | null;
 }
 
 export interface IncomingTriggerEvent {
@@ -65,6 +67,7 @@ export interface TriggerProviderHost {
   onTriggerError?: (routineId: string, error: string) => void;
   onTriggerRecovered?: (routineId: string) => void;
   onTriggerChecked?: (routineId: string, checkedAt: number) => void;
+  onTriggerWatchedCount?: (routineId: string, watchedCount: number) => void;
 }
 
 export interface TriggerProvider {
@@ -238,6 +241,18 @@ export class TriggerHub {
         if (current.lastCheckedAt === checkedAt) return;
         this.#store.updateTriggerState(routineId, {
           lastCheckedAt: checkedAt,
+        });
+        this.#changed(routineId);
+      },
+      onTriggerWatchedCount: (routineId, watchedCount) => {
+        const routine = this.#store.get(routineId);
+        const current = this.#store.trigger(routineId);
+        if (routine === undefined || current?.provider !== provider.id) {
+          return;
+        }
+        if (current.watchedCount === watchedCount) return;
+        this.#store.updateTriggerState(routineId, {
+          watchedCount,
         });
         this.#changed(routineId);
       },
@@ -574,6 +589,7 @@ export class TriggerHub {
   #applyProvisioned(routineId: string, result: TriggerProvisionResult): void {
     this.#store.updateTriggerState(routineId, {
       accountId: result.accountId,
+      ...(result.config === undefined ? {} : { config: result.config }),
       instanceId: result.instanceId,
       effectiveMode: result.mode,
       pollingInterval: result.pollingIntervalMinutes,
@@ -583,6 +599,9 @@ export class TriggerHub {
       ...(result.lastCheckedAt === undefined
         ? {}
         : { lastCheckedAt: result.lastCheckedAt }),
+      ...(result.watchedCount === undefined
+        ? {}
+        : { watchedCount: result.watchedCount }),
     });
   }
 

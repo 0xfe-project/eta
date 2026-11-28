@@ -161,6 +161,7 @@ describe("the seeds a release upgrades", () => {
       "0066-remove-revoked-machines",
       "0067-routine-triggers",
       "0068-routine-trigger-last-checked",
+      "0069-routine-trigger-watched-count",
     ]);
   });
 

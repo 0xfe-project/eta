@@ -594,3 +594,92 @@ test("Web Monitor channel auto-folds selects, validates selector vs jsonPath con
     },
   });
 });
+
+test("File Watch channel auto-folds selects, validates path/glob, and renders watchedCount/lastEventAt/lastError", async () => {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "en-US",
+  });
+
+  // Detail panel shows watched paths count, lastEventAt, and lastError for file-watch.
+  await app.waitFor("label:Local Docs Watch");
+  await app.press("label:Local Docs Watch");
+  await app.waitFor("text:file-watch / fs / FILE_CHANGED");
+  expect(app.shows("text:Watching 12 paths")).toBe(true);
+  expect(app.texts().some((text) => text.startsWith("Last event · "))).toBe(
+    true,
+  );
+  expect(app.shows("text:Watched file count exceeds limit (5000)")).toBe(true);
+
+  // Create a new File Watch routine via editor.
+  await app.press("label:New routine");
+  await app.waitFor("label:Event trigger");
+
+  await app.type("label:Name", "Reports Folder Watch");
+  await app.type("label:Brief", "Summarize newly added reports.");
+  await app.press("label:Event trigger");
+
+  await app.waitFor("label:Channel");
+  await app.press("label:Channel");
+  await app.waitFor("label:File Watch");
+  await app.press("label:File Watch");
+
+  await app.waitFor("text:File or directory changed");
+  expect(app.shows("text:FILE_CHANGED")).toBe(true);
+  expect(app.shows("label:App / source")).toBe(false);
+  expect(app.shows("label:Trigger event")).toBe(false);
+  expect(app.shows("label:Fallback scan interval (minutes)")).toBe(true);
+  expect(app.value("label:Debounce (ms)")).toBe("500");
+
+  // Validate relative path and drive root errors before entering a valid path.
+  await app.type("label:Watch path", "relative/folder");
+  expect(
+    app.shows(
+      "text:Enter an absolute path or start with ~ (e.g. ~/Documents).",
+    ),
+  ).toBe(true);
+  await app.clear("label:Watch path");
+  await app.type("label:Watch path", "/");
+  expect(
+    app.shows("text:Cannot watch an entire drive or filesystem root."),
+  ).toBe(true);
+  await app.clear("label:Watch path");
+  await app.type("label:Watch path", "~/Documents/reports");
+
+  await app.type("label:Include glob", "**/*.md");
+  await app.type("label:Ignore glob", "*.tmp");
+  await app.clear("label:Debounce (ms)");
+  await app.type("label:Debounce (ms)", "250");
+  await app.type("label:Fallback scan interval (minutes)", "10");
+
+  await app.press("label:Create");
+  await app.waitFor("text:Reports Folder Watch");
+
+  const createLine = app.texts().find((t) => t.startsWith("Create:")) ?? "";
+  const payload = JSON.parse(createLine.slice("Create:".length)) as {
+    trigger: {
+      provider: string;
+      source: string;
+      trigger: string;
+      mode: string;
+      pollingIntervalMinutes: number | null;
+      config: Record<string, unknown>;
+    };
+  };
+  expect(payload.trigger).toEqual({
+    provider: "file-watch",
+    source: "fs",
+    trigger: "FILE_CHANGED",
+    accountId: null,
+    mode: "poll",
+    pollingIntervalMinutes: 10,
+    config: {
+      path: "~/Documents/reports",
+      glob: "**/*.md",
+      ignore: "*.tmp",
+      debounceMs: 250,
+    },
+  });
+});

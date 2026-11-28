@@ -431,7 +431,30 @@ function TriggerSummaryDetail(props: {
               : uiText("triggerNoChangesYet")}
           </Label>
         </If>
-        <If when={props.trigger.provider !== "web-monitor"}>
+        <If when={props.trigger.provider === "file-watch"}>
+          <Label variant="caption" tone="muted">
+            {props.trigger.watchedCount != null
+              ? props.trigger.watchedCount === 1
+                ? uiText("triggerWatchedPathsCount", { count: 1 })
+                : uiText("triggerWatchedPathsCountPlural", {
+                    count: props.trigger.watchedCount,
+                  })
+              : uiText("triggerNotWatching")}
+          </Label>
+          <Label variant="caption" tone="muted">
+            {props.trigger.lastEventAt
+              ? uiText("triggerLastEventAt", {
+                  time: feedTime(props.trigger.lastEventAt),
+                })
+              : uiText("triggerNoEventsYet")}
+          </Label>
+        </If>
+        <If
+          when={
+            props.trigger.provider !== "web-monitor" &&
+            props.trigger.provider !== "file-watch"
+          }
+        >
           <If when={props.trigger.lastCheckedAt != null}>
             <Label variant="caption" tone="muted">
               {uiText("triggerLastCheckedAt", {

@@ -30,6 +30,7 @@ import type { DaemonBuilds } from "./machines/builds";
 import type { SshRunner } from "./machines/install";
 import type { MachineRecord } from "./machines/store";
 import type { Tailscale } from "./machines/tailscale";
+import type { FileWatchFn, FileWatchFs } from "./routines/file-watch-triggers";
 import type { RssFetch } from "./routines/rss-triggers";
 import type { WebMonitorFetch } from "./routines/web-monitor-triggers";
 import type { SessionHooks } from "./session-hooks";
@@ -110,6 +111,7 @@ import { Plugins } from "./plugins/service";
 import { pluginSessionTools } from "./plugins/tools";
 import { projectsPlugin } from "./projects/plugin";
 import { ProjectStore } from "./projects/store";
+import { FileWatchTriggerProvider } from "./routines/file-watch-triggers";
 import { routinesPlugin } from "./routines/plugin";
 import { RssTriggerProvider } from "./routines/rss-triggers";
 import { INTERRUPTED, RoutineRunner } from "./routines/runner";
@@ -216,6 +218,19 @@ export interface WebMonitorTuning {
   maxBytes?: number | undefined;
   now?: (() => number) | undefined;
   timer?: boolean | undefined;
+  backoffBaseMs?: number | undefined;
+  backoffMaxMs?: number | undefined;
+}
+
+/** Test-only overrides for `FileWatchTriggerProvider` filesystem watching and fallback polling. */
+export interface FileWatchTuning {
+  now?: (() => number) | undefined;
+  timer?: boolean | undefined;
+  home?: string | undefined;
+  platform?: NodeJS.Platform | undefined;
+  maxFiles?: number | undefined;
+  watch?: FileWatchFn | false | undefined;
+  fs?: FileWatchFs | undefined;
   backoffBaseMs?: number | undefined;
   backoffMaxMs?: number | undefined;
 }
@@ -355,6 +370,8 @@ export function createProduct(options: {
   webhook?: WebhookTuning | undefined;
   /** Test tuning for built-in webpage / JSON API change-monitoring triggers. */
   webMonitor?: WebMonitorTuning | undefined;
+  /** Test tuning for built-in local file & directory change-monitoring triggers. */
+  fileWatch?: FileWatchTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const captainOn = options.captain !== false;
@@ -626,9 +643,35 @@ export function createProduct(options: {
       ? {}
       : { backoffMaxMs: options.webMonitor.backoffMaxMs }),
   });
+  const fileWatchTriggers = new FileWatchTriggerProvider({
+    settings: new SettingStore(db),
+    now: options.fileWatch?.now ?? now,
+    timer: options.fileWatch?.timer ?? options.routines?.timer ?? true,
+    home: options.fileWatch?.home ?? options.home,
+    warn,
+    ...(options.fileWatch?.platform === undefined
+      ? {}
+      : { platform: options.fileWatch.platform }),
+    ...(options.fileWatch?.maxFiles === undefined
+      ? {}
+      : { maxFiles: options.fileWatch.maxFiles }),
+    ...(options.fileWatch?.watch === undefined
+      ? {}
+      : { watch: options.fileWatch.watch }),
+    ...(options.fileWatch?.fs === undefined
+      ? {}
+      : { fs: options.fileWatch.fs }),
+    ...(options.fileWatch?.backoffBaseMs === undefined
+      ? {}
+      : { backoffBaseMs: options.fileWatch.backoffBaseMs }),
+    ...(options.fileWatch?.backoffMaxMs === undefined
+      ? {}
+      : { backoffMaxMs: options.fileWatch.backoffMaxMs }),
+  });
   triggerHub.register(rssTriggers);
   triggerHub.register(webhookTriggers);
   triggerHub.register(webMonitorTriggers);
+  triggerHub.register(fileWatchTriggers);
   runner.setRunFinishedListener((routineId) =>
     triggerHub.onRunFinished(routineId),
   );

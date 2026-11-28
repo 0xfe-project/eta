@@ -20,6 +20,7 @@ import type { LlmOptions, LlmRuntime } from "./llm/runtime";
 import type { SshRunner } from "./machines/install";
 import type {
   ComposioTuning,
+  FileWatchTuning,
   McpTuning,
   Product,
   RepliesOptions,
@@ -101,6 +102,8 @@ export interface HostOptions {
   webhook?: WebhookTuning;
   /** Test tuning for built-in webpage / JSON API change-monitoring triggers. */
   webMonitor?: WebMonitorTuning;
+  /** Test tuning for built-in local file & directory change-monitoring triggers. */
+  fileWatch?: FileWatchTuning;
   /** What a published site may hold; the defaults are for real use, a test makes them small. */
   artifactLimits?: Partial<SiteLimits> | undefined;
   /**
@@ -282,6 +285,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.webMonitor === undefined
         ? {}
         : { webMonitor: options.webMonitor }),
+      ...(options.fileWatch === undefined
+        ? {}
+        : { fileWatch: options.fileWatch }),
     });
     const web = createWebRoutes(options.webDir);
     server = await assembleServer({

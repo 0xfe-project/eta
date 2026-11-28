@@ -238,6 +238,54 @@ const catalogItems: TriggerCatalogItem[] = [
     payloadSchema: {},
     accounts: [],
   },
+  {
+    provider: "file-watch",
+    source: "fs",
+    sourceName: "Local Filesystem",
+    trigger: "FILE_CHANGED",
+    name: "File or directory changed",
+    description:
+      "Watches a local file or directory (with fs.watch and periodic stat fallback) and triggers on created, modified, or deleted files.",
+    modes: ["poll"],
+    configSchema: {
+      type: "object",
+      required: ["path"],
+      properties: {
+        path: {
+          type: "string",
+          title: "Watch path",
+          description:
+            "Absolute path or ~/... path to a local file or directory on this machine.",
+          examples: ["~/Documents/reports"],
+        },
+        glob: {
+          type: "string",
+          title: "Include glob",
+          description:
+            "Optional glob pattern(s) relative to the watched directory (comma-separated, e.g. **/*.md, *.txt).",
+          examples: ["**/*.md, *.txt"],
+        },
+        ignore: {
+          type: "string",
+          title: "Ignore glob",
+          description:
+            "Optional glob pattern(s) to exclude (comma-separated; .git is always ignored).",
+          examples: ["node_modules/**, *.tmp"],
+        },
+        debounceMs: {
+          type: "integer",
+          title: "Debounce (ms)",
+          description:
+            "Quiet window in milliseconds to merge rapid changes into a single event (0–60000).",
+          minimum: 0,
+          maximum: 60000,
+          default: 500,
+        },
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
+  },
 ];
 
 const eventRoutineRuns: RunView[] = [
@@ -401,6 +449,39 @@ const initialRoutines: RoutineSummary[] = [
       lastError: 'CSS selector ".plan-price" matched no elements',
       lastEventAt: now - 20 * 60_000,
       lastCheckedAt: now - 5 * 60_000,
+    },
+    timezone: "UTC",
+    enabled: true,
+    nextRunAt: null,
+    revising: false,
+    unseenReports: 0,
+    unseenFailures: 0,
+    createdAt: now - 86_400_000,
+    updatedAt: now,
+    runs: [],
+  },
+  {
+    id: "r-file-watch",
+    name: "Local Docs Watch",
+    schedule: null,
+    trigger: {
+      provider: "file-watch",
+      source: "fs",
+      trigger: "FILE_CHANGED",
+      accountId: null,
+      config: {
+        path: "/srv/example-docs",
+        glob: "**/*.md",
+        debounceMs: 500,
+      },
+      instanceId: "file-watch:r-file-watch",
+      mode: "poll",
+      pollingIntervalMinutes: 5,
+      fallbackReason: null,
+      status: "error",
+      lastError: "Watched file count exceeds limit (5000)",
+      lastEventAt: now - 15 * 60_000,
+      watchedCount: 12,
     },
     timezone: "UTC",
     enabled: true,
@@ -610,6 +691,7 @@ function Fixture() {
       const providers: Record<CatalogScenario, TriggerProviderStatus[]> = {
         ready: [
           { provider: "composio", status: "ready" },
+          { provider: "file-watch", status: "ready" },
           { provider: "rss", status: "ready" },
           { provider: "web-monitor", status: "ready" },
           { provider: "webhook", status: "ready" },
