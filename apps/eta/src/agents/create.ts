@@ -40,6 +40,14 @@ export interface AgentCreateDeps {
     | undefined;
 }
 
+/** What a client may draw an avatar from: an agent's id is one, and so is a short random string. */
+const AVATAR_SEED = /^[\w-]{1,64}$/;
+
+export function checkAvatarSeed(avatarSeed: string | undefined): void {
+  if (avatarSeed !== undefined && !AVATAR_SEED.test(avatarSeed))
+    throw new Error("avatarSeed must be 1 to 64 letters, digits, - or _");
+}
+
 export interface NewAgent {
   name: string;
   instructions?: string | undefined;
@@ -50,6 +58,7 @@ export interface NewAgent {
   thinkingLevel?: ThinkingLevel | null | undefined;
   machineId?: string | null | undefined;
   plugins?: readonly string[] | undefined;
+  avatarSeed?: string | undefined;
 }
 
 /**
@@ -66,6 +75,7 @@ export function checkNewAgent(
   checkAgentName(deps.agents, name);
   checkExternalPersona(runtime, input.persona);
   checkExternalMachineRequired(runtime, input.machineId);
+  checkAvatarSeed(input.avatarSeed);
   requireModel(runtime, input.model ?? null);
   checkMachine(deps.machines, input.machineId);
   checkPlugins(deps.plugins, undefined, input.plugins);
@@ -260,7 +270,15 @@ export function checkPlugins(
 ): void {
   if (wanted === undefined) return;
   const has = agentId === undefined ? [] : plugins.rows.enabled(agentId);
-  for (const name of wanted)
-    if (!has.includes(name) && !plugins.canEnable(name))
-      throw new Error(`plugin ${name} cannot be enabled: it needs configuring`);
+  for (const name of wanted) {
+    if (has.includes(name)) continue;
+    const problem =
+      typeof plugins.enableProblem === "function"
+        ? plugins.enableProblem(name)
+        : plugins.canEnable(name)
+          ? null
+          : "it needs configuring";
+    if (problem !== null)
+      throw new Error(`plugin ${name} cannot be enabled: ${problem}`);
+  }
 }
