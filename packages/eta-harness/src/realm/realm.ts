@@ -385,7 +385,7 @@ export class Realm {
           const result = fn(...args);
           const thenable = result as { then?: unknown } | undefined;
           if (typeof thenable?.then === "function") {
-            return (result as Promise<unknown>).then(
+            const tracked = (result as Promise<unknown>).then(
               (value) => {
                 finish("ok", request);
                 return value;
@@ -394,7 +394,14 @@ export class Realm {
                 finish("failed", request);
                 throw error;
               },
-            ) as R;
+            );
+            // The ledger above is the only observer a call the script never
+            // awaits leaves: its rejection would otherwise sit unhandled and
+            // take the whole host down with it. Marking the promise handled
+            // keeps the host alive; a script that does await still receives
+            // the error, and the failure is already on the ledger either way.
+            tracked.catch(() => {});
+            return tracked as R;
           }
           finish("ok", request);
           return result;
@@ -416,7 +423,7 @@ export class Realm {
       }
       if (verdict === undefined) return run();
       if (!isPromise(verdict)) return deny(verdict) as R;
-      return (async () => {
+      const checked = (async () => {
         let reason: string | undefined;
         try {
           reason = await verdict;
@@ -426,7 +433,11 @@ export class Realm {
         }
         if (reason !== undefined) deny(reason);
         return run();
-      })() as R;
+      })();
+      // Same mark-as-handled as `run`'s thenable path: an unawaited call that
+      // is refused here, or fails inside `run`, must not end the host.
+      checked.catch(() => {});
+      return checked as R;
     }) as (...args: Args) => R;
   }
 
