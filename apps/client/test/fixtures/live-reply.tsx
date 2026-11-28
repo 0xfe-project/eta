@@ -11,7 +11,13 @@ import { Message } from "../../src/pages/chat/message";
 import { createHost, Host } from "../../src/services/host";
 
 /** How Ada's reply stands: at work, or over in one of the ways a run ends. */
-type Ending = "working" | "done" | "plain" | "stopped" | "failed";
+type Ending =
+  | "working"
+  | "done"
+  | "plain"
+  | "stopped"
+  | "stoppedWords"
+  | "failed";
 
 const at = Date.UTC(2026, 10, 21, 9, 30);
 const thought = "Look at the provider config.";
@@ -76,6 +82,35 @@ const plainRun = [
   row(2, { role: "assistant", content: [{ type: "text", text: plain }] }),
 ];
 
+/** A reply that writes first, before it calls anything. */
+const noteRun = [
+  row(1, { role: "user", content: "Why does the model return 401?" }),
+  row(2, { role: "assistant", content: [{ type: "text", text: note }] }),
+];
+
+/** Then its first call comes, and its answer after the call. */
+const noteThenToolRun = [
+  ...noteRun,
+  row(3, {
+    role: "assistant",
+    content: [
+      {
+        type: "toolCall",
+        id: "t1",
+        name: "read",
+        arguments: { path: "config.json" },
+      },
+    ],
+  }),
+  row(4, {
+    role: "toolResult",
+    toolCallId: "t1",
+    content: [{ type: "text", text: "baseUrl: https://example.invalid" }],
+    isError: false,
+  }),
+  row(5, { role: "assistant", content: [{ type: "text", text: answer }] }),
+];
+
 /** A reply that just started: no steps and no words yet. */
 const waitingRun = [
   row(1, { role: "user", content: "Why does the model return 401?" }),
@@ -120,6 +155,13 @@ function kept(ending: Ending): Partial<MessageView> {
       text: plain,
       data: { process: [{ type: "text", text: plain }] },
     };
+  if (ending === "stoppedWords")
+    // Stopped mid-sentence: the row keeps the words written so far.
+    return {
+      status: "stopped",
+      text: "Nothing to look up",
+      data: { process: [{ type: "text", text: "Nothing to look up" }] },
+    };
   if (ending === "stopped")
     return { status: "stopped", text: "", data: { activity, process } };
   if (ending === "failed")
@@ -154,7 +196,13 @@ function Fixture() {
   };
   const ending = signal<Ending>("working");
   const sessionMode = signal<
-    "working" | "runningTool" | "plain" | "waiting" | "firstStep"
+    | "working"
+    | "runningTool"
+    | "plain"
+    | "waiting"
+    | "firstStep"
+    | "note"
+    | "noteThenTool"
   >("working");
   const retried = signal(0);
   /** Rows the run wrote after the fixture's own. */
@@ -170,6 +218,10 @@ function Fixture() {
         return waitingRun;
       case "firstStep":
         return firstStepRun;
+      case "note":
+        return noteRun;
+      case "noteThenTool":
+        return noteThenToolRun;
       default:
         return working;
     }
@@ -301,6 +353,32 @@ function Fixture() {
             }}
           />
           <Button
+            label="Write a note"
+            onPress={() => {
+              sessionMode.set("note");
+              host.state.update((state) => ({
+                ...state,
+                targets: {
+                  ...state.targets,
+                  "sessions.s-ada": sessionTarget(),
+                },
+              }));
+            }}
+          />
+          <Button
+            label="Call after the note"
+            onPress={() => {
+              sessionMode.set("noteThenTool");
+              host.state.update((state) => ({
+                ...state,
+                targets: {
+                  ...state.targets,
+                  "sessions.s-ada": sessionTarget(),
+                },
+              }));
+            }}
+          />
+          <Button
             label="Write without tools"
             onPress={() => {
               sessionMode.set("plain");
@@ -341,6 +419,10 @@ function Fixture() {
             }
           />
           <Button label="End stopped" onPress={() => ending.set("stopped")} />
+          <Button
+            label="End stopped mid-words"
+            onPress={() => ending.set("stoppedWords")}
+          />
           <Button label="End failed" onPress={() => ending.set("failed")} />
           <Button
             label="Reload"

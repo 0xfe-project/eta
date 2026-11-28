@@ -20,15 +20,7 @@ import {
 } from "@eta/client-contracts";
 import { pasteBlocksOf } from "@eta/client-contracts/composer-draft";
 import { mentionLabel } from "@eta/client-contracts/composer-target";
-import {
-  cleanup,
-  Clipboard,
-  createMotion,
-  effect,
-  reduceMotion,
-  signal,
-  View,
-} from "nsh";
+import { Clipboard, effect, signal, View } from "nsh";
 import {
   Button,
   Caption,
@@ -82,41 +74,6 @@ const replyBlockGap = 8;
 
 /** A reply at work keeps this height, however much it writes. */
 const processWindowHeight = 176;
-/** Streaming caret blink period. */
-const CARET_BLINK_MS = 900;
-
-/** 2px accent caret shown at the end of a streaming AI answer (steady under reduced motion). */
-function StreamingCaret() {
-  const c = colors();
-  const blink = createMotion();
-  effect(() => {
-    if (reduceMotion()) {
-      blink.stop();
-      blink.reset();
-      return;
-    }
-    void blink.play({
-      keyframes: { opacity: [1, 0.2, 1] },
-      duration: CARET_BLINK_MS,
-      easing: "easeInOut",
-      iterations: "infinite",
-    });
-  });
-  cleanup(() => blink.stop());
-  return (
-    <View
-      testID="streaming-caret"
-      style={{
-        width: space[2],
-        height: space[16],
-        backgroundColor: c().blue,
-        marginTop: space[2],
-        ...(reduceMotion() ? {} : blink.style),
-      }}
-    />
-  );
-}
-
 /** How wide your message's bubble runs, and on phones the least room a task draft's title keeps. A
  * draft's card has no width of its own: like a task's card it fills the column, whose width is
  * the appearance setting's. */
@@ -307,10 +264,8 @@ export function Message(props: {
   const c = colors();
   /** The reply's whole run is open in the run panel. */
   const process = signal(false);
-  /** The live process window above the streaming answer can be collapsed by the reader. */
+  /** The live process window can be collapsed by the reader. */
   const processCollapsed = signal(false);
-  /** Downward-only minimum height reservation while the answer streams so height never jumps up. */
-  const minAnswerHeight = signal(0);
   const item = () => props.item;
   let action: ViewRef | undefined;
   let reply: ViewRef | undefined;
@@ -333,7 +288,6 @@ export function Message(props: {
     if (id !== previousId) {
       process.set(false);
       processCollapsed.set(false);
-      minAnswerHeight.set(0);
     }
     previousId = id;
   });
@@ -349,6 +303,11 @@ export function Message(props: {
     props.members.find((member) => member.agentId === item().agentId)
       ?.sessionId;
   follow(target);
+  /**
+   * While it works, every step is the process, the words too: nobody can tell yet whether the words
+   * being written are the answer or a note before the next call. Only once it is over is the text
+   * at the end the answer (the row's text), the way `splitReply` says.
+   */
   const steps = () => {
     const id = target();
     if (!id) return savedSteps(item());
@@ -358,21 +317,12 @@ export function Message(props: {
       runFromOf(item().data),
     );
   };
-  /** While streaming, the trailing assistant text block renders directly in the answer area. */
-  const streamingBlock = () => {
-    if (!active()) return undefined;
-    const last = steps().at(-1);
-    return last?.type === "text" && last.text ? last : undefined;
-  };
-  const processSteps = () =>
-    streamingBlock() ? steps().slice(0, -1) : steps();
   /** The steps a count says: a trace of an insert is not one. */
   const stepCount = () =>
-    processSteps().filter((step) => step.type !== "steer").length;
-  /** The answer text: streams live as it arrives, or shows the final saved reply text. */
+    steps().filter((step) => step.type !== "steer").length;
+  /** The answer: the reply's text once it is over, nothing while it works (it is in the window). */
   const answer = () => {
-    if (item().status === "failed") return undefined;
-    if (active()) return streamingBlock()?.text;
+    if (active() || item().status === "failed") return undefined;
     return item().text || undefined;
   };
   const attached = () =>
@@ -906,9 +856,9 @@ export function Message(props: {
             </If>
           }
         >
-          {/* Collapsible live steps window above the streaming answer, preserving per-member Stop.
-           * The 176px body is reserved from the start (unless collapsed) so the first step does
-           * not jump the streaming answer or composer below it. */}
+          {/* The reply at work: the whole run in a collapsible window, words included, with the
+           * member's Stop. Its 176px body is kept from the start (unless collapsed), so what comes
+           * in moves nothing below it. */}
           <View
             testID="process-window"
             style={{ borderWidth: 1, borderColor: c().border }}
@@ -989,7 +939,7 @@ export function Message(props: {
             </View>
             <If when={!processCollapsed()}>
               <ProcessWindow height={processWindowHeight}>
-                <Each of={processSteps()} key={(step) => step.id}>
+                <Each of={steps()} key={(step) => step.id}>
                   {(step) => <ProcessStep value={step()} />}
                 </Each>
               </ProcessWindow>
@@ -1057,25 +1007,11 @@ export function Message(props: {
                   ref={(node) => {
                     reply = node;
                   }}
-                  onLayout={(event) => {
-                    if (
-                      active() &&
-                      event.bounds.size.height > minAnswerHeight()
-                    )
-                      minAnswerHeight.set(event.bounds.size.height);
-                  }}
-                  style={{
-                    paddingHorizontal: space[2],
-                    minHeight:
-                      active() && minAnswerHeight() > 0
-                        ? minAnswerHeight()
-                        : undefined,
-                  }}
+                  style={{ paddingHorizontal: space[2] }}
                 >
                   <chatText.View
                     text={{ text: text(), mentions: mentionRefs() }}
                     plugins={shown}
-                    streaming={active()}
                     label={uiText("replyOf", {
                       name: host.agent(item().agentId)?.name ?? uiText("agent"),
                     })}
@@ -1083,9 +1019,6 @@ export function Message(props: {
                       props.onSelectionChange?.(event, reply)
                     }
                   />
-                  <If when={active()}>
-                    <StreamingCaret />
-                  </If>
                 </View>
               )}
             </If>
