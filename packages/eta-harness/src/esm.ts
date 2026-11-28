@@ -64,6 +64,14 @@ const NOT_MIRRORED = new Set<string>([...ESM_TOOL_NAMES, "finish_task"]);
 const RESULT_CHARS = 20_000;
 /** How much of the tail is kept when the middle is cut. */
 const RESULT_TAIL_CHARS = 4_000;
+/**
+ * The serialized size of `details` (`effects`, `calls`, `asks`) one result keeps. An oversized
+ * entry is first compacted itself, then the list is held to the budget as whole entries, so the
+ * shape the UI reads (`effects[].name`, `effects[].detail`) stays valid at any size.
+ */
+const DETAILS_CHARS = 20_000;
+/** The budget one oversized detail entry's `detail` gets before it is cut itself. */
+const DETAIL_VALUE_CHARS = 2_000;
 /** Images one esmrun result carries at most; the rest are named in its text. */
 const RESULT_IMAGES = 8;
 /** A nested turn that keeps calling tools is stopped here; the text so far is returned. */
@@ -601,6 +609,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     let sealedOnAbort = false;
 
     const outPath = `${file.replace(/\.js$/, "")}.out.txt`;
+    const detailsPath = `${file.replace(/\.js$/, "")}.details.json`;
     /**
      * Head and tail of `text` fit the budget; `full` holds the whole assembled text — every
      * section, not only what the first bound saw, which is what used to leak the rest.
@@ -624,6 +633,132 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
         path: full,
       };
     };
+    /** A note an oversized field is cut to, pointing at where the full content sits. */
+    const cutNote = (size: number): string =>
+      `… (${size} chars; full output: ${detailsPath})`;
+    const compactEffect = (effect: Effect): Effect => {
+      if (JSON.stringify(effect).length <= DETAIL_VALUE_CHARS) return effect;
+      const detail = effect.detail;
+      const note = cutNote(JSON.stringify(detail).length);
+      return {
+        ...effect,
+        detail:
+          typeof detail === "string"
+            ? `${detail.slice(0, Math.max(0, DETAIL_VALUE_CHARS - note.length - 16))}\n${note}`
+            : note,
+      };
+    };
+    const compactCall = (one: Frame["calls"][number]) => {
+      if (JSON.stringify(one).length <= DETAIL_VALUE_CHARS) return one;
+      const note = cutNote(JSON.stringify(one.details).length);
+      return {
+        ...one,
+        details:
+          typeof one.details === "string"
+            ? `${one.details.slice(0, Math.max(0, DETAIL_VALUE_CHARS - note.length - 16))}\n${note}`
+            : note,
+      };
+    };
+    const compactAsk = (one: Frame["asks"][number]) => {
+      if (JSON.stringify(one).length <= DETAIL_VALUE_CHARS) return one;
+      const note = cutNote(one.text.length);
+      return {
+        ...one,
+        text: `${one.text.slice(0, Math.max(0, DETAIL_VALUE_CHARS - note.length - 16))}\n${note}`,
+      };
+    };
+    /**
+     * A list held to the serialized budget as whole entries — entries, not bytes, so the shape
+     * the UI reads stays valid; oversized entries are compacted first, then head and tail are
+     * kept and the middle counted. `changed` says the bounded list is not the full one.
+     */
+    const boundList = <T>(
+      entries: readonly T[],
+      compact: (entry: T) => T,
+    ): { entries: T[]; dropped: number; changed: boolean } => {
+      const compacted = entries.map((entry) => {
+        const next = compact(entry);
+        return { entry: next, changed: next !== entry };
+      });
+      const anyCompacted = compacted.some((one) => one.changed);
+      const list = compacted.map((one) => one.entry);
+      if (JSON.stringify(list).length <= DETAILS_CHARS)
+        return { entries: list, dropped: 0, changed: anyCompacted };
+      // The most head-plus-tail entries whose JSON fits, kept whole and in order.
+      let lo = 0;
+      let hi = list.length;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        const head = Math.ceil(mid / 2);
+        const tail = mid - head;
+        if (
+          JSON.stringify([
+            ...list.slice(0, head),
+            ...list.slice(list.length - tail),
+          ]).length <= DETAILS_CHARS
+        )
+          lo = mid;
+        else hi = mid - 1;
+      }
+      const head = Math.ceil(lo / 2);
+      const tail = lo - head;
+      return {
+        entries: [...list.slice(0, head), ...list.slice(list.length - tail)],
+        dropped: list.length - lo,
+        changed: true,
+      };
+    };
+    /**
+     * `details` bounded the same way the text is: oversized entries compacted, oversized lists
+     * held as whole head-plus-tail entries with the dropped middle counted, and the complete
+     * content written to `detailsPath` whenever anything was left out.
+     */
+    const boundDetails = (full: {
+      aborted?: true;
+      file: string;
+      effects: Effect[];
+      calls: Frame["calls"];
+      asks: Frame["asks"];
+      stack: string[];
+    }): Record<string, unknown> => {
+      const effects = boundList(full.effects, compactEffect);
+      const calls = boundList(full.calls, compactCall);
+      const asks = boundList(full.asks, compactAsk);
+      const dropped = {
+        ...(effects.dropped === 0 ? {} : { effects: effects.dropped }),
+        ...(calls.dropped === 0 ? {} : { calls: calls.dropped }),
+        ...(asks.dropped === 0 ? {} : { asks: asks.dropped }),
+      };
+      const cut = effects.changed || calls.changed || asks.changed;
+      if (cut) {
+        mkdirSync(dirname(detailsPath), { recursive: true });
+        writeFileSync(
+          detailsPath,
+          JSON.stringify(
+            {
+              file: full.file,
+              effects: full.effects,
+              calls: full.calls,
+              asks: full.asks,
+              stack: full.stack,
+            },
+            null,
+            2,
+          ),
+          "utf8",
+        );
+      }
+      return {
+        ...(full.aborted === true ? { aborted: true } : {}),
+        file: full.file,
+        effects: effects.entries,
+        calls: calls.entries,
+        asks: asks.entries,
+        stack: full.stack,
+        ...(cut ? { detailsPath } : {}),
+        ...(Object.keys(dropped).length === 0 ? {} : { omitted: dropped }),
+      };
+    };
 
     const buildAbortResult = (): ToolResult => {
       sealedOnAbort = true;
@@ -643,12 +778,14 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
         isError: true,
         content: [{ type: "text", text }],
         details: {
-          aborted: true,
-          file,
-          effects: snapshotEffects,
-          calls: frame.calls.slice(),
-          asks: frame.asks.slice(),
-          stack: frame.stack.slice(),
+          ...boundDetails({
+            aborted: true,
+            file,
+            effects: snapshotEffects,
+            calls: frame.calls.slice(),
+            asks: frame.asks.slice(),
+            stack: frame.stack.slice(),
+          }),
           ...(path === undefined ? {} : { fullOutputPath: path }),
         },
       };
@@ -728,11 +865,13 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
         ...images.map((image) => ({ type: "image" as const, ...image })),
       ],
       details: {
-        file,
-        effects,
-        calls: frame.calls,
-        asks: frame.asks,
-        stack: frame.stack,
+        ...boundDetails({
+          file,
+          effects,
+          calls: frame.calls,
+          asks: frame.asks,
+          stack: frame.stack,
+        }),
         ...(path === undefined ? {} : { fullOutputPath: path }),
       },
       ...(isError ? { isError: true } : {}),
