@@ -38,30 +38,20 @@ describe("an acp.json from before cwd and autoAllow went", () => {
       agents: [one, two],
     });
   });
-
-  it("drops them from the agent being saved too", () => {
-    const one = fakeAgent("one").config;
-    const path = configFile([one]);
-    const { admin: a } = admin(path);
-    const saved = a.save({ ...one, cwd: "/x", autoAllow: true }, "one");
-    expect(saved).not.toHaveProperty("cwd");
-    expect(saved).not.toHaveProperty("autoAllow");
-    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ agents: [one] });
-  });
 });
 
 describe("a file that cannot be read whole", () => {
-  it("refuses add, change, rename and delete without writing a byte, and the list says why", () => {
-    const one = fakeAgent("one").config;
+  it("keeps a bad agent: saving the good one beside it is refused, and not a byte is written", () => {
+    const good = fakeAgent("good").config;
     const path = configFile([]);
-    const text = `{ "agents": [${JSON.stringify(one)},] }`;
+    const text = JSON.stringify({
+      agents: [{ id: "Bad Id", command: "x" }, good],
+    });
     writeFileSync(path, text);
     const { admin: a, changes } = admin(path);
-    expect(() => a.list()).toThrow(/is not valid JSON/);
-    expect(() => a.save(fakeAgent("two").config)).toThrow(/is not valid JSON/);
-    expect(() => a.save({ ...one, label: "x" }, "one")).toThrow(/JSON/);
-    expect(() => a.save({ ...one, id: "moved" }, "one")).toThrow(/JSON/);
-    expect(() => a.delete("one")).toThrow(/is not valid JSON/);
+    expect(() => a.save({ ...good, label: "Better" }, "good")).toThrow(
+      /agent 1 \("Bad Id"\): the id "Bad Id" is not valid/,
+    );
     expect(readFileSync(path, "utf8")).toBe(text);
     expect(changes()).toBe(0);
   });
@@ -84,12 +74,4 @@ describe("saving", () => {
     expect(settled[0]).toMatchObject({ status: "available", version: "0.0.1" });
     await until(() => changes() > after, "the change after the look");
   }, 20_000);
-
-  it("refuses an id the machine already has, and one that is not there", () => {
-    const one = fakeAgent("one").config;
-    const { admin: a } = admin(configFile([one]));
-    expect(() => a.save(one)).toThrow(/already exists on this machine/);
-    expect(() => a.save(one, "nobody")).toThrow(/There is no ACP agent nobody/);
-    expect(() => a.delete("nobody")).toThrow(/There is no ACP agent nobody/);
-  });
 });

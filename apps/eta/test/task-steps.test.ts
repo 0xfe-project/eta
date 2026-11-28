@@ -12,11 +12,7 @@ import type { Request } from "./support/models";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import {
-  executorSessionOf,
-  stepsOfJournal,
-  TaskSteps,
-} from "../src/tasks/steps";
+import { stepsOfJournal, TaskSteps } from "../src/tasks/steps";
 import { until } from "./support/client";
 import { tempDir } from "./support/host";
 import { call, say, scriptedModels } from "./support/models";
@@ -96,28 +92,6 @@ describe("the steps in a journal", () => {
   });
 });
 
-describe("the run whose steps a task shows", () => {
-  it("is the executor's latest, not a mentioned agent's", () => {
-    expect(
-      executorSessionOf([
-        { agentId: null, sessionId: "s1" },
-        { agentId: null, sessionId: "s2" },
-        { agentId: "agent-b", sessionId: "s3" },
-      ]),
-    ).toBe("s2");
-  });
-
-  it("has no session while the latest run has not started one", () => {
-    expect(
-      executorSessionOf([
-        { agentId: null, sessionId: "s1" },
-        { agentId: null, sessionId: null },
-      ]),
-    ).toBeNull();
-    expect(executorSessionOf([])).toBeNull();
-  });
-});
-
 describe("taskSteps", () => {
   const journalOf = (dir: string, session: string, text: string) => {
     mkdirSync(join(dir, "sessions", session), { recursive: true });
@@ -143,6 +117,33 @@ describe("taskSteps", () => {
     expect(steps.ofRuns(runs)).toEqual([
       { id: "t1", content: "read", status: "completed" },
     ]);
+  });
+
+  it("reads the executor's latest run, not a mentioned agent's, and nothing before that run has a session", async () => {
+    const dir = await tempDir();
+    const steps = new TaskSteps({ dataDir: dir, taskOfSession: () => "k1" });
+    journalOf(dir, "s1", `${line(ledger([step("t1", "old", "pending")]))}\n`);
+    journalOf(dir, "s2", `${line(ledger([step("t1", "mine", "pending")]))}\n`);
+    journalOf(
+      dir,
+      "s3",
+      `${line(ledger([step("t1", "theirs", "pending")]))}\n`,
+    );
+    expect(
+      steps.ofRuns([
+        { agentId: null, sessionId: "s1" },
+        { agentId: null, sessionId: "s2" },
+        { agentId: "agent-b", sessionId: "s3" },
+      ]),
+    ).toEqual([{ id: "t1", content: "mine", status: "pending" }]);
+    // The latest run has not started one yet: not the run before's plan, none.
+    expect(
+      steps.ofRuns([
+        { agentId: null, sessionId: "s1" },
+        { agentId: null, sessionId: null },
+      ]),
+    ).toEqual([]);
+    expect(steps.ofRuns([])).toEqual([]);
   });
 
   it("has none for a session whose journal is not here, or that is not a name", async () => {

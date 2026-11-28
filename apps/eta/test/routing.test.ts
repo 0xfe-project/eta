@@ -89,17 +89,29 @@ describe("a message that names members", () => {
 
 describe("a message that names nobody", () => {
   it("goes to the steward", async () => {
-    const w = await world({ models: replying() });
+    const { models, requests } = scriptedModels((request) =>
+      say(`${request.agent} here`),
+    );
+    const w = await world({ models });
     const ada = await w.agent("Ada");
     const bob = await w.agent("Bob");
     const project = await w.project();
+    // The steward is chosen when the conversation is made.
     const group = await w.group(project.id, [ada.id, bob.id], "plans", bob.id);
+    expect(group.stewardId).toBe(bob.id);
     await w.watch(group.id);
 
     const sent = await w.send(group.id, "anyone?");
     expect(sent.replies.map((reply) => reply.agentId)).toEqual([bob.id]);
     expect(sent.message.mentions).toEqual([]);
     await w.settled(group.id, sent.replies[0]!.id);
+    // Only the steward was asked, and nobody joined or left for it.
+    expect(requests.map((request) => request.agent)).toEqual(["Bob"]);
+    expect(
+      w.client
+        .section<{ agentId: string }[]>(`conversations.${group.id}`, "members")!
+        .map((member) => member.agentId),
+    ).toEqual([ada.id, bob.id]);
 
     await w.client.call("conversations", "setSteward", {
       conversationId: group.id,

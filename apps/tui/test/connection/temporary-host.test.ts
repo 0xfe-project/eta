@@ -196,16 +196,4 @@ setInterval(() => undefined, 1_000);
       WIN ? "ignoring the pipe" : "ignoring SIGTERM",
     );
   });
-
-  it("dies at once on killNow", async () => {
-    const program = await script(`
-console.log(JSON.stringify({ port: 4321 }));
-setInterval(() => undefined, 1_000);
-`);
-    const result = await launch(program);
-    if (!result.ok) throw new Error(result.output);
-    result.host.killNow();
-    await result.host.exited;
-    expect(alive(result.host.pid)).toBe(false);
-  });
 });

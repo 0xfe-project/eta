@@ -402,7 +402,11 @@ describe("elicitation", () => {
       tools: [tool("ask", { behavior: "elicit", elicit: form })],
     });
     const result = await none.call("ask");
-    expect(text(result)).not.toContain("accept");
+    // The call itself went through: what the server got back for its question is an error.
+    expect(result.isError).toBeUndefined();
+    const refusal = JSON.parse(text(result)) as { code?: unknown };
+    expect(typeof refusal.code).toBe("number");
+    expect(refusal).not.toHaveProperty("action");
   });
 
   it("does not count the time a user takes to answer against the request timeout", async () => {

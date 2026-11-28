@@ -41,24 +41,6 @@ const UNORDERED = [
   "plugins.composioStatus",
 ];
 
-/** Each of these writes something, or needs an earlier call of the connection to have landed. */
-const IN_LINE = [
-  "plugins.testServer",
-  "plugins.loginServer",
-  "plugins.logoutServer",
-  "plugins.marketAddSource",
-  "plugins.marketRemoveSource",
-  "plugins.marketSetSourceEnabled",
-  "plugins.marketSetProxy",
-  "plugins.marketClearCache",
-  "plugins.marketInstall",
-  "plugins.setHeaders",
-  "plugins.setEnabled",
-  "plugins.add",
-  "plugins.remove",
-  "plugins.recheck",
-];
-
 describe("the plugins ops that run out of order", () => {
   it.each(UNORDERED)("%s is registered unordered", (name) => {
     const ops = registered();
@@ -66,12 +48,7 @@ describe("the plugins ops that run out of order", () => {
     expect(ops.get(name)?.unordered).toBe(true);
   });
 
-  it.each(IN_LINE)("%s stays in arrival order", (name) => {
-    const ops = registered();
-    expect(ops.has(name)).toBe(true);
-    expect(ops.get(name)?.unordered).not.toBe(true);
-  });
-
+  // Everything else, every write among them, stays in arrival order.
   it("marks no other op", () => {
     const marked = [...registered()]
       .filter(([, meta]) => meta?.unordered === true)

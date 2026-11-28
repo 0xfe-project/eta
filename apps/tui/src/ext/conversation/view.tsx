@@ -25,7 +25,6 @@ import { renderItem } from "./render";
 import { markRead, sendMessage, stopReplies } from "./send";
 import { sentDraft } from "./sent-draft";
 import { createItemKeeper } from "./stable-items";
-import { drawWidths } from "./transcript/frames";
 import { useRenderedItems } from "./transcript/render-cache";
 import { Transcript as TranscriptColumn } from "./transcript/transcript";
 import { isExpanded } from "./transcript/ui";
@@ -124,7 +123,6 @@ function LoadedConversation({ feed, active }: { feed: Feed; active: boolean }) {
   const measured = hasMeasured && width > 0;
   const drawn = useRenderedItems(
     renderItem,
-    drawWidths,
     measured ? items : NO_ITEMS,
     {
       width,

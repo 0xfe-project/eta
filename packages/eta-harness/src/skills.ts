@@ -23,8 +23,6 @@ import { basename, join, resolve } from "node:path";
 import ignore from "ignore";
 import { parse } from "yaml";
 
-export { formatSkillInvocation } from "./prompt-blocks";
-
 /** A procedure loaded from a `SKILL.md`, or supplied by an application. */
 export interface Skill {
   /** Stable name used for lookup and model-visible listings. */
@@ -186,35 +184,6 @@ export async function loadSkills(
     );
     skills.push(...result.skills);
     diagnostics.push(...result.diagnostics);
-  }
-  return { skills, diagnostics };
-}
-
-/**
- * Load skills from source-tagged directories.
- *
- * Source values are preserved exactly and attached to every loaded skill and diagnostic. The agent package does not
- * interpret source values; applications define their own provenance shape.
- */
-export async function loadSourcedSkills<TSource, TSkill extends Skill = Skill>(
-  inputs: Array<{ path: string; source: TSource }>,
-  mapSkill: ((skill: Skill, source: TSource) => TSkill) | undefined,
-): Promise<{
-  skills: Array<{ skill: TSkill; source: TSource }>;
-  diagnostics: Array<SkillDiagnostic & { source: TSource }>;
-}> {
-  const skills: Array<{ skill: TSkill; source: TSource }> = [];
-  const diagnostics: Array<SkillDiagnostic & { source: TSource }> = [];
-  for (const input of inputs) {
-    const result = await loadSkills(input.path);
-    for (const skill of result.skills) {
-      skills.push({
-        skill: mapSkill ? mapSkill(skill, input.source) : (skill as TSkill),
-        source: input.source,
-      });
-    }
-    for (const diagnostic of result.diagnostics)
-      diagnostics.push({ ...diagnostic, source: input.source });
   }
   return { skills, diagnostics };
 }

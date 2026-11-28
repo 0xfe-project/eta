@@ -36,8 +36,6 @@ const MAGENTA = "\u001B[35m";
 const FG_OFF = "\u001B[39m";
 const BOLD = "\u001B[1m";
 const BOLD_OFF = "\u001B[22m";
-// eslint-disable-next-line no-control-regex
-const SGR = /\u001B\[[\d;]*m/;
 
 const user = (key: string): TranscriptItem => ({
   kind: "user",
@@ -126,18 +124,6 @@ describe("agentColourIndex", () => {
     expect(agentColourIndex("", 6)).toBe(2166136261 % 6);
     expect(agentColourIndex("bob", 7)).toBe(2261164244 % 7);
     expect(agentColourIndex("中文", 6)).toBe(1362277805 % 6);
-  });
-
-  it("is the same index for the same id every time, and always inside the list", () => {
-    for (const id of ["a1", "a2", "agent-ada-0001", "", "中文"]) {
-      for (const count of [1, 2, 3, 6, 13]) {
-        const index = agentColourIndex(id, count);
-        expect(agentColourIndex(id, count)).toBe(index);
-        expect(index).toBeGreaterThanOrEqual(0);
-        expect(index).toBeLessThan(count);
-        expect(Number.isInteger(index)).toBe(true);
-      }
-    }
   });
 
   it("spreads different ids over the colours", () => {
@@ -238,7 +224,7 @@ describe("the members an author carries and the drawing cache", () => {
     const cache = createRenderCache((item) => {
       draws += 1;
       return framedDrawing(item.key);
-    }, drawWidths);
+    });
     const shared = {
       width: 50,
       previewLines: 5,
@@ -580,21 +566,8 @@ describe("createRenderCache with frames", () => {
       seen.push({ key: item.key, options });
       return framedDrawing(`${item.key}@${options.width}`);
     };
-    return { seen, cache: createRenderCache(render, drawWidths) };
+    return { seen, cache: createRenderCache(render) };
   }
-
-  it("draws each item at the width the caller's widths give", () => {
-    const seen: string[] = [];
-    const cache = createRenderCache(
-      (item, options) => {
-        seen.push(`${item.key}@${options.width}`);
-        return framedDrawing(item.key);
-      },
-      (items, width) => items.map((_, index) => width - index),
-    );
-    cache(scene().items.slice(0, 3), shared(50), () => false);
-    expect(seen).toEqual(["r1@50", "r2:author@49", "r2:a@48"]);
-  });
 
   it("draws the items inside a frame at the width inside it", () => {
     const { seen, cache } = counting();
@@ -627,12 +600,5 @@ describe("createRenderCache with frames", () => {
     expect(seen.slice(before).map((one) => one.options.width)).toEqual([
       39, 39, 39, 39, 39, 39,
     ]);
-  });
-
-  it("puts no frame codes into a drawing", () => {
-    const { cache } = counting();
-    const out = cache(scene().items, shared(50), () => false);
-    for (const one of out)
-      for (const line of one.plain) expect(SGR.test(line)).toBe(false);
   });
 });

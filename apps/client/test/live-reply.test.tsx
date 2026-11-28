@@ -147,7 +147,13 @@ for (const [width, height] of [
   [390, 844],
 ] as const) {
   test(`"View more" opens the reply's run in the run panel, live, not in place (${width}px)`, async () => {
-    const app = await open("./fixtures/live-reply.tsx", { width, height });
+    // On a manual clock the run writes on (the fixture's 500 ms timer) only when the test moves the
+    // clock, not when a slow machine takes its time between two steps.
+    const app = await open("./fixtures/live-reply.tsx", {
+      width,
+      height,
+      clock: {},
+    });
     expect(app.shows(panel)).toBe(false);
     await app.press("Write more");
     await app.press("label:View more");
@@ -160,7 +166,8 @@ for (const [width, height] of [
     expect(app.texts().some((text) => text.includes("config.json"))).toBe(true);
     // What the run writes next comes into the open panel and streams live.
     expect(app.shows("Checking the key next.")).toBe(false);
-    await app.waitUntil(() => app.count("text:Checking the key next.") === 2);
+    await app.clock!.runFor(500);
+    expect(app.count("text:Checking the key next.")).toBe(2);
   });
 
   test(`a finished reply, and one drawn from its saved row, open the same panel (${width}px)`, async () => {

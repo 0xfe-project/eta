@@ -16,7 +16,6 @@ import {
   expect,
   it,
 } from "vitest";
-import { HOST_WRAPPER } from "../host";
 import {
   LocalHost,
   SERVICE_ENV,
@@ -125,11 +124,9 @@ afterAll(async () => {
   }
 });
 
-async function setUp(wrapped = true) {
-  const wrapper = join(dir, "wrapper.ts");
+async function setUp() {
   const fake = join(dir, "host.ts");
   const starts = join(dir, "starts");
-  await writeFile(wrapper, HOST_WRAPPER);
   await writeFile(fake, FAKE_HOST);
   const env: NodeJS.ProcessEnv = { ...process.env, STARTS: starts };
   await Bun.write(join(starts, ".keep"), "");
@@ -137,7 +134,6 @@ async function setUp(wrapped = true) {
     command: [process.execPath, fake],
     cwd: dir,
     env,
-    ...(wrapped ? { wrapper, bun: process.execPath } : {}),
     summary: join(dir, "summary"),
   });
   // The job's program is the host's file; on POSIX a script bun runs, on Windows a compiled exe.
@@ -225,24 +221,21 @@ describe("the app as the host's service", () => {
     expect(answer.status).toBe(403);
   });
 
-  it.each([true, false])(
-    "restarts on the same port (wrapper: %s)",
-    async (wrapped) => {
-      const { env, port } = await setUp(wrapped);
-      await ask(env, "/service/stop", {});
-      expect(await up(port)).toBe(false);
-      const stopped = (await (await ask(env, "/service")).json()) as {
-        running: boolean;
-        crashed: boolean;
-      };
-      // Stopped on purpose is not a crash: the upgrade's watch tells the two apart.
-      expect(stopped).toMatchObject({ running: false, crashed: false });
+  it("restarts on the same port", async () => {
+    const { env, port } = await setUp();
+    await ask(env, "/service/stop", {});
+    expect(await up(port)).toBe(false);
+    const stopped = (await (await ask(env, "/service")).json()) as {
+      running: boolean;
+      crashed: boolean;
+    };
+    // Stopped on purpose is not a crash: the upgrade's watch tells the two apart.
+    expect(stopped).toMatchObject({ running: false, crashed: false });
 
-      await ask(env, "/service/start", {});
-      await until(() => up(port));
-      expect(host?.port).toBe(port);
-    },
-  );
+    await ask(env, "/service/start", {});
+    await until(() => up(port));
+    expect(host?.port).toBe(port);
+  });
 
   it("says a host that exited by itself crashed", async () => {
     const { env, starts } = await setUp();

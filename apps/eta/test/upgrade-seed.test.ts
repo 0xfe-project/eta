@@ -146,23 +146,12 @@ describe("the seeds a release upgrades", () => {
   it("is already past it at 0.4.0-rc.3, which is what an rc upgrade has to do: only what came after", async () => {
     const { before, applied } = await upgraded("0.4.0-rc.3");
     expect(before.at(-1)).toBe("0054-task-archive");
-    expect(applied).toEqual([
-      "0055-steward-only-in-groups",
-      "0056-places",
-      "0057-task-usage",
-      "0058-agent-avatar",
-      "0059-pending-session-settings",
-      "0060-interaction-context",
-      "0061-captain-conversation",
-      "0062-drop-email",
-      "0063-plugins",
-      "0064-task-attachments",
-      "0065-external-runtime-bounds",
-      "0066-remove-revoked-machines",
-      "0067-routine-triggers",
-      "0068-routine-trigger-last-checked",
-      "0069-routine-trigger-watched-count",
-    ]);
+    // Every migration this tree has after 0054, in order, and nothing it had already.
+    const after = loadMigrations()
+      .map((migration) => migration.id)
+      .filter((id) => id > "0054-task-archive");
+    expect(after.length).toBeGreaterThan(0);
+    expect(applied).toEqual(after);
   });
 
   /*

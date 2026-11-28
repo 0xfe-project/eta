@@ -291,33 +291,6 @@ describe("the built-in sections a session contributes", () => {
   });
 });
 
-describe("a plugin's section", () => {
-  it("arrives as just another section, and leaves when its contribution is withdrawn", async () => {
-    const session = await openSession({
-      storage: new MemoryStorage(),
-      models: fakeModels([]) as never,
-      sessionId: "eta-5",
-    });
-    const before = session.view.snapshot();
-    expect(before.revisions).not.toHaveProperty("git");
-
-    const off = session.view.contribute({
-      name: "git",
-      project: () => ({ branch: "main", dirty: 2 }),
-      revision: () => "main|2",
-    });
-    const withGit = session.view.snapshot();
-    expect(withGit.sections.git).toEqual({ branch: "main", dirty: 2 });
-    expect(withGit.revisions.git).toBe("main|2");
-
-    off();
-    const after = session.view.snapshot();
-    expect(after.revisions).not.toHaveProperty("git");
-    await session.kernel.dispose();
-    session.stop();
-  });
-});
-
 describe("pictures in the transcript", () => {
   // 12 bytes encode to 16 characters with no padding, 11 with one "=", 10 with "==".
   const twelve = Buffer.from("0123456789ab").toString("base64");

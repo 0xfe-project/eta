@@ -22,46 +22,12 @@ import {
 import {
   composeEtaSystemPrompt,
   etaPromptBlockChars,
-  etaPromptSectionsDetailed,
   splitEtaPromptSections,
 } from "../src/prompts/composer";
 import { builtinPersonas } from "../src/prompts/persona";
 import { formatSkillsForSystemPrompt } from "../src/prompts/skills-block";
 
-const tasks = [
-  { id: "t1", content: "write the composer", status: "completed" as const },
-  { id: "t2", content: "port the tests", status: "in_progress" as const },
-];
-
 describe("the composer", () => {
-  it("lays the blocks out stable-first, in one fixed order", () => {
-    const prompt = composeEtaSystemPrompt("BASE", {
-      persona: "PERSONA",
-      skills: "SKILLS",
-      platform: "PLATFORM",
-      goal: { objective: "ship it", status: "active" },
-      tasks,
-      memory: "MEMORY",
-    });
-    const order = [
-      "BASE",
-      "PERSONA",
-      "SKILLS",
-      "PLATFORM",
-      "Goal: ship it",
-      "Before anything else",
-      "MEMORY",
-    ];
-    let cursor = -1;
-    for (const marker of order) {
-      const at = prompt.indexOf(marker);
-      expect(at, `${marker} appears after the previous block`).toBeGreaterThan(
-        cursor,
-      );
-      cursor = at;
-    }
-  });
-
   it("splits what a cache keeps from what is rewritten every generation", () => {
     const state = {
       persona: "PERSONA",
@@ -83,23 +49,6 @@ describe("the composer", () => {
     expect(chars.adaptiveChars).toBe(
       adaptive.reduce((sum, part) => sum + part.length, 0),
     );
-  });
-
-  it("names each section, so a UI can show the prompt as blocks", () => {
-    const sections = etaPromptSectionsDetailed("BASE", {
-      persona: "P",
-      memory: "M",
-    });
-    expect(sections.map((section) => section.name)).toEqual([
-      "base",
-      "persona",
-      "memory",
-    ]);
-    expect(sections.map((section) => section.stable)).toEqual([
-      true,
-      true,
-      false,
-    ]);
   });
 
   it("leaves out what is empty, and a finished goal is not pursued", () => {

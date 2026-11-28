@@ -334,6 +334,16 @@ export function storageContract(
       });
     }
 
+    it("commit after close rejects", async () => {
+      const handle = await factory();
+      await handle.storage.close();
+      await expect(handle.storage.commit([])).rejects.toThrow("closed");
+      await expect(
+        handle.storage.commit([setValue(value("k"), 1)]),
+      ).rejects.toThrow("closed");
+      await handle.dispose();
+    });
+
     it("is idempotent on close", async () => {
       const handle = await factory();
       await handle.storage.close();

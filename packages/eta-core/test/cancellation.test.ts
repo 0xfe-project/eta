@@ -259,6 +259,7 @@ describe("a provider that fails without being cancelled", () => {
     kernel.inject(userMsg("go"));
     const result = await runner.run();
     expect(result.status).toBe("failed");
+    expect(result.error).toBe("aborted");
     expect(runEnds).toEqual([{ status: "failed", error: "aborted" }]);
     void kernel.dispose();
   });

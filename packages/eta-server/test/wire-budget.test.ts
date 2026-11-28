@@ -75,7 +75,10 @@ describe("a burst of state changes", () => {
   it("reaches a subscriber as one frame per floor, carrying the newest state", () => {
     const h = harness({ backgroundIntervalMs: 100 });
     h.wire.subscribe(1, "sessions.s1");
+    // The subscribe itself is answered at once with a full snapshot: the floor is for pushes.
     expect(h.frames).toHaveLength(1);
+    expect(h.frames[0]).toMatchObject({ type: "state", target: "sessions.s1" });
+    expect(h.frames[0]).toHaveProperty("snapshot");
 
     for (let turn = 1; turn <= 50; turn += 1) {
       h.revisions.turn = turn;
@@ -103,16 +106,6 @@ describe("a burst of state changes", () => {
     }
     h.advance(20);
     expect(h.frames.length).toBeGreaterThan(1);
-  });
-
-  it("sends a fresh snapshot the moment a client subscribes, with no floor in the way", () => {
-    const h = harness({ backgroundIntervalMs: 100 });
-    h.wire.subscribe(1, "sessions.s1");
-    expect(h.frames[0]).toMatchObject({ type: "state", target: "sessions.s1" });
-    expect(h.frames[0]).toHaveProperty("snapshot");
-    // A second subscribe for the same target owes nothing: the client is current.
-    h.wire.subscribe(1, "sessions.s1");
-    expect(h.frames).toHaveLength(1);
   });
 
   it("stops scheduling for a socket that went away", () => {

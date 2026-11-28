@@ -374,55 +374,6 @@ function blocksFrom(
   return blocks;
 }
 
-/** A run of calls to one tool, drawn as one row that opens to them. */
-export interface ToolGroup {
-  type: "group";
-  id: string;
-  name: string;
-  tools: ToolBlock[];
-}
-
-/** How many calls in a row it takes to fold them: two side by side still read as two. */
-const GROUP_FROM = 3;
-
-/**
- * The log's blocks with runs of the same tool folded into groups: twelve `Read`s in a row are one
- * thing the agent did (it looked around), and a line each pushes what it found off the screen.
- * Commands are never folded, because each one is a separate decision worth reading.
- */
-export function groupBlocks(
-  blocks: readonly LogBlock[],
-): (LogBlock | ToolGroup)[] {
-  const out: (LogBlock | ToolGroup)[] = [];
-  let run: ToolBlock[] = [];
-  const flush = () => {
-    if (run.length >= GROUP_FROM)
-      out.push({
-        type: "group",
-        id: `group:${run[0]!.id}`,
-        name: run[0]!.name,
-        tools: run,
-      });
-    else out.push(...run);
-    run = [];
-  };
-  for (const block of blocks) {
-    const foldable =
-      block.type === "tool" &&
-      block.status !== "running" &&
-      commandOf(block.input) === undefined;
-    if (foldable && (run.length === 0 || run[0]!.name === block.name)) {
-      run.push(block);
-      continue;
-    }
-    flush();
-    if (foldable) run.push(block as ToolBlock);
-    else out.push(block);
-  }
-  flush();
-  return out;
-}
-
 /** The shell command a call ran, when its input says it ran one. */
 export function commandOf(input: unknown): string | undefined {
   if (typeof input !== "object" || input === null) return undefined;

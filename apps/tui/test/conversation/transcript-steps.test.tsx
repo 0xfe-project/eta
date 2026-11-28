@@ -123,7 +123,6 @@ function mount(
         loadingOlder={false}
         onReachTop={() => {}}
         onNotify={() => {}}
-        copy={() => {}}
       />
     );
   }

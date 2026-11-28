@@ -480,18 +480,6 @@ async function pressTimes(
 }
 
 describe("home completion menu with every real command", () => {
-  it("lists them all after a lone /, eight rows at a time", async () => {
-    const names = realCommandNames();
-    expect(names.length).toBeGreaterThan(8);
-    const r = await app();
-    await r.type("/");
-    const menu = menuRows(plain(r), 8);
-    expect(menu[0]?.startsWith(`› /${names[0]} `)).toBe(true);
-    for (let i = 1; i < 7; i++)
-      expect(menu[i]?.startsWith(`  /${names[i]} `)).toBe(true);
-    expect(menu[7]).toBe(`↓ ${names.length - 7} more`);
-  });
-
   it("goes down to the last command, which shows and is selected; the last row is not held by /help", async () => {
     const names = realCommandNames();
     const last = names.at(-1) ?? "?";
@@ -524,20 +512,6 @@ describe("home completion menu with every real command", () => {
     const menu = menuRows(plain(r), 8);
     expect(menu[0]).toMatch(/^› \/agent /);
     expect(plain(r)).not.toContain("↑");
-  });
-
-  it("lines the summaries up in one column that stays put while the window scrolls", async () => {
-    const names = realCommandNames();
-    const r = await app();
-    await r.type("/");
-    const summaryColumn = (line: string) =>
-      /^[› ] \/\S+ +/.exec(line)?.[0].length;
-    const top = menuRows(plain(r), 7).map(summaryColumn);
-    await pressTimes(r, KEYS.down, names.length - 1);
-    const bottom = menuRows(plain(r), 8).slice(1).map(summaryColumn);
-    const widest = Math.max(...names.map((name) => name.length));
-    // The marker, the slash, the widest name and two spaces.
-    expect(new Set([...top, ...bottom])).toEqual(new Set([3 + widest + 2]));
   });
 
   it("shrinks to the rows left on a short terminal, the selection in view", async () => {

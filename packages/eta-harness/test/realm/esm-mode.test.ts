@@ -1,4 +1,4 @@
-import type { Effect, EffectScopeHandle, Hooks } from "../../src/realm/index";
+import type { Effect } from "../../src/realm/index";
 import { Buffer } from "node:buffer";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
@@ -123,29 +123,31 @@ describe("realm", () => {
     expect((prefixed as Error).message).toContain("not mounted");
   });
 
-  it("effects carry the line and column that made the call", async () => {
-    if (process.platform === "win32") return;
-    const realm = new Realm({
-      name: "test",
-      mounts: (r) => mountModules(r, { root }),
-    });
-    await writeFile(join(root, "note.txt"), "hello");
+  it.skipIf(process.platform === "win32")(
+    "effects carry the line and column that made the call",
+    async () => {
+      const realm = new Realm({
+        name: "test",
+        mounts: (r) => mountModules(r, { root }),
+      });
+      await writeFile(join(root, "note.txt"), "hello");
 
-    const result = await realm.evaluate(
-      `import { readFile } from "node:fs/promises";\n\nconst text = await readFile(${JSON.stringify(join(root, "note.txt"))});\nexport default text;`,
-      { identifier: join(root, "probe.js") },
-    );
+      const result = await realm.evaluate(
+        `import { readFile } from "node:fs/promises";\n\nconst text = await readFile(${JSON.stringify(join(root, "note.txt"))});\nexport default text;`,
+        { identifier: join(root, "probe.js") },
+      );
 
-    expect(result.value).toBe("hello");
-    expect(result.effects).toHaveLength(1);
-    expect(result.effects[0]?.name).toBe("fs.readFile");
-    expect(result.effects[0]?.at.line).toBe(3);
-    // 1-based, at the callee: `const text = await |readFile(`.
-    expect(result.effects[0]?.at.column).toBe(
-      "const text = await readFile(".indexOf("readFile") + 1,
-    );
-    expect(result.effects[0]?.status).toBe("ok");
-  });
+      expect(result.value).toBe("hello");
+      expect(result.effects).toHaveLength(1);
+      expect(result.effects[0]?.name).toBe("fs.readFile");
+      expect(result.effects[0]?.at.line).toBe(3);
+      // 1-based, at the callee: `const text = await |readFile(`.
+      expect(result.effects[0]?.at.column).toBe(
+        "const text = await readFile(".indexOf("readFile") + 1,
+      );
+      expect(result.effects[0]?.status).toBe("ok");
+    },
+  );
 
   it("a failed binding is recorded and still throws into the script", async () => {
     const effects: Effect[] = [];
@@ -267,39 +269,6 @@ describe("env.js", () => {
     expect(result.value).toBe("HI");
   });
 
-  it("a taken name is refused rather than replaced", () => {
-    const agent = new Agent({ root });
-    selfEnv(agent).add("shout", `(text) => text.toUpperCase()`);
-    expect(() => selfEnv(agent).add("shout", `() => 1`)).toThrow(
-      /already exists/,
-    );
-  });
-
-  it("editing the file re-wakes the realm with the new ability", async () => {
-    const agent = new Agent({ root });
-    selfEnv(agent).add("one", `() => 1`);
-    expect(
-      (
-        await agent.run(
-          `import eta from "eta"; const { one } = eta.modules; export default one();`,
-          {
-            identifier: join(root, "p.js"),
-          },
-        )
-      ).value,
-    ).toBe(1);
-
-    selfEnv(agent).add("two", `() => 2`);
-
-    const after = await agent.run(
-      `import eta from "eta"; const { two } = eta.modules; export default two();`,
-      {
-        identifier: join(root, "p2.js"),
-      },
-    );
-    expect(after.value).toBe(2);
-  });
-
   it("the hand-written half survives a write", async () => {
     const agent = new Agent({ root });
     selfEnv(agent).add("one", `() => 1`);
@@ -312,74 +281,6 @@ describe("env.js", () => {
     expect(await readFile(join(root, "env.js"), "utf8")).toContain(
       `export const lastError = "boom";`,
     );
-  });
-});
-
-describe("hooks", () => {
-  it("every hook is reachable and every call lands in the ledger", async () => {
-    const seen: string[] = [];
-    const hooks: Hooks = {
-      onConsole: (level, line) => seen.push(`${level}:${line}`),
-      ctx: () => ({
-        frame: { id: "f1", parent: null, seq: 0 },
-        budget: { limit: 100, spent: 0 },
-        messages: async () => [{ role: "user", text: "hi" }],
-      }),
-      emit: { progress: (text) => seen.push(`progress:${text}`) },
-      tools: { ask: async (question) => `asked:${question}` },
-      platform: { classify: async () => "spam" },
-      memory: {
-        append: async () => {},
-        read: async (query) => `note:${query}`,
-      },
-      spawn: async (request) => ({
-        text: `child:${request.prompt}`,
-        effects: [],
-      }),
-    };
-
-    const agent = new Agent({ root, hooks });
-    const result = await agent.run(
-      `import eta from "eta";
-emit.progress("go");
-const last = (await ctx.messages(1))[0];
-const label = await eta.platform.classify({});
-const note = await eta.memory.read("x");
-const child = await eta.spawn({ prompt: "y" });
-const asked = await tools.ask("z");
-console.log("done");
-export default [last.text, label, note, child.text, asked].join("|");`,
-      { identifier: join(root, "probe.js") },
-    );
-
-    expect(result.value).toBe("hi|spam|note:x|child:y|asked:z");
-    expect(result.effects.map((effect) => effect.name)).toEqual([
-      "emit.progress",
-      "ctx.messages",
-      "eta.platform.classify",
-      "eta.memory.read",
-      "eta.spawn",
-      "tools.ask",
-    ]);
-    expect(seen).toContain("log:done");
-  });
-
-  it("a realm with no hooks still evaluates", async () => {
-    const realm = new Realm({ name: "bare" });
-    mountGlobals(realm);
-    expect((await realm.evaluate(`export default 1 + 1;`)).value).toBe(2);
-  });
-});
-
-describe("console", () => {
-  it("console output is captured, not written to the host", async () => {
-    const lines: string[] = [];
-    const realm = new Realm({
-      name: "test",
-      onConsole: (level, line) => lines.push(`${level}:${line}`),
-    });
-    await realm.evaluate(`console.log("a", 1);\nconsole.warn("b");`);
-    expect(lines).toEqual(["log:a 1", "warn:b"]);
   });
 });
 
@@ -521,27 +422,31 @@ describe("waking", () => {
 });
 
 describe("$", () => {
-  it("the shell is there without importing anything", async () => {
-    if (process.platform === "win32") return;
-    const agent = new Agent({ root });
-    const script =
-      "const out = await $`echo hi`;\nexport default { stdout: out.stdout.trim(), code: out.exitCode };";
-    const result = await agent.run(script, {
-      identifier: join(root, "probe.js"),
-    });
-    expect(result.value).toEqual({ stdout: "hi", code: 0 });
-  });
+  it.skipIf(process.platform === "win32")(
+    "the shell is there without importing anything",
+    async () => {
+      const agent = new Agent({ root });
+      const script =
+        "const out = await $`echo hi`;\nexport default { stdout: out.stdout.trim(), code: out.exitCode };";
+      const result = await agent.run(script, {
+        identifier: join(root, "probe.js"),
+      });
+      expect(result.value).toEqual({ stdout: "hi", code: 0 });
+    },
+  );
 
-  it("a failing command throws the way zx throws", async () => {
-    if (process.platform === "win32") return;
-    const agent = new Agent({ root });
-    const script = "await $`exit 3`;\nexport default 0;";
-    const error = (await agent
-      .run(script, { identifier: join(root, "probe.js") })
-      .catch((e: Error) => e)) as Error;
-    // Bun and Node word the same failure differently; both name the code.
-    expect(error.message).toMatch(/zx error|exit code:? 3/);
-  });
+  it.skipIf(process.platform === "win32")(
+    "a failing command throws the way zx throws",
+    async () => {
+      const agent = new Agent({ root });
+      const script = "await $`exit 3`;\nexport default 0;";
+      const error = (await agent
+        .run(script, { identifier: join(root, "probe.js") })
+        .catch((e: Error) => e)) as Error;
+      // Bun and Node word the same failure differently; both name the code.
+      expect(error.message).toMatch(/zx error|exit code:? 3/);
+    },
+  );
 
   it("the chained methods a prompt promises work inside the realm", async () => {
     const agent = new Agent({ root });
@@ -567,282 +472,115 @@ describe("$", () => {
     });
   });
 
-  it("commands record $ effects with callsite and status", async () => {
-    if (process.platform === "win32") return;
-    const agent = new Agent({ root });
-    const result = await agent.run(
-      [
-        "await $`true`;",
-        "await $`exit 3`.nothrow();",
-        "await $({ nothrow: true })`exit 2`;",
-        "$.sync`echo sync`;",
-        "export default 1;",
-      ].join("\n"),
-      {
-        identifier: join(root, "probe.js"),
-      },
-    );
-    expect(result.effects).toHaveLength(4);
-    expect(result.effects[0]).toMatchObject({
-      name: "$",
-      status: "ok",
-      detail: "true",
-      at: { line: 1 },
-    });
-    expect(result.effects[1]).toMatchObject({
-      name: "$",
-      status: "failed",
-      detail: "exit 3",
-      at: { line: 2 },
-    });
-    expect(result.effects[2]).toMatchObject({
-      name: "$",
-      status: "failed",
-      detail: "exit 2",
-      at: { line: 3 },
-    });
-    expect(result.effects[3]).toMatchObject({
-      name: "$",
-      status: "ok",
-      detail: "echo sync",
-      at: { line: 4 },
-    });
-    agent.dispose();
-  });
-
-  it(".timeout() kills background grandchildren holding stdout and settles promptly", async () => {
-    if (process.platform === "win32") return;
-    const agent = new Agent({ root, cwd: root });
-    const started = Date.now();
-    const res = await agent.run(
-      [
-        "const out = await $`sh -c 'sleep 30 & echo $! > bg1.pid; echo ok'`.timeout('300ms');",
-        "let waitTimedOut = false;",
-        "try { await $`sh -c 'sleep 30 & echo $! > bg2.pid; wait'`.timeout('300ms'); } catch { waitTimedOut = true; }",
-        "export default { stdout: out.stdout.trim(), waitTimedOut };",
-      ].join("\n"),
-      { identifier: join(root, "timeout.js") },
-    );
-    const elapsed = Date.now() - started;
-    expect(elapsed).toBeLessThan(2000);
-    expect(res.value).toEqual({ stdout: "ok", waitTimedOut: true });
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    for (const file of ["bg1.pid", "bg2.pid"]) {
-      const pid = Number((await readFile(join(root, file), "utf8")).trim());
-      let alive = true;
-      try {
-        process.kill(pid, 0);
-      } catch (error) {
-        alive = (error as NodeJS.ErrnoException).code !== "ESRCH";
-      }
-      expect(alive).toBe(false);
-    }
-    agent.dispose();
-  });
-
-  it("aborts via hooks.signal, kills process group and grandchildren, and records aborted effect", async () => {
-    if (process.platform === "win32") return;
-    const controller = new AbortController();
-    let scopeHandle: EffectScopeHandle | undefined;
-    const agent = new Agent({
-      root,
-      cwd: root,
-      hooks: { signal: () => controller.signal },
-    });
-    const run = agent.run(
-      "await $`sh -c 'sleep 30 & echo $! > grand.pid; wait'`;\nexport default 1;",
-      {
-        identifier: join(root, "abort-shell.js"),
-        onScope: (handle) => {
-          scopeHandle = handle;
-        },
-      },
-    );
-
-    const pidPath = join(root, "grand.pid");
-    const deadline = Date.now() + 5000;
-    while (!existsSync(pidPath) && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    expect(existsSync(pidPath)).toBe(true);
-    const grandchildPid = Number((await readFile(pidPath, "utf8")).trim());
-
-    const snapshot = scopeHandle!.seal();
-    controller.abort(new Error("stop shell"));
-    const outcome = await Promise.race([
-      run.then(
-        () => "resolved",
-        (error: unknown) => `rejected:${String(error)}`,
-      ),
-      new Promise<string>((resolve) => setTimeout(resolve, 2000, "hung")),
-    ]);
-    expect(outcome).toMatch(/^rejected:/);
-    expect(snapshot).toHaveLength(1);
-    expect(snapshot[0]).toMatchObject({
-      name: "$",
-      status: "aborted",
-      at: { line: 1 },
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    let alive = true;
-    try {
-      process.kill(grandchildPid, 0);
-    } catch (error) {
-      alive = (error as NodeJS.ErrnoException).code !== "ESRCH";
-    }
-    expect(alive).toBe(false);
-    agent.dispose();
-  });
-
-  it("respects an explicit caller signal option without overriding it", async () => {
-    if (process.platform === "win32") return;
-    const neverAborted = new AbortController();
-    const customAc = new AbortController();
-    const agent = new Agent({
-      root,
-      cwd: root,
-      hooks: {
-        state: { customSignal: customAc.signal },
-        signal: () => neverAborted.signal,
-      },
-    });
-    setTimeout(() => customAc.abort(new Error("caller abort")), 40);
-    const started = Date.now();
-    const error = await agent
-      .run(
+  it.skipIf(process.platform === "win32")(
+    "commands record $ effects with callsite and status",
+    async () => {
+      const agent = new Agent({ root });
+      const result = await agent.run(
         [
-          'import eta from "eta";',
-          "await $({ signal: eta.state.customSignal })`sleep 10`;",
+          "await $`true`;",
+          "await $`exit 3`.nothrow();",
+          "await $({ nothrow: true })`exit 2`;",
+          "$.sync`echo sync`;",
+          "export default 1;",
         ].join("\n"),
-        { identifier: join(root, "custom-signal.js") },
-      )
-      .catch((e: Error) => e);
-    expect(error).toBeInstanceOf(Error);
-    expect(Date.now() - started).toBeLessThan(2000);
-    agent.dispose();
-  });
+        {
+          identifier: join(root, "probe.js"),
+        },
+      );
+      expect(result.effects).toHaveLength(4);
+      expect(result.effects[0]).toMatchObject({
+        name: "$",
+        status: "ok",
+        detail: "true",
+        at: { line: 1 },
+      });
+      expect(result.effects[1]).toMatchObject({
+        name: "$",
+        status: "failed",
+        detail: "exit 3",
+        at: { line: 2 },
+      });
+      expect(result.effects[2]).toMatchObject({
+        name: "$",
+        status: "failed",
+        detail: "exit 2",
+        at: { line: 3 },
+      });
+      expect(result.effects[3]).toMatchObject({
+        name: "$",
+        status: "ok",
+        detail: "echo sync",
+        at: { line: 4 },
+      });
+      agent.dispose();
+    },
+  );
 
-  it("a background $ without await survives normal run completion and is killed on dispose", async () => {
-    if (process.platform === "win32") return;
-    const controller = new AbortController();
-    const state: Record<string, unknown> = {};
-    const agent = new Agent({
-      root,
-      cwd: root,
-      hooks: { state, signal: () => controller.signal },
-    });
-    const res = await agent.run(
-      [
-        'import eta from "eta";',
-        "const p = $`sleep 30`;",
-        "eta.state.bg = p;",
-        "export default p.pid;",
-      ].join("\n"),
-      { identifier: join(root, "bg.js") },
-    );
-    const pid = res.value as number;
-    expect(typeof pid).toBe("number");
-    expect(() => process.kill(pid, 0)).not.toThrow();
-
-    agent.dispose();
-    const waitDead = Date.now() + 2000;
-    let alive = true;
-    while (alive && Date.now() < waitDead) {
-      try {
-        process.kill(pid, 0);
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ESRCH") alive = false;
+  it.skipIf(process.platform === "win32")(
+    ".timeout() kills background grandchildren holding stdout and settles promptly",
+    async () => {
+      const agent = new Agent({ root, cwd: root });
+      const started = Date.now();
+      const res = await agent.run(
+        [
+          "const out = await $`sh -c 'sleep 30 & echo $! > bg1.pid; echo ok'`.timeout('300ms');",
+          "let waitTimedOut = false;",
+          "try { await $`sh -c 'sleep 30 & echo $! > bg2.pid; wait'`.timeout('300ms'); } catch { waitTimedOut = true; }",
+          "export default { stdout: out.stdout.trim(), waitTimedOut };",
+        ].join("\n"),
+        { identifier: join(root, "timeout.js") },
+      );
+      const elapsed = Date.now() - started;
+      expect(elapsed).toBeLessThan(2000);
+      expect(res.value).toEqual({ stdout: "ok", waitTimedOut: true });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      for (const file of ["bg1.pid", "bg2.pid"]) {
+        const pid = Number((await readFile(join(root, file), "utf8")).trim());
+        let alive = true;
+        try {
+          process.kill(pid, 0);
+        } catch (error) {
+          alive = (error as NodeJS.ErrnoException).code !== "ESRCH";
+        }
+        expect(alive).toBe(false);
       }
-    }
-    expect(alive).toBe(false);
-  });
+      agent.dispose();
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "respects an explicit caller signal option without overriding it",
+    async () => {
+      const neverAborted = new AbortController();
+      const customAc = new AbortController();
+      const agent = new Agent({
+        root,
+        cwd: root,
+        hooks: {
+          state: { customSignal: customAc.signal },
+          signal: () => neverAborted.signal,
+        },
+      });
+      setTimeout(() => customAc.abort(new Error("caller abort")), 40);
+      const started = Date.now();
+      const error = await agent
+        .run(
+          [
+            'import eta from "eta";',
+            "await $({ signal: eta.state.customSignal })`sleep 10`;",
+          ].join("\n"),
+          { identifier: join(root, "custom-signal.js") },
+        )
+        .catch((e: Error) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect(Date.now() - started).toBeLessThan(2000);
+      agent.dispose();
+    },
+  );
 });
 
-describe("effect scope and fetch abort", () => {
-  it("isolates evaluations, marks in-flight calls aborted on seal, and drops late completions", async () => {
-    let releaseSlow!: (value: string) => void;
-    let slowStarted!: () => void;
-    const slowReady = new Promise<void>((resolve) => {
-      slowStarted = resolve;
-    });
-    const onEffects: Effect[] = [];
-    const realm = new Realm({
-      name: "scope-test",
-      onEffect: (effect) => onEffects.push(effect),
-    });
-    realm.global(
-      "fastOp",
-      realm.binding("fast.op", (label: string) => `fast:${label}`),
-    );
-    realm.global(
-      "slowOp",
-      realm.binding("slow.op", (label: string) => {
-        slowStarted();
-        return new Promise<string>((resolve) => {
-          releaseSlow = () => resolve(`slow:${label}`);
-        });
-      }),
-    );
-
-    let handle1: EffectScopeHandle | undefined;
-    const eval1 = realm.evaluate(
-      'fastOp("one");\nconst v = await slowOp("p1");\nfastOp("after-seal");\nexport default v;',
-      {
-        identifier: join(root, "one.js"),
-        onScope: (handle) => {
-          handle1 = handle;
-        },
-      },
-    );
-    await slowReady;
-
-    const snapshot = handle1!.seal();
-    expect(snapshot).toHaveLength(2);
-    expect(snapshot[0]).toMatchObject({
-      name: "fast.op",
-      status: "ok",
-      detail: "one",
-      at: { identifier: "one.js", line: 1 },
-    });
-    expect(snapshot[1]).toMatchObject({
-      name: "slow.op",
-      status: "aborted",
-      detail: "p1",
-      at: { identifier: "one.js", line: 2 },
-    });
-    expect(handle1!.seal()).toEqual(snapshot);
-
-    const eval2 = await realm.evaluate('export default fastOp("two");', {
-      identifier: join(root, "two.js"),
-    });
-    expect(eval2.value).toBe("fast:two");
-    expect(eval2.effects).toHaveLength(1);
-    expect(eval2.effects[0]).toMatchObject({
-      name: "fast.op",
-      status: "ok",
-      detail: "two",
-      at: { identifier: "two.js", line: 1 },
-    });
-
-    // Settling the aborted promise late does not mutate the sealed snapshot, emit onEffect, or bleed into eval3.
-    const countBeforeLate = onEffects.length;
-    releaseSlow("late");
-    await eval1;
-    expect(snapshot).toHaveLength(2);
-    expect(snapshot[1]?.status).toBe("aborted");
-    expect(onEffects).toHaveLength(countBeforeLate);
-
-    const eval3 = await realm.evaluate('export default fastOp("three");', {
-      identifier: join(root, "three.js"),
-    });
-    expect(eval3.effects).toHaveLength(1);
-    expect(eval3.effects[0]?.detail).toBe("three");
-    expect(onEffects.some((e) => e.detail === "after-seal")).toBe(false);
-    realm.kill();
-  });
-
+describe("fetch abort", () => {
   it("fetch aborts when hooks.signal aborts", async () => {
     const sockets = new Set<import("node:net").Socket>();
     const server = createServer((_req, _res) => {

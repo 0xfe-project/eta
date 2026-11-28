@@ -9,7 +9,6 @@ import {
   CONVERSATION_ACTIONS,
   MACHINE_ACTIONS,
   PROJECT_ACTIONS,
-  stateSection,
 } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { connect, until } from "./support/client";
@@ -113,8 +112,7 @@ describe("the host", () => {
         )
         .some((frame) => {
           const state = frame.snapshot ?? frame.patch;
-          const transcript = state && stateSection(state, "transcript");
-          return JSON.stringify(transcript?.messages ?? []).includes(
+          return JSON.stringify(state?.sections.transcript ?? {}).includes(
             "fake answer",
           );
         });

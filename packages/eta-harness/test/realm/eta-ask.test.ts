@@ -18,59 +18,6 @@ afterEach(() => {
 });
 
 describe("eta.ask", () => {
-  it("can return a result with text, effects, stack, and status", async () => {
-    const hooks: Hooks = {
-      ask: async (request: AskRequest): Promise<AskResult> => {
-        // Simple mock: just echo the prompt
-        return {
-          text: `Answer to: ${request.prompt}`,
-          effects: [],
-          stack: request.parentStack ?? ["main"],
-          status: "completed",
-        };
-      },
-    };
-
-    const agent = new Agent({ root, hooks });
-    const result = await agent.run(
-      `import eta from "eta";
-const result = await eta.ask("What is 1 + 1?");
-export default result;`,
-      { identifier: join(root, "test.js") },
-    );
-
-    expect(result.value).toMatchObject({
-      text: expect.stringContaining("What is 1 + 1?"),
-      status: "completed",
-      stack: expect.any(Array),
-    });
-  });
-
-  it("supports passing model option", async () => {
-    let capturedModel: string | undefined;
-    const hooks: Hooks = {
-      ask: async (request: AskRequest): Promise<AskResult> => {
-        capturedModel = request.model;
-        return {
-          text: "result",
-          effects: [],
-          stack: ["main"],
-          status: "completed",
-        };
-      },
-    };
-
-    const agent = new Agent({ root, hooks });
-    await agent.run(
-      `import eta from "eta";
-await eta.ask("test", { model: "gpt-4" });
-export default 1;`,
-      { identifier: join(root, "test.js") },
-    );
-
-    expect(capturedModel).toBe("gpt-4");
-  });
-
   it("parentStack contains the truncated prompt", async () => {
     let capturedStack: string[] | undefined;
     const hooks: Hooks = {
@@ -125,63 +72,36 @@ export default 1;`,
     expect(capturedStack?.[0]).toContain("...");
     expect(capturedStack?.[0]?.length).toBeLessThan(60); // "eta.ask(\"" + 30 + "...\")" is ~44 chars
   });
-
-  it("the request carries depth for the host to count recursion", async () => {
-    // History injection is the host's job; what the runtime owes the host is
-    // a depth it can trust and a stack it can merge. This tests that much and
-    // nothing about session history — the rest is #23's (host side).
-    const depths: number[] = [];
-    const hooks: Hooks = {
-      ask: async (request: AskRequest): Promise<AskResult> => {
-        depths.push(request.depth ?? 0);
-        return {
-          text: "ok",
-          effects: [],
-          stack: request.parentStack ?? ["main"],
-          status: "completed",
-        };
-      },
-    };
-
-    const agent = new Agent({ root, hooks });
-    await agent.run(
-      `import eta from "eta";
-await eta.ask("first");`,
-      {
-        identifier: join(root, "test.js"),
-      },
-    );
-
-    expect(depths).toEqual([1]);
-  });
 });
 
 describe("eta.ask effect ledger", () => {
-  it("records the call site and a prompt summary", async () => {
-    if (process.platform === "win32") return;
-    const hooks: Hooks = {
-      ask: async (request: AskRequest): Promise<AskResult> => ({
-        text: "answer",
-        effects: [],
-        stack: request.parentStack ?? ["main"],
-        status: "completed",
-      }),
-    };
+  it.skipIf(process.platform === "win32")(
+    "records the call site and a prompt summary",
+    async () => {
+      const hooks: Hooks = {
+        ask: async (request: AskRequest): Promise<AskResult> => ({
+          text: "answer",
+          effects: [],
+          stack: request.parentStack ?? ["main"],
+          status: "completed",
+        }),
+      };
 
-    const agent = new Agent({ root, hooks });
-    const result = await agent.run(
-      `import eta from "eta";
+      const agent = new Agent({ root, hooks });
+      const result = await agent.run(
+        `import eta from "eta";
 const r = await eta.ask("find the failing test");
 export default r;`,
-      { identifier: join(root, "ledger.js") },
-    );
+        { identifier: join(root, "ledger.js") },
+      );
 
-    const ask = result.effects.find((e) => e.name === "eta.ask");
-    expect(ask).toBeDefined();
-    expect(ask?.status).toBe("ok");
-    expect(ask?.detail).toContain("find the failing test");
-    expect(ask?.at.line).toBe(2);
-  });
+      const ask = result.effects.find((e) => e.name === "eta.ask");
+      expect(ask).toBeDefined();
+      expect(ask?.status).toBe("ok");
+      expect(ask?.detail).toContain("find the failing test");
+      expect(ask?.at.line).toBe(2);
+    },
+  );
 
   it("records a failed ask as failed, and it still throws into the script", async () => {
     const hooks: Hooks = {

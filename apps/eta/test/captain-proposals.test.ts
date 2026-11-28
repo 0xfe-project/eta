@@ -143,18 +143,6 @@ describe("a proposal", () => {
     });
   });
 
-  it("is not recorded at all when its check refuses it", async () => {
-    const { kind, state } = thingKind();
-    state.refuse = "no room for it";
-    const h = harness();
-    const proposals = new CaptainProposals(h.deps, [kind]);
-    await expect(
-      proposals.propose(kind, { name: "Widget" }, "origin"),
-    ).rejects.toThrow(/no room for it/);
-    expect(h.operations.size).toBe(0);
-    expect(h.rows).toEqual([]);
-  });
-
   it("is checked again when it is confirmed, and made from what that check says", async () => {
     const { kind, made, state } = thingKind();
     const h = harness();

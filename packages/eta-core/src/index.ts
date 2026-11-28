@@ -18,14 +18,7 @@ export type {
   CompactionRequestState,
   CompactionSummarizer,
 } from "./kernel/compaction";
-export {
-  ConfigService,
-  RETRY_DEFAULTS,
-  validateCompactionSettings,
-  validateKernelConfig,
-  validateRetryPolicy,
-  validateToolNames,
-} from "./kernel/config";
+export { ConfigService, RETRY_DEFAULTS } from "./kernel/config";
 export type {
   DelegatedRunResult,
   RunDelegate,
@@ -33,8 +26,6 @@ export type {
 } from "./kernel/delegate";
 export {
   DEFAULT_MAX_INTERRUPTS,
-  type GenerateOptions,
-  generateWithRetry,
   type GenerationInterrupt,
   type GenerationObserver,
 } from "./kernel/generation";

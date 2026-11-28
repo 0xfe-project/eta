@@ -143,7 +143,8 @@ const indexes = (db: Database, table: string): string[] =>
 const entries = (db: Database): string[] =>
   db
     .query<Record<string, unknown>, []>(
-      "SELECT id, task_id, run_id, kind, actor, actor_agent, body, data, created_at FROM task_activity ORDER BY id",
+      // The rowid too: a task's timeline is read in rowid order.
+      "SELECT rowid, id, task_id, run_id, kind, actor, actor_agent, body, data, created_at FROM task_activity ORDER BY id",
     )
     .all()
     .map((row) => JSON.stringify(row));

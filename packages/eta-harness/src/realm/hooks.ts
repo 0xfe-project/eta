@@ -66,58 +66,6 @@ export interface McpSink {
  * what a turn or a conversation is.
  */
 
-export interface Frame {
-  /** This frame's id. Stable for the duration of one run. */
-  id: string;
-  /** The frame that asked for this one, or `null` at the top. */
-  parent: string | null;
-  /** Monotonic per parent; orders siblings. */
-  seq: number;
-}
-
-export interface MessageView {
-  role: string;
-  text: string;
-}
-
-export interface BudgetView {
-  /** Total the turn may spend, in tokens. */
-  limit: number;
-  spent: number;
-}
-
-/** What a script sees as `ctx`. A function, not a value, where it would be big. */
-export interface CtxView {
-  frame: Frame;
-  /** The last `count` messages. A method because materialising the transcript is wasteful. */
-  messages: (count?: number) => Promise<MessageView[]>;
-  budget: BudgetView;
-}
-
-export interface EmitSink {
-  text: (text: string) => void;
-  progress: (text: string) => void;
-  image: (input: { mime: string; base64: string; alt?: string }) => void;
-}
-
-export interface EditRequest {
-  path: string;
-  find: string;
-  replace: string;
-}
-
-export interface EditResult {
-  ok: boolean;
-  diff?: string;
-  reason?: string;
-}
-
-export interface ToolsSink {
-  /** Exact-match replacement. `fs.writeFile` overwrites; this refuses an ambiguous match. */
-  edit: (request: EditRequest) => Promise<EditResult>;
-  ask: (question: string) => Promise<string>;
-}
-
 /**
  * `eta.state`: a plain object a script reads and writes as `eta.state.x = y`.
  *
@@ -128,48 +76,26 @@ export interface ToolsSink {
  */
 export type StateObject = Record<string, unknown>;
 
-export interface MemorySink {
-  append: (text: string) => Promise<void>;
-  read: (query: string) => Promise<string>;
-}
-
 /**
  * A platform call.
  *
  * `kind` is what the ledger does with it: `det` is a deterministic local call,
  * `opaque` is a service whose behaviour we cannot inspect, `cost` is a paid
- * call that also draws down `ctx.budget`.
+ * call.
  */
 export interface PlatformCall {
   (input: unknown): Promise<unknown>;
   kind?: "det" | "opaque" | "cost";
 }
 
-export interface SpawnRequest {
-  prompt: string;
-  model?: string;
-}
-
-export interface SpawnResult {
-  text: string;
-  effects: Effect[];
-}
-
 export interface AskRequest {
   prompt: string;
-  model?: string;
   /**
    * Parent call stack: what was calling eta.ask.
    * Carried forward in recursion. The host merges this with the session
-   * stack; the depth the runtime computes below is only what the runtime
-   * itself can see — the host's own, longer stack wins.
+   * stack and counts the depth from the merged stack.
    */
   parentStack?: string[];
-  /**
-   * Depth of this ask in the recursion, ≥1 for a first call. The runtime
-   * stamps it so a host does not have to recount the stack it merged.
-   */
-  depth?: number;
 }
 
 export interface AskResult {
@@ -194,10 +120,8 @@ export interface AskResult {
  * filling in only the slots it has.
  */
 export interface Hooks {
-  /** `console` from inside the realm. Debug output, not `emit`. */
+  /** `console` from inside the realm. Debug output. */
   onConsole?: (level: string, line: string) => void;
-  /** Called as each effect completes, so a host can stream rather than wait. */
-  onEffect?: (effect: Effect) => void;
   /**
    * Asked before a binding reaches the host. Absent means everything runs, so
    * a host that has not written a policy yet is not silently gated.
@@ -205,11 +129,6 @@ export interface Hooks {
   authorize?: Authorizer;
   /** The active evaluation's abort signal, if any. Read dynamically per call. */
   signal?: () => AbortSignal | undefined;
-
-  ctx?: () => CtxView;
-  emit?: Partial<EmitSink>;
-  tools?: Partial<ToolsSink>;
-  memory?: MemorySink;
   /**
    * `eta.platform`: the host's services, one function each. A function form is
    * read when the `eta` module is first imported in a realm, so a host whose
@@ -222,8 +141,6 @@ export interface Hooks {
   state?: StateObject;
   /** MCP servers and tools. Absent in remote/daemon sessions. */
   mcp?: McpSink;
-  /** A real sub-turn. Recursion, budget and cycles are the host's to enforce. */
-  spawn?: (request: SpawnRequest) => Promise<SpawnResult>;
   /** Call the current agent with a new turn. Supports recursion and sees full history. */
   ask?: (request: AskRequest) => Promise<AskResult>;
 }

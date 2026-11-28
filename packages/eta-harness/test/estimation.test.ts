@@ -22,7 +22,7 @@ import {
   findTurnStartIndex,
   fitCompactionSettings,
   shouldCompact,
-} from "../src/index";
+} from "../src/estimation";
 
 const userMsg = (text: string) => ({
   role: "user" as const,

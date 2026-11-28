@@ -84,95 +84,101 @@ describe("0053-routines-run-by-captain", () => {
 });
 
 describe("0067-routine-triggers", () => {
-  it("allows nullable routine.schedule, started_by='trigger', and cascades trigger/event tables", () => {
-    const db = openDatabase(":memory:");
-    applyMigrations(db, upTo("0067-routine-triggers"));
+  // macOS's system SQLite renames with the legacy behaviour, which leaves other tables'
+  // references to the old name as they were: the rebuild has to hold either way.
+  it.each(["OFF", "ON"])(
+    "allows nullable routine.schedule, started_by='trigger', and cascades trigger/event tables (legacy_alter_table %s)",
+    (legacy) => {
+      const db = openDatabase(":memory:");
+      db.exec(`PRAGMA legacy_alter_table = ${legacy}`);
+      applyMigrations(db, upTo("0067-routine-triggers"));
 
-    // Existing scheduled routine and its run/brief/feedback survive rebuild intact.
-    db.exec(
-      "INSERT INTO routine (id, name, schedule, timezone, enabled, created_at, updated_at) VALUES ('r1', 'Digest', '{\"kind\":\"daily\",\"time\":\"09:00\"}', 'UTC', 1, 1, 2)",
-    );
-    db.exec(
-      "INSERT INTO routine_run (id, routine_id, started_by, status, started_at, finished_at, title, report, handoff) VALUES ('run1', 'r1', 'schedule', 'sent', 3, 4, 'T', '# T', 'note')",
-    );
-    db.exec(
-      "INSERT INTO routine_feedback (id, run_id, text, created_at) VALUES ('f1', 'run1', 'ok', 5)",
-    );
-    db.exec(
-      "INSERT INTO routine_brief (routine_id, version, text, feedback_id, created_at) VALUES ('r1', 1, 'Do it.', NULL, 1)",
-    );
-
-    applyMigrations(db, all);
-
-    expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
-    expect(db.query("SELECT id, name, schedule FROM routine").all()).toEqual([
-      {
-        id: "r1",
-        name: "Digest",
-        schedule: '{"kind":"daily","time":"09:00"}',
-      },
-    ]);
-    expect(
-      db.query("SELECT id, started_by, status FROM routine_run").all(),
-    ).toEqual([{ id: "run1", started_by: "schedule", status: "sent" }]);
-
-    // Trigger-only routine (schedule = NULL) + trigger binding + started_by = 'trigger'.
-    db.exec(
-      "INSERT INTO routine (id, name, schedule, timezone, enabled, created_at, updated_at) VALUES ('r2', 'Watcher', NULL, 'UTC', 1, 10, 10)",
-    );
-    db.exec(
-      "INSERT INTO routine_brief (routine_id, version, text, feedback_id, created_at) VALUES ('r2', 1, 'Watch.', NULL, 10)",
-    );
-    db.exec(
-      "INSERT INTO routine_trigger (routine_id, provider, source, trigger_slug, account_id, config_json, instance_id, status, created_at, updated_at) VALUES ('r2', 'composio', 'github', 'GITHUB_COMMIT_EVENT', 'ca_1', '{}', 'ti_1', 'active', 10, 10)",
-    );
-    db.exec(
-      "INSERT INTO routine_run (id, routine_id, started_by, status, started_at) VALUES ('run2', 'r2', 'trigger', 'running', 11)",
-    );
-
-    // One-at-a-time constraint still holds across started_by = 'trigger'.
-    expect(() =>
+      // Existing scheduled routine and its run/brief/feedback survive rebuild intact.
       db.exec(
-        "INSERT INTO routine_run (id, routine_id, started_by, status, started_at) VALUES ('run3', 'r2', 'trigger', 'running', 12)",
-      ),
-    ).toThrow();
-
-    // Idempotency key UNIQUE(routine_id, event_id) rejects duplicate event for same routine,
-    // while allowing the same event_id on another routine.
-    db.exec(
-      "INSERT INTO routine_trigger_event (id, routine_id, provider, event_id, trigger_slug, occurred_at, received_at, payload_json, state) VALUES ('e1', 'r2', 'composio', 'msg_1', 'GITHUB_COMMIT_EVENT', 11, 11, '{}', 'pending')",
-    );
-    expect(() =>
+        "INSERT INTO routine (id, name, schedule, timezone, enabled, created_at, updated_at) VALUES ('r1', 'Digest', '{\"kind\":\"daily\",\"time\":\"09:00\"}', 'UTC', 1, 1, 2)",
+      );
       db.exec(
-        "INSERT INTO routine_trigger_event (id, routine_id, provider, event_id, trigger_slug, occurred_at, received_at, payload_json, state) VALUES ('e2', 'r2', 'composio', 'msg_1', 'GITHUB_COMMIT_EVENT', 12, 12, '{}', 'pending')",
-      ),
-    ).toThrow(/UNIQUE/);
-    db.exec(
-      "INSERT INTO routine_trigger_event (id, routine_id, provider, event_id, trigger_slug, occurred_at, received_at, payload_json, state) VALUES ('e3', 'r1', 'composio', 'msg_1', 'GITHUB_COMMIT_EVENT', 12, 12, '{}', 'pending')",
-    );
+        "INSERT INTO routine_run (id, routine_id, started_by, status, started_at, finished_at, title, report, handoff) VALUES ('run1', 'r1', 'schedule', 'sent', 3, 4, 'T', '# T', 'note')",
+      );
+      db.exec(
+        "INSERT INTO routine_feedback (id, run_id, text, created_at) VALUES ('f1', 'run1', 'ok', 5)",
+      );
+      db.exec(
+        "INSERT INTO routine_brief (routine_id, version, text, feedback_id, created_at) VALUES ('r1', 1, 'Do it.', NULL, 1)",
+      );
 
-    // Deleting r2 cascades trigger binding, runs, briefs, and queued events without disturbing r1.
-    db.exec("DELETE FROM routine WHERE id = 'r2'");
-    expect(
-      db
-        .query(
-          "SELECT COUNT(*) AS n FROM routine_trigger WHERE routine_id = 'r2'",
-        )
-        .get(),
-    ).toEqual({ n: 0 });
-    expect(
-      db
-        .query(
-          "SELECT COUNT(*) AS n FROM routine_trigger_event WHERE routine_id = 'r2'",
-        )
-        .get(),
-    ).toEqual({ n: 0 });
-    expect(
-      db
-        .query(
-          "SELECT COUNT(*) AS n FROM routine_trigger_event WHERE routine_id = 'r1'",
-        )
-        .get(),
-    ).toEqual({ n: 1 });
-  });
+      applyMigrations(db, all);
+
+      expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
+      expect(db.query("SELECT id, name, schedule FROM routine").all()).toEqual([
+        {
+          id: "r1",
+          name: "Digest",
+          schedule: '{"kind":"daily","time":"09:00"}',
+        },
+      ]);
+      expect(
+        db.query("SELECT id, started_by, status FROM routine_run").all(),
+      ).toEqual([{ id: "run1", started_by: "schedule", status: "sent" }]);
+
+      // Trigger-only routine (schedule = NULL) + trigger binding + started_by = 'trigger'.
+      db.exec(
+        "INSERT INTO routine (id, name, schedule, timezone, enabled, created_at, updated_at) VALUES ('r2', 'Watcher', NULL, 'UTC', 1, 10, 10)",
+      );
+      db.exec(
+        "INSERT INTO routine_brief (routine_id, version, text, feedback_id, created_at) VALUES ('r2', 1, 'Watch.', NULL, 10)",
+      );
+      db.exec(
+        "INSERT INTO routine_trigger (routine_id, provider, source, trigger_slug, account_id, config_json, instance_id, status, created_at, updated_at) VALUES ('r2', 'composio', 'github', 'GITHUB_COMMIT_EVENT', 'ca_1', '{}', 'ti_1', 'active', 10, 10)",
+      );
+      db.exec(
+        "INSERT INTO routine_run (id, routine_id, started_by, status, started_at) VALUES ('run2', 'r2', 'trigger', 'running', 11)",
+      );
+
+      // One-at-a-time constraint still holds across started_by = 'trigger'.
+      expect(() =>
+        db.exec(
+          "INSERT INTO routine_run (id, routine_id, started_by, status, started_at) VALUES ('run3', 'r2', 'trigger', 'running', 12)",
+        ),
+      ).toThrow();
+
+      // Idempotency key UNIQUE(routine_id, event_id) rejects duplicate event for same routine,
+      // while allowing the same event_id on another routine.
+      db.exec(
+        "INSERT INTO routine_trigger_event (id, routine_id, provider, event_id, trigger_slug, occurred_at, received_at, payload_json, state) VALUES ('e1', 'r2', 'composio', 'msg_1', 'GITHUB_COMMIT_EVENT', 11, 11, '{}', 'pending')",
+      );
+      expect(() =>
+        db.exec(
+          "INSERT INTO routine_trigger_event (id, routine_id, provider, event_id, trigger_slug, occurred_at, received_at, payload_json, state) VALUES ('e2', 'r2', 'composio', 'msg_1', 'GITHUB_COMMIT_EVENT', 12, 12, '{}', 'pending')",
+        ),
+      ).toThrow(/UNIQUE/);
+      db.exec(
+        "INSERT INTO routine_trigger_event (id, routine_id, provider, event_id, trigger_slug, occurred_at, received_at, payload_json, state) VALUES ('e3', 'r1', 'composio', 'msg_1', 'GITHUB_COMMIT_EVENT', 12, 12, '{}', 'pending')",
+      );
+
+      // Deleting r2 cascades trigger binding, runs, briefs, and queued events without disturbing r1.
+      db.exec("DELETE FROM routine WHERE id = 'r2'");
+      expect(
+        db
+          .query(
+            "SELECT COUNT(*) AS n FROM routine_trigger WHERE routine_id = 'r2'",
+          )
+          .get(),
+      ).toEqual({ n: 0 });
+      expect(
+        db
+          .query(
+            "SELECT COUNT(*) AS n FROM routine_trigger_event WHERE routine_id = 'r2'",
+          )
+          .get(),
+      ).toEqual({ n: 0 });
+      expect(
+        db
+          .query(
+            "SELECT COUNT(*) AS n FROM routine_trigger_event WHERE routine_id = 'r1'",
+          )
+          .get(),
+      ).toEqual({ n: 1 });
+    },
+  );
 });

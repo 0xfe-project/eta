@@ -1,12 +1,12 @@
 /**
  * A Cursor-hosted server the user gave a Cursor credential (x-cursor-auth) and then signed in to with
- * the service's own OAuth (Google): both layers reach the server, in the connection test and in the
- * connection an agent's session makes. The server is a stand-in; nothing here reaches the network.
+ * the service's own OAuth (Google): both layers reach the server in the connection an agent's
+ * session makes (the connection test's is in plugin-oauth-test.test.ts). The server is a stand-in;
+ * nothing here reaches the network.
  */
 import { toMcpEntries } from "@eta/daemon";
 import { ServerManager } from "@eta/mcp";
 import { describe, expect, it } from "vitest";
-import { testConnection } from "../src/plugins/test-server";
 
 const URL_ = "https://api.cursor.com/rest-mcp/google-drive/mcp";
 const CURSOR = "Bearer cursor-credential-0123456789";
@@ -101,35 +101,6 @@ const entry = () =>
   )[0]!;
 
 describe("a Cursor server with a Cursor credential and a stored OAuth sign-in", () => {
-  it("is declared OAuth, so the stored sign-in is used at all", () => {
-    expect((entry() as { auth?: unknown }).auth).toBe("oauth");
-  });
-
-  it("the connection test sends the sign-in and the Cursor credential together, and passes", async () => {
-    const seen: Seen[] = [];
-    const result = await testConnection(
-      {
-        ...entry(),
-        name: "google-drive",
-        source: "plugin-test",
-        hash: "plugin-test",
-      } as never,
-      [],
-      5000,
-      () => provider(),
-      server(seen),
-    );
-    expect(result).toMatchObject({ status: "ok", toolCount: 1 });
-    const posts = seen.filter((one) => one.authorization !== null);
-    expect(posts.length).toBeGreaterThan(0);
-    for (const one of posts) {
-      expect(one.names).toContain("authorization");
-      expect(one.names).toContain("x-cursor-auth");
-      expect(one.cursor).toBe(CURSOR);
-    }
-    expect(JSON.stringify(result)).not.toContain(GOOGLE);
-  }, 30_000);
-
   it("a session's own connection sends both too, and lists the tools", async () => {
     const seen: Seen[] = [];
     const manager = new ServerManager({

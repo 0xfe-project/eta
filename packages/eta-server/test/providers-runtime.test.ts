@@ -173,9 +173,46 @@ describe("building the model layer", () => {
     expect(failures[0]).toContain("bad");
   });
 
-  it("builds a provider that has no key at all, for a local endpoint", async () => {
-    const provider = await buildProvider(localProvider({ apiKey: undefined }));
-    expect(provider.id).toBe("local");
+  it("talks to a provider that has no key at all, for a local endpoint", async () => {
+    const authorizations: (string | null)[] = [];
+    const endpoint = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        authorizations.push(request.headers.get("authorization"));
+        await request.json();
+        const chunk = (delta: unknown, finish: string | null = null) =>
+          `data: ${JSON.stringify({
+            id: "chatcmpl-1",
+            object: "chat.completion.chunk",
+            model: "m1",
+            choices: [{ index: 0, delta, finish_reason: finish }],
+          })}\n\n`;
+        return new Response(
+          `${chunk({ role: "assistant", content: "hello" })}${chunk({}, "stop")}data: [DONE]\n\n`,
+          { headers: { "content-type": "text/event-stream" } },
+        );
+      },
+    });
+    try {
+      const { models, failed } = await buildModels([
+        localProvider({
+          apiKey: undefined,
+          baseUrl: `http://127.0.0.1:${endpoint.port}/v1`,
+        }),
+      ]);
+      expect(failed).toEqual([]);
+      const result = await models!.completeSimple(
+        models!.getModel("local", "m1")!,
+        { messages: [{ role: "user", content: "hello", timestamp: 0 }] },
+      );
+      // The request goes out (with a placeholder, since the SDK insists on a key) and is answered.
+      expect(authorizations).toEqual(["Bearer eta-no-key"]);
+      expect(result.errorMessage).toBeUndefined();
+      expect(result.stopReason).toBe("stop");
+    } finally {
+      await endpoint.stop(true);
+    }
   });
 });
 
@@ -432,13 +469,10 @@ describe("every kind's request settings", () => {
     "openai-responses": { api: "openai-responses", off: "none" },
   };
 
-  it("has a row for every kind", () => {
-    expect(Object.keys(golden).sort()).toEqual(
-      Object.keys(MODEL_SOURCES).sort(),
-    );
-  });
-
-  it.each(Object.entries(golden))("%s", async (kind, expected) => {
+  // Every kind MODEL_SOURCES has, so a kind added without a row fails as its own case.
+  it.each(Object.keys(MODEL_SOURCES))("%s", async (kind) => {
+    const expected = golden[kind as ProviderKind];
+    expect(expected, `no golden row for ${kind}`).toBeDefined();
     const provider = await buildProvider({
       id: "p",
       kind: kind as ProviderKind,

@@ -64,7 +64,7 @@ export function validateCompactionSettings(settings: CompactionSettings): void {
   }
 }
 
-export function validateKernelConfig(config: KernelConfig): void {
+function validateKernelConfig(config: KernelConfig): void {
   validateToolNames(config.activeToolNames.map((name) => ({ name })));
   validateRetryPolicy(config.retryPolicy);
   validateCompactionSettings(config.compaction);

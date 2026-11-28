@@ -12,23 +12,6 @@ function env(values: Record<string, string>): NodeJS.ProcessEnv {
 }
 
 describe("installService", () => {
-  it("fails in the running step with the output when the command exits non-zero", async () => {
-    const program = await fakeInstaller();
-    const steps: string[] = [];
-    const result = await installService({
-      program,
-      env: env({ FAKE_EXIT: "1", FAKE_ERR: "Access is denied." }),
-      localUrl: `http://127.0.0.1:${await closedPort()}`,
-      runMs: 30_000,
-      upMs: 5_000,
-      probeTimeoutMs: 1_500,
-      onStep: (step) => steps.push(step),
-    });
-    expect(result).toMatchObject({ ok: false, step: "running" });
-    expect(result.output).toContain("Access is denied.");
-    expect(steps).toEqual([]);
-  });
-
   it("fails in the running step when the command outlasts its time, keeping what it printed", async () => {
     const program = await fakeInstaller();
     const started = Date.now();

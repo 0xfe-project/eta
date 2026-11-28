@@ -49,3 +49,14 @@ describe("theme presets of the shared themes", () => {
     }
   }
 });
+
+describe("the Catppuccin presets", () => {
+  it.each(
+    Object.keys(THEME_PRESETS).filter((name) => name.startsWith("catppuccin-")),
+  )("%s is a hex colour for every token and agent", (name) => {
+    const { agents, ...tokens } =
+      THEME_PRESETS[name as keyof typeof THEME_PRESETS];
+    for (const colour of [...Object.values(tokens), ...agents])
+      expect(colour).toMatch(/^#[\da-f]{6}$/i);
+  });
+});

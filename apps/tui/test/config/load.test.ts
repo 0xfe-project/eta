@@ -313,21 +313,6 @@ describe("parseConfig: theme", () => {
 });
 
 describe("parseConfig: theme.preset", () => {
-  const HEX = /^#[\da-f]{6}$/i;
-
-  it.each(Object.keys(THEME_PRESETS))(
-    "expands %s into a whole theme",
-    (name) => {
-      const { config, problems } = parse({ theme: { preset: name } });
-      const preset = THEME_PRESETS[name as keyof typeof THEME_PRESETS];
-      const { agents, ...tokens } = preset;
-      expect(problems).toEqual([]);
-      expect(config).toEqual({ ...defaults(), theme: preset });
-      for (const colour of [...Object.values(tokens), ...agents])
-        expect(colour).toMatch(HEX);
-    },
-  );
-
   it("keeps the defaults for `default` and when no preset is written", () => {
     expect(parse({ theme: { preset: "default" } })).toEqual({
       config: defaults(),

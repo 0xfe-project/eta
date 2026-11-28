@@ -39,8 +39,6 @@ import {
 } from "../providers/discovery";
 import { ProviderLogos } from "../providers/logos";
 
-export { PROVIDER_ACTIONS } from "@eta/client-contracts";
-
 export interface ProvidersPluginOptions {
   store: ProviderConfigStore;
   monthlySummaries?:

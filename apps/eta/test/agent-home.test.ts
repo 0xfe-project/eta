@@ -6,7 +6,7 @@ import type { Database } from "bun:sqlite";
 import type { Plugins } from "../src/plugins/service";
 import { afterEach, describe, expect, it } from "vitest";
 import { createAgent } from "../src/agents/create";
-import { ensureHome, homeOf, isAgentHome } from "../src/agents/home";
+import { ensureHome, homeOf } from "../src/agents/home";
 import { agentHome, AgentStore } from "../src/agents/store";
 import { ConversationStore } from "../src/conversations/store";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
@@ -83,15 +83,5 @@ describe("ensureHome", () => {
       null,
     );
     expect(ensureHome(d, agent).id).toBe(project.id);
-  });
-});
-
-describe("isAgentHome", () => {
-  it("knows an agent's workspace from any other directory", async () => {
-    const d = await stores();
-    const ada = d.agents.create({ name: "Ada" });
-    expect(isAgentHome(d, agentHome(d.dataDir, ada.id))).toBe(true);
-    expect(isAgentHome(d, agentHome(d.dataDir, "nobody"))).toBe(false);
-    expect(isAgentHome(d, "/work/repo")).toBe(false);
   });
 });

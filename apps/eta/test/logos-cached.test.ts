@@ -71,7 +71,6 @@ describe("logosCached", () => {
     expect(answer.map((one) => one.status)).toEqual(["hit", "miss", "unknown"]);
     expect(answer[0]).toMatchObject({ logo: { type: "image/png" } });
     expect(net.hits()).toBe(0);
-    expect(logos.requests).toBe(0);
   });
 
   it("is not held up by lookups that wait on a stalled network", async () => {

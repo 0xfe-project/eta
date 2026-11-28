@@ -52,7 +52,7 @@ export interface ScopeHost {
     definition: McpServerDefinition,
   ) => ObservedOutputs;
   /** What a live connection reports, as a cache entry. */
-  entryOf: (connection: Connection) => Omit<ServerCacheEntry, "cachedAt">;
+  entryOf: (connection: Connection) => ServerCacheEntry;
   /** Writes it to the owner's cache. */
   persist: (connection: Connection) => void;
   unregister: (scope: McpScope) => void;
@@ -406,7 +406,7 @@ export class McpScope {
         cache.get(definition.name, definition.hash) === undefined &&
         !cache.discoveryFailed(definition.name, definition.hash),
     );
-    const updates: Record<string, Omit<ServerCacheEntry, "cachedAt">> = {};
+    const updates: Record<string, ServerCacheEntry> = {};
     let next = 0;
     const worker = async (): Promise<void> => {
       for (;;) {

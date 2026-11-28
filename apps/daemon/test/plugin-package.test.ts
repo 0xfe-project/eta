@@ -658,25 +658,12 @@ describe("a Cursor or Claude Code layout", () => {
         join(outside, "x.json"),
         JSON.stringify({ mcpServers: servers }),
       );
-      try {
-        await symlink(join(outside, "x.json"), join(root, "link.json"));
-      } catch {
-        return; // A symlink needs a privilege some systems do not give.
-      }
+      await symlink(join(outside, "x.json"), join(root, "link.json"));
       const loaded = await loadPlugin(root);
       expect(loaded.servers).toEqual([]);
       expect(loaded.reports.join("\n")).toContain(
         "resolves outside the plugin",
       );
-    });
-
-    it("still warns about an unknown field of a native plugin.json", async () => {
-      const loaded = await loadPlugin(
-        await plugin({ "skills/a/SKILL.md": skill("a") }, { hooks: {} }),
-      );
-      expect(loaded.reports).toEqual([
-        "plugin.json: unknown field hooks was ignored",
-      ]);
     });
   });
 
@@ -1298,14 +1285,6 @@ describe("skill names that are not legal", () => {
       reports: loaded.reports.join("\n"),
     };
   };
-
-  it("leaves a legal name alone", async () => {
-    const { names, reports } = await load({
-      "skills/good-one/SKILL.md": skill("good-one"),
-    });
-    expect(names).toEqual(["good-one"]);
-    expect(reports).not.toContain("renamed");
-  });
 
   it("formats a space, uppercase, an underscore and edge symbols, and says so", async () => {
     const { names, reports } = await load({

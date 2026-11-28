@@ -1,3 +1,4 @@
+import type { OpenOptions } from "nsh/test";
 import { expect, open, test } from "nsh/test";
 
 // The strip above a conversation's transcript points at a question waiting for the user only while
@@ -7,13 +8,14 @@ import { expect, open, test } from "nsh/test";
 const fixture = "./fixtures/question-strip.tsx";
 const strip = "label:Jump to question";
 
-const openAt = (scenario: string) =>
+const openAt = (scenario: string, options: OpenOptions = {}) =>
   open(fixture, {
     width: 1440,
     height: 900,
     locale: "en-US",
     platform: "web",
     urlScheme: `eta://fixture/${scenario}`,
+    ...options,
   });
 
 test("a question on screen has no strip above the transcript", async () => {
@@ -24,15 +26,23 @@ test("a question on screen has no strip above the transcript", async () => {
 });
 
 test("the strip shows once the question scrolls off screen, and goes when it is back", async () => {
-  const app = await openAt("end");
+  // A scroll drags 10 points per display frame. On the system's clock it waits for each of the
+  // machine's frames, and on the macOS runner 7500 points of dragging ran out the test's 30 s; on a
+  // manual clock the drag moves the clock a frame at a time and waits for no machine.
+  const app = await openAt("end", { clock: {} });
   await app.waitFor("text:Ship rc.9 today?");
-  await app.scroll("id:conversation-messages", -2500);
+  // The question is on the last reply: one transcript height up takes it off screen, and as much
+  // down brings it back to the end.
+  const transcript = "id:conversation-messages";
+  const height = app.layout(transcript)!.height;
+  await app.scroll(transcript, -height);
   await app.waitFor(strip);
   expect(
     app.shows("text:Ada is waiting for your answer: Ship rc.9 today?"),
   ).toBe(true);
-  await app.scroll("id:conversation-messages", 5000);
+  await app.scroll(transcript, height);
   await app.waitUntil(() => !app.shows(strip));
+  expect(app.shows("text:Ship rc.9 today?")).toBe(true);
 });
 
 test("pressing the strip scrolls to the question and the strip goes", async () => {

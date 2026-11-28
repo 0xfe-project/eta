@@ -3,8 +3,7 @@
  * and an agent away from its project's machine is told so where the user does not see it (its
  * system prompt), never in the conversation.
  */
-import type { AgentRuntimeInfo, MessageView } from "@eta/client-contracts";
-import type { OarRuntimes } from "@eta/runtime-oar";
+import type { MessageView } from "@eta/client-contracts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -16,11 +15,8 @@ const AWAY =
   /<system-reminder>\nYou are running on laptop, not on the machine this conversation belongs to \(desk\)\./;
 
 /** A host and a daemon, named so the note can be read: the primary is `desk`, the daemon `laptop`. */
-async function named(
-  options: Parameters<typeof remoteWorld>[0] = {},
-  daemon = {},
-) {
-  const r = await remoteWorld(options, daemon);
+async function named(options: Parameters<typeof remoteWorld>[0] = {}) {
+  const r = await remoteWorld(options);
   const primary = r.client
     .section<{ id: string; kind: string }[]>("machines", "list")!
     .find((machine) => machine.kind === "primary")!;
@@ -314,30 +310,5 @@ describe("pinning", () => {
     await expect(
       r.agent("Bob", { machineId: r.daemon.machineId }),
     ).rejects.toThrow(/no such machine/);
-  });
-
-  it("a daemon machine's runtimes are asked of that machine", async () => {
-    const theirs: AgentRuntimeInfo[] = [
-      {
-        id: "claude",
-        label: "Claude Code",
-        status: "available",
-        models: [{ id: "sonnet", name: "Sonnet", default: true, efforts: [] }],
-      },
-    ];
-    const runtimes = {
-      catalog: { list: async () => theirs },
-      open: () => undefined,
-    } as unknown as OarRuntimes;
-    const r = await named({}, { node: { runtimes } });
-    expect(
-      await r.client.call("agents", "runtimes", {
-        machineId: r.daemon.machineId,
-      }),
-    ).toEqual({ runtimes: theirs });
-    // The primary's own (none, in a test host) when no machine is named.
-    expect(await r.client.call("agents", "runtimes", {})).toEqual({
-      runtimes: [],
-    });
   });
 });

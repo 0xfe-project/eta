@@ -692,18 +692,6 @@ describe("a completion menu longer than its window", () => {
     expect(menu.join("\n")).not.toContain("↓");
   });
 
-  it("has no row that stays last: the last row follows the selection down", async () => {
-    const s = setup({ commands: TWENTY });
-    await s.r.type("/");
-    const lastRows = new Set<string>();
-    for (let i = 0; i < 19; i++) {
-      await s.r.press(KEYS.down);
-      lastRows.add(menuLines(s.lines()).at(-1) ?? "");
-    }
-    expect(lastRows.size).toBeGreaterThan(5);
-    expect(menuLines(s.lines()).at(-1)).toContain("/c19");
-  });
-
   it("wraps from the first match to the last with up, and back with down", async () => {
     const s = setup({ commands: TWENTY });
     await s.r.type("/");
@@ -742,16 +730,6 @@ describe("a completion menu longer than its window", () => {
     expect(menu[0]).toBe("› /c10  About c10");
     expect(menu.at(-1)).toBe("↓ 3 more");
     expect(menu.join("\n")).not.toContain("/c09");
-  });
-
-  it("says how many more in Chinese, beside the Chinese summaries", async () => {
-    const s = setup({ commands: TWENTY, locale: "zh" });
-    await s.r.type("/");
-    await pressTimes(s.r, KEYS.down, 10);
-    const menu = menuLines(s.lines());
-    expect(menu[0]).toBe("↑ 还有 7 项");
-    expect(menu).toContain("› /c10  关于 c10");
-    expect(menu.at(-1)).toBe("↓ 还有 7 项");
   });
 
   it("shrinks to the rows left on a short screen, keeping the input whole and the selection in view", async () => {

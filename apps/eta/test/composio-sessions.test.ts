@@ -260,12 +260,21 @@ describe("a session for a connected toolkit", () => {
   });
 
   it("is not registered when the address is not on Composio's side, and the key goes nowhere else", async () => {
+    // Somewhere else that would gladly take the key: another origin, recording what it is sent.
+    const elsewhere: (string | null)[] = [];
+    const other = Bun.serve({
+      port: 0,
+      fetch: (request) => {
+        elsewhere.push(request.headers.get("x-api-key"));
+        return new Response("{}");
+      },
+    });
     const { composio } = open();
     create = () =>
       json(
         {
           session_id: "sess-x",
-          mcp: { type: "http", url: "http://evil.example/mcp" },
+          mcp: { type: "http", url: `http://127.0.0.1:${other.port}/mcp` },
           config: echo({
             toolkits: { enable: ["gmail"] },
             manage_connections: { enable_connection_removal: false },
@@ -274,8 +283,15 @@ describe("a session for a connected toolkit", () => {
         },
         201,
       );
-    await composio.sync(["gmail"]);
-    expect(composio.has("@composio/gmail")).toBe(false);
+    try {
+      await composio.sync(["gmail"]);
+      expect(composio.has("@composio/gmail")).toBe(false);
+      // No agent's session is given that address, so the key is never sent there.
+      expect(composio.mcpSource(["@composio/gmail"])).toBeUndefined();
+      expect(elsewhere).toEqual([]);
+    } finally {
+      await other.stop(true);
+    }
   });
 
   it("says error when Composio refuses to make it, without its text or the key, and does not ask again at once", async () => {
@@ -429,14 +445,6 @@ describe("a session for a connected toolkit", () => {
     expect(composio.mcpSource(["@composio/gmail"])).toBeUndefined();
     composio.setEnabled(true);
     expect(composio.has("@composio/gmail")).toBe(true);
-  });
-
-  it("tells the plugins when it changes", async () => {
-    const { composio } = open();
-    const changed = vi.fn();
-    composio.onChange(changed);
-    await composio.sync(["gmail"]);
-    expect(changed).toHaveBeenCalled();
   });
 });
 

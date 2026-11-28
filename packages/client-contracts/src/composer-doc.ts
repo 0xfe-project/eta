@@ -279,39 +279,6 @@ export function textToNodes(text: string): DocNode[] {
 }
 
 /**
- * A sent message back as a draft (a failed send pulled back to edit): its pastes folded again from
- * their ranges, its attachments as file parts after the text.
- */
-export function sentToDraft(message: {
-  text: string;
-  blocks?: readonly PasteRange[];
-  attachments: readonly AttachmentView[];
-}): Draft {
-  const parts: DraftPart[] = [];
-  let end = 0;
-  for (const [start, stop] of message.blocks ?? []) {
-    if (start < end || stop > message.text.length) continue;
-    parts.push({ type: "text", text: message.text.slice(end, start) });
-    parts.push({
-      type: "paste",
-      id: `paste-${start}`,
-      text: message.text.slice(start, stop),
-    });
-    end = stop;
-  }
-  parts.push({ type: "text", text: message.text.slice(end) });
-  for (const file of message.attachments)
-    parts.push({
-      type: "file",
-      id: file.id,
-      name: file.name,
-      contentType: file.contentType,
-      size: file.size,
-    });
-  return merged(parts);
-}
-
-/**
  * A draft saved before the composer was a document (`eta.composer.v1`): the folded parts above the
  * box, then the box's text, the uploaded files first since that is where they showed. Read once;
  * the composer saves the document from then on.

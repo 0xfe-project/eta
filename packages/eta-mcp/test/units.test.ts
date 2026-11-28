@@ -256,20 +256,12 @@ describe("metadata cache", () => {
     expect(new MetadataCache(path).get("s", "h")).toBeUndefined();
   });
 
-  it("creates its directory and drops entries on request", () => {
+  it("creates its directory", () => {
     const path = join(dir, "deep", "er", "c.json");
     const cache = new MetadataCache(path);
     cache.save({ s: entry("h", ["a"]) });
     // The save landed on disk, under directories it had to create.
     expect(new MetadataCache(path).get("s", "h")).toBeDefined();
-    cache.remove("s");
-    expect(new MetadataCache(path).get("s", "h")).toBeUndefined();
-  });
-
-  it("stamps when an entry was written", () => {
-    const cache = new MetadataCache(join(dir, "c.json"), () => 4242);
-    cache.save({ s: entry("h", ["a"]) });
-    expect(cache.get("s", "h")?.cachedAt).toBe(4242);
   });
 });
 

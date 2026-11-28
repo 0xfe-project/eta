@@ -53,11 +53,6 @@ export interface TaskEvents {
   "task:completed": TaskChange;
   /** Semantic alias, fires alongside `task:updated` on that transition. */
   "task:cancelled": TaskChange;
-  /**
-   * The cadence says a task reminder is due this turn; the prompts plugin
-   * injects the text. Fires once per cycle, transient by design.
-   */
-  "task:reminder-due": { turn: number };
 }
 
 /** Per-part token estimates for the context donut; runner reports, UI computes. */

@@ -1,15 +1,9 @@
 /** Client business vocabulary. No server, kernel, harness or SDK dependencies. */
 import type {
-  StatePatch,
-  StateSnapshot,
   HelloFrame as WireHelloFrame,
   ServerFrame as WireServerFrame,
 } from "@eta/client-wire-proto";
-import type {
-  MountedPlugin,
-  SessionViewSections,
-  ViewDiagnostics,
-} from "./types";
+import type { MountedPlugin, ViewDiagnostics } from "./types";
 
 export * from "./acp";
 export * from "./acp-form";
@@ -43,12 +37,3 @@ export * from "./usage";
 /** The existing hello payload, specialized without coupling the pipe to business types. */
 export type HelloFrame = WireHelloFrame<MountedPlugin, ViewDiagnostics>;
 export type ServerFrame = Exclude<WireServerFrame, WireHelloFrame> | HelloFrame;
-
-/** Read one section with its type, admitting that it may be absent. */
-export function stateSection<K extends keyof SessionViewSections>(
-  state: StateSnapshot | StatePatch,
-  name: K,
-): SessionViewSections[K] | undefined {
-  const sections: Record<string, unknown> = { ...state.sections };
-  return sections[name as string] as SessionViewSections[K] | undefined;
-}

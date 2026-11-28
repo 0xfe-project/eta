@@ -22,9 +22,12 @@ CREATE TABLE routine_next (
 INSERT INTO routine_next (id, name, schedule, timezone, enabled, created_at, updated_at)
 SELECT id, name, schedule, timezone, enabled, created_at, updated_at FROM routine;
 
+-- It names `routine`, the table it will point at once `routine_next` is renamed: with the legacy
+-- ALTER TABLE behaviour (macOS's system SQLite) a rename does not rewrite the references of other
+-- tables, and `routine_next` would stay there, a table that is gone.
 CREATE TABLE routine_run_next (
   id TEXT PRIMARY KEY,
-  routine_id TEXT NOT NULL REFERENCES routine_next (id) ON DELETE CASCADE,
+  routine_id TEXT NOT NULL REFERENCES routine (id) ON DELETE CASCADE,
   started_by TEXT NOT NULL CHECK (started_by IN ('schedule', 'user', 'trigger')),
   status TEXT NOT NULL CHECK (status IN ('running', 'sent', 'no_news', 'failed', 'skipped')),
   session_id TEXT,

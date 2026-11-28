@@ -499,7 +499,7 @@ function ProviderStatusNotice(props: {
           title: uiText("triggerProviderNeedsKey", { provider: name() }),
           description: uiText("triggerProviderNeedsKeyHint"),
           actionLabel: settingsAction()
-            ? uiText("openPluginSettings")
+            ? uiText("triggerOpenPluginSettings")
             : undefined,
           onAction: settingsAction(),
         };
@@ -512,7 +512,7 @@ function ProviderStatusNotice(props: {
             props.provider.error?.trim() ||
             uiText("triggerProviderKeyRejectedHint"),
           actionLabel: settingsAction()
-            ? uiText("openPluginSettings")
+            ? uiText("triggerOpenPluginSettings")
             : undefined,
           onAction: settingsAction(),
         };
@@ -523,7 +523,7 @@ function ProviderStatusNotice(props: {
           title: uiText("triggerProviderDisabled", { provider: name() }),
           description: uiText("triggerProviderDisabledHint"),
           actionLabel: settingsAction()
-            ? uiText("openPluginSettings")
+            ? uiText("triggerOpenPluginSettings")
             : undefined,
           onAction: settingsAction(),
         };

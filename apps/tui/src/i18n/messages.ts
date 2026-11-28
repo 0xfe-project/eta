@@ -33,13 +33,6 @@ export function fillPlaceholders(
   });
 }
 
-/** The placeholder names in a text, each once, sorted. */
-export function placeholdersOf(text: string): string[] {
-  return [...new Set([...text.matchAll(PLACEHOLDER)].map((m) => m[1] ?? ""))]
-    .filter((name) => name !== "")
-    .sort();
-}
-
 export function translatorFor<K extends string>(
   catalog: MessageCatalog<K>,
   locale: Locale,

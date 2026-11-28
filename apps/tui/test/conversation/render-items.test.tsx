@@ -30,8 +30,6 @@ const GREEN_BRIGHT = "\u001B[92m";
 const FG_OFF = "\u001B[39m";
 const BOLD = "\u001B[1m";
 const BOLD_OFF = "\u001B[22m";
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHAR = /[\u0000-\u001F\u007F-\u009F]/;
 
 const author = (
   name: string,
@@ -286,11 +284,9 @@ describe("author", () => {
     );
   });
 
-  it("names the frame in one line without control characters", () => {
-    const frame = draw(author("Wri\u0007ter\u001B[2J\nnext", "a1")).frame;
-    expect(frame?.name).not.toMatch(CONTROL_CHAR);
-    expect(frame?.name).not.toContain("\n");
-    expect(frame?.name).toContain("Wri");
+  it("names the frame on one line: control characters out, its lines joined by a space", () => {
+    expect(draw(author("Cy\u0007")).frame?.name).toBe("Cy");
+    expect(draw(author("Dee\nEve")).frame?.name).toBe("Dee Eve");
   });
 
   it("is the only kind with a frame", () => {

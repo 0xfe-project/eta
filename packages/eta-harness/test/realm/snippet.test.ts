@@ -24,14 +24,16 @@ describe("a snippet's last expression is its value", () => {
       ),
     ).toEqual([4, 6]);
   });
-  it("top-level await and imports", async () => {
-    if (process.platform === "win32") return;
-    expect(
-      await run(
-        'import { join } from "node:path";\nawait Promise.resolve(join("a", "b"))',
-      ),
-    ).toBe("a/b");
-  });
+  it.skipIf(process.platform === "win32")(
+    "top-level await and imports",
+    async () => {
+      expect(
+        await run(
+          'import { join } from "node:path";\nawait Promise.resolve(join("a", "b"))',
+        ),
+      ).toBe("a/b");
+    },
+  );
   it("an object literal at the end", async () => {
     expect(await run("const n = 1;\n({ n })")).toEqual({ n: 1 });
   });
@@ -48,20 +50,22 @@ describe("a snippet's last expression is its value", () => {
 });
 
 describe("cwd", () => {
-  it("$, fs and view resolve relative paths in the session cwd", async () => {
-    if (process.platform === "win32") return;
-    const dir = await mkdtemp(join(tmpdir(), "cwd-"));
-    const value = await run(
-      [
-        'import { writeFile, readFile } from "node:fs/promises";',
-        'await writeFile("note.txt", "a\\nb");',
-        "const pwd = (await $`pwd`).stdout.trim();",
-        'const shown = await view("note.txt");',
-        '({ pwd, shown, text: await readFile("note.txt") })',
-      ].join("\n"),
-      dir,
-    );
-    expect(value).toMatchObject({ shown: "1: a\n2: b", text: "a\nb" });
-    expect((value as { pwd: string }).pwd).toMatch(/cwd-/);
-  });
+  it.skipIf(process.platform === "win32")(
+    "$, fs and view resolve relative paths in the session cwd",
+    async () => {
+      const dir = await mkdtemp(join(tmpdir(), "cwd-"));
+      const value = await run(
+        [
+          'import { writeFile, readFile } from "node:fs/promises";',
+          'await writeFile("note.txt", "a\\nb");',
+          "const pwd = (await $`pwd`).stdout.trim();",
+          'const shown = await view("note.txt");',
+          '({ pwd, shown, text: await readFile("note.txt") })',
+        ].join("\n"),
+        dir,
+      );
+      expect(value).toMatchObject({ shown: "1: a\n2: b", text: "a\nb" });
+      expect((value as { pwd: string }).pwd).toMatch(/cwd-/);
+    },
+  );
 });

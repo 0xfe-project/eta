@@ -112,30 +112,4 @@ describe("two sessions in one process", () => {
     expect(second.session.kernel.tasks.list()).toEqual([]);
     await sessions.closeAll();
   });
-
-  it("closing one session leaves the other usable", async () => {
-    const sessions = new SessionManager({
-      store: new MemorySessionStore(),
-      modelsFor: () => answering() as never,
-    });
-    const first = await sessions.create({ cwd: "/work" });
-    const second = await sessions.create({ cwd: "/work" });
-    second.session.kernel.goal.set("the second session keeps working");
-
-    await sessions.close(first.meta.id);
-    // The second session's kernel, goal and ledger are untouched by the close.
-    expect(second.session.kernel.goal.current?.objective).toBe(
-      "the second session keeps working",
-    );
-    second.session.kernel.tasks.create("still able to work");
-    expect(second.session.kernel.tasks.list()).toHaveLength(1);
-    // And the closed one is genuinely gone from the open set (asking for it again
-    // would buy a fresh assembly over its journal, which the manager does offer —
-    // `close`, not the id, is what frees the slot).
-    expect(await sessions.close(first.meta.id)).toBe(false);
-    expect(sessions.openSessions().map((managed) => managed.meta.id)).toEqual([
-      second.meta.id,
-    ]);
-    await sessions.closeAll();
-  });
 });

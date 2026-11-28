@@ -83,7 +83,9 @@ async function everything() {
       },
       mcp: {
         local: { env: { KEY: "key", REGION: "region" } },
-        remote: { headers: { Authorization: "Bearer {key}" } },
+        remote: {
+          headers: { Authorization: "Bearer {key}", "X-Plain": "fixed" },
+        },
         legacy: { headers: { "X-Region": "{region}" } },
       },
     },
@@ -143,7 +145,11 @@ describe("what an external runtime is given", () => {
         name: "demo_plugin-remote",
         type: "http",
         url: "https://example.com/mcp",
-        headers: { "X-Tenant": "t", Authorization: "Bearer s3cret" },
+        headers: {
+          "X-Tenant": "t",
+          Authorization: "Bearer s3cret",
+          "X-Plain": "fixed",
+        },
       },
       {
         name: "demo_plugin-open",
@@ -205,7 +211,11 @@ describe("what eta's own loop is given", () => {
       "demo_plugin-remote": {
         type: "streamable-http",
         url: "https://example.com/mcp",
-        headers: { "X-Tenant": "t", Authorization: "Bearer s3cret" },
+        headers: {
+          "X-Tenant": "t",
+          Authorization: "Bearer s3cret",
+          "X-Plain": "fixed",
+        },
       },
       // Nothing does: OAuth, which asks for a login only if the server wants one.
       "demo_plugin-open": {

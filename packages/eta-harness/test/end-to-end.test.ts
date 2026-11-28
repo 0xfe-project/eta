@@ -133,7 +133,6 @@ function session(script: AssistantMessage[], tools: KernelTool[] = []) {
         persona: renderActivePersona(kernel.persona).text,
       }),
     toolContext: { workspace: "/w" },
-    entryProjectors: {},
     toProviderMessages: (messages) =>
       messages.flatMap((message) =>
         message.role === "compactionSummary"

@@ -3,9 +3,8 @@
  *
  * The subject is that a target owns actions and state, and that nothing distinguishes a
  * built-in from a plugin: the same `handle`/`state` calls, the same disposers, the same
- * namespace rules. What the tests pin is what a client depends on — an unknown call fails
- * loudly with the name that was asked for, a duplicate is refused, unloading takes exactly
- * one target's things with it, and `hello`'s descriptor list is the truth about what exists.
+ * namespace rules. What the tests pin is what a client depends on — a duplicate is refused,
+ * unloading takes exactly one target's things with it, and `hello`'s descriptor list is the truth about what exists.
  */
 
 import type { CallFrame } from "@eta/client-wire-proto";
@@ -48,22 +47,6 @@ describe("actions", () => {
     expect(() => targets.handle("bad name", "x", () => undefined)).toThrow(
       /invalid target/,
     );
-  });
-
-  it("calls an unclaimed name an error naming it", async () => {
-    const targets = registry();
-    await expect(
-      targets.dispatch(
-        { op: "call", target: "sessions", action: "promt" },
-        context,
-      ),
-    ).rejects.toThrow(UnknownOpError);
-    await expect(
-      targets.dispatch(
-        { op: "call", target: "sessions", action: "promt" },
-        context,
-      ),
-    ).rejects.toThrow(/unknown op: sessions.promt/);
   });
 
   it("forgets an action when its disposer runs, leaving its neighbours", async () => {

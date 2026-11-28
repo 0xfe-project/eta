@@ -150,12 +150,13 @@ describe("the catalog cache", () => {
     expect(
       db.query("SELECT COUNT(*) AS n FROM market_catalog_cache").get(),
     ).toEqual({ n: 0 });
+    // A row over the limit (a limit lowered since it was kept, say) is not read, and goes.
     row(JSON.stringify({ plugins: [], pad: "x".repeat(2000) }));
-    const small = openDatabase(":memory:");
-    applyMigrations(small, loadMigrations());
-    const cache = new CatalogCache(small, { maxRowBytes: 100 });
-    cache.put(url, "x".repeat(200), null, null, 1);
+    const cache = new CatalogCache(db, { maxRowBytes: 100 });
     expect(cache.get(url, 2)).toBeUndefined();
+    expect(
+      db.query("SELECT COUNT(*) AS n FROM market_catalog_cache").get(),
+    ).toEqual({ n: 0 });
   });
 
   it("drops the least recently used rows over the cap, and can be cleared", async () => {

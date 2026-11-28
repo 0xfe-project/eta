@@ -100,37 +100,27 @@ async function until(
 }
 
 describe("the model layer, hot", () => {
-  it.each([
-    "deepseek",
-    "kimi-coding",
-    "zai",
-    "zai-coding-cn",
-    "openai-compatible",
-    "openai-responses",
-  ] as const)(
-    "%s exposes manually saved unknown IDs to execution without catalog membership",
-    async (kind) => {
-      const { server } = await start([]);
-      await call(server, "save", {
-        revision: view(server)?.revision,
-        provider: {
-          ...entry("named", "manual-unknown"),
-          kind,
-          models: [
-            { id: "manual-unknown", overrides: { contextWindow: 64000 } },
-          ],
-        },
-      });
-      await until(
-        () => server.models.getModel("named", "manual-unknown") !== undefined,
-      );
-      expect(server.models.getModel("named", "manual-unknown")).toMatchObject({
-        id: "manual-unknown",
-        contextWindow: 64000,
-        baseUrl: "https://named.example/v1",
-      });
-    },
-  );
+  // One named kind with a catalog of its own: the save reaching execution is the same for
+  // every kind, and building each kind is the golden table's (providers-runtime.test.ts).
+  it("exposes a manually saved unknown ID of a named provider to execution, without catalog membership", async () => {
+    const { server } = await start([]);
+    await call(server, "save", {
+      revision: view(server)?.revision,
+      provider: {
+        ...entry("named", "manual-unknown"),
+        kind: "deepseek",
+        models: [{ id: "manual-unknown", overrides: { contextWindow: 64000 } }],
+      },
+    });
+    await until(
+      () => server.models.getModel("named", "manual-unknown") !== undefined,
+    );
+    expect(server.models.getModel("named", "manual-unknown")).toMatchObject({
+      id: "manual-unknown",
+      contextWindow: 64000,
+      baseUrl: "https://named.example/v1",
+    });
+  });
   it("serves a provider the settings page just saved, without a restart", async () => {
     const { server } = await start([entry("a")]);
     expect(server.models.getModel("a", "m1")).toBeDefined();

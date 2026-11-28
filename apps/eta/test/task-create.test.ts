@@ -250,30 +250,6 @@ describe("where a task the user makes starts", () => {
   // Backlog worktree tasks never run here: the page's `workspace.base` is what a run would start from.
   const backlog = { status: "backlog", workspace: "worktree" };
 
-  it("without a base, from the branch of the one task it waits for, else HEAD", async () => {
-    const r = await room();
-    const [a, b] = await r.create({
-      ...backlog,
-      tasks: [
-        { title: "A", assignee: "Ada" },
-        { title: "B", assignee: "Ada" },
-      ],
-    });
-    const [one, two] = await r.create({
-      ...backlog,
-      tasks: [
-        { title: "After A", assignee: "Ada", dependsOn: [{ task: a!.id }] },
-        {
-          title: "After both",
-          assignee: "Ada",
-          dependsOn: [{ task: a!.id }, { task: b!.id }],
-        },
-      ],
-    });
-    expect(r.task(one!.id).workspace.base).toBe(`eta/task-${a!.number}`);
-    expect(r.task(two!.id).workspace.base).toBeNull();
-  });
-
   it("with a base: #N is that task's branch, a branch or commit as written, empty is HEAD", async () => {
     const r = await room();
     const [a, b] = await r.create({

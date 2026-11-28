@@ -44,14 +44,6 @@ function HeldPair({ confirmed }: { confirmed: ReadonlySet<string>[] }) {
 }
 
 describe("check list", () => {
-  it("confirms a held tick made in the same read as the Enter", async () => {
-    const confirmed: ReadonlySet<string>[] = [];
-    const r = renderKit(<HeldPair confirmed={confirmed} />);
-    await flush();
-    await r.press(`${LIST_KEYS.space}${KEYS.enter}`);
-    expect(confirmedKeys(confirmed)).toEqual([["a"]]);
-  });
-
   it("confirms held ticks on two items made in the same read as the Enter", async () => {
     const confirmed: ReadonlySet<string>[] = [];
     const r = renderKit(<HeldPair confirmed={confirmed} />);

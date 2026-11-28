@@ -72,7 +72,7 @@ describe("matchesBinding", () => {
     expect(matchesBinding(binding("a"), "a", key())).toBe(true);
   });
 
-  it.each([
+  const NAMED = [
     ["escape", { escape: true }, ""],
     ["enter", { return: true }, "\r"],
     ["tab", { tab: true }, ""],
@@ -86,11 +86,20 @@ describe("matchesBinding", () => {
     ["home", { home: true }, ""],
     ["end", { end: true }, ""],
     ["space", {}, " "],
-  ] as const)(
+  ] as const;
+
+  it.each(NAMED)(
     "matches the named key %s and nothing else",
     (name, flags, input) => {
       expect(matchesBinding(binding(name), input, key(flags))).toBe(true);
       expect(matchesBinding(binding(name), "x", key())).toBe(false);
+      // Not any of the other named keys either.
+      for (const [other, otherFlags, otherInput] of NAMED)
+        if (other !== name)
+          expect(
+            matchesBinding(binding(name), otherInput, key(otherFlags)),
+            other,
+          ).toBe(false);
     },
   );
 });

@@ -2,19 +2,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  fetchInto,
-  GIT_TIMEOUT_MS,
-  gitLimit,
-  resolveRev,
-} from "../src/plugins/git";
+import { fetchInto, resolveRev } from "../src/plugins/git";
 
 /** A git:// server that takes the connection and never answers. */
 let server: Bun.TCPSocketListener<undefined>;
 let opened = 0;
 let closed = 0;
 let repo = "";
-const saved = gitLimit.ms;
+// Long enough that a loaded machine still gets `git` to connect before the limit; the test is about the kill, not the speed.
+const LIMIT_MS = 3000;
 
 beforeEach(() => {
   opened = 0;
@@ -29,13 +25,10 @@ beforeEach(() => {
     },
   });
   repo = `git://127.0.0.1:${server.port}/r.git`;
-  // Long enough that a loaded machine still gets `git` to connect before the limit; the test is about the kill, not the speed.
-  gitLimit.ms = 3000;
 });
 
 afterEach(() => {
   server.stop(true);
-  gitLimit.ms = saved;
 });
 
 async function ended(): Promise<boolean> {
@@ -47,14 +40,11 @@ async function ended(): Promise<boolean> {
 }
 
 describe("a git call that does not answer", () => {
-  it("is 20 s by default", () => {
-    expect(GIT_TIMEOUT_MS).toBe(20_000);
-    expect(saved).toBe(20_000);
-  });
-
   it("fails ls-remote with the step, the repository and a hint, and the process ends", async () => {
     const started = Date.now();
-    const error = await resolveRev(repo, "main").catch((e: Error) => e);
+    const error = await resolveRev(repo, "main", LIMIT_MS).catch(
+      (e: Error) => e,
+    );
     expect(error).toBeInstanceOf(Error);
     const message = (error as Error).message;
     expect(message).toContain("git ls-remote");
@@ -74,6 +64,7 @@ describe("a git call that does not answer", () => {
         sha: "a".repeat(40),
         ref: null,
         path: "",
+        limitMs: LIMIT_MS,
       }).catch((e: Error) => e);
       expect((error as Error).message).toContain("git fetch");
       expect((error as Error).message).toContain(repo);

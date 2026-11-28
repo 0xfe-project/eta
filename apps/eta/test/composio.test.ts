@@ -110,24 +110,6 @@ const composioOf = async (
   )!;
 
 describe("the Composio source", () => {
-  it("is listed, off without a key, on with one, and cannot be removed", () => {
-    const { market, composio } = open();
-    const one = () =>
-      market.sources().find((source) => source.kind === "composio")!;
-    expect(one()).toMatchObject({
-      url: COMPOSIO_URL,
-      name: "Composio",
-      enabled: false,
-    });
-    composio.setKey(KEY);
-    expect(one()).toMatchObject({
-      url: COMPOSIO_URL,
-      name: "Composio",
-      enabled: true,
-    });
-    expect(() => market.removeSource(COMPOSIO_URL)).toThrow();
-  });
-
   it("can be switched off and on like any source, and the git list is not touched", async () => {
     const { market, settings, composio } = open();
     composio.setKey(KEY);
@@ -179,6 +161,8 @@ describe("the Composio source", () => {
       const sources = (await market.catalog()).sources;
       expect(sources.map((s) => s.source.kind ?? "git")).toEqual(["git"]);
       expect(sources[0]!.entries?.map((entry) => entry.name)).toEqual(["demo"]);
+      // Composio itself was not asked.
+      expect(requests).toHaveLength(0);
     } finally {
       await git.stop(true);
     }
@@ -354,14 +338,28 @@ describe("the Composio source", () => {
   it("does not follow a redirect with the key", async () => {
     const { market, composio } = open();
     composio.setKey(KEY);
-    handler = () =>
-      new Response(null, {
-        status: 302,
-        headers: { location: "https://evil.example/x" },
-      });
-    const one = await composioOf(market);
-    expect(one.status).toBe("error");
-    expect(requests).toHaveLength(1);
+    // Where the redirect points: a server of its own, which records whatever reaches it.
+    const elsewhere: (string | null)[] = [];
+    const other = Bun.serve({
+      port: 0,
+      fetch: (request) => {
+        elsewhere.push(request.headers.get("x-api-key"));
+        return json({ items: [item("gmail")], next_cursor: null });
+      },
+    });
+    try {
+      handler = () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: `http://127.0.0.1:${other.port}/x` },
+        });
+      const one = await composioOf(market);
+      expect(one.status).toBe("error");
+      expect(requests).toHaveLength(1);
+      expect(elsewhere).toEqual([]);
+    } finally {
+      await other.stop(true);
+    }
   });
 });
 
@@ -1229,33 +1227,6 @@ describe("the logo", () => {
       await pictures.stop(true);
     }
   });
-
-  it("does not take a redirect to http", async () => {
-    const target = Bun.serve({ port: 0, fetch: () => new Response("x") });
-    try {
-      const logos = new Logos({
-        allowPrivate: true,
-        timeoutMs: 500,
-        resolve: async () => ["127.0.0.1"],
-      });
-      const to = `http://127.0.0.1:${target.port}/p.png`;
-      const hop = Bun.serve({
-        port: 0,
-        fetch: () =>
-          new Response(null, { status: 302, headers: { location: to } }),
-      });
-      try {
-        // The first hop is plain http too, so this only shows the whole chain is refused.
-        expect(
-          await logos.fromUrl(`http://127.0.0.1:${hop.port}/a.png`),
-        ).toBeNull();
-      } finally {
-        await hop.stop(true);
-      }
-    } finally {
-      await target.stop(true);
-    }
-  });
 });
 
 describe("the connected toolkits", () => {
@@ -1457,25 +1428,20 @@ describe("the source without a key", () => {
       (one) => one.source.kind === "composio",
     );
 
-  it("is off while there is no key, and the market does not ask it", async () => {
+  it("is on once a key is saved, and off again once it is cleared, and is never removed", async () => {
     const { market, composio } = open();
-    expect(composio.source().enabled).toBe(false);
-    expect(enabledOf(market)).toBe(false);
-    expect(await listed(market)).toBe(false);
     expect(
-      (await market.catalog()).sources.map((s) => s.source.kind),
-    ).not.toContain("composio");
-    expect(requests).toHaveLength(0);
-  });
-
-  it("is on once a key is saved, and off again once it is cleared", async () => {
-    const { market, composio } = open();
+      market.sources().find((source) => source.kind === "composio"),
+    ).toMatchObject({ url: COMPOSIO_URL, name: "Composio", enabled: false });
+    expect(composio.source().enabled).toBe(false);
+    expect(await listed(market)).toBe(false);
     composio.setKey(KEY);
     expect(enabledOf(market)).toBe(true);
     expect(await listed(market)).toBe(true);
     composio.clearKey();
     expect(enabledOf(market)).toBe(false);
     expect(await listed(market)).toBe(false);
+    expect(() => market.removeSource(COMPOSIO_URL)).toThrow();
   });
 
   it("stays off with a key when the user switched it off, and the setting is not written by the missing key", async () => {

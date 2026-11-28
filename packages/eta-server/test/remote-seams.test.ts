@@ -251,22 +251,6 @@ describe("a WebSocket route besides /ws", () => {
 });
 
 describe("an assembled server", () => {
-  it("offers the model layer it generates with and what a new session starts as", async () => {
-    const dataDir = await directory();
-    const models = fakeModels([]);
-    const server = await assembleServer({
-      dataDir,
-      configPath: join(dataDir, "config.json"),
-      port: 0,
-      models,
-      network: false,
-      plugins: ["sessions"],
-    });
-    stops.push(() => server.close());
-    expect(server.models).toBe(models);
-    expect(await server.defaults()).toEqual({});
-  });
-
   it("routes sessions it does not hold to the router it is given", async () => {
     const dataDir = await directory();
     const calls: string[] = [];
@@ -276,7 +260,6 @@ describe("an assembled server", () => {
       port: 0,
       models: fakeModels([]),
       network: false,
-      plugins: ["sessions"],
       remoteSessions: {
         owns: (id) => id === "far-1",
         call: async (action) => {

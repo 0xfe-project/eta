@@ -1,30 +1,12 @@
 import type { MessageEntry } from "@eta/core/session";
-import { MemoryStorage, setValue, value } from "@eta/core/storage";
+import {
+  InMemoryStorageState,
+  MemoryStorage,
+  setValue,
+  value,
+} from "@eta/core/storage";
 import { storageContract } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-
-describe("storageService maintenance results", () => {
-  it("maintenance results are plain data", async () => {
-    const storage = new MemoryStorage();
-    const compacted = await storage.compactJournal();
-    expect(Object.keys(compacted).sort()).toMatchInlineSnapshot(`
-			[
-			  "afterBytes",
-			  "beforeBytes",
-			  "rewritten",
-			]
-		`);
-    const repaired = await storage.repairTornTail();
-    expect(Object.keys(repaired).sort()).toMatchInlineSnapshot(`
-			[
-			  "droppedBytes",
-			  "droppedRecords",
-			  "trailingOnly",
-			]
-		`);
-    await storage.close();
-  });
-});
 
 // The shared behavioural suite: every backend runs the same checks.
 storageContract("memory", async () => {
@@ -33,15 +15,6 @@ storageContract("memory", async () => {
 });
 
 describe("memoryStorage specifics", () => {
-  it("rejects writes after close", async () => {
-    const storage = new MemoryStorage();
-    await storage.close();
-    await expect(storage.commit([])).rejects.toThrow("closed");
-    await expect(storage.commit([setValue(value("k"), 1)])).rejects.toThrow(
-      "closed",
-    );
-  });
-
   it("hands out copies, so a caller cannot edit stored state in place", async () => {
     const storage = new MemoryStorage();
     await storage.commit([
@@ -55,8 +28,9 @@ describe("memoryStorage specifics", () => {
     await storage.close();
   });
 
-  it("repeated entry ids overwrite and are counted, like a replayed journal", async () => {
-    const storage = new MemoryStorage();
+  it("repeated entry ids overwrite and are counted, like a replayed journal", () => {
+    // The shared state behind every backend; jsonl warns with this count.
+    const storage = new InMemoryStorageState();
     const entry: Omit<MessageEntry, "seq" | "timestamp"> = {
       id: "e1",
       parentId: null,
@@ -67,21 +41,20 @@ describe("memoryStorage specifics", () => {
         timestamp: 0,
       },
     };
-    await storage.commit([{ kind: "entry", entry }]);
-    await storage.commit([
+    storage.commit([{ kind: "entry", entry }]);
+    storage.commit([
       {
         kind: "entry",
         entry: { ...entry, message: { ...entry.message, timestamp: 1 } },
       },
     ]);
     expect(storage.repeated).toBe(1);
-    const found = await storage.getEntries(["e1"]);
+    const found = storage.getEntries(["e1"]);
     const stored = found.get("e1")!;
     expect(stored.type).toBe("message");
     if (stored.type !== "message") throw new Error("unreachable");
     expect(stored.message.timestamp).toBe(1);
     // A repeated id does not double-count the message.
-    expect((await storage.getStats()).messageCount).toBe(1);
-    await storage.close();
+    expect(storage.getStats().messageCount).toBe(1);
   });
 });

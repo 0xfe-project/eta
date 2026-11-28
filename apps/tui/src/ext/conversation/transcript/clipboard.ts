@@ -6,19 +6,13 @@ const BEL = "\u0007";
 
 /**
  * Puts `text` on the clipboard of the terminal the TUI runs in, with an OSC 52 sequence written
- * to `write`. Inside tmux (`TMUX` set and not empty) the sequence goes through tmux's passthrough,
+ * to stdout. Inside tmux (`TMUX` set and not empty) the sequence goes through tmux's passthrough,
  * which tmux forwards to the outer terminal only when its `allow-passthrough` option is on.
  */
-export function copyToClipboard(
-  text: string,
-  write: (data: string) => void = (data) => {
-    process.stdout.write(data);
-  },
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): void {
+export function copyToClipboard(text: string): void {
   const sequence = `${ESC}]52;c;${Buffer.from(text, "utf8").toString("base64")}${BEL}`;
-  const insideTmux = env.TMUX !== undefined && env.TMUX !== "";
-  write(
+  const insideTmux = process.env.TMUX !== undefined && process.env.TMUX !== "";
+  process.stdout.write(
     insideTmux
       ? `${ESC}Ptmux;${sequence.replaceAll(ESC, ESC + ESC)}${ESC}\\`
       : sequence,

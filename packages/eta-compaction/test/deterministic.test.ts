@@ -58,13 +58,6 @@ describe("tool noise", () => {
     expect(dropToolPairs(messages)).toEqual(messages);
   });
 
-  it("drops whole pairs once the share is past the threshold", () => {
-    // Two tool results in four messages is 50%.
-    const messages = [call("c1"), result("c1"), call("c2"), result("c2")];
-    expect(toolResultShare(messages)).toBe(50);
-    expect(dropToolPairs(messages)).toEqual([]);
-  });
-
   it("never splits a pair across the cut", () => {
     // c2's result is missing from this prefix, so the assistant half stays: a
     // call whose result is not here keeps the model's intent readable.

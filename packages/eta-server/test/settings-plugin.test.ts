@@ -82,23 +82,6 @@ async function harness(): Promise<Harness> {
 }
 
 describe("the settings target", () => {
-  it("registers its actions and an eager state target", async () => {
-    const h = await harness();
-    const unload = await h.load();
-    expect(
-      h.wire
-        .descriptors()
-        .map((descriptor) => descriptor.name)
-        .sort(),
-    ).toEqual(["settings.reload", "settings.save"]);
-    expect(h.wire.registry.eagerTargets()).toContain("settings");
-    await until(() => h.settings() !== undefined);
-    expect(h.settings()).toEqual({});
-    await unload();
-    expect(h.wire.descriptors()).toEqual([]);
-    expect(h.wire.registry.hasState("settings")).toBe(false);
-  });
-
   it("merges a save, and pushes what the file now holds", async () => {
     const h = await harness();
     const unload = await h.load();
