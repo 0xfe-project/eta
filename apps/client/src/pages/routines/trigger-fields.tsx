@@ -1364,6 +1364,7 @@ export function TriggerSection(props: {
                                           }}
                                           style={{
                                             ...row,
+                                            justifyContent: "center",
                                             gap: space[8],
                                             minHeight: props.sheet
                                               ? control.touch
@@ -1396,6 +1397,12 @@ export function TriggerSection(props: {
                                           <Label variant="small">
                                             {opt().label}
                                           </Label>
+                                          <View
+                                            style={{
+                                              width: space[12],
+                                              flexShrink: 0,
+                                            }}
+                                          />
                                         </View>
                                       );
                                     }}

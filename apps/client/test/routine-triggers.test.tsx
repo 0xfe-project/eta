@@ -887,6 +887,28 @@ test("eta-events fields show in Chinese while group, creator and assignee option
   expect(
     app.shows("text:任务状态变化时触发（例如进入待验收、已完成或已阻塞）。"),
   ).toBe(true);
+  // An option card keeps a spacer of the same width on each side of its text, so the text sits at
+  // the card's centre and the card keeps its width when it is selected.
+  await app.press("label:任务运行结束");
+  await app.waitFor("label:运行状态: 失败");
+  const card = "label:运行状态: 失败";
+  const gaps = () => {
+    const frame = app.layout(card)!;
+    const text = app.layout("text:失败")!;
+    return {
+      width: frame.width,
+      left: text.x - frame.x,
+      right: frame.x + frame.width - (text.x + text.width),
+    };
+  };
+  const unselected = gaps();
+  expect(Math.abs(unselected.left - unselected.right)).toBeLessThanOrEqual(1);
+  await app.press(card);
+  const selected = gaps();
+  expect(selected.width).toBe(unselected.width);
+  expect(selected.left).toBe(unselected.left);
+  await app.press("label:触发器类型");
+  await app.waitFor("label:任务运行结束");
   await app.press("label:任务状态变化");
 
   await app.waitFor("label:目标状态: 待验收");
