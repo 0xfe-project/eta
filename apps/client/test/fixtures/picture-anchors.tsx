@@ -7,7 +7,9 @@ import { Message } from "../../src/pages/chat/message";
 import { createHost, Host } from "../../src/services/host";
 import {
   createPictureMode,
+  createPicturePlaces,
   PictureModes,
+  PicturePlaces,
 } from "../../src/services/picture-mode";
 
 const SHOT = "6a0d3f0e-0000-4000-8000-000000000001";
@@ -23,6 +25,7 @@ function Fixture() {
   const host = createHost();
   const pictures = createPictureMode();
   pictures.set("expanded");
+  const places = createPicturePlaces();
   // The box the messages scroll in: "Look away" moves it to a corner that holds none of the marks.
   const away = signal(false);
   let list: ViewRef | undefined;
@@ -94,26 +97,28 @@ function Fixture() {
   return (
     <Host.Provider value={host}>
       <PictureModes.Provider value={pictures}>
-        <MessageViewport.Provider value={() => (away() ? corner : list)}>
-          <View style={{ flex: 1, justifyContent: "center", gap: 12 }}>
-            <Button label="Elsewhere" onPress={() => {}} />
-            <Button label="Look away" onPress={() => away.set(true)} />
-            <View
-              ref={(node) => {
-                corner = node;
-              }}
-              style={{ height: 8 }}
-            />
-            <View
-              ref={(node) => {
-                list = node;
-              }}
-            >
-              {show(anchored)}
-              {show(older)}
+        <PicturePlaces.Provider value={places}>
+          <MessageViewport.Provider value={() => (away() ? corner : list)}>
+            <View style={{ flex: 1, justifyContent: "center", gap: 12 }}>
+              <Button label="Elsewhere" onPress={() => {}} />
+              <Button label="Look away" onPress={() => away.set(true)} />
+              <View
+                ref={(node) => {
+                  corner = node;
+                }}
+                style={{ height: 8 }}
+              />
+              <View
+                ref={(node) => {
+                  list = node;
+                }}
+              >
+                {show(anchored)}
+                {show(older)}
+              </View>
             </View>
-          </View>
-        </MessageViewport.Provider>
+          </MessageViewport.Provider>
+        </PicturePlaces.Provider>
       </PictureModes.Provider>
     </Host.Provider>
   );

@@ -150,7 +150,7 @@ function shownPictures(): ShownPart {
           <If when={expanded()}>
             <PictureCards pictures={list()} tie={links.tie} onOpen={open} />
           </If>
-          <links.Line />
+          <links.Place />
           <Lightbox pictures={list} index={opened} onIndex={opened.set} />
         </If>
       );

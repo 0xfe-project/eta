@@ -4,296 +4,194 @@ import {
   cleanup,
   context,
   createMotion,
-  LayoutAnimation,
   reduceMotion,
   signal,
   View,
   windowSize,
 } from "nsh";
+import { PicturePlaces } from "../../../services/picture-mode";
 import { Caret } from "../../caret";
 import { motion } from "../../motion";
 import { colors } from "../../theme";
-import { space } from "../../tokens";
+import { border, space } from "../../tokens";
 
 // A sent message's pictures and the places they stood in its text. Nothing marks a place in the
-// words; while the pointer or the focus rests on a picture's card, one line goes from the card up
-// to a caret at its place, and moving to another card moves that same line and caret there.
-// Made once per shown text.
+// words at rest. While the pointer or the focus rests on a picture's card, or a finger holds it,
+// a caret grows up from the baseline at the place, between the two characters the picture stood
+// between, and blinks; a ring over the card's outline blinks with it. Nothing is drawn between them, and no
+// character moves. The caret is a hairline: the gap between two characters of the shipped face is
+// one point, and a wider caret would cover their edges. Made once per shown text.
 
 /**
  * The box that holds the messages (the list a transcript scrolls in): a place outside it is out
- * of sight, and no line is drawn to it. Without one, the window is that box.
+ * of sight, and no caret is drawn there. Without one, the window is that box.
  */
 export const MessageViewport = context<(() => ViewRef | undefined) | undefined>(
   undefined,
 );
 
-/** What `ViewRef.measure` says of a view (`null` when it is not on screen). */
-type Measured = Awaited<ReturnType<ViewRef["measure"]>>;
+/** What `ViewRef.measure` says of a view on screen. */
+type Measured = NonNullable<Awaited<ReturnType<ViewRef["measure"]>>>;
 
-/** A line's ends, in the overlay's points: the corner of the card's top edge nearest the lane,
- * where the line starts; the lane it rises in; and the bottom of the caret it rises to. */
-interface Ends {
-  fromX: number;
-  fromY: number;
-  laneX: number;
-  toY: number;
-}
-
-interface Box {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-/** The line as boxes: along the card's top edge to the lane, a corner, and up the lane. */
-interface Stroke {
-  along: Box;
-  turn: Box;
-  rise: Box;
-  /** The way the line goes along: 1 to the right, -1 to the left. */
-  way: 1 | -1;
-}
-
-/** The padding of a sent message's bubble beside its text; the overlay reaches over it. */
+/** The padding of a sent message's bubble beside its text. The caret is drawn over the text and
+ * that padding, not inside the text, which cuts off what crosses its edge: a caret at a line's
+ * start or end is drawn whole. */
 const BUBBLE_PADDING = space[12];
-/** Where the lane runs: this far in from the overlay's right edge, the middle of the padding. */
-const LANE = BUBBLE_PADDING / 2;
-/** The rounding of the line's corner, and how far in the card's corner it starts. */
-const CORNER = space[4];
-/** The line's width. */
-const HAIR = 1;
+/** A line of a message's text: body prose (theme.ts `typeScale`). The caret is as tall. */
+const LINE = 22;
 
-/**
- * The line from the card's corner along its top edge (the gap between the words and the cards) to
- * the lane, and up the lane to the caret's bottom. It never enters the words. The corner shrinks
- * to what the run along and the rise leave it.
- */
-function strokeOf({ fromX, fromY, laneX, toY }: Ends): Stroke {
-  const way = laneX >= fromX ? 1 : -1;
-  const r = Math.max(0, Math.min(CORNER, Math.abs(laneX - fromX), fromY - toY));
-  const end = way > 0 ? laneX + HAIR - r : laneX + r;
-  return {
-    way,
-    along: {
-      left: Math.min(fromX, end),
-      top: fromY,
-      width: Math.abs(end - fromX),
-      height: HAIR,
-    },
-    turn: {
-      left: way > 0 ? laneX + HAIR - r : laneX,
-      top: fromY + HAIR - r,
-      width: r,
-      height: r,
-    },
-    rise: {
-      left: laneX,
-      top: toY,
-      width: HAIR,
-      height: fromY + HAIR - r - toY,
-    },
-  };
+/** Where the caret stands, in the overlay's points: its place's x, and its line's top; and the
+ * card's box, which the ring goes round. */
+interface Place {
+  key: string;
+  x: number;
+  top: number;
+  card: { left: number; top: number; width: number; height: number };
 }
 
-/** The line drawn back into the card's corner. */
-function drawnBack({ fromX, fromY }: Ends, way: 1 | -1): Stroke {
-  const at: Box = { left: fromX, top: fromY, width: 0, height: 0 };
-  return { along: at, turn: at, rise: at, way };
-}
-
-/** The line's ends for `picture` and `mark`, or none where the mark is above no picture or is out
- * of sight in `view`. */
-function endsOf(
-  picture: NonNullable<Measured>,
-  mark: NonNullable<Measured>,
-  overlay: NonNullable<Measured>,
+/** The caret's place for `mark` (a zero-width view on its line), or none where the place is out of
+ * sight in `view`. */
+function placeOf(
+  key: string,
+  card: Measured,
+  mark: Measured,
+  overlay: Measured,
   view: { x: number; y: number; width: number; height: number },
-): Ends | undefined {
+): Place | undefined {
   const inView =
     mark.pagePosition.x >= view.x &&
     mark.pagePosition.y >= view.y &&
     mark.pagePosition.x <= view.x + view.width &&
     mark.pagePosition.y + mark.bounds.size.height <= view.y + view.height;
-  const laneX = overlay.bounds.size.width - LANE;
-  const left = picture.pagePosition.x - overlay.pagePosition.x;
-  const ends = {
-    fromX:
-      laneX >= left + picture.bounds.size.width / 2
-        ? left + picture.bounds.size.width - CORNER
-        : left + CORNER,
-    fromY: picture.pagePosition.y - overlay.pagePosition.y,
-    laneX,
-    toY: mark.pagePosition.y + mark.bounds.size.height - overlay.pagePosition.y,
+  if (!inView) return undefined;
+  return {
+    key,
+    x: mark.pagePosition.x - overlay.pagePosition.x,
+    top:
+      mark.pagePosition.y -
+      overlay.pagePosition.y +
+      (mark.bounds.size.height - LINE) / 2,
+    card: {
+      left: card.pagePosition.x - overlay.pagePosition.x,
+      top: card.pagePosition.y - overlay.pagePosition.y,
+      ...card.bounds.size,
+    },
   };
-  return inView && ends.toY < ends.fromY ? ends : undefined;
-}
-
-/** The kinds of move `LayoutAnimation` knows, by the curve the line's motion asks for: out for
- * `motion.open`, in for `motion.close`, in and out for `motion.move`. */
-const slide = {
-  open: "easeOut",
-  close: "easeIn",
-  move: "easeInEaseOut",
-} as const;
-
-/** The next layout change plays over `duration` (at once where less motion is asked for). */
-function slideNext(duration: number, curve: keyof typeof slide) {
-  if (reduceMotion()) return;
-  LayoutAnimation.configureNext({ duration, update: { type: slide[curve] } });
 }
 
 /** The tie of every picture card of one shown text to the place its picture stood. */
 export function pictureLinks() {
+  const places = PicturePlaces();
   const viewport = MessageViewport();
+  const c = colors();
   const cards = new Map<string, ViewRef>();
   const marks = new Map<string, ViewRef>();
-  /** The card whose line is drawn (or being moved to), for its outline. */
-  const linked = signal<string>();
-  /** The card the pointer or the focus is on. */
+  /** The card whose place shows. */
+  const shown = signal<string>();
+  /** The caret drawn, kept while it fades out. */
+  const place = signal<Place>();
+  /** The card the pointer, the focus or a finger is on. */
   let resting: string | undefined;
-  const stroke = signal<Stroke>();
-  /** The caret's place, in the overlay's points. */
-  const caret = signal<{ x: number; top: number }>();
-  /** The caret blinks only while nothing about it moves. */
-  const moving = signal(true);
-  const fade = createMotion({ initial: { opacity: 0 } });
+  /** The card a finger holds (a long press), until it lifts. */
+  let held: string | undefined;
   let overlay: ViewRef | undefined;
-  let ends: Ends | undefined;
   let wait: ReturnType<typeof setTimeout> | undefined;
   let grace: ReturnType<typeof setTimeout> | undefined;
-  const pending = new Set<ReturnType<typeof setTimeout>>();
-  /** Each draw, move or draw back replaces the one before: only the latest goes on. */
+  /** Each show or fade replaces the one before: only the latest goes on. */
   let turn = 0;
+  /** The caret growing up from the baseline. */
+  const grow = createMotion({ initial: { scaleY: 0 } });
+  /** The caret's and the card ring's light: one value, so they blink in step. */
+  const blink = createMotion();
+  /** The caret blinks (for tests: the blink itself plays natively). */
+  const blinks = signal(false);
   cleanup(() => {
     turn++;
     clearTimeout(wait);
     clearTimeout(grace);
-    for (const timer of pending) clearTimeout(timer);
-    fade.stop();
+    grow.stop();
+    blink.stop();
   });
 
-  /** Runs `step` after `ms`, unless another draw, move or draw back has begun by then. */
-  function later(ms: number, step: () => void) {
-    const mine = turn;
-    const timer = setTimeout(() => {
-      pending.delete(timer);
-      if (mine === turn) step();
-    }, ms);
-    pending.add(timer);
-  }
-
-  function showCaret(on: boolean) {
-    void fade.play({
-      keyframes: { opacity: on ? [0, 1] : [1, 0] },
-      duration: motion.connector.caret,
-      easing: on ? motion.open : motion.close,
-    });
-  }
-
-  /** Where the line from `key`'s card to its place is, now. */
-  async function measureEnds(key: string): Promise<Ends | undefined> {
-    const [picture, mark, box, view] = await Promise.all([
+  async function measure(key: string) {
+    const [card, mark, box, view] = await Promise.all([
       cards.get(key)?.measure(),
       marks.get(key)?.measure(),
       overlay?.measure(),
       viewport?.()?.measure(),
     ]);
-    if (!picture || !mark || !box) return undefined;
+    if (!card || !mark || !box) return undefined;
     const sight = view
       ? { ...view.pagePosition, ...view.bounds.size }
       : { x: 0, y: 0, ...windowSize() };
-    return endsOf(picture, mark, box, sight);
+    return placeOf(key, card, mark, box, sight);
   }
 
-  /** The line comes out of the card to its place. */
-  async function draw(key: string) {
+  /** The caret grows at `key`'s place, then it and the card blink. */
+  async function show(key: string) {
     const mine = ++turn;
-    const found = await measureEnds(key);
-    if (mine !== turn || !found) return;
-    ends = found;
-    linked.set(key);
-    moving.set(true);
-    caret.set({ x: found.laneX, top: found.toY - space[16] });
-    const full = strokeOf(found);
+    const found = await measure(key);
+    if (mine !== turn) return;
+    blink.stop();
+    blink.reset();
+    blinks.set(false);
+    place.set(found);
+    if (!found) return;
     if (reduceMotion()) {
-      stroke.set(full);
-      fade.opacity.set(1);
-      moving.set(false);
+      grow.scaleY.set(1);
       return;
     }
-    stroke.set(drawnBack(found, full.way));
-    // The line drawn back is on screen before it grows.
-    await new Promise((done) => setTimeout(done, 0));
-    if (mine !== turn) return;
-    slideNext(motion.connector.stretch, "move");
-    stroke.set(full);
-    later(motion.connector.stretch - motion.connector.caret, () =>
-      showCaret(true),
-    );
-    later(motion.connector.stretch, () => moving.set(false));
+    grow.scaleY.set(0);
+    void grow.play({
+      keyframes: { scaleY: [0, 1] },
+      spring: motion.pictureCue.grow,
+    });
+    blinks.set(true);
+    void blink.play({
+      keyframes: { opacity: [1, motion.pictureCue.blink.low, 1] },
+      duration: motion.pictureCue.blink.period,
+      easing: "easeInOut",
+      iterations: "infinite",
+    });
   }
 
-  /** The line, drawn or drawing back, goes on to `key`'s card and place. */
-  async function moveTo(key: string) {
+  /** The caret and the ring fade out. */
+  async function hide() {
     const mine = ++turn;
-    const found = await measureEnds(key);
-    if (mine !== turn || !found) return;
-    // A card on another row is twice as far.
-    const duration =
-      ends && Math.abs(found.fromY - ends.fromY) > 1
-        ? motion.connector.hop
-        : motion.connector.stretch;
-    ends = found;
-    linked.set(key);
-    moving.set(true);
-    slideNext(duration, "move");
-    stroke.set(strokeOf(found));
-    caret.set({ x: found.laneX, top: found.toY - space[16] });
-    showCaret(true);
-    later(duration, () => moving.set(false));
+    blink.stop();
+    blinks.set(false);
+    if (!reduceMotion())
+      await blink.opacity.timing(0, {
+        duration: motion.pictureCue.leave,
+        easing: motion.close,
+      });
+    if (mine !== turn) return;
+    place.set(undefined);
+    blink.reset();
   }
 
-  /** The line goes back into the card, and the caret goes out. */
-  function drawBack() {
-    if (!stroke() || !ends) return;
-    turn++;
-    linked.set(undefined);
-    moving.set(true);
-    if (reduceMotion()) return end();
-    slideNext(motion.connector.retract, "close");
-    stroke.set(drawnBack(ends, stroke()!.way));
-    later(motion.connector.retract - motion.connector.caret, () =>
-      showCaret(false),
-    );
-    later(motion.connector.retract, end);
-  }
-
-  function end() {
-    stroke.set(undefined);
-    caret.set(undefined);
-    fade.stop();
-    fade.reset();
-    fade.opacity.set(0);
-    ends = undefined;
-  }
-
-  function rest(key: string, on: boolean) {
-    // A picture that stood nowhere (an older message) has no place to go to.
-    if (!cards.has(key) || !marks.has(key)) return;
+  function rest(key: string, on: boolean, after: number) {
+    // Turned off in Settings, or a picture that stood nowhere (an older message): nothing shows.
+    if (!places.on() || !cards.has(key) || !marks.has(key)) return;
     if (on) {
       resting = key;
       clearTimeout(grace);
       clearTimeout(wait);
-      if (!stroke())
-        wait = setTimeout(() => void draw(key), motion.connector.rest);
-      else if (linked() !== key) void moveTo(key);
+      if (shown() === key) return;
+      const go = () => {
+        shown.set(key);
+        void show(key);
+      };
+      // Moving on to another card while a caret shows, or a held finger, shows it at once.
+      if (shown() || after === 0) go();
+      else wait = setTimeout(go, after);
     } else if (resting === key) {
       resting = undefined;
       clearTimeout(wait);
-      // Moving on to another card within the grace moves the line instead of drawing it back.
-      grace = setTimeout(drawBack, motion.connector.rest);
+      grace = setTimeout(() => {
+        shown.set(undefined);
+        void hide();
+      }, after);
     }
   }
 
@@ -304,8 +202,13 @@ export function pictureLinks() {
         ref: (node) => {
           cards.set(key, node);
         },
-        active: () => linked() === key,
-        onRest: (on) => rest(key, on),
+        onRest: (on) => rest(key, on, motion.pictureCue.rest),
+        onHold: (on) => {
+          // A press that was no long press lifts too: it opens the picture, and changes nothing here.
+          if (!on && held !== key) return;
+          held = on ? key : undefined;
+          rest(key, on, on ? 0 : motion.pictureCue.linger);
+        },
       };
     },
     /** The place a picture stood in the words: nothing is drawn there, it only has a position. */
@@ -321,14 +224,9 @@ export function pictureLinks() {
         />
       );
     },
-    /** The line and its caret, over the whole shown text; they take no press. */
-    Line() {
-      const c = colors();
-      const edge = { borderColor: c().blue, borderWidth: 0 };
-      const part = (box: Box) => ({
-        position: "absolute" as const,
-        ...box,
-      });
+    /** The caret and the ring, over the whole shown text, its cards and its bubble's padding;
+     * they take no press. */
+    Place() {
       return (
         <View
           ref={(node) => {
@@ -337,57 +235,43 @@ export function pictureLinks() {
           style={{
             position: "absolute",
             top: 0,
-            // Out over the bubble's padding, where the lane runs.
             right: -BUBBLE_PADDING,
             bottom: 0,
-            left: 0,
+            left: -BUBBLE_PADDING,
             pointerEvents: "none",
           }}
         >
-          <If when={stroke()}>
-            {(drawn) => (
-              <View testID="picture-link">
-                <View
-                  testID="picture-link-stroke"
-                  style={{ ...part(drawn().along), backgroundColor: c().blue }}
-                />
-                <View
-                  testID="picture-link-stroke"
-                  style={{ ...part(drawn().rise), backgroundColor: c().blue }}
-                />
-                <View
-                  testID="picture-link-corner"
-                  style={{
-                    ...part(drawn().turn),
-                    ...edge,
-                    borderBottomWidth: HAIR,
-                    ...(drawn().way > 0
-                      ? {
-                          borderRightWidth: HAIR,
-                          borderBottomRightRadius: CORNER,
-                        }
-                      : {
-                          borderLeftWidth: HAIR,
-                          borderBottomLeftRadius: CORNER,
-                        }),
-                  }}
-                />
-              </View>
-            )}
-          </If>
-          <If when={caret()}>
+          <If when={place()}>
             {(at) => (
               <View
-                testID="picture-link-caret"
+                testID="picture-card-ring"
                 style={{
                   position: "absolute",
-                  left: at().x - space[2] / 2,
-                  top: at().top,
-                  ...fade.style,
+                  ...at().card,
+                  borderWidth: border.hair,
+                  borderColor: c().blue,
+                  opacity: blink.opacity,
                 }}
-              >
-                <Caret testID="picture-link-blink" still={moving} />
-              </View>
+              />
+            )}
+          </If>
+          <If when={place()}>
+            {(at) => (
+              <Caret
+                testID={
+                  blinks() ? "picture-caret-blinking" : "picture-caret-still"
+                }
+                blink={blink}
+                style={{
+                  position: "absolute",
+                  left: at().x - border.hair / 2,
+                  top: at().top,
+                  width: border.hair,
+                  height: LINE,
+                  transformOrigin: "bottom",
+                  transform: grow.transform,
+                }}
+              />
             )}
           </If>
         </View>

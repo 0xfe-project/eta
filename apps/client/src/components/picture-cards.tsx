@@ -5,7 +5,7 @@ import { uiText } from "../i18n";
 import { Chip } from "./eta-editor/chip";
 import { SkeletonBar } from "./loading-skeleton";
 import { canHover } from "./menu";
-import { outlineMotion } from "./motion";
+import { motion } from "./motion";
 import { picturePreview } from "./picture-viewer";
 import { Label } from "./text";
 import { colors, focusRing, row } from "./theme";
@@ -18,12 +18,12 @@ import { space } from "./tokens";
 
 /** A card tied to the place in the text where its picture stood. */
 export interface Tie {
-  /** The card's box: where the line to that place starts. */
+  /** The card's box: the ring round it blinks with the caret at its place. */
   ref: (node: ViewRef) => void;
-  /** The line is drawn: the card takes the accent. */
-  active: () => boolean;
   /** The pointer or the focus came to the card, or left it. */
   onRest: (on: boolean) => void;
+  /** A finger held the card (a long press), or lifted. */
+  onHold: (on: boolean) => void;
 }
 
 /** A picture of shown text: what the chip and the card say, and how to ask for its bytes. */
@@ -103,16 +103,17 @@ export function PictureCards(props: {
               onMouseLeave={() => canHover && tie()?.onRest(false)}
               onFocus={() => tie()?.onRest(true)}
               onBlur={() => tie()?.onRest(false)}
+              // Only where there is no pointer to rest: a held mouse button still opens the picture.
+              delayLongPress={canHover ? undefined : motion.pictureCue.hold}
+              onLongPress={canHover ? undefined : () => tie()?.onHold(true)}
+              onPressUp={canHover ? undefined : () => tie()?.onHold(false)}
               focusVisibleStyle={focusRing(c())}
-              hoverStyle={
-                tie()?.active() ? undefined : { borderColor: c().strong }
-              }
+              hoverStyle={{ borderColor: c().strong }}
               style={{
                 width: width(),
                 flexShrink: 0,
                 borderWidth: 1,
-                borderColor: tie()?.active() ? c().blue : c().border,
-                ...outlineMotion,
+                borderColor: c().border,
                 backgroundColor: c().canvas,
                 cursor: "zoom-in",
               }}
