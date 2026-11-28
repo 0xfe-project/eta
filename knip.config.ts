@@ -35,6 +35,7 @@ export default {
         "scripts/upgrade-e2e/*.ts",
         "scripts/nsh-host-bootstrap.ts",
         "scripts/host-launcher/test/*.test.ts",
+        "scripts/test/*.test.ts",
       ],
       // Installed by that workflow for its run, to press the real button.
       ignoreDependencies: ["playwright-core"],

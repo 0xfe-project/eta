@@ -6,7 +6,7 @@
  * so a migration that renames what they read breaks this, not a release.
  *
  * The real runs are `upgrade-cross.yml` (between releases, over `test/upgrade-seed`) and
- * `upgrade-e2e.yml`.
+ * `host-upgrade-e2e.yml`.
  */
 import type { Database } from "bun:sqlite";
 import type { Check } from "../../../scripts/upgrade-e2e/button";
@@ -209,23 +209,29 @@ describe("hasPrereleaseSwitch", () => {
   });
 });
 
-describe("upgrade-e2e.yml's patterns", () => {
+describe("host-upgrade-e2e.yml's trigger pattern", () => {
   const { env } = Bun.YAML.parse(
     readFileSync(
-      join(import.meta.dirname, "../../../.github/workflows/upgrade-e2e.yml"),
+      join(
+        import.meta.dirname,
+        "../../../.github/workflows/host-upgrade-e2e.yml",
+      ),
       "utf8",
     ),
-  ) as { env: Record<"on_pr" | "on_main", string> };
-  const onPr = new RegExp(env.on_pr);
-  const onMain = new RegExp(env.on_main);
+  ) as { env: Record<"trigger_pattern", string> };
+  const triggerPattern = new RegExp(env.trigger_pattern);
 
-  it("run on a pull request for the upgrade, and on a merge for the rest of the client", () => {
-    expect(onPr.test("apps/client/src/pages/settings/updates/update.tsx")).toBe(
+  it("matches host upgrade, service, and update-UI paths on both PR and main, and excludes unrelated client UI", () => {
+    expect(
+      triggerPattern.test("apps/client/src/pages/settings/updates/update.tsx"),
+    ).toBe(true);
+    expect(triggerPattern.test("apps/eta/src/upgrade/upgrade.ts")).toBe(true);
+    expect(triggerPattern.test("apps/daemon/src/swap.ts")).toBe(true);
+    expect(triggerPattern.test(".github/workflows/host-upgrade-e2e.yml")).toBe(
       true,
     );
-    expect(onPr.test("apps/eta/src/upgrade/upgrade.ts")).toBe(true);
-    expect(onPr.test("apps/daemon/src/swap.ts")).toBe(true);
-    expect(onPr.test("apps/client/src/components/controls.tsx")).toBe(false);
-    expect(onMain.test("apps/client/src/components/controls.tsx")).toBe(true);
+    expect(triggerPattern.test("apps/client/src/components/controls.tsx")).toBe(
+      false,
+    );
   });
 });

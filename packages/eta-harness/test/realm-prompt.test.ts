@@ -103,7 +103,7 @@ describe("the realm prompt", () => {
   it("the examples produce what they say", async () => {
     if (process.platform === "win32") return;
     const [shell] = await runExample(REALM_EXAMPLES[1]!.scripts);
-    expect(shell!.text).toContain("killed by SIGTERM");
+    expect(shell!.text).toMatch(/killed: (?:SIGTERM|143)/);
     expect(shell!.text).toContain('"a",');
     expect(shell!.text).toContain('"ok": true');
     const [quoting] = await runExample(REALM_EXAMPLES[0]!.scripts);

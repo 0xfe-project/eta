@@ -1,0 +1,7 @@
+rules:
+  unpinned-uses:
+    config:
+      # Repository pins actions by major/semver release tags (e.g. @v7, @v10.2.0);
+      # reject floating branch refs like @main while allowing version tags.
+      policies:
+        "*": ref-pin

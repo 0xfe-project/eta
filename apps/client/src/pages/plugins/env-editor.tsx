@@ -2,11 +2,10 @@ import type { PluginEnvView, PluginView } from "@eta/client-contracts";
 import { signal, View } from "nsh";
 import { Button, colors, Field, Label, row, textFaces } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
+import { opacity, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { useHost } from "../../services/host";
-
 import { looksSecret } from "./headers-model";
-import { opacity, space, weight } from "../../components/tokens";
 
 interface Draft {
   id: number;

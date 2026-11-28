@@ -69,16 +69,52 @@ function shortHash(value: string): string {
   return (h >>> 0).toString(16).padStart(8, "0").slice(0, 4);
 }
 
+function separatorOf(path: string): "/" | "\\" {
+  return path.includes("\\") && !path.includes("/") ? "\\" : "/";
+}
+
+function joinChild(base: string, ...parts: string[]): string {
+  const sep = separatorOf(base);
+  if (base === "/" || base === "\\") return `${base}${parts.join(sep)}`;
+  if (/^[a-z]:[/\\]?$/i.test(base)) {
+    const rootSep =
+      base.endsWith("\\") || base.endsWith("/") ? base.at(-1)! : sep;
+    return `${base.slice(0, 2)}${rootSep}${parts.join(rootSep)}`;
+  }
+  const head = base.replace(/[/\\]+$/, "");
+  return `${head}${sep}${parts.join(sep)}`;
+}
+
+function parentDir(dir: string): string {
+  if (dir === "/" || dir === "\\" || /^[a-z]:[/\\]?$/i.test(dir)) return dir;
+  const trimmed = dir.replace(/[/\\]+$/, "");
+  const slash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  if (slash < 0) return dir;
+  if (slash === 0) return trimmed[0]!;
+  const prefix = trimmed.slice(0, slash);
+  if (/^[/\\]{2}[^/\\]+$/.test(prefix)) return dir;
+  if (/^[a-z]:$/i.test(prefix)) return `${prefix}${trimmed[slash]!}`;
+  return prefix;
+}
+
 /**
  * Short, path-derived label. `eta-agent~9f3c` for a project file; `user` is kept for a file
  * that sits at `~/.eta` — which is what a session opened in $HOME now is, not a global tier.
  * The directory owning `.eta/MEMORY.md` names it; the hash keeps two same-named directories apart.
  */
 export function memoryFileLabel(path: string, home: string): string {
-  if (path === `${home}/.eta/${MEMORY_FILE}`) return "user";
-  const owner = path.replace(new RegExp(`/.eta/${MEMORY_FILE}$`), "");
+  const cleanHome = home.length > 1 ? home.replace(/[/\\]+$/, "") : home;
+  if (path === joinChild(cleanHome, ".eta", MEMORY_FILE)) return "user";
+  const sep = separatorOf(path);
+  const suffix = `${sep}.eta${sep}${MEMORY_FILE}`;
+  const altSuffix = `/.eta/${MEMORY_FILE}`;
+  const owner = path.endsWith(suffix)
+    ? path.slice(0, -suffix.length)
+    : path.endsWith(altSuffix)
+      ? path.slice(0, -altSuffix.length)
+      : path;
   const name =
-    (owner.split("/").pop() ?? "").replace(/[^\w.-]/g, "_") || "root";
+    (owner.split(/[/\\]/).pop() ?? "").replace(/[^\w.-]/g, "_") || "root";
   return `${name}~${shortHash(owner)}`;
 }
 
@@ -172,14 +208,13 @@ export async function scanMemory(
   let dir = cwd;
   let projectRoot: string | undefined;
   for (;;) {
-    const candidate = `${dir}/.eta/${MEMORY_FILE}`;
+    const candidate = joinChild(dir, ".eta", MEMORY_FILE);
     if ((await fs.mtime(candidate)) !== undefined) paths.unshift(candidate);
-    if ((await fs.mtime(`${dir}/.git`)) !== undefined) {
+    if ((await fs.mtime(joinChild(dir, ".git"))) !== undefined) {
       projectRoot = dir;
       break;
     }
-    if (dir === "/") break;
-    const parent = dir.replace(/\/[^/]*$/, "") || "/";
+    const parent = parentDir(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -187,7 +222,8 @@ export async function scanMemory(
   // rather than leaking to the filesystem root, which is not writable by a person anyway.
   projectRoot ??= cwd;
   // Scan order is outermost first, so the last project entry is the nearest one.
-  const targetPath = paths.at(-1) ?? `${projectRoot}/.eta/${MEMORY_FILE}`;
+  const targetPath =
+    paths.at(-1) ?? joinChild(projectRoot, ".eta", MEMORY_FILE);
   return {
     files: paths.map((path) => ({ path, label: memoryFileLabel(path, home) })),
     target: { path: targetPath, label: memoryFileLabel(targetPath, home) },

@@ -318,9 +318,13 @@ describe("the gateway's accounts", () => {
         email: "ada@example.com",
         plan_type: "plus",
       });
-      expect(
-        Date.parse(credential.expired) - Date.parse(credential.last_refresh),
-      ).toBe(3_600_000);
+      const lifetimeMs =
+        Date.parse(credential.expired) - Date.parse(credential.last_refresh);
+      // `@cpajs/codex-auth` truncates `expired` and `last_refresh` to whole seconds from
+      // two separate `Date.now()` calls (token exchange vs auth-file build), so crossing
+      // a second boundary between them yields `3_599_000` (or slightly less under load).
+      expect(lifetimeMs).toBeGreaterThanOrEqual(3_590_000);
+      expect(lifetimeMs).toBeLessThanOrEqual(3_600_000);
       // CPA serves its models until renewing the fake tokens fails, then asks for a sign-in;
       // either way the account follows, and a disabled account serves none of them.
       let served = false;

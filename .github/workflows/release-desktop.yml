@@ -31,9 +31,9 @@ jobs:
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
-      id-token: write
     with:
       all: true
+      platforms: linux
 
   prepare:
     runs-on: ubuntu-latest
@@ -202,9 +202,11 @@ jobs:
 
       - name: Set up Flathub remote and GNOME 49 runtime
         if: matrix.target == 'linux'
+        env:
+          CACHE_HIT: ${{ steps.flatpak-runtime.outputs.cache-hit }}
         run: |
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          if [[ "${{ steps.flatpak-runtime.outputs.cache-hit }}" != "true" ]]; then
+          if [[ "$CACHE_HIT" != "true" ]]; then
             flatpak install --user --noninteractive -y flathub org.gnome.Platform//49 org.gnome.Sdk//49
           fi
 
@@ -376,6 +378,7 @@ jobs:
               flatpak install --user --noninteractive -y "$out/Eta.flatpak"
               flatpak info dev.eta.client
               flatpak info --show-permissions dev.eta.client
+              # shellcheck disable=SC2016
               flatpak run --command=sh dev.eta.client -c '
                 set -eu
                 test -n "${FLATPAK_ID:-}"
@@ -484,7 +487,7 @@ jobs:
           assets=("$RUNNER_TEMP/try"/*)
           gh release upload "$TAG" "${assets[@]}" --clobber
           # The desktops' update archives (Eta-<version>-<os>-<arch>.*) and Android's OTA package.
-          updates=("$RUNNER_TEMP/eta-desktop"/Eta-"$ETA_DESKTOP_VERSION"-* "$RUNNER_TEMP/eta-desktop"/*.nshpkg)
+          updates=("$RUNNER_TEMP/eta-desktop/Eta-$ETA_DESKTOP_VERSION"-* "$RUNNER_TEMP/eta-desktop"/*.nshpkg)
           if [[ -n $ETA_CLIENT_UPDATE_URL && ${#updates[@]} -gt 0 ]]; then
             gh release upload "$TAG" "${updates[@]}" --clobber
           fi
@@ -550,7 +553,7 @@ jobs:
           gh release download "$TAG" --pattern "Eta-$VERSION-*" --pattern '*.nshpkg' --dir "$RUNNER_TEMP/updates"
           gh release view "$TAG" --json body --jq .body > "$RUNNER_TEMP/notes.md"
           shopt -s nullglob
-          archives=("$RUNNER_TEMP/updates"/Eta-"$VERSION"-*)
+          archives=("$RUNNER_TEMP/updates/Eta-$VERSION"-*)
           packages=("$RUNNER_TEMP/updates"/*.nshpkg)
           args=(--notes "$RUNNER_TEMP/notes.md" --base-url "$BASE/$TAG/" -o "$RUNNER_TEMP/manifest")
           if [[ ${#packages[@]} -gt 0 ]]; then args+=(--package "${packages[0]}"); fi

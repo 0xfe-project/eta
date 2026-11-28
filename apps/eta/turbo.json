@@ -8,7 +8,11 @@
       "inputs": ["$TURBO_EXTENDS$", "$TURBO_ROOT$/scripts/upgrade-e2e/**"]
     },
     "test": {
-      "inputs": ["$TURBO_EXTENDS$", "$TURBO_ROOT$/scripts/upgrade-e2e/**"]
+      "inputs": [
+        "$TURBO_EXTENDS$",
+        "$TURBO_ROOT$/scripts/upgrade-e2e/**",
+        "$TURBO_ROOT$/.github/workflows/host-upgrade-e2e.yml"
+      ]
     }
   }
 }

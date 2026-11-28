@@ -101,7 +101,8 @@ const DEFAULT_TIMEOUT_MS = 10_000;
  * JSC gives up the identifier we set on the module and prints `unknown`, which
  * is why the file name comes from {@link Realm.#identifier} instead of the frame.
  */
-const FRAME = /^\s*at\s+([^\s()]+\s+\()?([^\s:]+):(\d+):(\d+)\)?$/;
+const FRAME =
+  /^\s*at\s+([^\s()]+\s+\()?((?:[a-zA-Z]:|file:\/\/)?[^\s:]+):(\d+):(\d+)\)?$/;
 
 /**
  * JSC (Bun) names module frames `[source:N]` instead of the module's
@@ -129,7 +130,7 @@ function summarize(value: unknown): string {
 
 function basename(file: string): string {
   const path = file.startsWith("file://") ? file.slice("file://".length) : file;
-  return path.split("/").pop() ?? path;
+  return path.split(/[/\\]/).pop() ?? path;
 }
 
 function round(ms: number): number {
@@ -595,7 +596,7 @@ export class Realm {
       const source = SOURCE_FRAME.exec(raw);
       if (source !== null) {
         return {
-          identifier,
+          identifier: basename(identifier),
           line: Number(source[1]),
           column: Number(source[2]),
         };
@@ -606,12 +607,14 @@ export class Realm {
       if (file.startsWith("node:") || file.startsWith("internal/")) continue;
       return {
         identifier:
-          file === "unknown" || file.length === 0 ? identifier : basename(file),
+          file === "unknown" || file.length === 0
+            ? basename(identifier)
+            : basename(file),
         line: Number(match[3]),
         column: Number(match[4]),
       };
     }
-    return { identifier, line: 0, column: 0 };
+    return { identifier: basename(identifier), line: 0, column: 0 };
   }
 
   /**

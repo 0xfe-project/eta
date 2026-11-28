@@ -76,18 +76,30 @@ jobs:
       - name: Ask the compared build about services that are not there
         if: inputs.compare != ''
         continue-on-error: true
-        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/compare/eta-host.exe" "${{ inputs.absent }}" "${{ inputs.compare }}" absent
+        env:
+          ABSENT: ${{ inputs.absent }}
+          COMPARE: ${{ inputs.compare }}
+        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/compare/eta-host.exe" "$ABSENT" "$COMPARE" absent
 
       - name: Ask this build about services that are not there
-        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/this/eta-host.exe" "${{ inputs.absent }}" "${{ github.ref_name }}" absent
+        env:
+          ABSENT: ${{ inputs.absent }}
+          REF_NAME: ${{ github.ref_name }}
+        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/this/eta-host.exe" "$ABSENT" "$REF_NAME" absent
 
       - name: Loop the compared build
         if: inputs.compare != ''
         continue-on-error: true
-        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/compare/eta-host.exe" "${{ inputs.rounds }}" "${{ inputs.compare }}"
+        env:
+          ROUNDS: ${{ inputs.rounds }}
+          COMPARE: ${{ inputs.compare }}
+        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/compare/eta-host.exe" "$ROUNDS" "$COMPARE"
 
       - name: Loop this build
-        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/this/eta-host.exe" "${{ inputs.rounds }}" "${{ github.ref_name }}"
+        env:
+          ROUNDS: ${{ inputs.rounds }}
+          REF_NAME: ${{ github.ref_name }}
+        run: bun scripts/upgrade-e2e/reinstall-loop.ts "$RUNNER_TEMP/hosts/this/eta-host.exe" "$ROUNDS" "$REF_NAME"
 
       - name: What Windows said
         if: always()

@@ -125,6 +125,8 @@ type Opened = Awaited<ReturnType<typeof opened>>;
 
 /** Opens the server on the given row of the list (the list is sorted: broken, then remote). */
 async function openServer(r: Opened["r"], row: number, name: string) {
+  await r.waitFor("Enter open");
+  await r.waitFor(name);
   for (let i = 0; i < row; i += 1) await r.press(KEYS.down);
   await r.press(KEYS.enter);
   await r.waitFor(`Declared in: ~/.eta/mcp.json`);

@@ -291,13 +291,13 @@ test("a toolkit with no managed sign-in and no key or registration scheme says s
   // Connect is still there: the user may have made the config already.
   expect(app.shows("label:Connect")).toBe(true);
   await app.press("label:Open Composio dashboard");
-  await app.waitFor("text:opened:" + DASHBOARD);
+  await app.waitFor(`text:opened:${DASHBOARD}`);
 });
 
 test("the no-managed-sign-in hint is not shown for a toolkit that has a managed sign-in, a key scheme or dynamic registration", async () => {
   for (const name of ["Gmail", "Railway", "Cloudflare MCP"]) {
     const app = await open("./fixtures/composio-no-managed.tsx", OPEN);
-    await app.press("label:" + name);
+    await app.press(`label:${name}`);
     expect(app.shows(NO_MANAGED)).toBe(false);
     expect(app.shows("label:Open Composio dashboard")).toBe(false);
   }
@@ -308,6 +308,6 @@ test("a link refused for want of a managed sign-in shows the sentence, not the h
   await app.press("label:Gmail");
   expect(app.shows(NO_MANAGED)).toBe(false);
   await app.press("label:Connect");
-  await app.waitFor("text:" + NO_MANAGED);
+  await app.waitFor(`text:${NO_MANAGED}`);
   expect(app.shows("composio_no_managed_login")).toBe(false);
 });

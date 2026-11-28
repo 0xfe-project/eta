@@ -1,3 +1,4 @@
+import process from "node:process";
 import { defineConfig } from "vitest/config";
 import { forceRerunTriggers } from "../../vitest.shared.ts";
 
@@ -9,6 +10,6 @@ export default defineConfig({
     testTimeout: 30_000,
     // Cleaning up after a host can wait for Windows to let go of the files it held; under the
     // same load the default 10s cuts off an afterEach that is only slow.
-    hookTimeout: 30_000,
+    hookTimeout: process.platform === "win32" ? 60_000 : 30_000,
   },
 });

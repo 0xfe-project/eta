@@ -215,7 +215,7 @@ export const REALM_EXAMPLES: RealmExample[] = [
     scripts: [
       [
         'let slow = "finished";',
-        'try { await $`sleep 999`.timeout("1s"); } catch (e) { slow = `killed by ${e.signal}`; }',
+        'try { await $`sleep 999`.timeout("1s"); } catch (e) { slow = `killed: ${e.signal ?? e.exitCode}`; }',
         'const missing = await $`ls /no/such/dir`.timeout("5s").nothrow();',
         'const [one, two] = await Promise.all([$`echo one`.timeout("5s"), $`echo two`.timeout("5s")]);',
         'const sorted = (await $`printf "b\\na\\n"`.timeout("5s").pipe($`sort`.timeout("5s"))).lines();',
