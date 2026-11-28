@@ -42,6 +42,7 @@ const resultOf = (
 const open = async (
   script: ReturnType<typeof stop>[],
   reuse?: { storage: MemoryStorage; root: string; cwd: string },
+  extra?: unknown[],
 ) => {
   const root = reuse?.root ?? (await mkdtemp(join(tmpdir(), "esm-root-")));
   const cwd = reuse?.cwd ?? (await mkdtemp(join(tmpdir(), "esm-cwd-")));
@@ -72,7 +73,7 @@ const open = async (
     models: models as never,
     cwd,
     esm: { root },
-    tools: [echo as never, picture as never],
+    tools: [echo, picture, ...(extra ?? [])] as never,
   });
   return { session, models, root, cwd, storage };
 };
@@ -953,4 +954,65 @@ describe("a session opened with the realm", () => {
     await session.kernel.dispose();
     session.stop();
   });
+});
+
+describe("a failure the script never awaits (#827)", () => {
+  const boom = defineTool({
+    name: "boom",
+    description: "Always fails.",
+    parameters: Type.Object({}),
+    execute: () => ({
+      content: [{ type: "text", text: "boom happened" }],
+      isError: true,
+    }),
+  });
+
+  it("an unawaited failing tool call is recorded and does not take the host down", async () => {
+    const { session } = await open(
+      [
+        call(
+          "esmrun",
+          {
+            script:
+              "import eta from \"eta\";\neta.platform.boom({});\nawait new Promise((r) => setTimeout(r, 50));\n'survived'",
+          },
+          "c-unawaited-fail",
+        ),
+        stop(),
+      ],
+      undefined,
+      [boom as never],
+    );
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    const text = resultOf(session, "c-unawaited-fail");
+    expect(text).toContain("survived");
+    // The failure is on the ledger the result reports, not lost.
+    expect(text).toContain("[failed] eta.platform.boom");
+    session.stop();
+  }, 15_000);
+
+  it("an awaited failing tool call still throws into the script", async () => {
+    const { session } = await open(
+      [
+        call(
+          "esmrun",
+          {
+            script:
+              "import eta from \"eta\";\nlet out;\ntry { await eta.platform.boom({}); out = 'no'; } catch (e) { out = 'caught: ' + e.message; }\nout",
+          },
+          "c-awaited-fail",
+        ),
+        stop(),
+      ],
+      undefined,
+      [boom as never],
+    );
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    expect(resultOf(session, "c-awaited-fail")).toContain(
+      "caught: boom: boom happened",
+    );
+    session.stop();
+  }, 15_000);
 });
