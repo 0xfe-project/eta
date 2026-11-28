@@ -8,6 +8,7 @@
  * The files land in `<root>/<hash of repo and path>/`, beside a `.sha` that says which commit they
  * are, so a directory that went missing is fetched again at the recorded commit.
  */
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
@@ -78,11 +79,14 @@ export const GIT_TIMEOUT_MS = 20_000;
 export const gitLimit = { ms: GIT_TIMEOUT_MS };
 
 /** Stop `child` and what it started: on Windows `git` leaves `git-remote-https` behind otherwise. */
-function stop(child: Bun.Subprocess): void {
-  if (process.platform === "win32")
-    Bun.spawnSync(["taskkill", "/T", "/F", "/PID", String(child.pid)], {
-      stdout: "ignore",
-      stderr: "ignore",
+function stop(child: ChildProcess): void {
+  // The platform's own id, not this runtime's: the two are not the same number, and taskkill
+  // answers to the operating system. A caller on a runtime that does not hand one out has no id to
+  // give, so the kill falls to the child itself.
+  const pid = child.pid;
+  if (process.platform === "win32" && typeof pid === "number" && pid > 0)
+    spawnSync("taskkill", ["/T", "/F", "/PID", String(pid)], {
+      stdio: "ignore",
     });
   child.kill();
 }
@@ -92,11 +96,9 @@ async function run(
   cwd?: string,
   repo?: string,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  const child = Bun.spawn(["git", ...args], {
+  const child = spawn("git", args, {
     ...(cwd === undefined ? {} : { cwd }),
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
+    stdio: "pipe",
     env: {
       ...process.env,
       // Never wait for a person: a repository that needs a password is a failure to report.
@@ -114,9 +116,9 @@ async function run(
   }, gitLimit.ms);
   try {
     const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
+      collect(child.stdout),
+      collect(child.stderr),
+      closed(child),
     ]);
     if (timedOut)
       throw new PluginError(
@@ -126,6 +128,25 @@ async function run(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Everything a pipe sends, as text. */
+async function collect(stream: NodeJS.ReadableStream | null): Promise<string> {
+  if (stream === null) return "";
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk as Uint8Array));
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/**
+ * The child is gone: its code, or `-1` when a signal ended it. `close` fires after both pipes
+ * have ended, so the output read above is the whole of it.
+ */
+function closed(child: ChildProcess): Promise<number> {
+  return new Promise((done) => {
+    child.on("close", (code) => done(code ?? -1));
+    child.on("error", () => done(-1));
+  });
 }
 
 const lastLine = (text: string): string => text.trim().split("\n").at(-1) ?? "";
@@ -270,13 +291,16 @@ export async function fetchInto(options: {
       `${path === "" ? "the repository" : path} is not in ${repo} at ${sha.slice(0, 12)}`,
       repo,
     );
-    const untar = Bun.spawn([TAR, "-xf", archive, "-C", tree], {
-      stdout: "ignore",
-      stderr: "pipe",
+    const untar = spawn(TAR, ["-xf", archive, "-C", tree], {
+      stdio: ["ignore", "ignore", "pipe"],
     });
-    if ((await untar.exited) !== 0)
+    const [untarError, untarCode] = await Promise.all([
+      collect(untar.stderr),
+      closed(untar),
+    ]);
+    if (untarCode !== 0)
       throw new PluginError(
-        `cannot unpack ${repo}: ${(await new Response(untar.stderr).text()).trim()}`,
+        `cannot unpack ${repo}: ${untarError.trim()}`,
       );
     await writeFile(`${dir}.sha`, sha);
     const old = `${dir}.old-${process.pid}`;

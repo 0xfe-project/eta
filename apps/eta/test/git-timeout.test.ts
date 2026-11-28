@@ -1,6 +1,7 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { serve } from "xmas:server";
 import { afterEach, beforeEach, describe, expect, it } from "xmas:test";
 import {
   fetchInto,
@@ -9,8 +10,15 @@ import {
   resolveRev,
 } from "../src/plugins/git";
 
-/** A git:// server that takes the connection and never answers. */
-let server: Bun.TCPSocketListener<undefined>;
+/**
+ * A port that takes the request and never answers it: the handler's promise never settles, so no
+ * byte is written back. A git client pointed here waits on a server that is not talking, which is
+ * the condition the timeout is supposed to end.
+ *
+ * `opened` counts the requests that reached the handler and `closed` the ones whose connection
+ * went away, which is what "the process was killed and its connections with it" comes to.
+ */
+let server: ReturnType<typeof serve>;
 let opened = 0;
 let closed = 0;
 let repo = "";
@@ -19,13 +27,11 @@ const saved = gitLimit.ms;
 beforeEach(() => {
   opened = 0;
   closed = 0;
-  server = Bun.listen({
-    hostname: "127.0.0.1",
-    port: 0,
-    socket: {
-      open: () => void opened++,
-      close: () => void closed++,
-      data: () => {},
+  server = serve({
+    fetch: (request) => {
+      opened++;
+      request.signal.addEventListener("abort", () => void closed++);
+      return new Promise<Response>(() => {});
     },
   });
   repo = `git://127.0.0.1:${server.port}/r.git`;
@@ -41,7 +47,7 @@ afterEach(() => {
 async function ended(): Promise<boolean> {
   for (let i = 0; i < 100; i++) {
     if (opened > 0 && closed >= opened) break;
-    await Bun.sleep(100);
+    await new Promise((done) => setTimeout(done, 100));
   }
   return opened > 0 && closed === opened;
 }
@@ -78,7 +84,7 @@ describe("a git call that does not answer", () => {
       expect((error as Error).message).toContain("git fetch");
       expect((error as Error).message).toContain(repo);
       expect(await ended()).toBe(true);
-      expect(await Array.fromAsync(new Bun.Glob("*").scan(root))).toEqual([]);
+      expect(await readdir(root)).toEqual([]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
