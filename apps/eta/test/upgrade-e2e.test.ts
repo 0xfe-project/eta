@@ -15,6 +15,7 @@ import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "xmas:test";
+import { parse as parseYaml } from "yaml";
 import { hasPrereleaseSwitch } from "../../../scripts/upgrade-e2e/button";
 import {
   leaveOutSystemData,
@@ -210,7 +211,7 @@ describe("hasPrereleaseSwitch", () => {
 });
 
 describe("upgrade-e2e.yml's patterns", () => {
-  const { env } = Bun.YAML.parse(
+  const { env } = parseYaml(
     readFileSync(
       join(import.meta.dirname, "../../../.github/workflows/upgrade-e2e.yml"),
       "utf8",

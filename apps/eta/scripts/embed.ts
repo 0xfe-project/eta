@@ -11,6 +11,7 @@
  * end up in the executable; within them, dotfiles (a stray `.env`) stay out.
  */
 import { createHash } from "node:crypto";
+import { zstdCompressSync } from "node:zlib";
 import {
   copyFileSync,
   mkdirSync,
@@ -20,9 +21,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
-
-/** Past 9 the daemons shrink by a tenth at thirty times the time, for every `host:install`. */
-const ZSTD_LEVEL = 9;
 
 /** The directories whose files are unpacked; `resources.ts` names their directories by digest. */
 const UNPACKED = ["cpa", "daemon"];
@@ -104,9 +102,7 @@ async function compressDaemons(
       const path = join(out, `${file}.zst`);
       writeFileSync(
         path,
-        await Bun.zstdCompress(readFileSync(join(daemons, file)), {
-          level: ZSTD_LEVEL,
-        }),
+        zstdCompressSync(readFileSync(join(daemons, file))),
       );
       return { name: `daemon/${file}.zst`, path };
     }),

@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { zstdCompressSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "xmas:test";
 import { buildsIn, defaultBuilds } from "../src/machines/builds";
 import {
@@ -162,7 +163,7 @@ describe("the daemon builds a compiled host carries", () => {
     const dataDir = await tempDir("eta-data-");
     writeFileSync(
       join(dir, "build-1234.zst"),
-      Bun.zstdCompressSync(Buffer.from(BUILD)),
+      zstdCompressSync(Buffer.from(BUILD)),
     );
     writeFileSync(
       join(dir, "manifest-5678.json"),

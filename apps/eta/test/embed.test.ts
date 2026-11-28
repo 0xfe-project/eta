@@ -5,6 +5,7 @@
  */
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
+import { zstdCompressSync, zstdDecompressSync } from "node:zlib";
 import {
   mkdirSync,
   readdirSync,
@@ -124,7 +125,7 @@ describe("the generated table", () => {
       join(out, "daemon", "eta-daemon-linux-x64.zst"),
     );
     expect(packed.length).toBeLessThan(build.length);
-    expect(Bun.zstdDecompressSync(packed).toString()).toBe(build);
+    expect(zstdDecompressSync(packed).toString()).toBe(build);
 
     // The table before the host: this order is what makes it visible to the host's modules.
     const generated = readFileSync(entry, "utf8");
@@ -150,7 +151,7 @@ describe("a compiled executable", () => {
     writeFileSync(tool, "#!/bin/sh\necho ran\n");
     const big = "daemon build\n".repeat(200_000);
     const packed = join(dir, "build.zst");
-    writeFileSync(packed, Bun.zstdCompressSync(Buffer.from(big)));
+    writeFileSync(packed, zstdCompressSync(Buffer.from(big)));
     const files = [
       ...filesIn(page, "web"),
       { name: "tool/run", path: tool },
