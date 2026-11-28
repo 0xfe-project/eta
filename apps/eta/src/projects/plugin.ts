@@ -15,7 +15,13 @@ import { PlaceError } from "@eta/places";
 import { transportOn } from "../machines/shell";
 import { wireFailure } from "../places/on-machine";
 import { Args, productPlugin, publish } from "../wire";
-import { DEFAULT_FILE_LIMIT, listProjectFiles } from "./files";
+import {
+  DEFAULT_DIRECTORY_LIMIT,
+  DEFAULT_FILE_LIMIT,
+  listProjectDirectory,
+  listProjectFiles,
+  readProjectFile,
+} from "./files";
 
 export interface ProjectsDeps {
   machines: MachineStore;
@@ -139,6 +145,35 @@ export function projectsPlugin(deps: ProjectsDeps, applied: () => void) {
               transportOn(machine, deps.hub),
               project.path,
               args.optionalInteger("limit") ?? DEFAULT_FILE_LIMIT,
+            ),
+          };
+        }),
+
+        wire.handle("projects", "directory", async (call) => {
+          const args = new Args(call);
+          const project = existing(args.string("projectId"));
+          const machine = machines.get(project.machineId);
+          if (machine === undefined) throw new Error("no such machine");
+          return {
+            result: await listProjectDirectory(
+              transportOn(machine, deps.hub),
+              project.path,
+              args.optionalString("path") ?? "",
+              args.optionalInteger("limit") ?? DEFAULT_DIRECTORY_LIMIT,
+            ),
+          };
+        }),
+
+        wire.handle("projects", "readFile", async (call) => {
+          const args = new Args(call);
+          const project = existing(args.string("projectId"));
+          const machine = machines.get(project.machineId);
+          if (machine === undefined) throw new Error("no such machine");
+          return {
+            result: await readProjectFile(
+              transportOn(machine, deps.hub),
+              project.path,
+              args.string("path"),
             ),
           };
         }),
