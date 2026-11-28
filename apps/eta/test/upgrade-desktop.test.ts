@@ -203,6 +203,33 @@ describe("a host already serving the data directory", () => {
     ).toBeUndefined();
   });
 
+  it("preserves tunnelUrl recorded by a running host", async () => {
+    const dataDir = await tempDir();
+    const forget = recordRunning(dataDir, {
+      pid: 4243,
+      hostname: "127.0.0.1",
+      port: 8791,
+      tokenFile: "/t",
+      tunnelUrl: "https://recorded.trycloudflare.com",
+      version: "1.0.0",
+    });
+    expect(
+      await findRunningHost({
+        dataDir,
+        pid: 1,
+        isAlive: (pid) => pid === 4243,
+        up: async () => true,
+        installed: none,
+      }),
+    ).toEqual({
+      address: "http://127.0.0.1:8791",
+      tokenFile: "/t",
+      tunnelUrl: "https://recorded.trycloudflare.com",
+      from: "record",
+    });
+    forget();
+  });
+
   it("leaves another process's record where it is", async () => {
     const dataDir = await tempDir();
     const forget = recordRunning(dataDir, {
@@ -270,6 +297,18 @@ describe("a host already serving the data directory", () => {
           "--host",
           "0.0.0.0",
         ]),
+      }),
+    ).toEqual({
+      address: "http://127.0.0.1:8790",
+      tokenFile: join(dataDir, "access-token"),
+      from: "service",
+    });
+    expect(
+      await findRunningHost({
+        dataDir,
+        pid: 1,
+        up: async () => true,
+        installed: service(["/usr/bin/eta-host", "--port", "8790", "--tunnel"]),
       }),
     ).toEqual({
       address: "http://127.0.0.1:8790",

@@ -633,8 +633,12 @@ export interface MachineResults {
     peers: TailnetPeerView[];
   };
   install: { installId: string };
-  /** The host's tailnet address (`http://<MagicDNS name>:<port>`), when it listens there. */
-  addresses: { tailnet: string | null };
+  /**
+   * The host's reachable remote addresses besides the one the page is on:
+   * `tailnet` (`http://<MagicDNS name>:<port>`) when it listens on a tailnet, and
+   * `tunnel` (`https://...`) when a managed tunnel is active with a known external URL.
+   */
+  addresses: { tailnet: string | null; tunnel?: string | null };
 }
 export type MachineCall = {
   [A in MachineAction]: Omit<CallFrame, "target" | "action" | "args"> & {

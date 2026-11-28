@@ -29,6 +29,7 @@
  * on being read from the real home while the config came from somewhere else, so a process pointed
  * at another directory looked like a config that had gone missing. One root, `$HOME` decides it.
  */
+import type { HostTunnelOption } from "./host";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -47,6 +48,10 @@ import { upgradeCommand } from "./upgrade/command";
 import { takeDesktopShell } from "./upgrade/desktop";
 import { HOST_UNIT, hostManager } from "./upgrade/service";
 import { VERSION, VERSION_JSON, VERSION_LINE } from "./version";
+
+// Capture and scrub before any subcommand or helper can spawn a child process.
+const envTunnelToken = process.env.ETA_TUNNEL_TOKEN;
+delete process.env.ETA_TUNNEL_TOKEN;
 
 // A subcommand comes first; every other argument is a flag of the run.
 const [command, ...rest] = process.argv.slice(2);
@@ -69,7 +74,15 @@ if (command === "running") {
     const token = running.tokenFile
       ? readFileSync(running.tokenFile, "utf8").trim()
       : undefined;
-    console.log(JSON.stringify({ address: running.address, token }));
+    console.log(
+      JSON.stringify({
+        address: running.address,
+        token,
+        ...(running.tunnelUrl === undefined
+          ? {}
+          : { tunnelUrl: running.tunnelUrl }),
+      }),
+    );
   } else {
     console.log(JSON.stringify(running ?? null));
   }
@@ -113,6 +126,14 @@ if (!Number.isInteger(port) || port < 0 || port > 65_535) {
   process.exit(2);
 }
 
+if (
+  values["tunnel-token"] !== undefined &&
+  values["tunnel-token"].trim() === ""
+) {
+  console.error("--tunnel-token: must not be empty");
+  process.exit(2);
+}
+
 if (serviceCommand !== undefined) {
   // How this process was started, for a service that has to start it again: a compiled host is
   // its own program; from source it is bun and this file. The flags were checked above.
@@ -132,11 +153,21 @@ if (serviceCommand !== undefined) {
     } else {
       const manager = hostManager({ ...HOST_UNIT, env: installedEnv() });
       const definition = await manager.install(self);
+      const serviceHasTunnel =
+        values.tunnel === true ||
+        (values["tunnel-token"] !== undefined &&
+          values["tunnel-token"].trim() !== "");
+      const tokenPath =
+        values["token-file"] !== undefined
+          ? resolve(values["token-file"])
+          : join(homedir(), ".eta", "access-token");
       console.log(`Installed ${definition.name} (${definition.path}).`);
       console.log(
-        values.host === "127.0.0.1" || values.host === "localhost"
+        !serviceHasTunnel &&
+          values["token-file"] === undefined &&
+          (values.host === "127.0.0.1" || values.host === "localhost")
           ? `It listens on http://127.0.0.1:${port}.`
-          : `It asks for a token beyond loopback: open the page once with ?token=<the token in ${join(homedir(), ".eta", "access-token")}>.`,
+          : `It asks for a token: open the page once with ?token=<the token in ${tokenPath}>.`,
       );
     }
   } catch (error) {
@@ -163,6 +194,21 @@ if (listen === "tailscale") {
 
 const publicUrl = values["public-url"] ?? process.env.ETA_PUBLIC_URL;
 const searxngUrl = values["searxng-url"] ?? process.env.ETA_SEARXNG_URL;
+const rawTunnelToken = values["tunnel-token"] ?? envTunnelToken;
+const tunnelToken =
+  rawTunnelToken === undefined || rawTunnelToken.trim() === ""
+    ? undefined
+    : rawTunnelToken.trim();
+const tunnel: HostTunnelOption | undefined =
+  tunnelToken !== undefined
+    ? {
+        mode: "named",
+        token: tunnelToken,
+        ...(publicUrl === undefined || publicUrl === "" ? {} : { publicUrl }),
+      }
+    : values.tunnel === true
+      ? { mode: "quick" }
+      : undefined;
 
 const host = await startHost({
   dataDir,
@@ -190,6 +236,7 @@ const host = await startHost({
         : { searxngUrl },
   // The flag wins over the environment; an empty value means none.
   ...(publicUrl === undefined || publicUrl === "" ? {} : { publicUrl }),
+  ...(tunnel === undefined ? {} : { tunnel }),
 });
 
 // Said where another start looks before it opens the same database (`running.ts`).
@@ -198,6 +245,7 @@ const forget = recordRunning(dataDir, {
   hostname: host.hostname,
   port: host.port,
   tokenFile: host.tokenFile ?? null,
+  ...(host.tunnelUrl === undefined ? {} : { tunnelUrl: host.tunnelUrl }),
   version: VERSION,
 });
 process.on("exit", forget);
@@ -226,6 +274,7 @@ console.log(
     webDir:
       host.webDir ?? (embeddedFiles("web") === undefined ? null : "(embedded)"),
     tokenFile: host.tokenFile ?? null,
+    ...(host.tunnelUrl === undefined ? {} : { tunnelUrl: host.tunnelUrl }),
     plugins: host.server
       .mounted()
       .map((plugin) =>
@@ -235,5 +284,24 @@ console.log(
       ),
   }),
 );
+
+if (tunnel !== undefined) {
+  const tokenHint = host.tokenFile ?? join(dataDir, "access-token");
+  if (host.tunnelUrl !== undefined) {
+    const encodedAddress = encodeURIComponent(host.tunnelUrl);
+    console.error(
+      [
+        `Tunnel ready: ${host.tunnelUrl}`,
+        `Access token file: ${tokenHint}`,
+        `Browser: ${host.tunnelUrl}/?token=$(cat '${tokenHint}')`,
+        `Phone link: eta://connect?address=${encodedAddress}&token=$(cat '${tokenHint}')`,
+      ].join("\n"),
+    );
+  } else {
+    console.error(
+      `Tunnel running (named). Access token file: ${tokenHint}\nSet --public-url <https://your-domain> (or ETA_PUBLIC_URL) to include your external URL in pairing links.`,
+    );
+  }
+}
 
 listenForStop();

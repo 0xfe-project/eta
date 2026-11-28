@@ -49,6 +49,8 @@ describe("eta-host --help", () => {
     const run = host([flag], home);
     expect(run.status).toBe(0);
     expect(run.stdout).toContain("eta-host upgrade [version]");
+    expect(run.stdout).toContain("--tunnel");
+    expect(run.stdout).toContain("--tunnel-token");
     expect(run.stderr).toBe("");
     expect(existsSync(join(home, ".eta"))).toBe(false);
   });

@@ -26,6 +26,8 @@ export interface RunningRecord {
   port: number;
   /** Where its token is, when it asks for one. */
   tokenFile: string | null;
+  /** The active managed tunnel's external HTTPS URL, when present. */
+  tunnelUrl?: string | null;
   version: string;
 }
 
@@ -35,6 +37,8 @@ export interface RunningHost {
   address: string;
   /** The file its token is in, when it asks for one. */
   tokenFile: string | null;
+  /** The active managed tunnel's external HTTPS URL, when present. */
+  tunnelUrl?: string;
   /** How it was found. */
   from: "record" | "service";
 }
@@ -119,7 +123,14 @@ export async function findRunningHost(
   if (record !== undefined && record.pid !== self && isAlive(record.pid)) {
     const address = localOrigin(record.hostname, record.port);
     if (await up(`${address}/up`))
-      return { address, tokenFile: record.tokenFile, from: "record" };
+      return {
+        address,
+        tokenFile: record.tokenFile,
+        ...(typeof record.tunnelUrl === "string" && record.tunnelUrl !== ""
+          ? { tunnelUrl: record.tunnelUrl }
+          : {}),
+        from: "record",
+      };
   }
 
   // No service manager here, or none that answers: that is no service.
@@ -143,10 +154,14 @@ export async function findRunningHost(
     strict: false,
     allowPositionals: true,
   });
+  const tunnelOn =
+    values.tunnel === true ||
+    (typeof values["tunnel-token"] === "string" &&
+      values["tunnel-token"].trim() !== "");
   const tokenFile =
     typeof values["token-file"] === "string"
       ? values["token-file"]
-      : isLoopback(String(values.host))
+      : !tunnelOn && isLoopback(String(values.host))
         ? null
         : join(dataDir, "access-token");
   return {
