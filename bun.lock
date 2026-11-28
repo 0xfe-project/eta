@@ -99,9 +99,6 @@
         "vitest": "4.1.9",
       },
     },
-    "apps/memory": {
-      "name": "@eta/memory",
-    },
     "apps/tui": {
       "name": "@eta/tui",
       "version": "0.1.0",
@@ -613,8 +610,6 @@
     "@eta/harness": ["@eta/harness@workspace:packages/eta-harness"],
 
     "@eta/mcp": ["@eta/mcp@workspace:packages/eta-mcp"],
-
-    "@eta/memory": ["@eta/memory@workspace:apps/memory"],
 
     "@eta/places": ["@eta/places@workspace:packages/eta-places"],
 

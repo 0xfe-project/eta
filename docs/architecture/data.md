@@ -27,7 +27,7 @@ No second root is allowed here. There used to be a `--data-dir`: it only moved c
   secret.key                sealing key for MCP (0600, generated on first use)
 ```
 
-daemon data lives in the same root: `~/.eta/daemon/` (see [machines and daemon](machines.md)), sessions in `daemon/sessions/`. It shares `$HOME` with the host, each occupying its own subdirectory. The memory sidecar's data lives in its own PostgreSQL, not here.
+daemon data lives in the same root: `~/.eta/daemon/` (see [machines and daemon](machines.md)), sessions in `daemon/sessions/`. It shares `$HOME` with the host, each occupying its own subdirectory.
 
 ## SQLite
 

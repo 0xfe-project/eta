@@ -1,6 +1,7 @@
 import type { IconName } from "./icons";
 import {
   cleanup,
+  Clipboard,
   createMotion,
   effect,
   reduceMotion,
@@ -13,6 +14,7 @@ import { canHover, touchScreen } from "./menu";
 import { motion } from "./motion";
 import { Icon, Label } from "./text";
 import { colors, focusRing, row } from "./theme";
+import { showToast } from "./toast";
 import {
   border,
   control,
@@ -69,6 +71,8 @@ interface ProgressComplete {
   detail?: string;
   /** Invoked when clicking the completed card; also dismisses it. */
   onOpen?: () => void;
+  /** A saved file's full path: shown in monospace under the title, with a Copy path button. */
+  path?: string;
   /** Show the completed card even if the operation finished before the 300 ms reveal delay. */
   showWhenQuick?: boolean;
 }
@@ -102,6 +106,7 @@ interface ProgressEntry {
   lastProgressAt?: number;
   slowAfterMs: number;
   showWhenQuick?: boolean;
+  path?: string;
   revealed: boolean;
   slow: boolean;
   etaNow: number;
@@ -311,6 +316,7 @@ export function startProgress(options: ProgressOptions): ProgressHandle {
         title: done?.title ?? entry.title,
         detail: done && "detail" in done ? done.detail : entry.detail,
         onOpen: done?.onOpen,
+        path: done?.path,
         onCancel: undefined,
         showWhenQuick: done?.showWhenQuick,
       }));
@@ -572,6 +578,43 @@ function ProgressCard(props: {
                 </Label>
               </View>
             </View>
+          </If>
+          <If
+            when={
+              props.entry().phase === "done" ? props.entry().path : undefined
+            }
+          >
+            {(path) => (
+              <View style={{ gap: space[4], paddingTop: space[2] }}>
+                <Label variant="caption" tone="muted" mono>
+                  {path()}
+                </Label>
+                <View style={row}>
+                  <View
+                    role="button"
+                    accessibilityLabel={uiText("artifactCopyPath")}
+                    onPress={() =>
+                      void Clipboard.writeText(path())
+                        .then(() => showToast({ title: uiText("copied") }))
+                        .catch(() => {})
+                    }
+                    hoverStyle={{ backgroundColor: c().selected }}
+                    focusVisibleStyle={focusRing(c())}
+                    style={{
+                      paddingHorizontal: space[8],
+                      paddingVertical: space[2],
+                      borderWidth: 1,
+                      borderColor: c().strong,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Label variant="caption" weight={weight.strong}>
+                      {uiText("artifactCopyPath")}
+                    </Label>
+                  </View>
+                </View>
+              </View>
+            )}
           </If>
         </View>
 

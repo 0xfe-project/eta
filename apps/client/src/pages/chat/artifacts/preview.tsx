@@ -37,7 +37,7 @@ import { readResponseBytes } from "../../../services/attachment-files";
 import { useHost } from "../../../services/host";
 import { problemText } from "../../../services/problem-text";
 import { CopyButton } from "../../../ui";
-import { createArtifactFileSaver } from "./file";
+import { createArtifactFileSaver, savedNotice } from "./file";
 import { ArtifactPdfPreview, ArtifactPdfResourcesError } from "./pdf-preview";
 
 import { ArtifactToolbar } from "./toolbar";
@@ -304,7 +304,7 @@ export function ArtifactPreview(props: {
         progress.dismiss();
         return;
       }
-      await saveArtifactFile(
+      const savedFile = await saveArtifactFile(
         bytes,
         props.artifact.title,
         number,
@@ -313,6 +313,11 @@ export function ArtifactPreview(props: {
       );
       if (controller.signal.aborted) {
         progress.dismiss();
+        return;
+      }
+      const notice = savedNotice(savedFile);
+      if (notice) {
+        progress.complete(notice);
         return;
       }
       const saved = files.savedPath();
@@ -394,7 +399,7 @@ export function ArtifactPreview(props: {
         progress.dismiss();
         return;
       }
-      await saveArtifactFile(
+      const savedFile = await saveArtifactFile(
         bytes,
         props.artifact.title,
         current.number,
@@ -403,6 +408,11 @@ export function ArtifactPreview(props: {
       );
       if (request.signal.aborted) {
         progress.dismiss();
+        return;
+      }
+      const notice = savedNotice(savedFile);
+      if (notice) {
+        progress.complete(notice);
         return;
       }
       const saved = files.savedPath();

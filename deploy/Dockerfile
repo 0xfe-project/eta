@@ -57,5 +57,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
 
 # Listening beyond loopback turns the token gate on; the token is created in the data directory
 # on first start (`docker exec eta cat /data/access-token`). Flags after the image name are
-# appended: `docker run eta --allow-origin https://eta.example.com --memory-url http://memory:8320`.
+# appended: `docker run eta --allow-origin https://eta.example.com`.
 ENTRYPOINT ["bun", "apps/eta/src/main.ts", "--web-dir", "/srv/web", "--host", "0.0.0.0", "--port", "8787"]

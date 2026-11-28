@@ -53,7 +53,6 @@ Product plugins (`apps/eta`, all are cordis plugins, injecting `wire` and `sessi
 | routines      | `routines`、`routines.<id>`                                 | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                                                                                                    |
 | mcp           | `mcp`                                                       | `connect` `reconnect` `login` `completeLogin` `logout`, see [MCP](mcp.md)                                                                                                            |
 | plugins       | `list` `toolkits` `audit`                                   | `configure` `setLevel` `add` `update` `remove` `recheck`, see [Plugins](plugins.md)                                                                                                  |
-| memory        | `memory` (mounted only when sidecar is present)             | `list` `remember` `forget`                                                                                                                                                           |
 | llm           | `llm` (eager; mounted only when gateway library is present) | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                                                                                                 |
 
 Eager targets arrive with `hello`, so the page can render without subscribing first.
@@ -68,7 +67,7 @@ The `transcript` segments of `sessions.<id>` only include the last 200 lines of 
 
 ## How the UI uses it
 
-The client side lives once, in `@eta/client-contracts/wire`: handling hello, reply, state, event, and reconnection with increasing intervals. Web, TUI and phone each add only their socket and where the state is kept. Plugins not present in `hello.mounted` have their corresponding entries hidden (e.g., no memory page if the memory sidecar isn't configured). In production, the page is same-origin with the host.
+The client side lives once, in `@eta/client-contracts/wire`: handling hello, reply, state, event, and reconnection with increasing intervals. Web, TUI and phone each add only their socket and where the state is kept. Plugins not present in `hello.mounted` have their corresponding entries hidden. In production, the page is same-origin with the host.
 
 ## HTTP not exposed online
 
