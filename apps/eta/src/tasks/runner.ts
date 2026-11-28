@@ -297,12 +297,20 @@ const workingIn = (
       ? `You work in the project's directory, ${cwd}, itself: your changes are made in place.`
       : `You work in ${cwd}, a git worktree of the project on the branch ${branch}. Commit your work there; the worktree stays after you finish, for the user to review.`;
 
+export interface TaskRunFinishedNotice {
+  run: RunRecord;
+  task: TaskRecord | undefined;
+}
+
 export class TaskRunner implements TaskRuns {
   readonly #deps: TaskRunnerDeps;
   readonly #live = new Map<string, Live>();
   /** Comments waiting for the next run of a lane to read, oldest first, by `laneKey`. */
   readonly #waiting = new Map<string, { lane: Lane; texts: Said[] }>();
   readonly #work = new Set<Promise<void>>();
+  readonly #runFinishedListeners = new Set<
+    (notice: TaskRunFinishedNotice) => void
+  >();
   #attached = false;
   #closing = false;
   /** `pump` is going; a call from inside it (a run ended, a task was blocked) asks for one more pass. */
@@ -312,6 +320,12 @@ export class TaskRunner implements TaskRuns {
   constructor(deps: TaskRunnerDeps) {
     this.#deps = deps;
     deps.board.attach(this);
+  }
+
+  /** Be told after a task run finishes in storage, until the returned function is called. */
+  onRunFinished(listener: (notice: TaskRunFinishedNotice) => void): () => void {
+    this.#runFinishedListeners.add(listener);
+    return () => this.#runFinishedListeners.delete(listener);
   }
 
   /** Begin taking runs: the queue is looked at now, and every time something changes. */
@@ -1031,7 +1045,7 @@ export class TaskRunner implements TaskRuns {
           : undefined;
       if (boundProblem !== undefined) {
         if (runs.start(run.id)) {
-          runs.finish(run.id, "failed", boundProblem);
+          const done = runs.finish(run.id, "failed", boundProblem);
           board.runEvent(run.taskId, {
             kind: "run_failed",
             runId: run.id,
@@ -1039,6 +1053,7 @@ export class TaskRunner implements TaskRuns {
             body: boundProblem,
           });
           this.#waiting.delete(laneKey(run));
+          if (done !== undefined) this.#emitRunFinished(done);
         }
         continue;
       }
@@ -1047,7 +1062,8 @@ export class TaskRunner implements TaskRuns {
           run.machineId === null
             ? "This run has no machine to run on."
             : "The machine for this run was removed.";
-        if (runs.finish(run.id, "failed", error) !== undefined) {
+        const done = runs.finish(run.id, "failed", error);
+        if (done !== undefined) {
           board.runEvent(run.taskId, {
             kind: "run_failed",
             runId: run.id,
@@ -1055,6 +1071,7 @@ export class TaskRunner implements TaskRuns {
             body: error,
           });
           this.#waiting.delete(laneKey(run));
+          this.#emitRunFinished(done);
         }
         continue;
       }
@@ -1091,15 +1108,15 @@ export class TaskRunner implements TaskRuns {
       // It never started: it never will. Nothing is going to read what was left for it, and the
       // user asked for the task to stop, so the words stay on the timeline and the queue is clear.
       this.#waiting.delete(laneKey(run));
-      if (
-        this.#deps.runs.finish(run.id, "interrupted", why ?? null) !== undefined
-      ) {
+      const done = this.#deps.runs.finish(run.id, "interrupted", why ?? null);
+      if (done !== undefined) {
         this.#deps.board.runEvent(run.taskId, {
           kind: "run_interrupted",
           runId: run.id,
           body: why,
           actor: actorOf(run),
         });
+        this.#emitRunFinished(done);
         this.pump();
       }
       return;
@@ -1120,13 +1137,15 @@ export class TaskRunner implements TaskRuns {
       live.stopError ??= reason;
       live.handle?.abort();
     }
-    if (this.#deps.runs.finish(run.id, "failed", reason) !== undefined) {
+    const done = this.#deps.runs.finish(run.id, "failed", reason);
+    if (done !== undefined) {
       this.#deps.board.runEvent(run.taskId, {
         kind: "run_failed",
         runId: run.id,
         body: reason,
         actor: actorOf(run),
       });
+      this.#emitRunFinished(done);
     }
   }
 
@@ -1198,6 +1217,7 @@ export class TaskRunner implements TaskRuns {
           ? {}
           : { body: ended.error }),
       });
+      this.#emitRunFinished(done);
     }
     // What was said on the task and this run never told to anyone. A stop is a full stop, and a run
     // that died before it was briefed is not asked again by the same comment — a task that cannot
@@ -1654,5 +1674,20 @@ export class TaskRunner implements TaskRuns {
       .catch((error: unknown) =>
         this.#deps.warn(`[eta] afterRun failed: ${messageOf(error)}`),
       );
+  }
+
+  #emitRunFinished(run: RunRecord): void {
+    if (this.#runFinishedListeners.size === 0) return;
+    const task = this.#deps.tasks.get(run.taskId);
+    const notice: TaskRunFinishedNotice = { run, task };
+    for (const listener of [...this.#runFinishedListeners]) {
+      try {
+        listener(notice);
+      } catch (error) {
+        this.#deps.warn(
+          `[eta] task run finished listener failed: ${messageOf(error)}`,
+        );
+      }
+    }
   }
 }

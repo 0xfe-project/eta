@@ -36,6 +36,9 @@ export interface TriggerProvisionResult {
   pollingIntervalMinutes: number | null;
   fallbackReason: string | null;
   active: boolean;
+  config?: Record<string, unknown>;
+  lastCheckedAt?: number | null;
+  watchedCount?: number | null;
 }
 
 export interface IncomingTriggerEvent {
@@ -63,6 +66,8 @@ export interface TriggerProviderHost {
   onBindingsChanged: () => void;
   onTriggerError?: (routineId: string, error: string) => void;
   onTriggerRecovered?: (routineId: string) => void;
+  onTriggerChecked?: (routineId: string, checkedAt: number) => void;
+  onTriggerWatchedCount?: (routineId: string, watchedCount: number) => void;
 }
 
 export interface TriggerProvider {
@@ -227,6 +232,30 @@ export class TriggerHub {
         });
         this.#changed(routineId);
       },
+      onTriggerChecked: (routineId, checkedAt) => {
+        const routine = this.#store.get(routineId);
+        const current = this.#store.trigger(routineId);
+        if (routine === undefined || current?.provider !== provider.id) {
+          return;
+        }
+        if (current.lastCheckedAt === checkedAt) return;
+        this.#store.updateTriggerState(routineId, {
+          lastCheckedAt: checkedAt,
+        });
+        this.#changed(routineId);
+      },
+      onTriggerWatchedCount: (routineId, watchedCount) => {
+        const routine = this.#store.get(routineId);
+        const current = this.#store.trigger(routineId);
+        if (routine === undefined || current?.provider !== provider.id) {
+          return;
+        }
+        if (current.watchedCount === watchedCount) return;
+        this.#store.updateTriggerState(routineId, {
+          watchedCount,
+        });
+        this.#changed(routineId);
+      },
     });
   }
 
@@ -351,15 +380,27 @@ export class TriggerHub {
 
       // If the previous trigger was removed or replaced, drop its remote instance first (if unshared)
       // and retire any stale pending events from the old trigger definition.
+      // Same-provider inbound webhook edits keep their persisted URL token and secret intact,
+      // while leaving/deleting a disabled webhook still cleans up SettingStore credentials.
       if (
         prev !== undefined &&
         (input.triggerPatch === null || input.triggerPatch !== undefined)
       ) {
         this.#clearPendingOnTriggerChange(input.routineId);
-        if (prev.instanceId !== null)
+        const targetInstanceId =
+          prev.instanceId ??
+          (prev.provider === "webhook" ? `webhook:${prev.routineId}` : null);
+        if (
+          targetInstanceId !== null &&
+          !(
+            current !== undefined &&
+            prev.provider === "webhook" &&
+            current.provider === "webhook"
+          )
+        )
           await this.#deleteUnshared(
             prev.provider,
-            prev.instanceId,
+            targetInstanceId,
             prev.routineId,
           );
       }
@@ -375,7 +416,9 @@ export class TriggerHub {
         (input.enabledAfter &&
           (current.status === "error" || current.instanceId === null));
       if (needSync) {
-        await this.#syncRoutine(input.routineId, input.enabledAfter, current);
+        await this.#syncRoutine(input.routineId, input.enabledAfter, current, {
+          forceProvision: input.triggerPatch !== undefined,
+        });
       }
       if (input.enabledAfter) this.drainSoon(input.routineId, 0);
     });
@@ -388,10 +431,15 @@ export class TriggerHub {
         clearTimeout(timer);
         this.#drainTimers.delete(previousTrigger.routineId);
       }
-      if (previousTrigger.instanceId !== null) {
+      const targetInstanceId =
+        previousTrigger.instanceId ??
+        (previousTrigger.provider === "webhook"
+          ? `webhook:${previousTrigger.routineId}`
+          : null);
+      if (targetInstanceId !== null) {
         await this.#deleteUnshared(
           previousTrigger.provider,
-          previousTrigger.instanceId,
+          targetInstanceId,
           previousTrigger.routineId,
         );
       }
@@ -456,6 +504,7 @@ export class TriggerHub {
     routineId: string,
     enabled: boolean,
     record: RoutineTriggerRecord,
+    options?: { forceProvision?: boolean },
   ): Promise<void> {
     const provider = this.#providers.get(record.provider);
     if (provider === undefined) {
@@ -492,7 +541,11 @@ export class TriggerHub {
           status: "disabled",
           lastError: null,
         });
-      } else if (record.instanceId !== null && record.status === "disabled") {
+      } else if (
+        !options?.forceProvision &&
+        record.instanceId !== null &&
+        record.status === "disabled"
+      ) {
         try {
           await provider.setEnabled(record.instanceId, true);
           this.#store.updateTriggerState(routineId, {
@@ -536,12 +589,19 @@ export class TriggerHub {
   #applyProvisioned(routineId: string, result: TriggerProvisionResult): void {
     this.#store.updateTriggerState(routineId, {
       accountId: result.accountId,
+      ...(result.config === undefined ? {} : { config: result.config }),
       instanceId: result.instanceId,
       effectiveMode: result.mode,
       pollingInterval: result.pollingIntervalMinutes,
       fallbackReason: result.fallbackReason,
       status: result.active ? "active" : "disabled",
       lastError: null,
+      ...(result.lastCheckedAt === undefined
+        ? {}
+        : { lastCheckedAt: result.lastCheckedAt }),
+      ...(result.watchedCount === undefined
+        ? {}
+        : { watchedCount: result.watchedCount }),
     });
   }
 

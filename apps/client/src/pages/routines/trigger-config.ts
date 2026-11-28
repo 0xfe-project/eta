@@ -1,4 +1,9 @@
 import { uiText } from "../../i18n";
+import {
+  fieldDescriptionText,
+  fieldOptionText,
+  fieldTitleText,
+} from "./trigger-text";
 
 type TriggerFieldKind =
   | "string"
@@ -27,7 +32,9 @@ export interface TriggerConfigField {
   secret: boolean;
   multiline: boolean;
   options: TriggerEnumOption[];
+  arrayOptions?: TriggerEnumOption[];
   arrayItemKind?: "string" | "number" | "integer" | "other";
+  objectValueType?: "string";
   minLength?: number;
   maxLength?: number;
   pattern?: string;
@@ -52,15 +59,20 @@ function schemaTypeOf(raw: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
-function enumOptionsOf(raw: Record<string, unknown>): TriggerEnumOption[] {
+function enumOptionsOf(
+  raw: Record<string, unknown>,
+  optionText: (value: unknown, fallback: string) => string,
+): TriggerEnumOption[] {
   if (Array.isArray(raw.enum) && raw.enum.length > 0) {
     const names = Array.isArray(raw.enumNames) ? raw.enumNames : [];
     return raw.enum.map((item, index) => ({
       value: `opt:${index}`,
-      label:
+      label: optionText(
+        item,
         typeof names[index] === "string" && names[index].trim() !== ""
           ? names[index]
           : String(item),
+      ),
       raw: item,
     }));
   }
@@ -80,10 +92,12 @@ function enumOptionsOf(raw: Record<string, unknown>): TriggerEnumOption[] {
   ) {
     return branches.map((entry, index) => ({
       value: `opt:${index}`,
-      label:
+      label: optionText(
+        entry.const,
         typeof entry.title === "string" && entry.title.trim() !== ""
           ? entry.title.trim()
           : String(entry.const),
+      ),
       raw: entry.const,
     }));
   }
@@ -120,8 +134,11 @@ function finiteOrUndefined(value: unknown): number | undefined {
 /**
  * Parses a JSON Schema `configSchema` into typed field specs.
  * Deprecated properties are skipped unless `existingConfig` already carries a saved value for them.
+ * `provider` and `trigger` identify the catalog entry, so built-in providers' fields show in Chinese.
  */
 export function parseTriggerConfigSchema(
+  provider: string,
+  trigger: string,
   schema: Record<string, unknown> | undefined,
   existingConfig?: Record<string, unknown>,
 ): TriggerConfigField[] {
@@ -142,7 +159,9 @@ export function parseTriggerConfigSchema(
       : false;
     if (deprecated && !hasSaved) continue;
 
-    const options = enumOptionsOf(raw);
+    const optionText = (value: unknown, fallback: string) =>
+      fieldOptionText(provider, trigger, key, value, fallback);
+    const options = enumOptionsOf(raw, optionText);
     const schemaType = schemaTypeOf(raw);
     let kind: TriggerFieldKind;
     if (options.length > 0) kind = "enum";
@@ -154,6 +173,10 @@ export function parseTriggerConfigSchema(
     else kind = "string";
 
     const itemsType = isPlain(raw.items) ? schemaTypeOf(raw.items) : undefined;
+    const arrayOptions =
+      kind === "array" && isPlain(raw.items)
+        ? enumOptionsOf(raw.items, optionText)
+        : [];
     const arrayItemKind =
       itemsType === "string" ||
       itemsType === "number" ||
@@ -161,14 +184,29 @@ export function parseTriggerConfigSchema(
         ? itemsType
         : "other";
 
+    const objectValueType =
+      kind === "object" &&
+      isPlain(raw.additionalProperties) &&
+      schemaTypeOf(raw.additionalProperties) === "string"
+        ? ("string" as const)
+        : undefined;
+
     fields.push({
       key,
-      title:
+      title: fieldTitleText(
+        provider,
+        trigger,
+        key,
         typeof raw.title === "string" && raw.title.trim() !== ""
           ? raw.title.trim()
           : key,
-      description:
+      ),
+      description: fieldDescriptionText(
+        provider,
+        trigger,
+        key,
         typeof raw.description === "string" ? raw.description.trim() : "",
+      ),
       kind,
       required: !deprecated && (requiredKeys.has(key) || raw.required === true),
       deprecated,
@@ -177,7 +215,9 @@ export function parseTriggerConfigSchema(
       secret: raw.format === "password" || raw.writeOnly === true,
       multiline: raw.format === "textarea",
       options,
+      ...(arrayOptions.length > 0 ? { arrayOptions } : {}),
       arrayItemKind,
+      objectValueType,
       minLength: finiteOrUndefined(raw.minLength),
       maxLength: finiteOrUndefined(raw.maxLength),
       pattern: typeof raw.pattern === "string" ? raw.pattern : undefined,
@@ -217,7 +257,10 @@ export function initialTriggerConfigState(
       config[field.key] = rawValue;
       if (field.kind === "number" || field.kind === "integer") {
         drafts[field.key] = String(rawValue);
-      } else if (field.kind === "array") {
+      } else if (
+        field.kind === "array" &&
+        (field.arrayOptions?.length ?? 0) === 0
+      ) {
         drafts[field.key] = Array.isArray(rawValue)
           ? rawValue.every(
               (item) => typeof item === "string" || typeof item === "number",
@@ -284,6 +327,7 @@ function parseArrayDraft(
 
 function parseObjectDraft(
   rawText: string,
+  field?: TriggerConfigField,
 ):
   | { ok: true; value: Record<string, unknown> | undefined }
   | { ok: false; error: string } {
@@ -293,18 +337,109 @@ function parseObjectDraft(
     const parsed: unknown = JSON.parse(trimmed);
     if (!isPlain(parsed))
       return { ok: false, error: uiText("triggerFieldJsonInvalid") };
+    if (
+      field?.objectValueType === "string" &&
+      Object.values(parsed).some((value) => typeof value !== "string")
+    ) {
+      return { ok: false, error: uiText("triggerFieldStringValuesOnly") };
+    }
     return { ok: true, value: parsed };
   } catch {
     return { ok: false, error: uiText("triggerFieldJsonInvalid") };
   }
 }
 
+function validateFileWatchPath(raw: string): string | undefined {
+  if (raw.includes("\0")) return uiText("triggerFileWatchPathInvalid");
+  if (/^~(?=$|[\\/])/.test(raw)) return undefined;
+  if (raw.startsWith("/")) {
+    return raw.replace(/\/+$/, "") === ""
+      ? uiText("triggerFileWatchPathRootForbidden")
+      : undefined;
+  }
+  if (/^[a-z]:[\\/]/i.test(raw)) {
+    return /^[a-z]:[\\/]+$/i.test(raw)
+      ? uiText("triggerFileWatchPathRootForbidden")
+      : undefined;
+  }
+  if (/^[a-z]:$/i.test(raw)) {
+    return uiText("triggerFileWatchPathRootForbidden");
+  }
+  if (raw.startsWith("\\\\")) {
+    const parts = raw
+      .slice(2)
+      .split(/[\\/]+/)
+      .filter(Boolean);
+    if (parts.length <= 1) return uiText("triggerFileWatchPathInvalid");
+    if (parts.length === 2) return uiText("triggerFileWatchPathRootForbidden");
+    return undefined;
+  }
+  return uiText("triggerFileWatchPathNotAbsolute");
+}
+
+function hasBalancedGlobSyntax(pattern: string): boolean {
+  let braceDepth = 0;
+  let inClass = false;
+  let escaped = false;
+  for (const ch of pattern) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === "[" && !inClass) {
+      inClass = true;
+      continue;
+    }
+    if (ch === "]" && inClass) {
+      inClass = false;
+      continue;
+    }
+    if (!inClass) {
+      if (ch === "{") braceDepth += 1;
+      else if (ch === "}") {
+        braceDepth -= 1;
+        if (braceDepth < 0) return false;
+      }
+    }
+  }
+  return !inClass && braceDepth === 0;
+}
+
 export function validateTriggerField(
   field: TriggerConfigField,
   config: Record<string, unknown>,
   drafts: Record<string, string>,
+  provider?: string,
 ): string | undefined {
   const current = config[field.key];
+  if (
+    provider === "web-monitor" &&
+    (field.key === "selector" || field.key === "jsonPath")
+  ) {
+    const selectorText =
+      typeof config.selector === "string" ? config.selector.trim() : "";
+    const jsonPathText =
+      typeof config.jsonPath === "string" ? config.jsonPath.trim() : "";
+    if (selectorText !== "" && jsonPathText !== "") {
+      return uiText("triggerWebMonitorSelectorConflict");
+    }
+  }
+  if (provider === "file-watch") {
+    const text = typeof current === "string" ? current.trim() : "";
+    if (field.key === "path" && text !== "") {
+      const pathErr = validateFileWatchPath(text);
+      if (pathErr) return pathErr;
+    }
+    if ((field.key === "glob" || field.key === "ignore") && text !== "") {
+      if (text.includes("\0") || !hasBalancedGlobSyntax(text)) {
+        return uiText("triggerFileWatchGlobInvalid");
+      }
+    }
+  }
   switch (field.kind) {
     case "enum":
       if (field.required && (current === undefined || current === null)) {
@@ -357,6 +492,22 @@ export function validateTriggerField(
       return undefined;
     }
     case "array": {
+      const arrayOptions = field.arrayOptions ?? [];
+      if (arrayOptions.length > 0 && !Object.hasOwn(drafts, field.key)) {
+        const list = Array.isArray(current) ? current : [];
+        if (
+          list.some(
+            (entry) =>
+              !arrayOptions.some((option) => Object.is(option.raw, entry)),
+          )
+        ) {
+          return uiText("triggerFieldInvalidChoice");
+        }
+        if (field.required && list.length === 0) {
+          return uiText("triggerFieldArrayRequired");
+        }
+        return undefined;
+      }
       const raw = Object.hasOwn(drafts, field.key)
         ? drafts[field.key]!
         : Array.isArray(current)
@@ -364,6 +515,16 @@ export function validateTriggerField(
           : "";
       const parsed = parseArrayDraft(field, raw);
       if (!parsed.ok) return parsed.error;
+      if (
+        arrayOptions.length > 0 &&
+        parsed.value &&
+        parsed.value.some(
+          (entry) =>
+            !arrayOptions.some((option) => Object.is(option.raw, entry)),
+        )
+      ) {
+        return uiText("triggerFieldInvalidChoice");
+      }
       if (field.required && (!parsed.value || parsed.value.length === 0)) {
         return uiText("triggerFieldArrayRequired");
       }
@@ -375,7 +536,7 @@ export function validateTriggerField(
         : isPlain(current)
           ? JSON.stringify(current)
           : "";
-      const parsed = parseObjectDraft(raw);
+      const parsed = parseObjectDraft(raw, field);
       if (!parsed.ok) return parsed.error;
       if (field.required && parsed.value === undefined) {
         return uiText("triggerFieldEnterValue");
@@ -444,6 +605,15 @@ export function buildTriggerConfigPayload(
         break;
       }
       case "array": {
+        if (
+          (field.arrayOptions?.length ?? 0) > 0 &&
+          !Object.hasOwn(drafts, field.key)
+        ) {
+          if (Array.isArray(current) && current.length > 0) {
+            payload[field.key] = current;
+          }
+          break;
+        }
         const raw = Object.hasOwn(drafts, field.key)
           ? drafts[field.key]!
           : Array.isArray(current)
@@ -461,7 +631,7 @@ export function buildTriggerConfigPayload(
           : isPlain(current)
             ? JSON.stringify(current)
             : "";
-        const parsed = parseObjectDraft(raw);
+        const parsed = parseObjectDraft(raw, field);
         if (parsed.ok && parsed.value !== undefined) {
           payload[field.key] = parsed.value;
         }

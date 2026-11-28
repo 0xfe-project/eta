@@ -40,6 +40,11 @@ import {
   triggerModeLabel,
 } from "./schedule";
 import { enumSelectionValue, validateTriggerField } from "./trigger-config";
+import {
+  sourceText,
+  triggerDescriptionText,
+  triggerNameText,
+} from "./trigger-text";
 
 const selectMenuWidth = { phone: 240, tablet: 220, desktop: 220 } as const;
 const optionHeight = { tablet: 36, desktop: 32 } as const;
@@ -636,7 +641,14 @@ export function TriggerSection(props: {
     for (const item of props.triggers) {
       if (item.provider !== props.provider) continue;
       if (!seen.has(item.source)) {
-        seen.set(item.source, item.sourceName || item.source);
+        seen.set(
+          item.source,
+          sourceText(
+            item.provider,
+            item.source,
+            item.sourceName || item.source,
+          ),
+        );
       }
     }
     if (props.source && !seen.has(props.source)) {
@@ -659,9 +671,15 @@ export function TriggerSection(props: {
     );
     const list: SearchableChoice[] = matched.map((item) => ({
       value: item.trigger,
-      title: item.name || item.trigger,
+      title: triggerNameText(
+        item.provider,
+        item.trigger,
+        item.name || item.trigger,
+      ),
       subtitle: item.name !== item.trigger ? item.trigger : undefined,
-      description: item.description || undefined,
+      description: item.description
+        ? triggerDescriptionText(item.provider, item.trigger, item.description)
+        : undefined,
     }));
     if (
       props.triggerSlug &&
@@ -784,7 +802,12 @@ export function TriggerSection(props: {
     !props.selectedItem;
 
   const fieldError = (field: TriggerConfigField) => {
-    const err = validateTriggerField(field, props.config, props.drafts);
+    const err = validateTriggerField(
+      field,
+      props.config,
+      props.drafts,
+      props.provider,
+    );
     if (!err) return "";
     const emptyRequired =
       err === uiText("triggerFieldEnterValue") ||
@@ -975,7 +998,7 @@ export function TriggerSection(props: {
               }}
             >
               <Label variant="small" weight={weight.strong}>
-                {item().name}
+                {triggerNameText(item().provider, item().trigger, item().name)}
               </Label>
               <Label
                 variant="caption"
@@ -996,7 +1019,11 @@ export function TriggerSection(props: {
             </View>
             <If when={item().description}>
               <Label variant="caption" tone="muted">
-                {item().description}
+                {triggerDescriptionText(
+                  item().provider,
+                  item().trigger,
+                  item().description,
+                )}
               </Label>
             </If>
             <If when={item().instructions}>
@@ -1095,11 +1122,21 @@ export function TriggerSection(props: {
       <If when={showPolling()}>
         <View style={{ gap: space[4] }}>
           <Label variant="small" tone={props.sheet ? "mutedInk" : undefined}>
-            {uiText("triggerPollingInterval")}
+            {props.provider === "file-watch"
+              ? uiText("triggerFileWatchPollingInterval")
+              : uiText("triggerPollingInterval")}
           </Label>
           <Field
-            label={uiText("triggerPollingInterval")}
-            placeholder={props.provider === "rss" ? "15" : "5"}
+            label={
+              props.provider === "file-watch"
+                ? uiText("triggerFileWatchPollingInterval")
+                : uiText("triggerPollingInterval")
+            }
+            placeholder={
+              props.provider === "rss" || props.provider === "web-monitor"
+                ? "15"
+                : "5"
+            }
             value={props.pollingIntervalText}
             invalid={Boolean(props.pollingError)}
             onChange={props.onChangePollingInterval}
@@ -1112,7 +1149,10 @@ export function TriggerSection(props: {
             })}
           />
           <Label variant="caption" tone={props.pollingError ? "red" : "muted"}>
-            {props.pollingError || uiText("triggerPollingIntervalHint")}
+            {props.pollingError ||
+              (props.provider === "file-watch"
+                ? uiText("triggerFileWatchPollingHint")
+                : uiText("triggerPollingIntervalHint"))}
           </Label>
         </View>
       </If>
@@ -1186,64 +1226,212 @@ export function TriggerSection(props: {
                         <If
                           when={spec().kind === "enum"}
                           else={
-                            <Field
-                              label={spec().title}
-                              placeholder={
-                                spec().placeholder ||
-                                (spec().kind === "object"
-                                  ? '{"key": "value"}'
-                                  : spec().kind === "array"
-                                    ? spec().arrayItemKind === "other"
-                                      ? '["item"]'
-                                      : "a, b"
-                                    : "")
+                            <If
+                              when={
+                                spec().kind === "array" &&
+                                (spec().arrayOptions?.length ?? 0) > 0
                               }
-                              masked={spec().secret}
-                              multiline={
-                                spec().multiline || spec().kind === "object"
-                              }
-                              invalid={Boolean(err())}
-                              value={
-                                spec().kind === "number" ||
-                                spec().kind === "integer" ||
-                                spec().kind === "array" ||
-                                spec().kind === "object"
-                                  ? Object.hasOwn(props.drafts, spec().key)
-                                    ? (props.drafts[spec().key] ?? "")
-                                    : props.config[spec().key] !== undefined
-                                      ? String(props.config[spec().key])
-                                      : ""
-                                  : typeof props.config[spec().key] === "string"
-                                    ? String(props.config[spec().key])
-                                    : props.config[spec().key] !== undefined &&
-                                        props.config[spec().key] !== null
-                                      ? String(props.config[spec().key])
-                                      : ""
-                              }
-                              onBlur={() => props.onBlurField(spec().key)}
-                              onChange={(text) => {
-                                if (
-                                  spec().kind === "number" ||
-                                  spec().kind === "integer" ||
-                                  spec().kind === "array" ||
-                                  spec().kind === "object"
-                                ) {
-                                  props.onChangeDraft(spec().key, text);
-                                } else {
-                                  props.onChangeConfig(spec().key, text);
-                                }
-                              }}
-                              style={
-                                spec().multiline || spec().kind === "object"
-                                  ? {
-                                      height: multilineFieldHeight,
-                                      paddingVertical: space[8],
-                                      paddingHorizontal: props.controlInset,
-                                      ...textStyle(type("small"), "prose"),
+                              else={
+                                <Field
+                                  label={spec().title}
+                                  placeholder={
+                                    spec().placeholder ||
+                                    (spec().kind === "object"
+                                      ? '{"key": "value"}'
+                                      : spec().kind === "array"
+                                        ? spec().arrayItemKind === "other"
+                                          ? '["item"]'
+                                          : "a, b"
+                                        : "")
+                                  }
+                                  masked={spec().secret}
+                                  multiline={
+                                    spec().multiline || spec().kind === "object"
+                                  }
+                                  invalid={Boolean(err())}
+                                  value={
+                                    spec().kind === "number" ||
+                                    spec().kind === "integer" ||
+                                    spec().kind === "array" ||
+                                    spec().kind === "object"
+                                      ? Object.hasOwn(props.drafts, spec().key)
+                                        ? (props.drafts[spec().key] ?? "")
+                                        : props.config[spec().key] !== undefined
+                                          ? String(props.config[spec().key])
+                                          : ""
+                                      : typeof props.config[spec().key] ===
+                                          "string"
+                                        ? String(props.config[spec().key])
+                                        : props.config[spec().key] !==
+                                              undefined &&
+                                            props.config[spec().key] !== null
+                                          ? String(props.config[spec().key])
+                                          : ""
+                                  }
+                                  onBlur={() => props.onBlurField(spec().key)}
+                                  onChange={(text) => {
+                                    if (
+                                      spec().kind === "number" ||
+                                      spec().kind === "integer" ||
+                                      spec().kind === "array" ||
+                                      spec().kind === "object"
+                                    ) {
+                                      props.onChangeDraft(spec().key, text);
+                                    } else {
+                                      props.onChangeConfig(spec().key, text);
                                     }
-                                  : inputStyle()
+                                  }}
+                                  style={
+                                    spec().multiline || spec().kind === "object"
+                                      ? {
+                                          height: multilineFieldHeight,
+                                          paddingVertical: space[8],
+                                          paddingHorizontal: props.controlInset,
+                                          ...textStyle(type("small"), "prose"),
+                                        }
+                                      : inputStyle()
+                                  }
+                                />
                               }
-                            />
+                            >
+                              <View style={{ gap: space[8] }}>
+                                <View
+                                  style={{
+                                    ...row,
+                                    gap: space[8],
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <Each
+                                    of={spec().arrayOptions ?? []}
+                                    key={(opt) => opt.value}
+                                  >
+                                    {(opt) => {
+                                      const selected = () => {
+                                        const current =
+                                          props.config[spec().key];
+                                        return (
+                                          Array.isArray(current) &&
+                                          current.some((item) =>
+                                            Object.is(item, opt().raw),
+                                          )
+                                        );
+                                      };
+                                      return (
+                                        <View
+                                          role="checkbox"
+                                          accessibilityLabel={`${spec().title}: ${opt().label}`}
+                                          accessibilityState={{
+                                            checked: selected(),
+                                          }}
+                                          hoverStyle={
+                                            canHover
+                                              ? {
+                                                  backgroundColor: c().selected,
+                                                }
+                                              : undefined
+                                          }
+                                          activeStyle={{
+                                            backgroundColor: c().selected,
+                                          }}
+                                          focusVisibleStyle={focusRing(
+                                            c(),
+                                            "inset",
+                                          )}
+                                          onPress={() => {
+                                            const current = Array.isArray(
+                                              props.config[spec().key],
+                                            )
+                                              ? [
+                                                  ...(props.config[
+                                                    spec().key
+                                                  ] as unknown[]),
+                                                ]
+                                              : [];
+                                            const next = selected()
+                                              ? current.filter(
+                                                  (item) =>
+                                                    !Object.is(item, opt().raw),
+                                                )
+                                              : [...current, opt().raw];
+                                            props.onBlurField(spec().key);
+                                            props.onChangeConfig(
+                                              spec().key,
+                                              next.length > 0
+                                                ? next
+                                                : undefined,
+                                            );
+                                          }}
+                                          style={{
+                                            ...row,
+                                            justifyContent: "center",
+                                            gap: space[8],
+                                            minHeight: props.sheet
+                                              ? control.touch
+                                              : control.md,
+                                            paddingHorizontal: space[12],
+                                            paddingVertical: space[4],
+                                            borderWidth: 1,
+                                            borderColor: selected()
+                                              ? c().strong
+                                              : c().border,
+                                            backgroundColor: selected()
+                                              ? c().selected
+                                              : c().canvas,
+                                          }}
+                                        >
+                                          <View
+                                            style={{
+                                              width: space[12],
+                                              height: space[12],
+                                              flexShrink: 0,
+                                            }}
+                                          >
+                                            <If when={selected()}>
+                                              <Icon
+                                                name="check"
+                                                size={icon.sm}
+                                              />
+                                            </If>
+                                          </View>
+                                          <Label variant="small">
+                                            {opt().label}
+                                          </Label>
+                                          <View
+                                            style={{
+                                              width: space[12],
+                                              flexShrink: 0,
+                                            }}
+                                          />
+                                        </View>
+                                      );
+                                    }}
+                                  </Each>
+                                </View>
+                                <If
+                                  when={
+                                    !spec().required &&
+                                    Array.isArray(props.config[spec().key]) &&
+                                    (props.config[spec().key] as unknown[])
+                                      .length > 0
+                                  }
+                                >
+                                  <View style={{ alignItems: "flex-start" }}>
+                                    <Button
+                                      label={uiText("clear")}
+                                      tone="ghost"
+                                      size={control.sm}
+                                      onPress={() =>
+                                        props.onChangeConfig(
+                                          spec().key,
+                                          undefined,
+                                        )
+                                      }
+                                    />
+                                  </View>
+                                </If>
+                              </View>
+                            </If>
                           }
                         >
                           <View style={{ ...row, gap: space[8] }}>

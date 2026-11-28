@@ -5,6 +5,8 @@ import type {
   RunView,
   TriggerCatalogItem,
   TriggerProviderStatus,
+  WebhookAuthMode,
+  WebhookTriggerInfo,
 } from "@eta/client-contracts";
 import type { Layout } from "../../src/components";
 import { mount, signal, Text, View, windowSize } from "nsh";
@@ -23,7 +25,8 @@ type CatalogScenario =
   | "error"
   | "empty"
   | "partial_empty"
-  | "stale_catalog";
+  | "stale_catalog"
+  | "origin_filters";
 
 const catalogItems: TriggerCatalogItem[] = [
   {
@@ -143,21 +146,353 @@ const catalogItems: TriggerCatalogItem[] = [
   },
   {
     provider: "webhook",
-    source: "linear",
-    sourceName: "Linear",
-    trigger: "ISSUE_CREATED",
-    name: "Issue Created",
-    description: "Fires when a new Linear issue is opened.",
+    source: "http",
+    sourceName: "Inbound Webhook",
+    trigger: "WEBHOOK_RECEIVED",
+    name: "Webhook received",
+    description:
+      "Triggers when an external service sends an HTTP POST request to this routine's dedicated webhook URL.",
     modes: ["webhook"],
     configSchema: {
       type: "object",
-      required: ["team"],
+      required: ["authMode"],
       properties: {
-        team: { type: "string", title: "Team key" },
+        authMode: {
+          type: "string",
+          title: "Authentication",
+          enum: ["none", "header", "hmac-sha256"],
+          enumNames: [
+            "URL token only (none)",
+            "Shared secret header",
+            "HMAC-SHA256 signature",
+          ],
+          default: "none",
+        },
+        headerName: {
+          type: "string",
+          title: "Header name",
+          examples: ["X-Webhook-Secret"],
+        },
+        includeKeywords: {
+          type: "string",
+          title: "Include keywords",
+          examples: ["deploy, release"],
+        },
+        excludeKeywords: {
+          type: "string",
+          title: "Exclude keywords",
+          examples: ["ping, healthcheck"],
+        },
       },
     },
     payloadSchema: {},
-    accounts: [{ id: "lin_1", label: "Linear Workspace" }],
+    accounts: [],
+  },
+  {
+    provider: "web-monitor",
+    source: "http",
+    sourceName: "Web / JSON Monitor",
+    trigger: "WEB_CONTENT_CHANGED",
+    name: "Web / JSON content changed",
+    description:
+      "Polls an HTTP/HTTPS webpage or JSON API and triggers when extracted content changes.",
+    modes: ["poll"],
+    configSchema: {
+      type: "object",
+      required: ["url"],
+      properties: {
+        url: {
+          type: "string",
+          format: "uri",
+          title: "URL",
+          description: "HTTP or HTTPS URL to monitor.",
+          examples: ["https://example.com/status"],
+        },
+        selector: {
+          type: "string",
+          title: "CSS selector",
+          description:
+            "Optional CSS selector for HTML pages (leave empty when using JSON path or monitoring the whole page).",
+          examples: ["main .status, #version"],
+        },
+        jsonPath: {
+          type: "string",
+          title: "JSON path",
+          description:
+            "Optional JSON path for JSON APIs (e.g. $.data.version or items[0].title).",
+          examples: ["$.data.version"],
+        },
+        method: {
+          type: "string",
+          title: "HTTP method",
+          enum: ["GET", "POST"],
+          default: "GET",
+        },
+        headers: {
+          type: "object",
+          title: "Request headers",
+          additionalProperties: { type: "string" },
+          examples: ['{"Accept": "application/json"}'],
+        },
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
+  },
+  {
+    provider: "file-watch",
+    source: "fs",
+    sourceName: "Local Filesystem",
+    trigger: "FILE_CHANGED",
+    name: "File or directory changed",
+    description:
+      "Watches a local file or directory (with fs.watch and periodic stat fallback) and triggers on created, modified, or deleted files.",
+    modes: ["poll"],
+    configSchema: {
+      type: "object",
+      required: ["path"],
+      properties: {
+        path: {
+          type: "string",
+          title: "Watch path",
+          description:
+            "Absolute path or ~/... path to a local file or directory on this machine.",
+          examples: ["~/Documents/reports"],
+        },
+        glob: {
+          type: "string",
+          title: "Include glob",
+          description:
+            "Optional glob pattern(s) relative to the watched directory (comma-separated, e.g. **/*.md, *.txt).",
+          examples: ["**/*.md, *.txt"],
+        },
+        ignore: {
+          type: "string",
+          title: "Ignore glob",
+          description:
+            "Optional glob pattern(s) to exclude (comma-separated; .git is always ignored).",
+          examples: ["node_modules/**, *.tmp"],
+        },
+        debounceMs: {
+          type: "integer",
+          title: "Debounce (ms)",
+          description:
+            "Quiet window in milliseconds to merge rapid changes into a single event (0–60000).",
+          minimum: 0,
+          maximum: 60000,
+          default: 500,
+        },
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
+  },
+  {
+    provider: "eta-events",
+    source: "tasks",
+    sourceName: "eta Tasks",
+    trigger: "task.status.changed",
+    name: "Task status changed",
+    description:
+      "Triggers when a task changes status (for example moving into in_review, done, or blocked).",
+    modes: [],
+    configSchema: {
+      type: "object",
+      properties: {
+        to: {
+          type: "array",
+          title: "Target statuses",
+          description:
+            "Optional target statuses to match (leave empty to match any status change).",
+          items: {
+            type: "string",
+            enum: [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+              "done",
+              "blocked",
+              "cancelled",
+            ],
+          },
+        },
+        from: {
+          type: "array",
+          title: "Previous statuses",
+          description:
+            "Optional previous statuses to match (leave empty to match any).",
+          items: {
+            type: "string",
+            enum: [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+              "done",
+              "blocked",
+              "cancelled",
+            ],
+          },
+        },
+        assignee: {
+          type: "string",
+          title: "Assignee",
+          description:
+            "Optional executor agent id or name to match (leave empty for any assignee).",
+          examples: ["forge"],
+        },
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
+  },
+  {
+    provider: "eta-events",
+    source: "tasks",
+    sourceName: "eta Tasks",
+    trigger: "task.run.finished",
+    name: "Task run finished",
+    description:
+      "Triggers when a task run ends (completed, failed, or interrupted).",
+    modes: [],
+    configSchema: {
+      type: "object",
+      properties: {
+        status: {
+          type: "array",
+          title: "Run statuses",
+          description:
+            "Optional run outcomes to match (leave empty to match any finished run).",
+          items: {
+            type: "string",
+            enum: ["completed", "failed", "interrupted"],
+          },
+        },
+        assignee: {
+          type: "string",
+          title: "Assignee",
+          description:
+            "Optional executor agent id or name to match (leave empty for any assignee).",
+          examples: ["forge"],
+        },
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
+  },
+];
+
+const originFilterFields = {
+  group: {
+    type: "string",
+    title: "Source group",
+    description:
+      "Optional group chat the task was proposed in, Captain's included (leave empty for any).",
+    enum: ["g1", "g2"],
+    enumNames: ["Dev Group", "Release Crew"],
+  },
+  creator: {
+    type: "string",
+    title: "Creator",
+    description:
+      "Optional agent that created the task (leave empty for any creator).",
+    enum: ["a1", "a2"],
+    enumNames: ["Forge", "Ada"],
+  },
+  assignee: {
+    type: "string",
+    title: "Assignee",
+    description:
+      "Optional executor agent to match (leave empty for any assignee).",
+    enum: ["a1", "a2"],
+    enumNames: ["Forge", "Ada"],
+  },
+};
+
+/** eta-events as the host lists it: group, creator and assignee are dropdowns of the user's own groups and agents. */
+const originFilterItems: TriggerCatalogItem[] = [
+  {
+    provider: "eta-events",
+    source: "tasks",
+    sourceName: "eta Tasks",
+    trigger: "task.status.changed",
+    name: "Task status changed",
+    description:
+      "Triggers when a task changes status (for example moving into in_review, done, or blocked).",
+    modes: [],
+    configSchema: {
+      type: "object",
+      properties: {
+        to: {
+          type: "array",
+          title: "Target statuses",
+          description:
+            "Optional target statuses to match (leave empty to match any status change).",
+          items: {
+            type: "string",
+            enum: [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+              "done",
+              "blocked",
+              "cancelled",
+            ],
+          },
+        },
+        from: {
+          type: "array",
+          title: "Previous statuses",
+          description:
+            "Optional previous statuses to match (leave empty to match any).",
+          items: {
+            type: "string",
+            enum: [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+              "done",
+              "blocked",
+              "cancelled",
+            ],
+          },
+        },
+        ...originFilterFields,
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
+  },
+  {
+    provider: "eta-events",
+    source: "tasks",
+    sourceName: "eta Tasks",
+    trigger: "task.run.finished",
+    name: "Task run finished",
+    description:
+      "Triggers when a task run ends (completed, failed, or interrupted).",
+    modes: [],
+    configSchema: {
+      type: "object",
+      properties: {
+        status: {
+          type: "array",
+          title: "Run statuses",
+          description:
+            "Optional run outcomes to match (leave empty to match any finished run).",
+          items: {
+            type: "string",
+            enum: ["completed", "failed", "interrupted"],
+          },
+        },
+        ...originFilterFields,
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
   },
 ];
 
@@ -300,6 +635,103 @@ const initialRoutines: RoutineSummary[] = [
     updatedAt: now,
     runs: [],
   },
+  {
+    id: "r-web-monitor",
+    name: "Pricing Page Watch",
+    schedule: null,
+    trigger: {
+      provider: "web-monitor",
+      source: "http",
+      trigger: "WEB_CONTENT_CHANGED",
+      accountId: null,
+      config: {
+        url: "https://example.com/pricing",
+        selector: ".plan-price",
+        method: "GET",
+      },
+      instanceId: "web-monitor:r-web-monitor",
+      mode: "poll",
+      pollingIntervalMinutes: 15,
+      fallbackReason: null,
+      status: "error",
+      lastError: 'CSS selector ".plan-price" matched no elements',
+      lastEventAt: now - 20 * 60_000,
+      lastCheckedAt: now - 5 * 60_000,
+    },
+    timezone: "UTC",
+    enabled: true,
+    nextRunAt: null,
+    revising: false,
+    unseenReports: 0,
+    unseenFailures: 0,
+    createdAt: now - 86_400_000,
+    updatedAt: now,
+    runs: [],
+  },
+  {
+    id: "r-file-watch",
+    name: "Local Docs Watch",
+    schedule: null,
+    trigger: {
+      provider: "file-watch",
+      source: "fs",
+      trigger: "FILE_CHANGED",
+      accountId: null,
+      config: {
+        path: "/srv/example-docs",
+        glob: "**/*.md",
+        debounceMs: 500,
+      },
+      instanceId: "file-watch:r-file-watch",
+      mode: "poll",
+      pollingIntervalMinutes: 5,
+      fallbackReason: null,
+      status: "error",
+      lastError: "Watched file count exceeds limit (5000)",
+      lastEventAt: now - 15 * 60_000,
+      watchedCount: 12,
+    },
+    timezone: "UTC",
+    enabled: true,
+    nextRunAt: null,
+    revising: false,
+    unseenReports: 0,
+    unseenFailures: 0,
+    createdAt: now - 86_400_000,
+    updatedAt: now,
+    runs: [],
+  },
+  {
+    id: "r-eta-events",
+    name: "Review Notification",
+    schedule: null,
+    trigger: {
+      provider: "eta-events",
+      source: "tasks",
+      trigger: "task.status.changed",
+      accountId: null,
+      config: {
+        to: ["in_review", "blocked"],
+        assignee: "forge",
+      },
+      instanceId: "eta-events:r-eta-events",
+      mode: null,
+      pollingIntervalMinutes: null,
+      fallbackReason: null,
+      status: "error",
+      lastError: "Unsupported eta-events filter",
+      lastEventAt: now - 10 * 60_000,
+    },
+    timezone: "UTC",
+    enabled: true,
+    nextRunAt: null,
+    revising: false,
+    unseenReports: 0,
+    unseenFailures: 0,
+    createdAt: now - 86_400_000,
+    updatedAt: now,
+    runs: [],
+  },
 ];
 
 const routineProposals: CaptainOperationView[] = [
@@ -395,7 +827,10 @@ function Fixture() {
   const lastCreate = signal("");
   const lastUpdate = signal("");
   const lastTriggersCall = signal("");
+  const lastWebhookAction = signal("");
   const navLog = signal<string[]>([]);
+  let webhookSeq = 1;
+  const webhookStore = new Map<string, WebhookTriggerInfo>();
 
   const target = <T,>(sections: T) => ({ sections, revisions: {}, version: 0 });
   const setRoutines = (items: RoutineSummary[]) => {
@@ -437,6 +872,9 @@ function Fixture() {
       "routines.delete",
       "routines.run",
       "routines.triggers",
+      "routines.webhookInfo",
+      "routines.webhookRotate",
+      "routines.webhookSetSecret",
       "captain.decideOperation",
     ],
     targets: {
@@ -444,7 +882,46 @@ function Fixture() {
       agents: target({ list: [] }),
     },
   }));
+  host.address.set({ origin: "http://127.0.0.1:4100" });
   setRoutines(initialRoutines);
+
+  const ensureWebhookState = (routineId: string): WebhookTriggerInfo | null => {
+    const existing = webhookStore.get(routineId);
+    if (existing) return existing;
+    const item = host
+      .list<RoutineSummary>("routines")
+      .find((r) => r.id === routineId);
+    if (
+      !item?.trigger ||
+      item.trigger.provider !== "webhook" ||
+      item.trigger.source !== "http"
+    ) {
+      return null;
+    }
+    const authMode =
+      (item.trigger.config.authMode as WebhookAuthMode | undefined) ?? "none";
+    const rawHeader =
+      typeof item.trigger.config.headerName === "string"
+        ? item.trigger.config.headerName.trim()
+        : "";
+    const headerName =
+      authMode === "none"
+        ? null
+        : rawHeader ||
+          (authMode === "header" ? "Authorization" : "X-Hub-Signature-256");
+    const n = webhookSeq++;
+    const created: WebhookTriggerInfo = {
+      routineId,
+      path: `/hooks/tok_${n}`,
+      publicUrl: null,
+      authMode,
+      headerName,
+      hasSecret: authMode !== "none",
+      secret: authMode === "none" ? null : `sec_initial_${n}`,
+    };
+    webhookStore.set(routineId, created);
+    return created;
+  };
 
   host.call = (async (targetName: string, action: string, args: unknown) => {
     if (targetName === "routines" && action === "triggers") {
@@ -453,7 +930,10 @@ function Fixture() {
       const providers: Record<CatalogScenario, TriggerProviderStatus[]> = {
         ready: [
           { provider: "composio", status: "ready" },
+          { provider: "eta-events", status: "ready" },
+          { provider: "file-watch", status: "ready" },
           { provider: "rss", status: "ready" },
+          { provider: "web-monitor", status: "ready" },
           { provider: "webhook", status: "ready" },
         ],
         needs_key: [{ provider: "composio", status: "needs_key" }],
@@ -478,6 +958,7 @@ function Fixture() {
           { provider: "webhook", status: "ready" },
         ],
         stale_catalog: [{ provider: "composio", status: "ready" }],
+        origin_filters: [{ provider: "eta-events", status: "ready" }],
       };
       return {
         triggers:
@@ -487,7 +968,9 @@ function Fixture() {
               ? catalogItems.filter((item) => item.provider === "webhook")
               : mode === "stale_catalog"
                 ? catalogItems.filter((item) => item.source === "slack")
-                : [],
+                : mode === "origin_filters"
+                  ? originFilterItems
+                  : [],
         providers: providers[mode],
       };
     }
@@ -580,6 +1063,37 @@ function Fixture() {
         routine: next.find((item) => item.id === input.routineId)!,
       };
     }
+    if (targetName === "routines" && action === "webhookInfo") {
+      const input = args as { routineId: string };
+      return ensureWebhookState(input.routineId) ?? {};
+    }
+    if (targetName === "routines" && action === "webhookRotate") {
+      const input = args as { routineId: string };
+      lastWebhookAction.set(`rotate:${input.routineId}`);
+      const current = ensureWebhookState(input.routineId);
+      if (!current) return {};
+      const n = webhookSeq++;
+      const next: WebhookTriggerInfo = {
+        ...current,
+        path: `/hooks/tok_rot_${n}`,
+        secret: current.authMode === "none" ? null : `sec_rot_${n}`,
+      };
+      webhookStore.set(input.routineId, next);
+      return next;
+    }
+    if (targetName === "routines" && action === "webhookSetSecret") {
+      const input = args as { routineId: string; secret: string };
+      lastWebhookAction.set(`setSecret:${input.routineId}:${input.secret}`);
+      const current = ensureWebhookState(input.routineId);
+      if (!current) return {};
+      const next: WebhookTriggerInfo = {
+        ...current,
+        hasSecret: true,
+        secret: input.secret,
+      };
+      webhookStore.set(input.routineId, next);
+      return next;
+    }
     return {};
   }) as typeof host.call;
 
@@ -637,12 +1151,17 @@ function Fixture() {
                 onPress={() => scenario.set("stale_catalog")}
               />
               <Button
+                label="Scenario: origin_filters"
+                onPress={() => scenario.set("origin_filters")}
+              />
+              <Button
                 label="Hide controls"
                 onPress={() => hideControls.set(true)}
               />
               <Text>{`Create:${lastCreate()}`}</Text>
               <Text>{`Update:${lastUpdate()}`}</Text>
               <Text>{`Triggers:${lastTriggersCall()}`}</Text>
+              <Text>{`WebhookAction:${lastWebhookAction()}`}</Text>
               <Text>{`Nav:${navLog().join(",")}`}</Text>
             </View>
           </If>

@@ -27,6 +27,12 @@ vi.mock("node:fs/promises", async (original) => {
   };
 });
 
+// `move` and `dropStaged` retry 25 times, 200ms apart, on Windows; a test that fails on purpose
+// would otherwise wait 4.8s for nothing.
+vi.mock("node:timers/promises", () => ({
+  setTimeout: () => Promise.resolve(),
+}));
+
 const dirs: string[] = [];
 afterEach(async () => {
   running.clear();

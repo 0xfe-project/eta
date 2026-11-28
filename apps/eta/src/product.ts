@@ -30,8 +30,11 @@ import type { DaemonBuilds } from "./machines/builds";
 import type { SshRunner } from "./machines/install";
 import type { MachineRecord } from "./machines/store";
 import type { Tailscale } from "./machines/tailscale";
+import type { FileWatchFn, FileWatchFs } from "./routines/file-watch-triggers";
 import type { RssFetch } from "./routines/rss-triggers";
+import type { WebMonitorFetch } from "./routines/web-monitor-triggers";
 import type { SessionHooks } from "./session-hooks";
+import type { TaskRecord } from "./tasks/store";
 import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
 import { homedir, hostname, platform } from "node:os";
@@ -56,6 +59,7 @@ import { CaptainAudit } from "./captain/audit";
 import { CaptainMemory } from "./captain/memory";
 import { repairCaptainToolPin } from "./captain/pin";
 import { captainPlugin } from "./captain/plugin";
+import { CAPTAIN_KIND } from "./captain/policy";
 import { redactToolResult } from "./captain/redact";
 import { CaptainService } from "./captain/service";
 import { CaptainStore } from "./captain/store";
@@ -106,6 +110,13 @@ import { Plugins } from "./plugins/service";
 import { pluginSessionTools } from "./plugins/tools";
 import { projectsPlugin } from "./projects/plugin";
 import { ProjectStore } from "./projects/store";
+import {
+  EtaEventBus,
+  EtaEventsTriggerProvider,
+  TASK_RUN_FINISHED_TRIGGER,
+  TASK_STATUS_CHANGED_TRIGGER,
+} from "./routines/eta-events-triggers";
+import { FileWatchTriggerProvider } from "./routines/file-watch-triggers";
 import { routinesPlugin } from "./routines/plugin";
 import { RssTriggerProvider } from "./routines/rss-triggers";
 import { INTERRUPTED, RoutineRunner } from "./routines/runner";
@@ -113,6 +124,8 @@ import { Scheduler } from "./routines/scheduler";
 import { RoutineService } from "./routines/service";
 import { RoutineStore } from "./routines/store";
 import { TriggerHub } from "./routines/triggers";
+import { WebMonitorTriggerProvider } from "./routines/web-monitor-triggers";
+import { WebhookTriggerProvider } from "./routines/webhook-triggers";
 import { loadSecretKey } from "./secret";
 import { combineSessionHooks } from "./session-hooks";
 import { conversationOf, ownerOf, sessionKeyOf } from "./session-owner";
@@ -185,6 +198,39 @@ export interface RssTuning {
   maxBytes?: number | undefined;
   now?: (() => number) | undefined;
   timer?: boolean | undefined;
+  backoffBaseMs?: number | undefined;
+  backoffMaxMs?: number | undefined;
+}
+
+/** Test-only overrides for `WebhookTriggerProvider` inbound limits and clock. */
+export interface WebhookTuning {
+  now?: (() => number) | undefined;
+  maxBodyBytes?: number | undefined;
+  rateLimitMax?: number | undefined;
+  rateLimitWindowMs?: number | undefined;
+}
+
+/** Test-only overrides for `WebMonitorTriggerProvider` polling and HTTP transport. */
+export interface WebMonitorTuning {
+  fetch?: WebMonitorFetch | undefined;
+  allowPrivateNetwork?: boolean | undefined;
+  timeoutMs?: number | undefined;
+  maxBytes?: number | undefined;
+  now?: (() => number) | undefined;
+  timer?: boolean | undefined;
+  backoffBaseMs?: number | undefined;
+  backoffMaxMs?: number | undefined;
+}
+
+/** Test-only overrides for `FileWatchTriggerProvider` filesystem watching and fallback polling. */
+export interface FileWatchTuning {
+  now?: (() => number) | undefined;
+  timer?: boolean | undefined;
+  home?: string | undefined;
+  platform?: NodeJS.Platform | undefined;
+  maxFiles?: number | undefined;
+  watch?: FileWatchFn | false | undefined;
+  fs?: FileWatchFs | undefined;
   backoffBaseMs?: number | undefined;
   backoffMaxMs?: number | undefined;
 }
@@ -318,6 +364,12 @@ export function createProduct(options: {
   composio?: ComposioTuning | undefined;
   /** Test tuning for built-in RSS / Atom / JSON Feed polling triggers. */
   rss?: RssTuning | undefined;
+  /** Test tuning for built-in inbound webhook triggers. */
+  webhook?: WebhookTuning | undefined;
+  /** Test tuning for built-in webpage / JSON API change-monitoring triggers. */
+  webMonitor?: WebMonitorTuning | undefined;
+  /** Test tuning for built-in local file & directory change-monitoring triggers. */
+  fileWatch?: FileWatchTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const captainOn = options.captain !== false;
@@ -522,6 +574,7 @@ export function createProduct(options: {
       ? {}
       : { maxBatch: options.routines.maxBatch }),
   });
+  const secretKey = loadSecretKey(dataDir);
   const rssTriggers = new RssTriggerProvider({
     settings: new SettingStore(db),
     now: options.rss?.now ?? now,
@@ -544,7 +597,84 @@ export function createProduct(options: {
       ? {}
       : { backoffMaxMs: options.rss.backoffMaxMs }),
   });
+  const webhookTriggers = new WebhookTriggerProvider({
+    settings: new SettingStore(db),
+    secretKey,
+    publicUrl: options.publicUrl,
+    now: options.webhook?.now ?? now,
+    warn,
+    ...(options.webhook?.maxBodyBytes === undefined
+      ? {}
+      : { maxBodyBytes: options.webhook.maxBodyBytes }),
+    ...(options.webhook?.rateLimitMax === undefined
+      ? {}
+      : { rateLimitMax: options.webhook.rateLimitMax }),
+    ...(options.webhook?.rateLimitWindowMs === undefined
+      ? {}
+      : { rateLimitWindowMs: options.webhook.rateLimitWindowMs }),
+  });
+  const webMonitorTriggers = new WebMonitorTriggerProvider({
+    settings: new SettingStore(db),
+    now: options.webMonitor?.now ?? now,
+    timer: options.webMonitor?.timer ?? options.routines?.timer ?? true,
+    warn,
+    ...(options.webMonitor?.fetch === undefined
+      ? {}
+      : { fetch: options.webMonitor.fetch }),
+    ...(options.webMonitor?.allowPrivateNetwork === undefined
+      ? {}
+      : { allowPrivateNetwork: options.webMonitor.allowPrivateNetwork }),
+    ...(options.webMonitor?.timeoutMs === undefined
+      ? {}
+      : { timeoutMs: options.webMonitor.timeoutMs }),
+    ...(options.webMonitor?.maxBytes === undefined
+      ? {}
+      : { maxBytes: options.webMonitor.maxBytes }),
+    ...(options.webMonitor?.backoffBaseMs === undefined
+      ? {}
+      : { backoffBaseMs: options.webMonitor.backoffBaseMs }),
+    ...(options.webMonitor?.backoffMaxMs === undefined
+      ? {}
+      : { backoffMaxMs: options.webMonitor.backoffMaxMs }),
+  });
+  const fileWatchTriggers = new FileWatchTriggerProvider({
+    settings: new SettingStore(db),
+    now: options.fileWatch?.now ?? now,
+    timer: options.fileWatch?.timer ?? options.routines?.timer ?? true,
+    home: options.fileWatch?.home ?? options.home,
+    warn,
+    ...(options.fileWatch?.platform === undefined
+      ? {}
+      : { platform: options.fileWatch.platform }),
+    ...(options.fileWatch?.maxFiles === undefined
+      ? {}
+      : { maxFiles: options.fileWatch.maxFiles }),
+    ...(options.fileWatch?.watch === undefined
+      ? {}
+      : { watch: options.fileWatch.watch }),
+    ...(options.fileWatch?.fs === undefined
+      ? {}
+      : { fs: options.fileWatch.fs }),
+    ...(options.fileWatch?.backoffBaseMs === undefined
+      ? {}
+      : { backoffBaseMs: options.fileWatch.backoffBaseMs }),
+    ...(options.fileWatch?.backoffMaxMs === undefined
+      ? {}
+      : { backoffMaxMs: options.fileWatch.backoffMaxMs }),
+  });
+  const etaEventBus = new EtaEventBus({ warn });
+  const etaEventsTriggers = new EtaEventsTriggerProvider({
+    bus: etaEventBus,
+    conversations,
+    agents,
+    now,
+    warn,
+  });
   triggerHub.register(rssTriggers);
+  triggerHub.register(webhookTriggers);
+  triggerHub.register(webMonitorTriggers);
+  triggerHub.register(fileWatchTriggers);
+  triggerHub.register(etaEventsTriggers);
   runner.setRunFinishedListener((routineId) =>
     triggerHub.onRunFinished(routineId),
   );
@@ -631,7 +761,6 @@ export function createProduct(options: {
     ...(options.places === undefined ? {} : { local: options.places }),
   });
   const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
-  const secretKey = loadSecretKey(dataDir);
   const mcp = new McpService({
     db,
     key: secretKey,
@@ -716,6 +845,7 @@ export function createProduct(options: {
     agents,
     artifactsOf,
     changed,
+    warn,
   });
   const inbox = new Inbox({
     interactions,
@@ -869,6 +999,84 @@ export function createProduct(options: {
     captain.refreshAssignments();
     captainSupervisor.requestTick();
     wire?.pushNow("captain");
+  });
+  // Where a task was proposed and who made it, for the events the routines filter on.
+  const taskOriginOf = (task: TaskRecord | undefined) => {
+    const originId = task?.originConversationId ?? null;
+    const group = originId === null ? undefined : conversations.get(originId);
+    const creator = task?.createdBy.agentId ?? null;
+    return {
+      groupId: group?.id ?? null,
+      groupName: group?.name ?? null,
+      groupKind:
+        group === undefined
+          ? null
+          : group.kind === CAPTAIN_KIND
+            ? ("captain" as const)
+            : ("group" as const),
+      creator,
+      creatorName:
+        creator === null ? null : (agents.get(creator)?.name ?? null),
+    };
+  };
+  board.onStatusChange((change) => {
+    const assigneeId = executorOf(change.task);
+    const assigneeName =
+      assigneeId === null ? null : (agents.get(assigneeId)?.name ?? null);
+    const occurredAt = now();
+    etaEventBus.emit({
+      type: TASK_STATUS_CHANGED_TRIGGER,
+      eventId: `task-status:${change.task.id}:${crypto.randomUUID()}`,
+      occurredAt,
+      payload: {
+        taskId: change.task.id,
+        number: change.task.number,
+        title: change.task.title,
+        from: change.from,
+        to: change.to,
+        assignee: assigneeId,
+        assigneeName,
+        ...taskOriginOf(change.task),
+        actor: change.actor,
+        reason: change.reason,
+        occurredAt,
+      },
+    });
+  });
+  taskRunner.onRunFinished(({ run, task }) => {
+    if (
+      run.status !== "completed" &&
+      run.status !== "failed" &&
+      run.status !== "interrupted"
+    ) {
+      return;
+    }
+    const assigneeId =
+      run.agentId ?? (task === undefined ? null : executorOf(task));
+    const assigneeName =
+      assigneeId === null ? null : (agents.get(assigneeId)?.name ?? null);
+    const occurredAt = run.finishedAt ?? now();
+    etaEventBus.emit({
+      type: TASK_RUN_FINISHED_TRIGGER,
+      eventId: `task-run:${run.id}:finished`,
+      occurredAt,
+      payload: {
+        taskId: run.taskId,
+        number: task?.number ?? 0,
+        title: task?.title ?? "",
+        runId: run.id,
+        status: run.status,
+        reason: run.error,
+        errorCode: run.errorCode,
+        agentId: run.agentId,
+        assignee: assigneeId,
+        assigneeName,
+        ...taskOriginOf(task),
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt,
+        occurredAt,
+      },
+    });
   });
   // Nothing is running yet, so the runs the last process left going cannot be.
   taskRunner.recover();
@@ -1096,12 +1304,14 @@ export function createProduct(options: {
       (await mcp.route(request)) ??
       (await artifactRoutes(request)) ??
       (await attachmentRoutes(request)) ??
+      (await webhookTriggers.route(request)) ??
       upgradeRoutes(request, dataDir),
     remote: router,
     endpoints: [hub.endpoint],
     setPrivateNetwork: (privateNetwork) => {
       web?.setPrivateNetwork(privateNetwork);
       rssTriggers.setPrivateNetwork(privateNetwork);
+      webMonitorTriggers.setPrivateNetwork(privateNetwork);
     },
     close: async () => {
       // The runs stop first: they work through the links and the session host.
@@ -1466,6 +1676,7 @@ export function createProduct(options: {
             runner,
             scheduler,
             triggers: triggerHub,
+            webhook: webhookTriggers,
             now,
             changed: routinesChanged,
           },

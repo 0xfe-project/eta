@@ -8,13 +8,14 @@
  * (`service.ts`): this file is the surface in front of them. A run's handoff is in no section: it
  * is the next run's alone.
  */
-import type { RoutineSummary } from "@eta/client-contracts";
+import type { RoutineSummary, RoutineTrigger } from "@eta/client-contracts";
 import type { RoutineRunner } from "./runner";
 import type { Scheduler } from "./scheduler";
 import type { RoutineService } from "./service";
-import type { RoutineRecord } from "./store";
+import type { RoutineRecord, RoutineTriggerRecord } from "./store";
 import type { TriggerHub } from "./triggers";
 import type { ViewDeps } from "./views";
+import type { WebhookTriggerProvider } from "./webhook-triggers";
 import { Args, productPlugin, publish } from "../wire";
 import {
   briefsOf,
@@ -31,14 +32,26 @@ export interface RoutinesDeps extends ViewDeps {
   runner: RoutineRunner;
   scheduler: Scheduler;
   triggers?: TriggerHub | undefined;
+  webhook?: WebhookTriggerProvider | undefined;
   /** Say that a routine's state moved (and the list, always). */
   changed: (routineId: string) => void;
 }
 
 const MAX_FEEDBACK = 4_000;
 
+const triggerInputOf = (record: RoutineTriggerRecord): RoutineTrigger => ({
+  provider: record.provider,
+  source: record.source,
+  trigger: record.triggerSlug,
+  accountId: record.accountId,
+  config: record.config,
+  mode: record.effectiveMode ?? record.requestedMode,
+  pollingIntervalMinutes:
+    record.pollingInterval ?? record.requestedPollingInterval,
+});
+
 export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
-  const { store, service, runner, scheduler, triggers } = deps;
+  const { store, service, runner, scheduler, triggers, webhook } = deps;
 
   const existing = (id: string): RoutineRecord => service.existing(id);
   const summary = (routine: RoutineRecord): RoutineSummary =>
@@ -202,6 +215,61 @@ export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
           },
           { unordered: true },
         ),
+
+        wire.handle(
+          "routines",
+          "webhookInfo",
+          (call) => {
+            const routine = existing(new Args(call).string("routineId"));
+            const trigger = store.trigger(routine.id);
+            if (trigger === undefined || trigger.provider !== "webhook")
+              throw new Error(
+                "routine does not use an inbound webhook trigger",
+              );
+            if (webhook === undefined)
+              throw new Error("webhook trigger provider is not available");
+            return {
+              result: webhook.info(routine.id, triggerInputOf(trigger)),
+            };
+          },
+          { unordered: true },
+        ),
+
+        wire.handle("routines", "webhookRotate", (call) => {
+          const args = new Args(call);
+          const routine = existing(args.string("routineId"));
+          const trigger = store.trigger(routine.id);
+          if (trigger === undefined || trigger.provider !== "webhook")
+            throw new Error("routine does not use an inbound webhook trigger");
+          if (webhook === undefined)
+            throw new Error("webhook trigger provider is not available");
+          const rotateToken = args.optionalBoolean("rotateToken");
+          const rotateSecret = args.optionalBoolean("rotateSecret");
+          return {
+            result: webhook.rotate(routine.id, triggerInputOf(trigger), {
+              ...(rotateToken === undefined ? {} : { rotateToken }),
+              ...(rotateSecret === undefined ? {} : { rotateSecret }),
+            }),
+          };
+        }),
+
+        wire.handle("routines", "webhookSetSecret", (call) => {
+          const args = new Args(call);
+          const routine = existing(args.string("routineId"));
+          const secret = args.string("secret");
+          const trigger = store.trigger(routine.id);
+          if (trigger === undefined || trigger.provider !== "webhook")
+            throw new Error("routine does not use an inbound webhook trigger");
+          if (webhook === undefined)
+            throw new Error("webhook trigger provider is not available");
+          return {
+            result: webhook.setSecret(
+              routine.id,
+              triggerInputOf(trigger),
+              secret,
+            ),
+          };
+        }),
       ];
       return async () => {
         scheduler.stop();

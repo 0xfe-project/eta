@@ -20,12 +20,15 @@ import type { LlmOptions, LlmRuntime } from "./llm/runtime";
 import type { SshRunner } from "./machines/install";
 import type {
   ComposioTuning,
+  FileWatchTuning,
   McpTuning,
   Product,
   RepliesOptions,
   RoutinesOptions,
   RssTuning,
   TasksOptions,
+  WebhookTuning,
+  WebMonitorTuning,
 } from "./product";
 import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
@@ -90,6 +93,12 @@ export interface HostOptions {
   composio?: ComposioTuning;
   /** Test tuning for built-in RSS / Atom / JSON Feed polling triggers. */
   rss?: RssTuning;
+  /** Test tuning for built-in inbound webhook triggers. */
+  webhook?: WebhookTuning;
+  /** Test tuning for built-in webpage / JSON API change-monitoring triggers. */
+  webMonitor?: WebMonitorTuning;
+  /** Test tuning for built-in local file & directory change-monitoring triggers. */
+  fileWatch?: FileWatchTuning;
   /** What a published site may hold; the defaults are for real use, a test makes them small. */
   artifactLimits?: Partial<SiteLimits> | undefined;
   /**
@@ -266,6 +275,13 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.mcp === undefined ? {} : { mcp: options.mcp }),
       ...(options.composio === undefined ? {} : { composio: options.composio }),
       ...(options.rss === undefined ? {} : { rss: options.rss }),
+      ...(options.webhook === undefined ? {} : { webhook: options.webhook }),
+      ...(options.webMonitor === undefined
+        ? {}
+        : { webMonitor: options.webMonitor }),
+      ...(options.fileWatch === undefined
+        ? {}
+        : { fileWatch: options.fileWatch }),
     });
     const web = createWebRoutes(options.webDir);
     server = await assembleServer({

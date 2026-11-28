@@ -46,6 +46,8 @@ export interface RoutineTriggerRecord {
   status: RoutineTriggerStatus;
   lastError: string | null;
   lastEventAt: number | null;
+  lastCheckedAt: number | null;
+  watchedCount: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -140,6 +142,8 @@ interface TriggerRow {
   status: string;
   last_error: string | null;
   last_event_at: number | null;
+  last_checked_at: number | null;
+  watched_count: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -244,6 +248,8 @@ const triggerOf = (row: TriggerRow): RoutineTriggerRecord => ({
   status: row.status as RoutineTriggerStatus,
   lastError: row.last_error,
   lastEventAt: row.last_event_at,
+  lastCheckedAt: row.last_checked_at,
+  watchedCount: row.watched_count,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -262,6 +268,8 @@ const triggerViewOf = (record: RoutineTriggerRecord): RoutineTriggerView => ({
   status: record.status,
   lastError: record.lastError,
   lastEventAt: record.lastEventAt,
+  lastCheckedAt: record.lastCheckedAt,
+  watchedCount: record.watchedCount,
 });
 
 const triggerEventOf = (row: TriggerEventRow): TriggerEventRecord => ({
@@ -483,6 +491,7 @@ export class RoutineStore {
     routineId: string,
     patch: {
       accountId?: string | null;
+      config?: Record<string, unknown>;
       instanceId?: string | null;
       effectiveMode?: RoutineTriggerMode | null;
       pollingInterval?: number | null;
@@ -490,6 +499,8 @@ export class RoutineStore {
       status?: RoutineTriggerStatus;
       lastError?: string | null;
       lastEventAt?: number | null;
+      lastCheckedAt?: number | null;
+      watchedCount?: number | null;
     },
   ): RoutineTriggerRecord | undefined {
     const current = this.trigger(routineId);
@@ -499,6 +510,7 @@ export class RoutineStore {
       .query(
         `UPDATE routine_trigger
             SET account_id = ?,
+                config_json = ?,
                 instance_id = ?,
                 effective_mode = ?,
                 polling_interval = ?,
@@ -506,11 +518,16 @@ export class RoutineStore {
                 status = ?,
                 last_error = ?,
                 last_event_at = ?,
+                last_checked_at = ?,
+                watched_count = ?,
                 updated_at = ?
           WHERE routine_id = ?`,
       )
       .run(
         patch.accountId === undefined ? current.accountId : patch.accountId,
+        patch.config === undefined
+          ? JSON.stringify(current.config)
+          : JSON.stringify(patch.config),
         patch.instanceId === undefined ? current.instanceId : patch.instanceId,
         patch.effectiveMode === undefined
           ? current.effectiveMode
@@ -526,6 +543,12 @@ export class RoutineStore {
         patch.lastEventAt === undefined
           ? current.lastEventAt
           : patch.lastEventAt,
+        patch.lastCheckedAt === undefined
+          ? current.lastCheckedAt
+          : patch.lastCheckedAt,
+        patch.watchedCount === undefined
+          ? current.watchedCount
+          : patch.watchedCount,
         now,
         routineId,
       );
@@ -630,9 +653,9 @@ export class RoutineStore {
            routine_id, provider, source, trigger_slug, account_id, config_json,
            requested_mode, requested_polling_interval, instance_id, effective_mode,
            polling_interval, fallback_reason, status, last_error, last_event_at,
-           created_at, updated_at
+           last_checked_at, watched_count, created_at, updated_at
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 'disabled', NULL, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 'disabled', NULL, ?, NULL, NULL, ?, ?)
          ON CONFLICT(routine_id) DO UPDATE SET
            provider = excluded.provider,
            source = excluded.source,
@@ -647,6 +670,8 @@ export class RoutineStore {
            fallback_reason = NULL,
            status = 'disabled',
            last_error = NULL,
+           last_checked_at = NULL,
+           watched_count = NULL,
            updated_at = excluded.updated_at`,
       )
       .run(

@@ -5,8 +5,10 @@ import type {
   RoutineTriggerMode,
   RoutineTriggerStatus,
   RunTrigger,
+  WebhookTriggerInfo,
 } from "@eta/client-contracts";
 import { formatLocale, localizedText, uiText } from "../../i18n";
+import { providerText } from "./trigger-text";
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -338,13 +340,16 @@ export function upcomingTimes(
 export function providerLabel(provider: string) {
   const trimmed = provider.trim();
   if (!trimmed) return "";
-  if (trimmed.toLowerCase() === "rss") return "RSS";
+  if (trimmed.toLowerCase() === "rss") return providerText(trimmed, "RSS");
   if (/^[a-z0-9_-]+$/.test(trimmed)) {
-    return trimmed
-      .split(/[-_]+/)
-      .filter(Boolean)
-      .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-      .join(" ");
+    return providerText(
+      trimmed,
+      trimmed
+        .split(/[-_]+/)
+        .filter(Boolean)
+        .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+        .join(" "),
+    );
   }
   return trimmed;
 }
@@ -412,4 +417,53 @@ export function formatTriggerConfigSummary(
       return `${key}=${text}`;
     })
     .join(", ");
+}
+
+export function webhookFullUrl(
+  info: Pick<WebhookTriggerInfo, "path" | "publicUrl">,
+  hostOrigin?: string | null,
+) {
+  if (info.publicUrl) return info.publicUrl;
+  const origin = hostOrigin?.trim().replace(/\/+$/, "");
+  return origin ? `${origin}${info.path}` : info.path;
+}
+
+export function isLoopbackWebhookUrl(url: string) {
+  try {
+    const name = new URL(url).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return (
+      name === "localhost" ||
+      name === "::1" ||
+      name === "::ffff:127.0.0.1" ||
+      /^127(?:\.\d{1,3}){3}$/.test(name)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function shellSingleQuote(value: string) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+export function webhookCurlCommand(
+  url: string,
+  info: Pick<WebhookTriggerInfo, "authMode" | "headerName">,
+) {
+  const parts = [
+    "curl -X POST",
+    shellSingleQuote(url),
+    "-H 'Content-Type: application/json'",
+  ];
+  if (info.authMode === "header") {
+    const header = info.headerName || "Authorization";
+    const value =
+      header.toLowerCase() === "authorization" ? "Bearer <secret>" : "<secret>";
+    parts.push(`-H ${shellSingleQuote(`${header}: ${value}`)}`);
+  } else if (info.authMode === "hmac-sha256") {
+    const header = info.headerName || "X-Hub-Signature-256";
+    parts.push(`-H ${shellSingleQuote(`${header}: sha256=<hmac-sha256>`)}`);
+  }
+  parts.push(`-d '{"event":"test"}'`);
+  return parts.join(" ");
 }

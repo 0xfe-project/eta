@@ -112,6 +112,8 @@ it("checks signature, exact 3MiB/20M pixels, +1 and aggregate detail budget", as
     await call("read", { detail: fresh.detail, path: "fake.png" }),
   ).toMatchObject({ kind: "text" });
 });
+// Each of the 2000 entries is checked with realpath and lstat on every path part, about 1ms per
+// entry on Windows, and planDelete walks them twice: 5s on an idle machine, over 20s on CI.
 it("paginates 200, enforces cumulative 2000 and complete delete manifest bounds", async () => {
   const { detail } = await setup();
   const skill = join(home, ".agents/skills/demo");
@@ -139,7 +141,7 @@ it("paginates 200, enforces cumulative 2000 and complete delete manifest bounds"
   await expect(
     call("directory", { detail, path: "", offset: 2000 }),
   ).rejects.toThrow("entry_limit");
-});
+}, 60_000);
 it("permits path depth8 but not expansion below8 or delete members at9", async () => {
   const { detail } = await setup();
   const skill = join(home, ".agents/skills/demo");

@@ -3,6 +3,10 @@ import { defineConfig } from "vitest/config";
 import { forceRerunTriggers } from "../../vitest.shared.ts";
 
 export default defineConfig({
+  // Resolve TypeScript settings from this package for every file a test imports. Without it, a
+  // test that imports apps/client source (trigger-catalog-text) looks up apps/client/tsconfig.json,
+  // which extends .nsh/tsconfig.json, a file nsh generates and CI does not have when this runs.
+  tsconfig: "./tsconfig.json",
   test: {
     forceRerunTriggers,
     // These tests start real hosts, spawn processes and walk directories. Alone each takes well

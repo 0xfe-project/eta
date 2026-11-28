@@ -435,3 +435,551 @@ test("multi-option selects stay visible, TriggerSearchSelect highlights on hover
   expect(app.shows("label:App / source")).toBe(true);
   expect(app.shows("label:Trigger event")).toBe(true);
 });
+
+test("Webhook channel auto-folds single source/trigger and detail panel supports copy URL/curl, secret reveal/set, and rotate", async () => {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "en-US",
+  });
+  await app.waitFor("label:New routine");
+  await app.press("label:New routine");
+  await app.waitFor("label:Event trigger");
+
+  await app.type("label:Name", "Deploy Hook");
+  await app.type("label:Brief", "Summarize incoming deploy webhooks.");
+  await app.press("label:Event trigger");
+
+  await app.waitFor("label:Channel");
+  await app.press("label:Channel");
+  await app.waitFor("label:Webhook");
+  await app.press("label:Webhook");
+
+  // Single source + single trigger auto-selected and selectors folded.
+  await app.waitFor("text:Webhook received");
+  expect(app.shows("text:WEBHOOK_RECEIVED")).toBe(true);
+  expect(app.shows("label:App / source")).toBe(false);
+  expect(app.shows("label:Trigger event")).toBe(false);
+  expect(app.shows("label:Polling interval (minutes)")).toBe(false);
+
+  // Choose HMAC-SHA256 authentication mode.
+  await app.waitFor("label:Authentication");
+  await app.press("label:Authentication");
+  await app.waitFor("label:HMAC-SHA256 signature");
+  await app.press("label:HMAC-SHA256 signature");
+
+  await app.press("label:Create");
+  await app.waitFor("text:Deploy Hook");
+
+  // Detail panel renders inbound URL, loopback hint, copy URL/curl, masked secret, and rotate.
+  await app.waitFor("text:http://127.0.0.1:4100/hooks/tok_1");
+  expect(app.shows("text:HMAC-SHA256 · X-Hub-Signature-256")).toBe(true);
+  expect(
+    app.shows(
+      "text:This URL uses a local loopback address. External services need a public URL, Tailscale, or a reverse proxy to reach it.",
+    ),
+  ).toBe(true);
+  expect(app.shows("text:sec_initial_1")).toBe(false);
+
+  await app.press("label:Copy URL");
+  await app.waitUntil(
+    () => app.clipboard() === "http://127.0.0.1:4100/hooks/tok_1",
+  );
+
+  await app.press("label:Copy curl");
+  await app.waitUntil(() =>
+    (app.clipboard() ?? "").includes(
+      "curl -X POST 'http://127.0.0.1:4100/hooks/tok_1' -H 'Content-Type: application/json' -H 'X-Hub-Signature-256: sha256=<hmac-sha256>'",
+    ),
+  );
+
+  // Reveal secret & set a custom secret.
+  await app.press("label:Show");
+  await app.waitFor("text:sec_initial_1");
+  await app.press("label:Copy secret");
+  await app.waitUntil(() => app.clipboard() === "sec_initial_1");
+
+  await app.type("label:Custom secret", "gh_secret_custom");
+  await app.press("label:Save");
+  await app.waitFor("text:gh_secret_custom");
+  expect(
+    app.shows("text:WebhookAction:setSecret:r-created:gh_secret_custom"),
+  ).toBe(true);
+
+  // Rotate credentials with confirmation dialog.
+  await app.press("label:Rotate credentials");
+  await app.waitFor("text:Rotate webhook credentials?");
+  await app.press("label:Rotate");
+  await app.waitFor("text:http://127.0.0.1:4100/hooks/tok_rot_2");
+  expect(app.shows("text:WebhookAction:rotate:r-created")).toBe(true);
+});
+
+test("Web Monitor channel auto-folds selects, validates selector vs jsonPath conflict, and renders lastCheckedAt/lastEventAt/lastError", async () => {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "en-US",
+  });
+
+  // Detail panel shows lastCheckedAt, lastEventAt (last changed), and lastError for web-monitor.
+  await app.waitFor("label:Pricing Page Watch");
+  await app.press("label:Pricing Page Watch");
+  await app.waitFor("text:web-monitor / http / WEB_CONTENT_CHANGED");
+  expect(app.texts().some((text) => text.startsWith("Last checked · "))).toBe(
+    true,
+  );
+  expect(app.texts().some((text) => text.startsWith("Last changed · "))).toBe(
+    true,
+  );
+  expect(app.shows('text:CSS selector ".plan-price" matched no elements')).toBe(
+    true,
+  );
+
+  // Create a new Web Monitor routine via editor.
+  await app.press("label:New routine");
+  await app.waitFor("label:Event trigger");
+
+  await app.type("label:Name", "API Release Monitor");
+  await app.type("label:Brief", "Notify when release version changes.");
+  await app.press("label:Event trigger");
+
+  await app.waitFor("label:Channel");
+  await app.press("label:Channel");
+  await app.waitFor("label:Web Monitor");
+  await app.press("label:Web Monitor");
+
+  await app.waitFor("text:Web / JSON content changed");
+  expect(app.shows("text:WEB_CONTENT_CHANGED")).toBe(true);
+  expect(app.shows("label:App / source")).toBe(false);
+  expect(app.shows("label:Trigger event")).toBe(false);
+  expect(app.shows("label:Polling interval (minutes)")).toBe(true);
+  expect(app.shows("text:15")).toBe(true);
+
+  await app.type("label:URL", "https://api.example.com/version");
+  await app.type("label:CSS selector", ".version");
+  await app.type("label:JSON path", "$.version");
+  expect(
+    app.shows("text:Specify either CSS selector or JSON path, not both."),
+  ).toBe(true);
+
+  await app.clear("label:CSS selector");
+  await app.type("label:Polling interval (minutes)", "10");
+  await app.press("label:Create");
+  await app.waitFor("text:API Release Monitor");
+
+  const createLine = app.texts().find((t) => t.startsWith("Create:")) ?? "";
+  const payload = JSON.parse(createLine.slice("Create:".length)) as {
+    trigger: {
+      provider: string;
+      source: string;
+      trigger: string;
+      mode: string;
+      pollingIntervalMinutes: number | null;
+      config: Record<string, unknown>;
+    };
+  };
+  expect(payload.trigger).toEqual({
+    provider: "web-monitor",
+    source: "http",
+    trigger: "WEB_CONTENT_CHANGED",
+    accountId: null,
+    mode: "poll",
+    pollingIntervalMinutes: 10,
+    config: {
+      url: "https://api.example.com/version",
+      jsonPath: "$.version",
+      method: "GET",
+    },
+  });
+});
+
+test("File Watch channel auto-folds selects, validates path/glob, and renders watchedCount/lastEventAt/lastError", async () => {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "en-US",
+  });
+
+  // Detail panel shows watched paths count, lastEventAt, and lastError for file-watch.
+  await app.waitFor("label:Local Docs Watch");
+  await app.press("label:Local Docs Watch");
+  await app.waitFor("text:file-watch / fs / FILE_CHANGED");
+  expect(app.shows("text:Watching 12 paths")).toBe(true);
+  expect(app.texts().some((text) => text.startsWith("Last event · "))).toBe(
+    true,
+  );
+  expect(app.shows("text:Watched file count exceeds limit (5000)")).toBe(true);
+
+  // Create a new File Watch routine via editor.
+  await app.press("label:New routine");
+  await app.waitFor("label:Event trigger");
+
+  await app.type("label:Name", "Reports Folder Watch");
+  await app.type("label:Brief", "Summarize newly added reports.");
+  await app.press("label:Event trigger");
+
+  await app.waitFor("label:Channel");
+  await app.press("label:Channel");
+  await app.waitFor("label:File Watch");
+  await app.press("label:File Watch");
+
+  await app.waitFor("text:File or directory changed");
+  expect(app.shows("text:FILE_CHANGED")).toBe(true);
+  expect(app.shows("label:App / source")).toBe(false);
+  expect(app.shows("label:Trigger event")).toBe(false);
+  expect(app.shows("label:Fallback scan interval (minutes)")).toBe(true);
+  expect(app.value("label:Debounce (ms)")).toBe("500");
+
+  // Validate relative path and drive root errors before entering a valid path.
+  await app.type("label:Watch path", "relative/folder");
+  expect(
+    app.shows(
+      "text:Enter an absolute path or start with ~ (e.g. ~/Documents).",
+    ),
+  ).toBe(true);
+  await app.clear("label:Watch path");
+  await app.type("label:Watch path", "/");
+  expect(
+    app.shows("text:Cannot watch an entire drive or filesystem root."),
+  ).toBe(true);
+  await app.clear("label:Watch path");
+  await app.type("label:Watch path", "~/Documents/reports");
+
+  await app.type("label:Include glob", "**/*.md");
+  await app.type("label:Ignore glob", "*.tmp");
+  await app.clear("label:Debounce (ms)");
+  await app.type("label:Debounce (ms)", "250");
+  await app.type("label:Fallback scan interval (minutes)", "10");
+
+  await app.press("label:Create");
+  await app.waitFor("text:Reports Folder Watch");
+
+  const createLine = app.texts().find((t) => t.startsWith("Create:")) ?? "";
+  const payload = JSON.parse(createLine.slice("Create:".length)) as {
+    trigger: {
+      provider: string;
+      source: string;
+      trigger: string;
+      mode: string;
+      pollingIntervalMinutes: number | null;
+      config: Record<string, unknown>;
+    };
+  };
+  expect(payload.trigger).toEqual({
+    provider: "file-watch",
+    source: "fs",
+    trigger: "FILE_CHANGED",
+    accountId: null,
+    mode: "poll",
+    pollingIntervalMinutes: 10,
+    config: {
+      path: "~/Documents/reports",
+      glob: "**/*.md",
+      ignore: "*.tmp",
+      debounceMs: 250,
+    },
+  });
+});
+
+test("Eta Events channel folds single source, lets user pick event & status/assignee filters, and renders event name, lastEventAt, and lastError", async () => {
+  const c = palette("light", "default");
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "en-US",
+  });
+
+  // Detail panel shows event name, lastEventAt, and lastError for eta-events.
+  await app.waitFor("label:Review Notification");
+  await app.press("label:Review Notification");
+  await app.waitFor("text:eta-events / tasks / task.status.changed");
+  expect(app.texts().some((text) => text.startsWith("Last event · "))).toBe(
+    true,
+  );
+  expect(app.shows("text:Unsupported eta-events filter")).toBe(true);
+
+  // Create a new Eta Events routine via editor.
+  await app.press("label:New routine");
+  await app.waitFor("label:Event trigger");
+
+  await app.type("label:Name", "Blocked & Review Digest");
+  await app.type(
+    "label:Brief",
+    "Notify when Forge tasks enter review or blocked.",
+  );
+  await app.press("label:Event trigger");
+
+  await app.waitFor("label:Channel");
+  await app.press("label:Channel");
+  await app.waitFor("label:Eta Events");
+  await app.press("label:Eta Events");
+
+  // Single source ("tasks") auto-folds; Trigger event remains visible for multi-event selection.
+  await app.waitFor("label:Trigger event");
+  expect(app.shows("label:App / source")).toBe(false);
+  expect(app.shows("label:Polling interval (minutes)")).toBe(false);
+  expect(app.shows("label:Delivery mode")).toBe(false);
+
+  await app.press("label:Trigger event");
+  await app.waitFor("label:Task run finished");
+  await app.press("label:Task status changed");
+
+  await app.waitFor("text:task.status.changed");
+  await app.waitFor("label:Target statuses: in_review");
+
+  // Hover and selected background highlight match, with no cursor: pointer.
+  await app.hover("label:Target statuses: in_review");
+  expect(
+    app.viewStyle("label:Target statuses: in_review")?.backgroundColor,
+  ).toBe(rgba(c.selected));
+  expect(
+    Object.hasOwn(
+      app.viewStyle("label:Target statuses: in_review") ?? {},
+      "cursor",
+    ),
+  ).toBe(false);
+
+  await app.press("label:Target statuses: in_review");
+  expect(
+    app.viewStyle("label:Target statuses: in_review")?.backgroundColor,
+  ).toBe(rgba(c.selected));
+  await app.press("label:Target statuses: blocked");
+  await app.press("label:Previous statuses: in_progress");
+  await app.type("label:Assignee", "forge");
+
+  await app.press("label:Create");
+  await app.waitFor("text:Blocked & Review Digest");
+
+  const createLine = app.texts().find((t) => t.startsWith("Create:")) ?? "";
+  const payload = JSON.parse(createLine.slice("Create:".length)) as {
+    trigger: {
+      provider: string;
+      source: string;
+      trigger: string;
+      accountId: string | null;
+      mode: string | null;
+      pollingIntervalMinutes: number | null;
+      config: Record<string, unknown>;
+    };
+  };
+  expect(payload.trigger).toEqual({
+    provider: "eta-events",
+    source: "tasks",
+    trigger: "task.status.changed",
+    accountId: null,
+    mode: null,
+    pollingIntervalMinutes: null,
+    config: {
+      to: ["in_review", "blocked"],
+      from: ["in_progress"],
+      assignee: "forge",
+    },
+  });
+});
+
+async function openZhEditor() {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "zh-CN",
+  });
+  await app.waitFor("label:新建定时任务");
+  await app.press("label:Scenario: ready");
+  await app.press("label:新建定时任务");
+  await app.waitFor("label:仅事件触发");
+  await app.type("label:名称", "触发器翻译");
+  await app.type("label:要求", "检查触发器中文。");
+  await app.press("label:仅事件触发");
+  await app.waitFor("label:渠道");
+  return app;
+}
+
+test("built-in provider catalogs and config fields show in Chinese", async () => {
+  const app = await openZhEditor();
+
+  async function choose(provider: string) {
+    await app.press("label:渠道");
+    await app.waitFor(`label:${provider}`);
+    await app.press(`label:${provider}`);
+  }
+
+  await choose("Webhook");
+  await app.waitFor("text:收到 Webhook");
+  for (const title of ["验证方式", "请求头名称", "包含关键词", "排除关键词"]) {
+    expect(app.shows(`label:${title}`)).toBe(true);
+  }
+  expect(app.shows("label:Authentication")).toBe(false);
+  await app.press("label:验证方式");
+  await app.waitFor("label:HMAC-SHA256 签名");
+  expect(app.shows("label:共享密钥请求头")).toBe(true);
+  expect(app.shows("label:仅地址令牌（无）")).toBe(true);
+  await app.press("label:HMAC-SHA256 签名");
+
+  await choose("RSS");
+  await app.waitFor("text:新订阅条目");
+  expect(
+    app.shows(
+      "text:RSS 2.0、Atom 1.0 或 JSON Feed 1.1 订阅源发布新条目时触发。",
+    ),
+  ).toBe(true);
+  expect(app.shows("label:订阅地址")).toBe(true);
+  expect(
+    app.shows("text:RSS 2.0、Atom 1.0 或 JSON Feed 1.1 的地址（http/https）。"),
+  ).toBe(true);
+  expect(app.shows("label:包含关键词")).toBe(true);
+  expect(app.shows("label:排除关键词")).toBe(true);
+
+  await choose("网页监控");
+  await app.waitFor("text:网页 / JSON 内容变化");
+  for (const title of [
+    "地址",
+    "CSS 选择器",
+    "JSON 路径",
+    "HTTP 方法",
+    "请求头",
+  ]) {
+    expect(app.shows(`label:${title}`)).toBe(true);
+  }
+  expect(app.shows("text:要监控的 HTTP 或 HTTPS 地址。")).toBe(true);
+
+  await choose("文件监听");
+  await app.waitFor("text:文件或目录变化");
+  for (const title of [
+    "监听路径",
+    "包含的 glob",
+    "忽略的 glob",
+    "防抖（毫秒）",
+  ]) {
+    expect(app.shows(`label:${title}`)).toBe(true);
+  }
+  expect(
+    app.shows("text:本机文件或目录的绝对路径，或 ~/... 形式的路径。"),
+  ).toBe(true);
+});
+
+test("eta-events fields show in Chinese while group, creator and assignee options keep the host's names", async () => {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "zh-CN",
+  });
+  await app.waitFor("label:新建定时任务");
+  await app.press("label:Scenario: origin_filters");
+  await app.press("label:新建定时任务");
+  await app.waitFor("label:仅事件触发");
+  await app.type("label:名称", "任务事件");
+  await app.type("label:要求", "检查任务事件。");
+  await app.press("label:仅事件触发");
+  await app.waitFor("label:渠道");
+  await app.press("label:渠道");
+  await app.waitFor("label:eta 事件");
+  await app.press("label:eta 事件");
+
+  await app.waitFor("label:触发器类型");
+  await app.press("label:触发器类型");
+  await app.waitFor("label:任务运行结束");
+  expect(
+    app.shows("text:任务状态变化时触发（例如进入待验收、已完成或已阻塞）。"),
+  ).toBe(true);
+  // An option card keeps a spacer of the same width on each side of its text, so the text sits at
+  // the card's centre and the card keeps its width when it is selected.
+  await app.press("label:任务运行结束");
+  await app.waitFor("label:运行状态: 失败");
+  const card = "label:运行状态: 失败";
+  const gaps = () => {
+    const frame = app.layout(card)!;
+    const text = app.layout("text:失败")!;
+    return {
+      width: frame.width,
+      left: text.x - frame.x,
+      right: frame.x + frame.width - (text.x + text.width),
+    };
+  };
+  const unselected = gaps();
+  expect(Math.abs(unselected.left - unselected.right)).toBeLessThanOrEqual(1);
+  await app.press(card);
+  const selected = gaps();
+  expect(selected.width).toBe(unselected.width);
+  expect(selected.left).toBe(unselected.left);
+  await app.press("label:触发器类型");
+  await app.waitFor("label:任务运行结束");
+  await app.press("label:任务状态变化");
+
+  await app.waitFor("label:目标状态: 待验收");
+  expect(app.shows("label:目标状态: 已阻塞")).toBe(true);
+  expect(app.shows("label:原状态: 进行中")).toBe(true);
+  expect(app.shows("label:目标状态: in_review")).toBe(false);
+  expect(
+    app.shows("text:可选，要匹配的目标状态（留空则匹配任何状态变化）。"),
+  ).toBe(true);
+  expect(
+    app.shows(
+      "text:可选，任务是在哪个群聊里提出的，包括 Captain 的对话（留空则不限）。",
+    ),
+  ).toBe(true);
+
+  await app.press("label:来源群聊");
+  await app.waitFor("label:Dev Group");
+  expect(app.shows("label:Release Crew")).toBe(true);
+  await app.press("label:Release Crew");
+
+  await app.press("label:创建者");
+  await app.waitFor("label:Forge");
+  expect(app.shows("label:Ada")).toBe(true);
+  await app.press("label:Ada");
+
+  await app.press("label:执行者");
+  await app.waitFor("label:Forge");
+  await app.press("label:Forge");
+
+  await app.press("label:创建");
+  await app.waitFor("text:任务事件");
+  const createLine = app.texts().find((t) => t.startsWith("Create:")) ?? "";
+  const payload = JSON.parse(createLine.slice("Create:".length)) as {
+    trigger: { config: Record<string, unknown> };
+  };
+  expect(payload.trigger.config).toEqual({
+    group: "g2",
+    creator: "a2",
+    assignee: "a1",
+  });
+});
+
+test("eta-events fields keep the host's English text in English", async () => {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "en-US",
+  });
+  await app.waitFor("label:New routine");
+  await app.press("label:Scenario: origin_filters");
+  await app.press("label:New routine");
+  await app.waitFor("label:Event trigger");
+  await app.type("label:Name", "Task events");
+  await app.type("label:Brief", "Check task events.");
+  await app.press("label:Event trigger");
+  await app.waitFor("label:Channel");
+  await app.press("label:Channel");
+  await app.waitFor("label:Eta Events");
+  await app.press("label:Eta Events");
+  await app.waitFor("label:Trigger event");
+  await app.press("label:Trigger event");
+  await app.waitFor("label:Task run finished");
+  await app.press("label:Task status changed");
+
+  await app.waitFor("label:Target statuses: in_review");
+  expect(app.shows("label:Previous statuses: in_progress")).toBe(true);
+  for (const title of ["Source group", "Creator", "Assignee"]) {
+    expect(app.shows(`label:${title}`)).toBe(true);
+  }
+  await app.press("label:Source group");
+  await app.waitFor("label:Dev Group");
+  expect(app.shows("label:Release Crew")).toBe(true);
+});

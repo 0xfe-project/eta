@@ -217,7 +217,43 @@ export const routinesMessages = {
     "格式不符合要求。",
   ],
   triggerFieldJsonInvalid: ["Enter valid JSON.", "请输入有效的 JSON。"],
+  triggerFieldStringValuesOnly: [
+    "All object values must be strings.",
+    "对象的所有值都必须是字符串。",
+  ],
+  triggerWebMonitorSelectorConflict: [
+    "Specify either CSS selector or JSON path, not both.",
+    "CSS 选择器和 JSON 路径不能同时填写。",
+  ],
+  triggerFileWatchPollingInterval: [
+    "Fallback scan interval (minutes)",
+    "兜底扫描间隔（分钟）",
+  ],
+  triggerFileWatchPollingHint: [
+    "Fallback stat scan interval when file watcher misses changes (1–10080 min, default 5).",
+    "文件监听漏报时的兜底扫描间隔（1–10080 分钟，默认 5 分钟）。",
+  ],
+  triggerFileWatchPathNotAbsolute: [
+    "Enter an absolute path or start with ~ (e.g. ~/Documents).",
+    "请输入绝对路径或以 ~ 开头的路径（例如 ~/Documents）。",
+  ],
+  triggerFileWatchPathRootForbidden: [
+    "Cannot watch an entire drive or filesystem root.",
+    "不能监控整个盘符或文件系统根目录。",
+  ],
+  triggerFileWatchPathInvalid: [
+    "Enter a valid file or directory path.",
+    "请输入有效的文件或目录路径。",
+  ],
+  triggerFileWatchGlobInvalid: [
+    "Glob pattern has unmatched brackets or braces.",
+    "Glob 模式中的括号或花括号未成对闭合。",
+  ],
   triggerFieldArrayRequired: ["Enter at least one item.", "请至少填写一项。"],
+  triggerFieldInvalidChoice: [
+    "Select from the allowed options.",
+    "请从可选项中选择。",
+  ],
   triggerFieldExclusiveMin: [
     "Must be greater than {{value}}",
     "必须大于 {{value}}",
@@ -275,6 +311,19 @@ export const routinesMessages = {
   triggerLastEvent: ["Last event {{ago}}", "最近事件 {{ago}}"],
   triggerLastEventAt: ["Last event · {{time}}", "最近事件 · {{time}}"],
   triggerNoEventsYet: ["No events yet", "尚未收到事件"],
+  triggerLastCheckedAt: ["Last checked · {{time}}", "上次抓取 · {{time}}"],
+  triggerNotCheckedYet: ["Not checked yet", "尚未抓取"],
+  triggerLastChangeAt: ["Last changed · {{time}}", "上次变化 · {{time}}"],
+  triggerNoChangesYet: ["No changes yet", "尚未变化"],
+  triggerWatchedPathsCount: [
+    "Watching {{count}} path",
+    "正在监听 {{count}} 个路径",
+  ],
+  triggerWatchedPathsCountPlural: [
+    "Watching {{count}} paths",
+    "正在监听 {{count}} 个路径",
+  ],
+  triggerNotWatching: ["Not watching paths", "尚未监听路径"],
   triggerWaitingForEvents: [
     "Listening for external events",
     "等待外部触发事件",
@@ -294,4 +343,34 @@ export const routinesMessages = {
   runStartedByTrigger: ["Event trigger", "事件触发"],
   runStartedBySchedule: ["Scheduled", "定时运行"],
   runStartedByUser: ["Manual", "手动运行"],
+  webhookPanelTitle: ["Inbound Webhook", "入站 Webhook"],
+  webhookLoading: ["Loading webhook endpoint…", "正在加载 Webhook 地址…"],
+  webhookLoadError: ["Couldn't load webhook details", "无法加载 Webhook 详情"],
+  webhookAuthNone: ["URL token only", "仅 URL Token"],
+  webhookAuthHeader: ["Header · {{header}}", "请求头 · {{header}}"],
+  webhookAuthHmac: ["HMAC-SHA256 · {{header}}", "HMAC-SHA256 · {{header}}"],
+  webhookCopyUrl: ["Copy URL", "复制 URL"],
+  webhookCopyCurl: ["Copy curl", "复制 curl"],
+  webhookLoopbackHint: [
+    "This URL uses a local loopback address. External services need a public URL, Tailscale, or a reverse proxy to reach it.",
+    "当前为本机回环地址，外部服务触发需配合公网地址、Tailscale 或反向代理访问。",
+  ],
+  webhookSecretLabel: ["Signing / auth secret", "鉴权 / 签名密钥"],
+  webhookShowSecret: ["Show", "显示"],
+  webhookHideSecret: ["Hide", "隐藏"],
+  webhookCopySecret: ["Copy secret", "复制密钥"],
+  webhookCustomSecretLabel: ["Custom secret", "自定义密钥"],
+  webhookCustomSecretPlaceholder: [
+    "Paste an external webhook secret (e.g. GitHub / Stripe)",
+    "填入外部平台 Webhook Secret（如 GitHub / Stripe）",
+  ],
+  webhookSecretSaved: ["Webhook secret updated", "Webhook 密钥已更新"],
+  webhookRotate: ["Rotate credentials", "轮换凭证"],
+  webhookRotateTitle: ["Rotate webhook credentials?", "轮换 Webhook 凭证？"],
+  webhookRotateBody: [
+    "This immediately invalidates the current webhook URL token (and signing secret, if enabled). Any external services using the old URL or secret must be updated.",
+    "轮换后当前入站 URL Token（以及已启用的签名密钥）会立即失效，使用旧地址或旧密钥的外部服务需要同步更新。",
+  ],
+  webhookRotateConfirm: ["Rotate", "确认轮换"],
+  webhookRotated: ["Webhook credentials rotated", "Webhook 凭证已轮换"],
 } as const;

@@ -1,11 +1,13 @@
 import type {
   BriefView,
   RoutineInfo,
+  RoutineResults,
   RoutineTriggerView,
   RunView,
+  WebhookTriggerInfo,
 } from "@eta/client-contracts";
 import type { Layout } from "../../components";
-import { View } from "nsh";
+import { effect, signal, untracked, View } from "nsh";
 import {
   ActionItem,
   ActionMenu,
@@ -16,12 +18,24 @@ import {
   Label,
   row,
   SmoothScroll,
+  textFaces,
+  textStyle,
 } from "../../components";
 import { EmptyState } from "../../components/empty-state";
+import { showToast } from "../../components/toast";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, icon, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
-import { Badge, Callout, WarningLine } from "../../ui";
+import { useHost } from "../../services/host";
+import { problemText } from "../../services/problem-text";
+import {
+  Badge,
+  Callout,
+  ConfirmDialog,
+  CopyButton,
+  Field,
+  WarningLine,
+} from "../../ui";
 import { EarlierReportCard, LatestReportCard } from "./history";
 import {
   clockDistance,
@@ -29,15 +43,344 @@ import {
   dayWord,
   feedTime,
   formatTriggerConfigSummary,
+  isLoopbackWebhookUrl,
   scheduleFor,
   shortDate,
   triggerModeLabel,
   triggerStatusMeta,
   triggerTargetLabel,
+  webhookCurlCommand,
+  webhookFullUrl,
 } from "./schedule";
 
 /** The schedule and brief labels, and the time column of the timeline under them. */
 const labelWidth = 72;
+const secretMask = "••••••••••••••••••••••••••••••••";
+
+function webhookAuthLabel(info: WebhookTriggerInfo) {
+  if (info.authMode === "header") {
+    return uiText("webhookAuthHeader", {
+      header: info.headerName || "Authorization",
+    });
+  }
+  if (info.authMode === "hmac-sha256") {
+    return uiText("webhookAuthHmac", {
+      header: info.headerName || "X-Hub-Signature-256",
+    });
+  }
+  return uiText("webhookAuthNone");
+}
+
+function InboundWebhookPanel(props: {
+  routine: RoutineInfo;
+  phone: boolean;
+  inset: number;
+}) {
+  const host = useHost();
+  const c = colors();
+  const type = textFaces();
+
+  const info = signal<WebhookTriggerInfo | null>(null);
+  const loading = signal(false);
+  const loadError = signal("");
+  const secretVisible = signal(false);
+  const customSecret = signal("");
+  const savingSecret = signal(false);
+  const rotating = signal(false);
+  const confirmRotate = signal(false);
+  let requestSeq = 0;
+
+  async function fetchInfo(routineId: string) {
+    const seq = ++requestSeq;
+    loading.set(true);
+    loadError.set("");
+    try {
+      const result = await host.call<RoutineResults["webhookInfo"]>(
+        "routines",
+        "webhookInfo",
+        { routineId },
+      );
+      if (seq !== requestSeq) return;
+      if (result && typeof result.path === "string" && result.path !== "") {
+        info.set(result);
+      } else {
+        info.set(null);
+      }
+    } catch (error) {
+      if (seq !== requestSeq) return;
+      loadError.set(problemText(error));
+    } finally {
+      if (seq === requestSeq) loading.set(false);
+    }
+  }
+
+  effect(() => {
+    const routineId = props.routine.id;
+    const provider = props.routine.trigger?.provider;
+    const configKey = JSON.stringify(props.routine.trigger?.config ?? {});
+    const updatedAt = props.routine.updatedAt;
+    void configKey;
+    void updatedAt;
+    untracked(() => {
+      secretVisible.set(false);
+      customSecret.set("");
+      confirmRotate.set(false);
+      savingSecret.set(false);
+      rotating.set(false);
+      if (provider !== "webhook") {
+        requestSeq++;
+        info.set(null);
+        loading.set(false);
+        loadError.set("");
+        return;
+      }
+      if (!host.can("routines.webhookInfo") && host.state().ops.length > 0) {
+        return;
+      }
+      void fetchInfo(routineId);
+    });
+  });
+
+  const fullUrl = () => {
+    const current = info();
+    if (!current) return "";
+    return webhookFullUrl(current, host.address()?.origin);
+  };
+
+  const canRotate = () =>
+    host.can("routines.webhookRotate") || host.state().ops.length === 0;
+  const canSetSecret = () =>
+    host.can("routines.webhookSetSecret") || host.state().ops.length === 0;
+
+  async function saveSecret() {
+    const trimmed = customSecret().trim();
+    if (!trimmed || savingSecret()) return;
+    const targetId = props.routine.id;
+    const seq = ++requestSeq;
+    savingSecret.set(true);
+    const updated = await host.action(() =>
+      host.call<RoutineResults["webhookSetSecret"]>(
+        "routines",
+        "webhookSetSecret",
+        { routineId: targetId, secret: trimmed },
+      ),
+    );
+    savingSecret.set(false);
+    if (seq !== requestSeq || props.routine.id !== targetId) return;
+    if (updated && typeof updated.path === "string") {
+      info.set(updated);
+      customSecret.set("");
+      showToast({ title: uiText("webhookSecretSaved"), tone: "green" });
+    }
+  }
+
+  async function rotateCredentials() {
+    if (rotating()) return;
+    const targetId = props.routine.id;
+    const seq = ++requestSeq;
+    rotating.set(true);
+    const updated = await host.action(() =>
+      host.call<RoutineResults["webhookRotate"]>("routines", "webhookRotate", {
+        routineId: targetId,
+      }),
+    );
+    rotating.set(false);
+    if (seq !== requestSeq || props.routine.id !== targetId) return;
+    if (updated && typeof updated.path === "string") {
+      info.set(updated);
+      confirmRotate.set(false);
+      secretVisible.set(false);
+      showToast({ title: uiText("webhookRotated"), tone: "green" });
+    }
+  }
+
+  return (
+    <If when={info() || loading() || loadError()}>
+      <View
+        style={{
+          paddingVertical: space[12],
+          paddingHorizontal: props.inset,
+          gap: space[8],
+          borderTopWidth: 1,
+          borderColor: c().border,
+        }}
+      >
+        <View
+          style={{
+            ...row,
+            gap: space[8],
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          <Label variant="small" weight={weight.strong}>
+            {uiText("webhookPanelTitle")}
+          </Label>
+          <If when={info()}>
+            {(current) => (
+              <Badge
+                label={webhookAuthLabel(current())}
+                tone="neutral"
+                size="caption"
+              />
+            )}
+          </If>
+          <View style={{ flex: 1 }} />
+          <If when={info() && canRotate()}>
+            <Button
+              label={uiText("webhookRotate")}
+              icon="refresh"
+              size={props.phone ? control.md : control.sm}
+              onPress={() => confirmRotate.set(true)}
+            />
+          </If>
+        </View>
+
+        <If when={loading() && !info()}>
+          <Label variant="small" tone="muted">
+            {uiText("webhookLoading")}
+          </Label>
+        </If>
+
+        <If when={loadError()}>
+          <Callout
+            tone="danger"
+            icon="warning"
+            title={uiText("webhookLoadError")}
+            description={loadError()}
+            actions={
+              <Button
+                label={uiText("retry")}
+                size={control.sm}
+                onPress={() => void fetchInfo(props.routine.id)}
+              />
+            }
+          />
+        </If>
+
+        <If when={info()}>
+          {(current) => (
+            <>
+              <View
+                style={{
+                  gap: space[8],
+                  padding: space[8],
+                  borderWidth: 1,
+                  borderColor: c().border,
+                  backgroundColor: c().surface,
+                }}
+              >
+                <Label variant="small" mono>
+                  {fullUrl()}
+                </Label>
+                <View style={{ ...row, gap: space[8], flexWrap: "wrap" }}>
+                  <CopyButton
+                    label={uiText("webhookCopyUrl")}
+                    value={fullUrl}
+                    size={props.phone ? control.md : control.sm}
+                  />
+                  <CopyButton
+                    label={uiText("webhookCopyCurl")}
+                    value={() => webhookCurlCommand(fullUrl(), current())}
+                    size={props.phone ? control.md : control.sm}
+                  />
+                </View>
+              </View>
+
+              <If when={isLoopbackWebhookUrl(fullUrl())}>
+                <WarningLine
+                  text={uiText("webhookLoopbackHint")}
+                  outline={!props.phone}
+                />
+              </If>
+
+              <If when={current().authMode !== "none"}>
+                <View style={{ gap: space[8], paddingTop: space[4] }}>
+                  <View
+                    style={{
+                      ...row,
+                      gap: space[8],
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Label variant="small" tone="muted">
+                      {uiText("webhookSecretLabel")}
+                    </Label>
+                    <Label
+                      variant="small"
+                      mono
+                      style={{ flex: 1, minWidth: 0 }}
+                    >
+                      {secretVisible() ? (current().secret ?? "") : secretMask}
+                    </Label>
+                    <Button
+                      label={
+                        secretVisible()
+                          ? uiText("webhookHideSecret")
+                          : uiText("webhookShowSecret")
+                      }
+                      size={props.phone ? control.md : control.sm}
+                      disabled={!current().secret}
+                      onPress={() => secretVisible.set(!secretVisible())}
+                    />
+                    <CopyButton
+                      label={uiText("webhookCopySecret")}
+                      value={() => current().secret ?? ""}
+                      disabled={!current().secret}
+                      size={props.phone ? control.md : control.sm}
+                    />
+                  </View>
+                  <If when={canSetSecret()}>
+                    <View
+                      style={{ ...row, gap: space[8], alignItems: "center" }}
+                    >
+                      <Field
+                        label={uiText("webhookCustomSecretLabel")}
+                        placeholder={uiText("webhookCustomSecretPlaceholder")}
+                        masked
+                        value={customSecret()}
+                        onChange={customSecret.set}
+                        onSubmit={() => void saveSecret()}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          height: props.phone ? control.lg : control.md,
+                          paddingHorizontal: space[8],
+                          ...textStyle(type("small")),
+                        }}
+                      />
+                      <Button
+                        label={uiText("save")}
+                        size={props.phone ? control.lg : control.md}
+                        disabled={!customSecret().trim() || savingSecret()}
+                        busy={savingSecret()}
+                        onPress={() => void saveSecret()}
+                      />
+                    </View>
+                  </If>
+                </View>
+              </If>
+            </>
+          )}
+        </If>
+
+        <If when={confirmRotate()}>
+          <ConfirmDialog
+            title={uiText("webhookRotateTitle")}
+            description={uiText("webhookRotateBody")}
+            confirmLabel={uiText("webhookRotateConfirm")}
+            tone="danger"
+            phone={props.phone}
+            busy={rotating()}
+            onConfirm={() => void rotateCredentials()}
+            onClose={() => confirmRotate.set(false)}
+          />
+        </If>
+      </View>
+    </If>
+  );
+}
 
 function TriggerSummaryDetail(props: {
   trigger: RoutineTriggerView;
@@ -72,13 +415,61 @@ function TriggerSummaryDetail(props: {
         <If when={modeText()}>
           {(mode) => <Badge label={mode()} tone="neutral" size="caption" />}
         </If>
-        <Label variant="caption" tone="muted">
-          {props.trigger.lastEventAt
-            ? uiText("triggerLastEventAt", {
-                time: feedTime(props.trigger.lastEventAt),
-              })
-            : uiText("triggerNoEventsYet")}
-        </Label>
+        <If when={props.trigger.provider === "web-monitor"}>
+          <Label variant="caption" tone="muted">
+            {props.trigger.lastCheckedAt != null
+              ? uiText("triggerLastCheckedAt", {
+                  time: feedTime(props.trigger.lastCheckedAt),
+                })
+              : uiText("triggerNotCheckedYet")}
+          </Label>
+          <Label variant="caption" tone="muted">
+            {props.trigger.lastEventAt
+              ? uiText("triggerLastChangeAt", {
+                  time: feedTime(props.trigger.lastEventAt),
+                })
+              : uiText("triggerNoChangesYet")}
+          </Label>
+        </If>
+        <If when={props.trigger.provider === "file-watch"}>
+          <Label variant="caption" tone="muted">
+            {props.trigger.watchedCount != null
+              ? props.trigger.watchedCount === 1
+                ? uiText("triggerWatchedPathsCount", { count: 1 })
+                : uiText("triggerWatchedPathsCountPlural", {
+                    count: props.trigger.watchedCount,
+                  })
+              : uiText("triggerNotWatching")}
+          </Label>
+          <Label variant="caption" tone="muted">
+            {props.trigger.lastEventAt
+              ? uiText("triggerLastEventAt", {
+                  time: feedTime(props.trigger.lastEventAt),
+                })
+              : uiText("triggerNoEventsYet")}
+          </Label>
+        </If>
+        <If
+          when={
+            props.trigger.provider !== "web-monitor" &&
+            props.trigger.provider !== "file-watch"
+          }
+        >
+          <If when={props.trigger.lastCheckedAt != null}>
+            <Label variant="caption" tone="muted">
+              {uiText("triggerLastCheckedAt", {
+                time: feedTime(props.trigger.lastCheckedAt!),
+              })}
+            </Label>
+          </If>
+          <Label variant="caption" tone="muted">
+            {props.trigger.lastEventAt
+              ? uiText("triggerLastEventAt", {
+                  time: feedTime(props.trigger.lastEventAt),
+                })
+              : uiText("triggerNoEventsYet")}
+          </Label>
+        </If>
       </View>
       <If when={configSummary()}>
         {(summary) => (
@@ -370,6 +761,13 @@ export function RoutineDetail(props: {
             onPress={props.onRun}
           />
         </View>
+        <If when={trigger()?.provider === "webhook"}>
+          <InboundWebhookPanel
+            routine={props.routine}
+            phone={phone()}
+            inset={inset()}
+          />
+        </If>
         <If when={!props.runs.length}>
           <EmptyState
             size="row"
