@@ -76,8 +76,6 @@ export interface TranscriptProps {
   onReachTop: () => void;
   /** A line for the status area, already in the reader's language. */
   onNotify: (text: string) => void;
-  /** Puts text on the clipboard; OSC 52 to the terminal unless given. */
-  copy?: ((text: string) => void) | undefined;
   onModeChange?: ((mode: TranscriptMode) => void) | undefined;
 }
 
@@ -317,7 +315,6 @@ export function Transcript(props: TranscriptProps) {
     onUi({ scroll: scrollPlace(layout, revealed) });
     if (delta < 0) askOlderAt(revealed);
   };
-  const copyText = props.copy ?? ((text: string) => copyToClipboard(text));
   const onSelectKey = (input: string, key: Key) => {
     if (selection === undefined) return;
     const reaction = selectionKey(input, key, page);
@@ -338,7 +335,7 @@ export function Transcript(props: TranscriptProps) {
         const text = selectedText(layout.plain, selection);
         if (text.trim() === "") props.onNotify(t("nothingCopied"));
         else {
-          copyText(text);
+          copyToClipboard(text);
           props.onNotify(copiedLines(t, selectedLines(selection)));
         }
         setHeld(undefined);
@@ -347,7 +344,7 @@ export function Transcript(props: TranscriptProps) {
       case "copy-item": {
         const place = foldPlace(layout, selection.cursor);
         if (place === undefined) return;
-        copyText(rendered[place.item]!.source);
+        copyToClipboard(rendered[place.item]!.source);
         props.onNotify(t("copied"));
         return;
       }

@@ -539,7 +539,8 @@ describe("/agent", () => {
     });
     await r.runCommand("/agent Ad");
     await r.waitFor("Adam");
-    expect(r.screen()).toContain("Ada");
+    // A row of its own for Ada, not only the "Ada" inside "Adam".
+    expect(r.screen()).toMatch(/(^|[\s›])Ada(\s|$)/m);
     expect(r.launches).toEqual([]);
   });
 

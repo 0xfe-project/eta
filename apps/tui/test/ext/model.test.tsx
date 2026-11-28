@@ -190,7 +190,8 @@ describe("/model", () => {
 
     await r.runCommand("/model Ad");
     await r.waitFor("Which agent?");
-    expect(r.screen()).toContain("Ada");
+    // A row of its own for Ada, not only the "Ada" inside "Adam".
+    expect(r.screen()).toMatch(/(^|[\s›])Ada(\s|$)/m);
     expect(r.screen()).toContain("Adam");
     expect(r.screen()).not.toContain("Bob");
     await markLine(r, "Adam");

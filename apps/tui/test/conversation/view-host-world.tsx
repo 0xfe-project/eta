@@ -78,7 +78,7 @@ export async function hostWorld(
   respond: Respond,
   overrides: Partial<HostOptions> = {},
 ) {
-  const { models, requests } = scriptedModels(respond);
+  const { models } = scriptedModels(respond);
   const host = await testHost({
     overrides: { models: models as never, ...overrides },
   });
@@ -168,7 +168,6 @@ export async function hostWorld(
     host,
     raw,
     wire,
-    requests,
     agent,
     project,
     conversation,

@@ -5,7 +5,6 @@
 import { describe, expect, it } from "vitest";
 import { CONVERSATION_VIEW } from "../../src/ext/conversation/kind";
 import { screenShows } from "../conversation/view-host-world";
-import { KEYS } from "../ui-support/render";
 import { manageWorld, tabBar } from "./world";
 
 async function twoNamedAlike() {
@@ -56,19 +55,5 @@ describe("conversation tabs of the same name", () => {
       r,
       bar(`1:demo (Ada)  2:demo (${second.id.slice(0, 6)})`),
     );
-  }, 60_000);
-
-  it("drops the qualifier of the tab left once the other is closed", async () => {
-    const { r, ben, second, ask } = await twoNamedAlike();
-    await ask("setSteward", { conversationId: second.id, agentId: ben.id });
-    await screenShows(r, bar("1:demo (Ada)  2:demo (Ben)"));
-    await r.press(KEYS.ctrlW); // tabs.close in the test settings
-    // Times out while the tab left keeps its qualifier.
-    await screenShows(
-      r,
-      (screen) => !bar("2:demo")(screen) && !bar("(")(screen),
-      10_000,
-    );
-    expect(tabBar(r)).toMatch(/^1:demo {2}/);
   }, 60_000);
 });

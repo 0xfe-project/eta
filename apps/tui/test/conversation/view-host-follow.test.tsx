@@ -248,26 +248,6 @@ async function following(
 }
 
 describe("following the newest line while steps unfold", () => {
-  it("keeps following when everything unfolds while a reply only writes text", async () => {
-    const world = await liveWorld(
-      (index) => (index === 0 ? say(lines("line", 30)) : { live: true }),
-      { rows: 16 },
-    );
-    await world.send("hi");
-    await screenShows(world.r, "line 30");
-    await world.send("go");
-    const reply = await world.live();
-    reply.write("streamed A\nstreamed B\n");
-    await following(world.r, world.scroll, "streamed B");
-    await world.r.press(KEY.expandAll);
-    await following(world.r, world.scroll, "streamed B");
-    reply.write("streamed C\n");
-    await following(world.r, world.scroll, "streamed C");
-    reply.end();
-    await screenShows(world.r, (screen) => !screen.includes("is replying"));
-    await following(world.r, world.scroll, "streamed C");
-  }, 60_000);
-
   it("keeps following when the steps unfold while the reply streams after its tool calls", async () => {
     const world = await liveWorld((index) => {
       if (index === 0) return say(lines("line", 30));

@@ -45,8 +45,8 @@ function interpolate(from: string, to: string, t: number): string {
  */
 export function logoLineColors(
   theme: Pick<Theme, "brand" | "brandDim">,
-  lineCount: number = LOGO_LINES.length,
 ): (string | undefined)[] {
+  const lineCount = LOGO_LINES.length;
   const plain = (value: string) => (value === "default" ? undefined : value);
   if (HEX6.test(theme.brand) && HEX6.test(theme.brandDim)) {
     return Array.from({ length: lineCount }, (_, i) =>

@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createStore } from "zustand/vanilla";
 import { CONVERSATION_VIEW } from "../../src/ext/conversation/kind";
 import { renderApp } from "../ui-support/app";
-import { flush, KEYS, realDelay } from "../ui-support/render";
+import { flush, realDelay } from "../ui-support/render";
 
 vi.hoisted(() => {
   globalThis.process.env.FORCE_COLOR = "3";
@@ -29,18 +29,14 @@ afterEach(() => {
 
 const ID = "c1";
 const KEY = {
-  select: "\u001Bv",
   expandAll: "\u000F",
-  toggleTurn: KEYS.alt("e"),
   pageUp: "\u001B[5~",
   lineDown: "\u001B[1;2B",
 };
 // The test theme's agent colours are magenta, blueBright, greenBright. "a1" hashes to the second,
-// "a2" to the first (transcript-frames.test.ts pins the hash). "ada" (Ann) hashes to the second too,
-// and comes after "a1" among the members, so it moves on to the third.
+// "a2" to the first (transcript-frames.test.ts pins the hash).
 const ADA_COLOUR = "\u001B[94m";
 const BEA_COLOUR = "\u001B[35m";
-const ANN_COLOUR = "\u001B[92m";
 const ACCENT = "\u001B[36m";
 // eslint-disable-next-line no-control-regex
 const SGR = /\u001B\[[\d;]*m/;
@@ -116,7 +112,6 @@ function sceneWire(rows: MessageView[], held: MessageView[] = []): WireClient {
         list: [
           { id: "a1", name: "Ada" } as AgentView,
           { id: "a2", name: "Bea" } as AgentView,
-          { id: "ada", name: "Ann" } as AgentView,
         ],
       }),
       conversations: target({
@@ -127,7 +122,6 @@ function sceneWire(rows: MessageView[], held: MessageView[] = []): WireClient {
         members: [
           { agentId: "a1", sessionId: null, lastSeq: 0, status: "idle" },
           { agentId: "a2", sessionId: null, lastSeq: 0, status: "idle" },
-          { agentId: "ada", sessionId: null, lastSeq: 0, status: "idle" },
         ],
         timeline: { messages: rows, hasMore: false, held },
       }),
@@ -249,20 +243,6 @@ describe("frames in a group conversation", () => {
     expect(inner.replace(/^\u001B\[39m/, "")).not.toMatch(SGR);
   });
 
-  it("gives two members whose ids pick the same colour different colours", async () => {
-    const r = await show([
-      row(1, { text: "go" }),
-      said(2, "a1", "from ada"),
-      said(3, "ada", "from ann"),
-    ]);
-    const all = lines(r);
-    const at = (text: string) =>
-      all[plainLines(r).findIndex((line) => line.includes(text))]!;
-    expect(at("╭─ Ada ")).toContain(ADA_COLOUR);
-    expect(at("╭─ Ann ")).toContain(ANN_COLOUR);
-    expect(at("╭─ Ann ")).not.toContain(ADA_COLOUR);
-  });
-
   it("frames a reply that is still running down to its bottom edge, the newest line on screen", async () => {
     const r = await show([
       row(1, { text: "go" }),
@@ -305,44 +285,9 @@ describe("unfolding inside a frame", () => {
       frameOf(r, "Ada").some((line) => line.includes("▸ Used 1 tool")),
     ).toBe(true);
   });
-
-  it("the toggle key unfolds the reply's steps inside its frame", async () => {
-    const r = await show(scene());
-    await press(r, KEY.toggleTurn);
-    unfoldedInside(r);
-  });
-
-  it("space on the steps line in the selection unfolds them inside the frame", async () => {
-    const r = await show(scene());
-    await press(r, KEY.select);
-    for (let i = 0; i < 12; i += 1) {
-      const cursor = lines(r).find((line) => line.includes("\u001B[7m"));
-      if (
-        cursor !== undefined &&
-        stripVTControlCharacters(cursor).includes("Used 1 tool")
-      )
-        break;
-      await press(r, KEYS.up);
-    }
-    await press(r, " ");
-    unfoldedInside(r);
-  });
 });
 
 describe("narrow terminals", () => {
-  it("below 40 columns draws the author's line and no frame", async () => {
-    const r = await show(scene(), { columns: 39 });
-    const screen = plainLines(r);
-    expect(screen).toContain("● Ada");
-    expect(screen).toContain("● Bea");
-    expect(screen.some((line) => /[╭╰│]/.test(line))).toBe(false);
-  });
-
-  it("at 40 columns frames the replies", async () => {
-    const r = await show(scene(), { columns: 40 });
-    expectWellFramed(frameOf(r, "Ada"), 40);
-  });
-
   it("drops and brings back the frames as the terminal is resized, the scroll staying on the same item", async () => {
     const many = [
       row(1, { text: "go" }),

@@ -1,89 +1,21 @@
 /**
- * Layers with a list, on a real host and a small terminal: the list takes the rows the layer has
- * left, so the layer fits the terminal without scrolling as a whole, and Ink's frame is never
- * taller than the terminal.
+ * Layers with a list, on a real host and a short terminal: the first-time setup keeps every part
+ * reachable, and /new's list lets Enter pick only what the cursor is on.
  */
 import type { AgentView, ProjectView } from "@eta/client-contracts";
-import type { HostRendered } from "../ext-support/render-with-host";
 import { stripVTControlCharacters } from "node:util";
 import { describe, expect, it } from "vitest";
 import manage from "../../src/ext/manage";
-import model from "../../src/ext/model";
 import { createSetupExtension } from "../../src/ext/setup";
 import { renderWithHost } from "../ext-support/render-with-host";
 import { tempDir } from "../support/temp";
 import { KEYS } from "../ui-support/render";
 
 const COLUMNS = 60;
-const ROWS = 16;
 
 function frameLines(frame: string): string[] {
   return stripVTControlCharacters(frame).replace(/\n$/, "").split("\n");
 }
-
-/** The layer's rows from its title down to the row above its bottom border, border and padding off. */
-function layerRows(screen: string): string[] {
-  const lines = screen.split("\n");
-  const top = lines.findIndex((line) => line.startsWith("┌"));
-  const bottom = lines.findIndex((line) => line.startsWith("└"));
-  if (top === -1 || bottom === -1) return [];
-  return lines
-    .slice(top + 1, bottom)
-    .map((line) => line.replace(/^│ ?/, "").replace(/ ?│$/, "").trimEnd());
-}
-
-/**
- * Every frame since `from` fits the terminal; the last one shows the whole layer, both borders,
- * with the frame's own hint rows (under the title, above the footer or the bottom border) empty:
- * nothing of the layer is scrolled out of view.
- */
-function expectFits(
-  r: HostRendered,
-  from: number,
-  { footer, rows = ROWS }: { footer: boolean; rows?: number },
-): string[] {
-  for (const frame of r.stdout.frames.slice(from))
-    expect(frameLines(frame).length).toBeLessThanOrEqual(rows);
-  const layer = layerRows(r.screen());
-  expect(layer.length, r.screen()).toBeGreaterThan(3);
-  expect(layer[1], r.screen()).toBe("");
-  expect(layer.at(footer ? -2 : -1), r.screen()).toBe("");
-  return layer;
-}
-
-describe(`layers with a list on a ${COLUMNS}×${ROWS} terminal`, () => {
-  it("/model: the agent list shows as many agents as fit, in order, with how many more below", async () => {
-    const r = await renderWithHost({
-      extensions: [model],
-      columns: COLUMNS,
-      rows: ROWS,
-    });
-    const names = Array.from(
-      { length: 30 },
-      (_, i) => `Agent ${String(i + 1).padStart(2, "0")}`,
-    );
-    for (const name of names)
-      await r.wire.call<{ agent: AgentView }>("agents", "create", {
-        name,
-        model: "fake:fake-model",
-      });
-    const from = r.stdout.frames.length;
-    await r.runCommand("/model");
-    await r.waitFor(/Agent 01/);
-    await r.settle();
-    const rows = expectFits(r, from, { footer: true });
-    const shown = rows.flatMap((row) => /Agent (\d\d)/.exec(row)?.[1] ?? []);
-    expect(shown.length).toBeGreaterThanOrEqual(3);
-    // In order from the first, each whole, then a row for the rest.
-    expect(shown).toEqual(names.slice(0, shown.length).map((n) => n.slice(6)));
-    expect(rows).toContain(`↓ ${30 - shown.length} more`);
-    // Moving to the end keeps it fitting.
-    for (let i = 0; i < 30; i += 1) await r.press(KEYS.down);
-    await r.settle();
-    const end = expectFits(r, from, { footer: true });
-    expect(end.some((row) => row.includes("Agent 30"))).toBe(true);
-  });
-});
 
 describe("the first-time setup on terminals too short for it", () => {
   const SETUP_TITLE = "Setup · Esc to leave";

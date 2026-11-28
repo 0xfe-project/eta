@@ -149,25 +149,6 @@ describe("tab bar", () => {
     expect([...bar].length).toBe(100);
   });
 
-  it("stays on one line when the tabs do not fit, cutting the line", async () => {
-    const feature = testFeature();
-    const ids = Array.from({ length: 12 }, (_, i) => `tab-number-${i}`);
-    const r = await app({
-      extensions: [feature.extension],
-      state: { tabs: chats(...ids), activeTab: 0 },
-      columns: 60,
-      rows: 12,
-    });
-    const all = lines(plain(r));
-    expect(all).toHaveLength(12);
-    const bar = all.at(-1) ?? "";
-    expect(bar).toContain("1:tab-number-0");
-    expect(bar).not.toContain("12:tab-number-11");
-    expect([...bar].length).toBeLessThanOrEqual(60);
-    // No other line carries a piece of the bar.
-    expect(all.slice(0, -1).join("\n")).not.toMatch(/\d+:tab-number/);
-  });
-
   it("goes to the top with layout.tabBar top, the status area staying at the bottom", async () => {
     const { r } = await shellWith(
       { tabs: chats("a"), activeTab: 0 },

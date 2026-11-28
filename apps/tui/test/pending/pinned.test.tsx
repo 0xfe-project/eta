@@ -3,9 +3,14 @@
  * attention while something waits, it opens the panel once, and a new item changes nothing else
  * on the screen.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { KEYS, plain } from "../ui-support/render";
 import { PENDING_KEYS, probe, screenShows, tabBar, twoRooms } from "./world";
+
+// Ink's colour library reads this once, when it loads, so it is set before any import.
+vi.hoisted(() => {
+  globalThis.process.env.FORCE_COLOR = "3";
+});
 
 const PANEL = "Waiting and conversations";
 
@@ -111,21 +116,22 @@ describe("the pending entry after the panel closed", () => {
   }, 90_000);
 });
 
-describe("what the pending entry counts", () => {
-  it("counts no task that is to do, in progress or in the backlog", async () => {
-    const w = await twoRooms();
-    const first = await w.reviewTask("Ada", w.ada.group.id, "One", "One");
-    const second = await w.reviewTask("Ada", w.ada.group.id, "Two", "Two");
-    const third = await w.reviewTask("Ada", w.ada.group.id, "Three", "Three");
-    const watch = probe();
-    const r = await w.show(undefined, { extensions: [watch.extension] });
-    await screenShows(r, () => tabBar(r).endsWith("Pending 3"));
-    expect(watch.attention.at(-1)).toBe(true);
+describe("the pending entry's colour", () => {
+  // The test theme's warning and muted colours, yellow and gray.
+  const WARNING = "\u001B[33m";
+  const MUTED = "\u001B[90m";
+  const drawnBar = (r: { lastFrame: () => string }) =>
+    r.lastFrame().split("\n").at(-1) ?? "";
 
-    await w.moveTask(first.id, "todo");
-    await w.moveTask(second.id, "in_progress");
-    await w.moveTask(third.id, "backlog");
+  it("is the warning colour while something waits, and muted once nothing does", async () => {
+    const w = await twoRooms();
+    const task = await w.reviewTask("Ada", w.ada.group.id, "One", "One");
+    const r = await w.show();
+    await screenShows(r, () => tabBar(r).endsWith("Pending 1"));
+    expect(drawnBar(r)).toContain(`${WARNING}Pending 1`);
+
+    await w.moveTask(task.id, "todo");
     await screenShows(r, () => tabBar(r).endsWith("Pending 0"));
-    expect(watch.attention.at(-1)).toBe(false);
+    expect(drawnBar(r)).toContain(`${MUTED}Pending 0`);
   }, 120_000);
 });

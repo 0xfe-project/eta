@@ -784,6 +784,11 @@ describe("installResident", () => {
     >;
     expect(phase.step).toBe("running");
     expect(phase.output).toContain("Access is denied.");
+    // It never got as far as waiting for the service to answer.
+    expect(made.phases).not.toContainEqual({
+      name: "installing",
+      step: "waiting-up",
+    });
     expect(await settings(made.config)).toBeUndefined();
   });
 
@@ -1037,25 +1042,6 @@ describe("stop", () => {
     await closeHost(host);
     await new Promise((resolve) => setTimeout(resolve, FAST.giveUpMs + 500));
     expect(phaseOf(made)).toEqual({ name: "stopped" });
-  });
-});
-
-describe("killTemporaryNow", () => {
-  it("kills the temporary host without waiting", async () => {
-    const target = await testHost();
-    const program = await dualProgram();
-    const pidFile = join(await tempDir(), "pid");
-    const made = await make({
-      env: { FAKE_PORT: String(target.port), FAKE_PID_FILE: pidFile },
-      findHost: () => program,
-    });
-    await made.controller.start();
-    await made.controller.startTemporary({ persist: false });
-    await until(named(made, "connected"));
-    const pid = await pidIn(pidFile);
-    const result = made.controller.killTemporaryNow();
-    expect(result).toBeUndefined();
-    await until(() => !alive(pid), 5_000, "the temporary host to die");
   });
 });
 

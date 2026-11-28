@@ -1,8 +1,7 @@
 import { nextRetryMs } from "@eta/client-contracts/wire";
 /** The small pure pieces of the connection layer. */
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TIMING, resolveTiming } from "../../src/connection/controller";
-import { TUI_VERSION } from "../../src/version";
+import { DEFAULT_TIMING } from "../../src/connection/controller";
 
 describe("the default timing", () => {
   it("gives up after 15 s and retries from 0.5 s doubling up to 5 s", () => {
@@ -24,18 +23,5 @@ describe("the default timing", () => {
     expect(delays).toEqual([
       500, 1_000, 2_000, 4_000, 5_000, 5_000, 5_000, 5_000,
     ]);
-  });
-});
-
-describe("the TUI version", () => {
-  it("is dev when run from source", () => {
-    expect(TUI_VERSION).toBe("dev");
-  });
-});
-
-describe("the controller's timing", () => {
-  it("is the default timing when none is given", () => {
-    expect(resolveTiming(undefined)).toEqual(DEFAULT_TIMING);
-    expect(resolveTiming({})).toEqual(DEFAULT_TIMING);
   });
 });

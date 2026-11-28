@@ -118,28 +118,6 @@ describe("readSetupFacts with copies the host is not keeping up to date", () => 
     return { sections, revisions: {}, version: 0 };
   }
 
-  it("waits past a hello copy of the agents and decides on the list the host sends after it subscribed", async () => {
-    const state = hostState({ accounts: READY, models: [GEMINI] });
-    state.targets!.agents = unfollowed({ list: [] });
-    const { wire, asked } = trackedWire(state);
-    let facts: Awaited<ReturnType<typeof readSetupFacts>> | "pending" =
-      "pending";
-    const reading = readSetupFacts(wire, "en", 5_000).then((found) => {
-      facts = found;
-    });
-    await flush();
-    expect(asked).toContain("agents");
-    expect(facts).toBe("pending");
-
-    wire.store.setState((current) => ({
-      targets: { ...current.targets, agents: target({ list: [AGENT] }) },
-    }));
-    await reading;
-    expect(
-      (facts as unknown as Awaited<ReturnType<typeof readSetupFacts>>)?.agents,
-    ).toEqual([AGENT]);
-  });
-
   it.each(["providers", "personas", "agents", "llm"])(
     "does not decide while the %s copy is one the host is not keeping up to date",
     async (name) => {

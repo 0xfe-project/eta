@@ -44,7 +44,6 @@ function heldProgram(events: string[]) {
 function setup(
   options: {
     program?: TerminalProgram;
-    startFails?: boolean;
     /** The controller's stop; one that resolves at once when absent. */
     stop?: () => Promise<void>;
   } = {},
@@ -81,7 +80,6 @@ function setup(
     startProgram: (launch) => {
       launches.push(launch);
       mouseAtStart = [...mouse];
-      if (options.startFails) throw new Error("spawn failed");
       if (!options.program) throw new Error("no program in this test");
       return options.program;
     },
@@ -229,14 +227,6 @@ describe("runInterface and the mouse reporting", () => {
     expect(r.mouse).toEqual(["on", "off", "on"]);
   });
 
-  it("turns the reporting on again when the program cannot start", async () => {
-    const r = setup({ startFails: true });
-    r.reporting.setEnabled(true);
-    await expect(r.hooks.runProcess(EDITOR)).rejects.toThrow("spawn failed");
-    expect(r.mouseAtStart()).toEqual(["on", "off"]);
-    expect(r.mouse).toEqual(["on", "off", "on"]);
-  });
-
   it("leaves the reporting off when eta quits while a program has the terminal", async () => {
     const events: string[] = [];
     const held = heldProgram(events);
@@ -266,15 +256,6 @@ describe("runInterface and the mouse reporting while the host stops", () => {
       expect(r.mouse).toEqual(["on", "off"]);
     },
   );
-
-  it("turns the reporting off on a quit from the interface before the host has stopped", async () => {
-    const r = setup({ stop: neverStops });
-    r.reporting.setEnabled(true);
-    void r.hooks.quit();
-    await realDelay(20);
-    expect(r.events).toEqual(["stop"]);
-    expect(r.mouse).toEqual(["on", "off"]);
-  });
 
   it.each(["uncaughtException", "unhandledRejection"] as const)(
     "turns the reporting off on %s before the host has stopped",

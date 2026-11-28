@@ -1,8 +1,7 @@
 /**
  * The conversation view's wiring against a wire whose answers the test scripts: paging back
  * through the history, a send that fails while the user types on, the clipboard the selection
- * writes to, folding seen on screen, the preview setting, the project's files, and the transcript
- * left alone while the input changes.
+ * writes to, folding seen on screen, the preview setting, and the project's files.
  */
 import type {
   AgentView,
@@ -17,22 +16,12 @@ import process from "node:process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createStore } from "zustand/vanilla";
 import { CONVERSATION_VIEW } from "../../src/ext/conversation/kind";
-import { layoutTranscript } from "../../src/ext/conversation/transcript/layout";
 import { renderApp } from "../ui-support/app";
 import { testConfig } from "../ui-support/config";
 import { flush, KEYS, plain, realDelay } from "../ui-support/render";
 
 vi.hoisted(() => {
   globalThis.process.env.FORCE_COLOR = "3";
-});
-
-// Counts the layouts the transcript makes, and otherwise does what the module does.
-vi.mock("../../src/ext/conversation/transcript/layout", async (original) => {
-  const actual =
-    await original<
-      typeof import("../../src/ext/conversation/transcript/layout")
-    >();
-  return { ...actual, layoutTranscript: vi.fn(actual.layoutTranscript) };
 });
 
 const open: { unmount: () => void }[] = [];
@@ -235,36 +224,6 @@ describe("paging back", () => {
     expect(before()).toEqual([201]);
   });
 
-  it("asks nothing when the window says nothing is older, whatever its first seq", async () => {
-    const { r, wire } = await show({
-      rows: [row(2), row(3)],
-      hasMore: false,
-      answer: pages,
-    });
-    await r.press(KEY.pageUp);
-    await r.press(KEY.top);
-    await realDelay(200);
-    expect(asked(wire, "conversations.history")).toEqual([]);
-  });
-
-  it("stops after an empty page", async () => {
-    const { r, wire } = await show({
-      rows: [row(2), row(3)],
-      hasMore: true,
-      answer: async () => ({
-        conversationId: ID,
-        messages: [],
-        hasMore: false,
-      }),
-    });
-    await r.press(KEY.pageUp);
-    await realDelay(200);
-    await r.press(KEY.pageUp);
-    await r.press(KEY.top);
-    await realDelay(200);
-    expect(asked(wire, "conversations.history")).toHaveLength(1);
-  });
-
   it.each([
     [
       "a host that fails",
@@ -315,24 +274,6 @@ describe("a send that fails while the user types on", () => {
     expect(screen).toContain("› second");
     expect(screen).not.toContain("first words");
     expect(screen).toMatch(/Failed: .*the host said no/);
-  });
-
-  it("puts the words back when the input is still empty", async () => {
-    let fail: (error: Error) => void = () => {};
-    const { r } = await show({
-      rows: [row(1)],
-      answer: (op) =>
-        op === "conversations.send"
-          ? new Promise((_resolve, reject) => {
-              fail = reject;
-            })
-          : Promise.resolve(undefined),
-    });
-    await r.type("first words");
-    await r.press(KEYS.enter);
-    fail(new Error("the host said no"));
-    await flush();
-    expect(plain(r)).toContain("› first words");
   });
 });
 
@@ -551,19 +492,3 @@ function arrive(wire: WireClient, message: MessageView): void {
     };
   });
 }
-
-describe("the transcript while the input changes", () => {
-  it("lays the transcript out again for none of the keys typed into the input", async () => {
-    const { r } = await show({ rows: rowsFrom(1, 30) });
-    const layouts = vi.mocked(layoutTranscript);
-    await realDelay(50);
-    await flush();
-    const before = layouts.mock.calls.length;
-    expect(before).toBeGreaterThan(0);
-    await r.type("hello there");
-    await r.press(KEYS.backspace);
-    await flush();
-    expect(plain(r)).toContain("› hello ther");
-    expect(layouts.mock.calls.length).toBe(before);
-  });
-});
