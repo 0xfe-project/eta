@@ -5,12 +5,15 @@ import { Clipboard, context, signal } from "nsh";
 import { startProgress } from "../components/progress-notification";
 import { showToast } from "../components/toast";
 import { uiText } from "../i18n";
-import { createFileSaver } from "../pages/chat/artifacts/file";
+import {
+  createFileSaver,
+  savedToDownloads,
+} from "../pages/chat/artifacts/file";
 import { problemText } from "./problem-text";
 
 // A file a message carried, saved on a press: the host's copy (`GET /attachments/<id>`, served as
-// bytes to save), through the share sheet where there is one, else into the app's storage; a
-// browser downloads it. One at a time; the app mounts `writer` once.
+// bytes to save), on a desktop into the Downloads folder, elsewhere through the share sheet where
+// there is one, else into the app's storage; a browser downloads it. One at a time; the app mounts `writer` once.
 
 /** Reads a fetch response body into bytes, reporting determinate 0..1 progress when Content-Length is known. */
 export async function readResponseBytes(
@@ -87,7 +90,7 @@ export function createAttachmentFiles(host: ReturnType<typeof useHost>) {
         progress.dismiss();
         return;
       }
-      await saver.save(
+      const savedFile = await saver.save(
         bytes,
         savedName(file.name),
         file.contentType || "application/octet-stream",
@@ -95,6 +98,10 @@ export function createAttachmentFiles(host: ReturnType<typeof useHost>) {
       );
       if (controller.signal.aborted) {
         progress.dismiss();
+        return;
+      }
+      if (savedFile?.downloads) {
+        progress.complete(savedToDownloads(savedFile));
         return;
       }
       const saved = saver.savedPath();

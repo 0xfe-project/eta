@@ -31,6 +31,7 @@
     "clipboard": true,
     "picker": true,
     "share": true,
+    "homeDir": true,
     "fs": {
       "read": [
         "${dataDir}/artifact-exports",
@@ -38,7 +39,11 @@
         "${homeDir}",
         "/"
       ],
-      "write": ["${dataDir}/artifact-exports", "${dataDir}/downloads"]
+      "write": [
+        "${dataDir}/artifact-exports",
+        "${dataDir}/downloads",
+        "${homeDir}/Downloads"
+      ]
     },
     "openUrl": {
       "schemes": ["http", "https", "mailto"]

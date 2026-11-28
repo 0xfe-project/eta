@@ -1,5 +1,6 @@
 import type { WebViewDownload, WebViewRef } from "nsh";
 import {
+  exists,
   mkdir,
   readdir,
   rename,
@@ -8,11 +9,14 @@ import {
   unlink,
   writeFile,
 } from "fs/promises";
+import { homedir } from "os";
 import { cleanup, platform, Share, signal, WebView } from "nsh";
+import { uiText } from "../../../i18n";
 
-// NSH expands this placeholder when its file and share APIs access app storage.
+// NSH expands these placeholders when its file and share APIs access app storage and the home directory.
 const exportsDirectory = `\${dataDir}/artifact-exports`;
 const downloadDirectory = `\${dataDir}/downloads`;
+const downloadsFolder = `\${homeDir}/Downloads`;
 const directWriteLimit = 8 * 1024 * 1024;
 const chunkSize = 128 * 1024;
 const transferPage = `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'"><script>
@@ -60,6 +64,34 @@ async function expireShares() {
     if ((await stat(directory)).mtimeMs < Date.now() - 86400000)
       await removeExport(directory);
   }
+}
+
+/** The first of `name`, `name (1).ext`, `name (2).ext`, … that is free in the Downloads folder. */
+async function freeDownloadName(name: string) {
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const extension = dot > 0 ? name.slice(dot) : "";
+  let candidate = name;
+  for (let n = 1; await exists(`${downloadsFolder}/${candidate}`); n++)
+    candidate = `${stem} (${n})${extension}`;
+  return candidate;
+}
+
+/** Where a saved file went: its full path, its name there, and whether that is the Downloads folder. */
+export interface SavedFile {
+  path: string;
+  name: string;
+  downloads: boolean;
+}
+
+/** The completed download notification for a file saved into the Downloads folder. */
+export function savedToDownloads(saved: SavedFile) {
+  return {
+    title: uiText("savedToDownloads", { name: saved.name }),
+    detail: undefined,
+    path: saved.path,
+    showWhenQuick: true,
+  };
 }
 
 interface Transfer {
@@ -177,9 +209,10 @@ function FileTransfer(props: { job: Transfer }) {
 }
 
 /**
- * Saves files the app holds: through the share sheet where there is one, else into the app's
- * storage (`savedPath` says where); files over NSH's direct write limit go through a WebView
- * download (`writer` mounts it). One file at a time.
+ * Saves files the app holds: on a desktop into the Downloads folder, under a free name; elsewhere
+ * through the share sheet where there is one, else into the app's storage. `save` resolves with
+ * where the file went (`savedPath` holds its path too); files over NSH's direct write limit go
+ * through a WebView download (`writer` mounts it). One file at a time.
  */
 export function createFileSaver() {
   const transfer = signal<Transfer | undefined>(undefined);
@@ -199,13 +232,15 @@ export function createFileSaver() {
     name: string,
     mime: string,
     request?: AbortSignal,
-  ) {
+  ): Promise<SavedFile | undefined> {
     if (closed || active)
       throw new Error("Another file export is in progress.");
     active = true;
     savedPath.set("");
     const id = crypto.randomUUID();
     let directory: string | undefined;
+    // A file written into the Downloads folder, removed alone if the save does not finish.
+    let download: string | undefined;
     let keep = false;
     let job: Transfer | undefined;
     const stopped = () => closed || request?.aborted;
@@ -216,15 +251,7 @@ export function createFileSaver() {
       }
     };
     request?.addEventListener("abort", cancel);
-    try {
-      if (stopped()) return;
-      const sharing = await Share.available();
-      if (stopped()) return;
-      directory = `${exportsDirectory}/${sharing ? "share-" : ""}${id}`;
-      const path = `${directory}/${name}`;
-      await mkdir(directory, { recursive: true });
-      if (platform.os === "android") await expireShares().catch(() => {});
-      if (stopped()) return;
+    const write = async (path: string) => {
       if (bytes.length <= directWriteLimit) await writeFile(path, bytes);
       else
         await new Promise<void>((resolve, reject) => {
@@ -240,6 +267,35 @@ export function createFileSaver() {
           transfer.set(job);
         });
       transfer.set(undefined);
+    };
+    try {
+      if (stopped()) return;
+      if (
+        platform.os === "macos" ||
+        platform.os === "windows" ||
+        platform.os === "linux"
+      ) {
+        const home = homedir();
+        await mkdir(downloadsFolder, { recursive: true });
+        const saved = await freeDownloadName(name);
+        if (stopped()) return;
+        download = `${downloadsFolder}/${saved}`;
+        await write(download);
+        if (stopped()) return;
+        const separator = platform.os === "windows" ? "\\" : "/";
+        const path = `${home}${separator}Downloads${separator}${saved}`;
+        savedPath.set(path);
+        keep = true;
+        return { path, name: saved, downloads: true };
+      }
+      const sharing = await Share.available();
+      if (stopped()) return;
+      directory = `${exportsDirectory}/${sharing ? "share-" : ""}${id}`;
+      const path = `${directory}/${name}`;
+      await mkdir(directory, { recursive: true });
+      if (platform.os === "android") await expireShares().catch(() => {});
+      if (stopped()) return;
+      await write(path);
       if (stopped()) return;
       if (sharing) {
         const result = await Share.show({ title: name, files: [path] });
@@ -250,8 +306,10 @@ export function createFileSaver() {
         const dataDir = globalThis.process?.dataDir;
         if (!dataDir)
           throw new Error("No local file destination is available.");
-        savedPath.set(`${dataDir}/artifact-exports/${id}/${name}`);
+        const path = `${dataDir}/artifact-exports/${id}/${name}`;
+        savedPath.set(path);
         keep = true;
+        return { path, name, downloads: false };
       }
     } finally {
       request?.removeEventListener("abort", cancel);
@@ -260,6 +318,7 @@ export function createFileSaver() {
       // A native rename already in flight can still create the destination after an abort.
       await job?.finalizing;
       if (!keep && directory) await removeExport(directory).catch(() => {});
+      if (!keep && download) await unlink(download).catch(() => {});
       active = false;
     }
   }
