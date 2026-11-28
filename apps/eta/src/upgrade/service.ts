@@ -50,11 +50,12 @@ const windows: WindowsOptions = {
   worker: { name: WORKER_NAME, description: "eta host upgrade" },
 };
 
-export const hostManager = (unit: ServiceUnit = HOST_UNIT): ServiceManager =>
-  serviceManager(unit, windows);
+export const hostManager = async (
+  unit: ServiceUnit = HOST_UNIT,
+): Promise<ServiceManager> => serviceManager(unit, windows);
 
-export const hostRunner = (): DetachedRunner =>
-  desktopRunner() ?? detachedRunner(windows);
+export const hostRunner = async (): Promise<DetachedRunner> =>
+  desktopRunner() ?? (await detachedRunner(windows));
 
 /** Whether two paths are one file; Windows's names have no case. */
 export function sameFile(one: string, other: string): boolean {
@@ -118,7 +119,7 @@ export async function findHostService(): Promise<HostService | undefined> {
 
 /** The service the computer's own manager runs, leaving the desktop app out. */
 async function installedService(): Promise<HostService | undefined> {
-  const manager = hostManager();
+  const manager = await hostManager();
   const argv = await manager.installed();
   if (argv === undefined) return undefined;
   const [program] = argv;

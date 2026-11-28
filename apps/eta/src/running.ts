@@ -101,7 +101,7 @@ export interface FindOptions {
 }
 
 async function computerService(): Promise<InstalledHost | undefined> {
-  const manager = hostManager();
+  const manager = await hostManager();
   const argv = await manager.installed();
   return argv === undefined ? undefined : { argv, status: manager.status };
 }

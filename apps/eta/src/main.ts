@@ -119,10 +119,10 @@ if (serviceCommand !== undefined) {
   }
   try {
     if (serviceCommand === "uninstall-service") {
-      const definition = await hostManager().uninstall(self);
+      const definition = await (await hostManager()).uninstall(self);
       console.log(`Removed ${definition.name}.`);
     } else {
-      const manager = hostManager({ ...HOST_UNIT, env: installedEnv() });
+      const manager = await hostManager({ ...HOST_UNIT, env: installedEnv() });
       const definition = await manager.install(self);
       console.log(`Installed ${definition.name} (${definition.path}).`);
       console.log(

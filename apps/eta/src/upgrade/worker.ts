@@ -77,7 +77,7 @@ export async function startWorker(request: WorkerRequest): Promise<string> {
   const id = randomUUID();
   announceUpgrade(dataDir, id, from);
   try {
-    await (request.runner ?? hostRunner()).start({
+    await (request.runner ?? (await hostRunner())).start({
       name: WORKER_NAME,
       argv: [
         program,
@@ -106,12 +106,12 @@ export async function startWorker(request: WorkerRequest): Promise<string> {
 /** Stop a worker that has not touched the service yet; false when it is too late, or nothing runs. */
 export async function cancelWorker(
   dataDir: string,
-  runner: DetachedRunner = hostRunner(),
+  runner?: DetachedRunner,
 ): Promise<boolean> {
   const status = readStatus(dataDir);
   if (status?.state !== "running" || !CANCELLABLE.has(status.phase))
     return false;
-  await runner.stop(WORKER_NAME);
+  await (runner ?? (await hostRunner())).stop(WORKER_NAME);
   return true;
 }
 

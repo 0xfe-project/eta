@@ -625,12 +625,14 @@ describe("windows", () => {
 });
 
 describe("choosing", () => {
-  it("gives this computer one, and the daemon none on Windows", () => {
+  it("gives this computer one, and the daemon none on Windows", async () => {
     const original = Object.getOwnPropertyDescriptor(process, "platform");
     try {
       Object.defineProperty(process, "platform", { value: "win32" });
-      expect(() => serviceManager(unit)).toThrow(/no service support on win32/);
-      expect(() => detachedRunner()).toThrow(/win32/);
+      await expect(serviceManager(unit)).rejects.toThrow(
+        /no service support on win32/,
+      );
+      await expect(detachedRunner()).rejects.toThrow(/win32/);
     } finally {
       Object.defineProperty(
         process,
@@ -638,6 +640,6 @@ describe("choosing", () => {
         original as PropertyDescriptor,
       );
     }
-    expect(serviceManager(unit).name).toBe("io.eta.host");
+    expect((await serviceManager(unit)).name).toBe("io.eta.host");
   });
 });
