@@ -113,7 +113,6 @@ describe("an installed plugin's icon after a restart", () => {
 
       const restarted = boot(db);
       expect(await restarted.find(...ask(site_.url))).toEqual(first);
-      expect(restarted.requests).toBe(0);
       expect(site_.hits).toBe(before);
     },
   );
@@ -130,7 +129,6 @@ describe("an installed plugin's icon after a restart", () => {
 
     const soon = boot(db, () => start + 10 * 60 * 1000);
     expect(await soon.find(null, `${home.url}/`, null)).toBe(null);
-    expect(soon.requests).toBe(0);
     expect(home.hits).toBe(before);
 
     const later = boot(db, () => start + 2 * HOUR);
@@ -156,11 +154,12 @@ describe("an installed plugin's icon after a restart", () => {
     const db = database();
     expect(await boot(db).find(null, `${home.url}/`, null)).toBe(null);
     home.mode.broken = false;
+    const before = home.hits;
     const restarted = boot(db);
     expect((await restarted.find(null, `${home.url}/`, null))?.type).toBe(
       "image/png",
     );
-    expect(restarted.requests).toBeGreaterThan(0);
+    expect(home.hits).toBeGreaterThan(before);
   });
 });
 

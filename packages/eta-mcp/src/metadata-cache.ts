@@ -35,11 +35,9 @@ export class MetadataCache {
   private servers: Record<string, ServerCacheEntry> | undefined;
 
   readonly path: string;
-  private readonly now: () => number;
 
-  constructor(path: string, now: () => number = Date.now) {
+  constructor(path: string) {
     this.path = path;
-    this.now = now;
   }
 
   private load(): Record<string, ServerCacheEntry> {
@@ -62,7 +60,7 @@ export class MetadataCache {
   }
 
   /** Stores entries, keeping observed shapes of tools whose definition did not change. */
-  save(updates: Record<string, Omit<ServerCacheEntry, "cachedAt">>): void {
+  save(updates: Record<string, ServerCacheEntry>): void {
     // Re-read: another process may have written since we loaded.
     const servers = readFile(this.path);
     for (const [name, update] of Object.entries(updates)) {
@@ -75,17 +73,8 @@ export class MetadataCache {
       servers[name] = {
         ...update,
         ...(outputShapes === undefined ? {} : { outputShapes }),
-        cachedAt: this.now(),
       };
     }
-    this.write(servers);
-  }
-
-  /** Drops a server's entry (the config no longer has it). */
-  remove(server: string): void {
-    const servers = readFile(this.path);
-    if (!(server in servers)) return;
-    delete servers[server];
     this.write(servers);
   }
 

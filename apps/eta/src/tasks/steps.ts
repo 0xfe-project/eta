@@ -59,7 +59,7 @@ export function stepsOfJournal(text: string): TaskStepView[] {
  * agent mentioned on the task keeps a plan of its own and is not the task's. Null until that run
  * has started a session.
  */
-export function executorSessionOf(
+function executorSessionOf(
   runs: readonly { agentId: string | null; sessionId: string | null }[],
 ): string | null {
   const executors = runs.filter((run) => run.agentId === null);

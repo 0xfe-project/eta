@@ -198,12 +198,9 @@ describe("hasPrereleaseSwitch", () => {
     ...(prerelease === undefined ? {} : { prerelease }),
   });
 
-  it("is there when the page answers yes or no", () => {
+  it("is there when the page answers yes or no, and not when the field is missing or null", () => {
     expect(hasPrereleaseSwitch(check(true))).toBe(true);
     expect(hasPrereleaseSwitch(check(false))).toBe(true);
-  });
-
-  it("is not there when the field is missing or null", () => {
     expect(hasPrereleaseSwitch(check(undefined))).toBe(false);
     expect(hasPrereleaseSwitch(check(null))).toBe(false);
   });

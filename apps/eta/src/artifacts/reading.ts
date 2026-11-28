@@ -141,7 +141,7 @@ const ENTITIES: Record<string, string> = {
 };
 
 /** The words of an HTML page: no tags, no comments, no style or script, entities decoded. */
-export function htmlText(html: string): string {
+function htmlText(html: string): string {
   return html
     .replaceAll(/<!--[\s\S]*?-->/g, " ")
     .replaceAll(/<(style|script)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
@@ -355,7 +355,7 @@ function asText(bytes: Uint8Array): string | undefined {
 }
 
 /** Lines `offset`..`offset + limit - 1` with their numbers, and what is left after them. */
-export function page(
+function page(
   text: string,
   offset: number,
   limit: number,

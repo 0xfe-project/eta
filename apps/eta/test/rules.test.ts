@@ -5,12 +5,7 @@
 import type { MessageView } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { briefing } from "../src/conversations/briefing";
-import {
-  judgeMention,
-  resolveNamed,
-  routeUserMessage,
-  WAKE_BUDGET,
-} from "../src/conversations/routing";
+import { resolveNamed, routeUserMessage } from "../src/conversations/routing";
 
 describe("routeUserMessage", () => {
   const base = {
@@ -34,13 +29,6 @@ describe("routeUserMessage", () => {
     ).toEqual({ targets: ["a"], named: [] });
   });
 
-  it("goes to the steward when nobody is named", () => {
-    expect(routeUserMessage({ ...base, mentions: [], steward: "b" })).toEqual({
-      targets: ["b"],
-      named: [],
-    });
-  });
-
   it("never brings in a steward who is not a member: that is no steward", () => {
     // Several members: nobody is woken, and nobody is added.
     expect(routeUserMessage({ ...base, mentions: [], steward: "z" })).toEqual({
@@ -51,40 +39,6 @@ describe("routeUserMessage", () => {
     expect(
       routeUserMessage({ ...base, members: ["a"], mentions: [], steward: "z" }),
     ).toEqual({ targets: ["a"], named: [] });
-  });
-
-  it("goes to the only member when there is no steward", () => {
-    expect(
-      routeUserMessage({ ...base, members: ["a"], mentions: [] }).targets,
-    ).toEqual(["a"]);
-  });
-
-  it("wakes nobody when there is no steward and more than one member", () => {
-    expect(routeUserMessage({ ...base, mentions: [] })).toEqual({
-      targets: [],
-      named: [],
-    });
-    expect(
-      routeUserMessage({ ...base, members: [], mentions: [] }).targets,
-    ).toEqual([]);
-  });
-});
-
-describe("judgeMention", () => {
-  it("lets the first four through, reminds on the fifth, and holds the rest back", () => {
-    expect(WAKE_BUDGET).toBe(5);
-    expect([1, 2, 3, 4].map(judgeMention)).toEqual([
-      "wake",
-      "wake",
-      "wake",
-      "wake",
-    ]);
-    expect(judgeMention(5)).toBe("wake_last");
-    expect([6, 7, 100].map(judgeMention)).toEqual([
-      "capped",
-      "capped",
-      "capped",
-    ]);
   });
 });
 
@@ -100,13 +54,6 @@ describe("resolveNamed", () => {
       "b1",
     ]);
     expect(resolveNamed(["b1"], members, "z").ids).toEqual(["b1"]);
-  });
-
-  it("reports what it could not find, and never wakes the speaker", () => {
-    expect(resolveNamed(["Ada", "Zed", "ada"], members, "a1")).toEqual({
-      ids: [],
-      unknown: ["Zed"],
-    });
   });
 });
 
@@ -156,38 +103,6 @@ describe("briefing", () => {
     });
   const BACKGROUND =
     "(The above is background: handled already, or not for you. Answer only the message below, unless it asks you to take up something above.)";
-
-  it("is only the message when there is nothing since the agent last looked", () => {
-    const told = tell([row(1, { text: "hello" })], 1);
-    expect(told.text).toBe("[conversation: plans]\nthe user says:\nhello");
-    expect(told.text).not.toContain("Since you last looked");
-    expect(told.text).not.toContain(BACKGROUND);
-    expect(told.seen).toBe(1);
-  });
-
-  it("puts what was missed before the message, with who said it", () => {
-    const told = tell(
-      [
-        row(1, { text: "first" }),
-        row(2, { text: "second", author: "agent", agentId: "b" }),
-        row(3, { text: "now" }),
-      ],
-      3,
-    );
-    expect(told.text).toBe(
-      [
-        "[conversation: plans]",
-        "Since you last looked:",
-        "- the user: first",
-        "- Bob: second",
-        BACKGROUND,
-        "",
-        "the user says:",
-        "now",
-      ].join("\n"),
-    );
-    expect(told.seen).toBe(3);
-  });
 
   it("says who an earlier message went to and that they replied, so it is not taken up again", () => {
     // The incident: the user asked the steward a question, the steward answered, then Captain

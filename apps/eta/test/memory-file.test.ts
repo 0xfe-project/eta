@@ -49,8 +49,11 @@ describe("renderMemoryFile", () => {
     ).toEqual(
       entries.map((entry) => ({ section: entry.section, text: entry.text })),
     );
-    expect(again[0]!.id).toBe(
-      parseMemoryFile(PATH, renderMemoryFile(entries))[0]!.id,
-    );
+    // The id follows from the path, section and text alone: the same bullet read from another
+    // file's text has the same id, and another bullet does not.
+    const fromSample = parseMemoryFile(PATH, sample);
+    expect(again[0]!.id).toBe(fromSample[0]!.id);
+    expect(again[1]!.id).toBe(fromSample[1]!.id);
+    expect(again[0]!.id).not.toBe(again[1]!.id);
   });
 });

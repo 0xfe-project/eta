@@ -10,6 +10,7 @@ import type {
   PlaceListing,
   PlaceSearchResult,
   ProjectResults,
+  ProjectView,
   RecentPlace,
 } from "@eta/client-contracts";
 import type { PlaceFs, PlaceRunner } from "@eta/places";
@@ -137,9 +138,9 @@ describe("places on the primary", () => {
     expect(await problem(call(w, "list", { path: "relative" }))).toBe(
       "not_absolute",
     );
-    expect(
-      await problem(call(w, "list", { machineId: "nope" })),
-    ).toBeUndefined();
+    await expect(call(w, "list", { machineId: "nope" })).rejects.toThrow(
+      /no such machine/,
+    );
   });
 
   it("says what the machine can do, with where a clone goes", async () => {
@@ -208,6 +209,19 @@ describe("projects.create, by the machine's rules", () => {
         }),
       ),
     ).toBe("invalid");
+    await expect(
+      w.client.call("projects", "create", {
+        path: "~/code",
+        machineId: "nope",
+      }),
+    ).rejects.toThrow(/no such machine/);
+    // None of the refusals left a project behind: the one made is the only one.
+    expect(
+      w.client
+        .section<ProjectView[]>("projects", "list")
+        ?.filter((entry) => entry.kind !== "agent_home")
+        .map((entry) => entry.path),
+    ).toEqual([join(home, "code")]);
     // Making it is using it.
     await until(
       () => recentOf(w, primaryId(w))[0]?.path === join(home, "code"),

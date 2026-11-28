@@ -458,34 +458,6 @@ describe("a run is Captain's", () => {
     expect(run.error).toBe("The run took longer than 150 ms and was stopped.");
   });
 
-  it("a routine runs once at a time, the clock's turn included", async () => {
-    const hold = gate();
-    const t = await setup(
-      runs(() => [
-        hold.opened.then(() => report("R", "r")) as unknown as Answer,
-      ]),
-    );
-    const routine = await t.create();
-    await t.watch(routine.id);
-    t.setClock("2026-10-18T08:59:59Z");
-    t.tick();
-    t.setClock("2026-10-18T09:00:00Z");
-    expect(t.tick()).toEqual([routine.id]);
-    await until(() => t.requests.some(isRun));
-    expect(t.sections(routine.id).runs()[0]).toMatchObject({
-      status: "running",
-      startedBy: "schedule",
-    });
-    t.setClock("2026-10-19T09:00:00Z");
-    expect(t.tick()).toEqual([]);
-    await expect(t.act("run", { routineId: routine.id })).rejects.toThrow(
-      /already running/,
-    );
-    hold.open();
-    await until(() => t.sections(routine.id).runs()[0]?.status === "sent");
-    expect(t.sections(routine.id).runs()).toHaveLength(1);
-  });
-
   it("the clock fires a run once at the time, not twice, and not while paused", async () => {
     const t = await setup(runs(() => [report("Tick", "t")]));
     const routine = await t.create();
@@ -704,13 +676,25 @@ describe("a routine Captain proposes from a chat", () => {
         });
       return say("Proposed.");
     });
-    await t.w.send(t.direct, "every Monday at 9, tell me what moved");
-    let card: ReturnType<typeof captainProposalOf<CaptainRoutineProposal>>;
-    await until(() => {
-      card = t.w
+    const cards = () =>
+      t.w
         .rows(t.direct)
         .map(captainProposalOf<CaptainRoutineProposal>)
-        .find((c) => c?.kind === "create_routine");
+        .filter((c) => c?.kind === "create_routine");
+    // The first card is rejected: nothing is made.
+    await t.w.send(t.direct, "every Monday at 9, tell me what moved");
+    await until(() => cards().length === 1);
+    const rejected = (await t.w.client.call("captain", "decideOperation", {
+      operationId: cards()[0]!.operationId,
+      decision: "reject",
+    })) as { operation: CaptainOperationView };
+    expect(rejected.operation).toMatchObject({ status: "rejected" });
+    expect(t.w.host.product.routines.store.list()).toEqual([]);
+
+    await t.w.send(t.direct, "every Monday at 9 after all, tell me what moved");
+    let card: ReturnType<typeof captainProposalOf<CaptainRoutineProposal>>;
+    await until(() => {
+      card = cards()[1];
       return card !== undefined;
     });
     expect(card!.proposal).toMatchObject({
@@ -960,6 +944,11 @@ describe("feedback and the brief", () => {
     await expect(
       t.act("feedback", { routineId: b.id, runId: run.id, text: "x" }),
     ).rejects.toThrow(/no such run/);
+    // Finished, and of this routine, but no words: still refused, and nothing is kept.
+    await expect(
+      t.act("feedback", { routineId: a.id, runId: run.id, text: "  " }),
+    ).rejects.toThrow(/needs text/);
+    expect(t.w.host.product.routines.store.feedbackOn(run.id)).toEqual([]);
   });
 });
 

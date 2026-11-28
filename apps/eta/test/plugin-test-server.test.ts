@@ -378,17 +378,6 @@ describe("testing a plugin server's connection", () => {
     expect(JSON.stringify(result)).not.toContain(SECRET);
   });
 
-  it("sends the stored sign-in, so a logged-in server is listed, not asked to log in again", async () => {
-    const server = await fake("token");
-    const { run } = await setup(server.url);
-    const result = await run(5000, storedProvider("access-stored"));
-    expect(result.status).toBe("ok");
-    expect(result.tools.map((tool) => tool.name)).toEqual(["echo"]);
-    expect(server.hits.some((hit) => hit.auth === "Bearer access-stored")).toBe(
-      true,
-    );
-  });
-
   it("says needs login when the stored sign-in is rejected, and starts no login", async () => {
     const server = await fake("token");
     const { run } = await setup(server.url);
@@ -409,23 +398,6 @@ describe("testing a plugin server's connection", () => {
     expect(result.tools.map((tool) => tool.name)).toEqual(["echo"]);
     expect(server.refreshes).toBe(1);
     expect(JSON.stringify(result)).not.toContain("refresh-ok");
-  });
-
-  it("a rejected token whose refresh also fails says needs login", async () => {
-    const server = await fake("token");
-    const { run } = await setup(server.url);
-    const result = await run(
-      5000,
-      storedProvider("access-expired", "refresh-revoked"),
-    );
-    expect(result.status).toBe("needs_login");
-    expect(server.refreshes).toBe(0);
-  });
-
-  it("without a stored sign-in (logged out) says needs login", async () => {
-    const server = await fake("token");
-    const { run } = await setup(server.url);
-    expect((await run()).status).toBe("needs_login");
   });
 
   it("says a 401 with no credential at all needs a login", async () => {

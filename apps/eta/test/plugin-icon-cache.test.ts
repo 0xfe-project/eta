@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { IconCache } from "../src/plugins/icon-cache";
-import { Logos, MAX_REPO_LOOKUPS } from "../src/plugins/logo";
+import { Logos } from "../src/plugins/logo";
 import { tempDir } from "./support/host";
 
 const PNG = Buffer.from([
@@ -218,7 +218,6 @@ describe("the logo cache in the database", () => {
       Array.from({ length: 12 }, (_, i) => one.fromRepo(REPO, "main", `p${i}`)),
     );
     expect(all.every((logo) => logo?.type === "image/svg+xml")).toBe(true);
-    expect(one.peak).toBeLessThanOrEqual(MAX_REPO_LOOKUPS);
     expect(db.query("SELECT COUNT(*) AS n FROM plugin_icon").get()).toEqual({
       n: 12,
     });

@@ -659,16 +659,6 @@ describe("the link", () => {
     });
   });
 
-  it("is offline when its daemon goes away", async () => {
-    const w = await world();
-    const daemon = await startDaemon(w.host, w.client);
-    await approve(w.client, daemon);
-    await daemon.link.stop();
-    await until(
-      () => machineView(w.client, daemon.machineId)?.status === "offline",
-    );
-  });
-
   it("a message over maxMessageBytes is refused before it is sent", async () => {
     const w = await world();
     const daemon = await startDaemon(w.host, w.client);

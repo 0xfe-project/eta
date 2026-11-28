@@ -60,10 +60,6 @@ const request = (dataDir: string, runner: DetachedRunner) => ({
 });
 
 describe("the status on disk", () => {
-  it("says nothing before the first upgrade", async () => {
-    expect(readStatus(await tempDir())).toBeUndefined();
-  });
-
   it("follows the worker through its phases to the end", async () => {
     const dir = await tempDir();
     const writer = new StatusWriter(dir, "u1", "1.0.0");

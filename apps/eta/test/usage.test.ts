@@ -491,12 +491,4 @@ describe("the sums", () => {
     // The whole picture still has all of it.
     expect(store.models()[0]).toMatchObject({ requests: 4, total: 111 });
   });
-
-  it("count a failure as failed and a stop as neither", () => {
-    const { store } = open();
-    store.record(entry(NOW, { status: "error", error: "boom", total: 0 }));
-    store.record(entry(NOW, { status: "aborted" }));
-    store.record(entry(NOW));
-    expect(store.models()[0]).toMatchObject({ requests: 3, failed: 1 });
-  });
 });

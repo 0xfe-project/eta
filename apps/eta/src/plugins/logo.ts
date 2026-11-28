@@ -162,6 +162,8 @@ export interface LogoOptions {
   allowPrivate?: boolean;
   /** Tests only: the name resolver. */
   resolve?: (host: string) => Promise<string[]>;
+  /** Tests only: where a checked address is dialed, so a fake public host can be served locally. */
+  dial?: (address: string) => string;
   /** Tests only: a certificate (PEM) trusted for https, so a local fake server with its own can answer. */
   ca?: string;
   /** Tests only: the sites asked for a server's icon, in order (a local fake has no parent host). */
@@ -284,10 +286,6 @@ export class Logos {
   readonly #repoBackoff = new Map<string, number>();
   #active = 0;
   readonly #waiting: (() => void)[] = [];
-  /** Requests made, for tests. */
-  requests = 0;
-  /** The most repository lookups that ran at once, for tests. */
-  peak = 0;
 
   constructor(options: LogoOptions = {}) {
     this.#options = options;
@@ -431,7 +429,6 @@ export class Logos {
       if (this.#active >= MAX_REPO_LOOKUPS)
         await new Promise<void>((go) => this.#waiting.push(go));
       else this.#active++;
-      this.peak = Math.max(this.peak, this.#active);
       try {
         logo = await this.#repoLogo(repo, ref, path);
       } finally {
@@ -852,11 +849,10 @@ export class Logos {
     const pinned = usable[0]!;
     const secure = url.protocol === "https:";
     const timeoutMs = this.#options.timeoutMs ?? TIMEOUT_MS;
-    this.requests++;
     return await new Promise((resolve, reject) => {
       const request = (secure ? https : http).request(
         {
-          host: pinned,
+          host: this.#options.dial?.(pinned) ?? pinned,
           port: url.port || (secure ? 443 : 80),
           path: url.pathname + url.search,
           method: "GET",

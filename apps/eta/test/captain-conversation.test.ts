@@ -61,6 +61,14 @@ describe("captain's conversation", () => {
       await expect(
         w.client.call("conversations", "update", { conversationId, ...patch }),
       ).rejects.toThrow(/Captain's conversation cannot be changed/);
+    // Refused before anything was written.
+    expect(
+      w.host.db
+        .query<{ archived: number; name: string | null }, [string]>(
+          "SELECT archived, name FROM conversation WHERE id = ?",
+        )
+        .get(conversationId),
+    ).toMatchObject({ archived: 0 });
     await w.watch(conversationId);
     expect(
       w.client

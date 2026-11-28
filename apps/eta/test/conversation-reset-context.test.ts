@@ -44,6 +44,6 @@ describe("conversations.resetContext", () => {
       w.client.call("conversations", "resetContext", {
         conversationId: "nope",
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/no such conversation: nope/);
   });
 });

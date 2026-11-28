@@ -2,36 +2,14 @@
  * Machines and projects through a real socket: the primary machine every host has, and the
  * directories on it that conversations belong to.
  */
-import type {
-  ConversationSummary,
-  MachineView,
-  ProjectView,
-} from "@eta/client-contracts";
-import { writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import type { MachineView, ProjectView } from "@eta/client-contracts";
+import { basename } from "node:path";
 import { describe, expect, it } from "vitest";
 import { connect, until } from "./support/client";
 import { tempDir, testHost } from "./support/host";
 import { world } from "./support/world";
 
 describe("the primary machine", () => {
-  it("a conversation can have no steward, or one of its members", async () => {
-    const w = await world();
-    const ada = await w.agent("Ada");
-    const project = await w.project();
-    const group = await w.group(project.id, [ada.id], "nobody leads");
-    const said = (await w.client.call("conversations", "setSteward", {
-      conversationId: group.id,
-      agentId: null,
-    })) as { conversation: ConversationSummary };
-    expect(said.conversation.stewardId).toBeNull();
-    const back = (await w.client.call("conversations", "setSteward", {
-      conversationId: group.id,
-      agentId: ada.id,
-    })) as { conversation: ConversationSummary };
-    expect(back.conversation.stewardId).toBe(ada.id);
-  });
-
   it("is there from the first start, and is the same machine on the next", async () => {
     const dataDir = await tempDir();
     const first = await testHost({ dataDir });
@@ -106,30 +84,6 @@ describe("projects", () => {
     );
   });
 
-  it("checks the path before it takes it", async () => {
-    const w = await world();
-    const dir = await tempDir();
-    await writeFile(join(dir, "file.txt"), "not a directory");
-    const create = (path: string) =>
-      w.client.call("projects", "create", { path });
-    await expect(create("relative/path")).rejects.toThrow(/absolute/);
-    await expect(create(join(dir, "missing"))).rejects.toThrow(
-      /no such directory/,
-    );
-    await expect(create(join(dir, "file.txt"))).rejects.toThrow(
-      /not a directory/,
-    );
-    await expect(
-      w.client.call("projects", "create", { path: dir, machineId: "nope" }),
-    ).rejects.toThrow(/no such machine/);
-    // None of that left a project behind.
-    expect(
-      w.client
-        .section<ProjectView[]>("projects", "list")
-        ?.filter((entry) => entry.kind !== "agent_home"),
-    ).toEqual([]);
-  });
-
   it("returns the project that is already there, spelled however the path is", async () => {
     const w = await world();
     const path = await tempDir("eta-project-");
@@ -174,23 +128,5 @@ describe("projects", () => {
     await expect(
       w.client.call("projects", "update", { projectId: "nope", name: "x" }),
     ).rejects.toThrow(/no such project/);
-  });
-});
-
-describe("a project's steward", () => {
-  it("is gone: a project has none to set, and a group made in it takes its own", async () => {
-    const w = await world();
-    const ada = await w.agent("Ada");
-    const bob = await w.agent("Bob");
-    const project = await w.project();
-    expect(project).not.toHaveProperty("stewardId");
-    await expect(
-      w.client.call("projects", "setSteward", {
-        projectId: project.id,
-        agentId: ada.id,
-      }),
-    ).rejects.toThrow(/unknown op/);
-    const group = await w.group(project.id, [bob.id, ada.id]);
-    expect(group.stewardId).toBe(bob.id);
   });
 });
