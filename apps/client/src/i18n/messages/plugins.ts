@@ -437,4 +437,52 @@ export const pluginsMessages = {
   composioTools: ["Tools", "工具数"],
   composioCategories: ["Categories", "分类"],
   composioHomepage: ["App page", "应用主页"],
+  openPluginSettings: ["Open Settings → Plugins", "打开 设置 → 插件"],
+  marketManifestName: ["Installs as", "安装为"],
+  marketMissingEnv: ["Required environment variables", "必填环境变量"],
+  envRequired: ["Required before it can run", "运行前必填"],
+  envRequiredValue: ["Required value", "必填值"],
+  pluginEnvMissing: [
+    'Required environment variable "{{name}}" for server "{{server}}" is missing.',
+    "服务器“{{server}}”缺少必填环境变量“{{name}}”。",
+  ],
+  pluginFieldRequired: ["This field is required.", "此字段为必填项。"],
+  pluginFieldInvalidType: ["Value has the wrong type.", "值的类型不正确。"],
+  pluginFieldPattern: [
+    "Does not match the required format.",
+    "不符合要求的格式。",
+  ],
+  pluginFieldMinLength: [
+    "Must be at least {{limit}} characters.",
+    "至少需要 {{limit}} 个字符。",
+  ],
+  pluginFieldMaxLength: [
+    "Must be at most {{limit}} characters.",
+    "最多允许 {{limit}} 个字符。",
+  ],
+  pluginFieldInvalidOption: [
+    "Choose one of the listed options.",
+    "请从列出的选项中选择。",
+  ],
+  pluginFieldMinItems: [
+    "Select at least {{limit}} items.",
+    "至少选择 {{limit}} 项。",
+  ],
+  pluginFieldMaxItems: [
+    "Select at most {{limit}} items.",
+    "最多选择 {{limit}} 项。",
+  ],
+  pluginFieldWarning: [
+    'Field "{{title}}": {{reason}}',
+    "字段“{{title}}”：{{reason}}",
+  ],
+  configureMissingEnv: [
+    "Saved, but this plugin still needs server environment variables before it can run: {{names}}",
+    "已保存，但此插件运行前仍需填写服务器环境变量：{{names}}",
+  ],
+  configureStillNeedsSetup: [
+    "Saved, but this plugin still needs setup before it can run.",
+    "已保存，但此插件运行前仍需完成配置。",
+  ],
+  openServerSettings: ["Open server settings", "打开服务器设置"],
 } as const;

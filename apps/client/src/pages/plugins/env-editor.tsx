@@ -1,5 +1,5 @@
 import type { PluginEnvView, PluginView } from "@eta/client-contracts";
-import { signal, View } from "nsh";
+import { effect, signal, untracked, View } from "nsh";
 import { Button, colors, Field, Label, row, textFaces } from "../../components";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { opacity, space, weight } from "../../components/tokens";
@@ -25,6 +25,22 @@ const draftOf = (one: PluginEnvView): Draft => ({
   saved: true,
 });
 
+const missingDraftOf = (name: string): Draft => ({
+  id: next++,
+  name,
+  value: "",
+  secret: looksSecret(name),
+  saved: false,
+});
+
+function buildDrafts(saved: PluginEnvView[], missing: string[]): Draft[] {
+  const present = new Set(saved.map((one) => one.name));
+  return [
+    ...saved.map(draftOf),
+    ...missing.filter((name) => !present.has(name)).map(missingDraftOf),
+  ];
+}
+
 /** The environment variables the user sets on one stdio server; a secret is never shown again. */
 export function EnvEditor(props: { item: PluginView; server: string }) {
   const host = useHost();
@@ -32,16 +48,51 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
   const type = textFaces();
   const mine = () =>
     (props.item.env ?? []).filter((one) => one.server === props.server);
-  const drafts = signal<Draft[]>(mine().map(draftOf));
+  const serverView = () =>
+    props.item.servers.find((one) => one.name === props.server);
+  const locked = () => serverView()?.lockedEnv ?? [];
+  const missing = () => serverView()?.missingEnv ?? [];
+  const snapshot = () =>
+    JSON.stringify([
+      mine().map((one) => [one.name, one.secret, one.value]),
+      missing(),
+    ]);
+  const identity = () => `${props.item.name}\n${props.server}`;
+  const drafts = signal<Draft[]>(buildDrafts(mine(), missing()));
+  const dirty = signal(false);
   const problem = signal("");
   const off = () => !props.item.enabled;
-  const locked = () =>
-    props.item.servers.find((one) => one.name === props.server)?.lockedEnv ??
-    [];
-  const patch = (id: number, change: Partial<Draft>) =>
+  let seenIdentity = identity();
+  let seenSnapshot = snapshot();
+  effect(() => {
+    const nextIdentity = identity();
+    const nextSnapshot = snapshot();
+    if (nextIdentity !== seenIdentity) {
+      seenIdentity = nextIdentity;
+      seenSnapshot = nextSnapshot;
+      untracked(() => {
+        drafts.set(buildDrafts(mine(), missing()));
+        dirty.set(false);
+        problem.set("");
+      });
+      return;
+    }
+    if (nextSnapshot !== seenSnapshot) {
+      seenSnapshot = nextSnapshot;
+      if (!untracked(dirty)) {
+        untracked(() => {
+          drafts.set(buildDrafts(mine(), missing()));
+        });
+      }
+    }
+  });
+  const patch = (id: number, change: Partial<Draft>) => {
+    dirty.set(true);
     drafts.update((all) =>
       all.map((d) => (d.id === id ? { ...d, ...change } : d)),
     );
+  };
+  const isMissing = (name: string) => missing().includes(name.trim());
   function save() {
     const rows = drafts();
     for (const d of rows) {
@@ -69,8 +120,14 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
         server: props.server,
         env,
       });
+      dirty.set(false);
       drafts.update((all) =>
-        all.map((d) => ({ ...d, value: d.secret ? "" : d.value, saved: true })),
+        all.map((d) => ({
+          ...d,
+          name: d.name.trim(),
+          value: d.secret ? "" : d.value,
+          saved: true,
+        })),
       );
     });
   }
@@ -87,6 +144,11 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
         >
           {off() ? uiText("envOff") : uiText("envHint")}
         </Label>
+        <If when={missing().length}>
+          <Label variant="small" tone="warningInk">
+            {`${uiText("envRequired")}: ${missing().join(", ")}`}
+          </Label>
+        </If>
         <If when={locked().length}>
           <Label variant="small" tone="muted">
             {`${uiText("envFixed")}: ${locked().join(", ")}`}
@@ -101,12 +163,17 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
                 label={uiText("envName")}
                 value={d().name}
                 placeholder={uiText("envName")}
-                onChange={(name) =>
-                  patch(d().id, {
+                onChange={(name) => {
+                  const current = d();
+                  const renamed = current.saved && name !== current.name;
+                  patch(current.id, {
                     name,
-                    ...(d().saved ? {} : { secret: looksSecret(name) }),
-                  })
-                }
+                    ...(renamed ? { saved: false } : {}),
+                    ...(!current.saved || renamed
+                      ? { secret: looksSecret(name) }
+                      : {}),
+                  });
+                }}
               />
             </View>
             <View style={{ flex: 3, minWidth: 0 }}>
@@ -117,7 +184,9 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
                 placeholder={
                   d().secret && d().saved && d().value === ""
                     ? uiText("valueSaved")
-                    : uiText("headerValue")
+                    : isMissing(d().name)
+                      ? uiText("envRequiredValue")
+                      : uiText("headerValue")
                 }
                 onChange={(value) => patch(d().id, { value })}
               />
@@ -132,9 +201,10 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
               tone="ghost"
               labelVariant="small"
               disabled={off()}
-              onPress={() =>
-                drafts.update((all) => all.filter((o) => o.id !== d().id))
-              }
+              onPress={() => {
+                dirty.set(true);
+                drafts.update((all) => all.filter((o) => o.id !== d().id));
+              }}
             />
           </View>
         )}
@@ -150,12 +220,13 @@ export function EnvEditor(props: { item: PluginView; server: string }) {
           tone="plain"
           labelVariant="small"
           disabled={off()}
-          onPress={() =>
+          onPress={() => {
+            dirty.set(true);
             drafts.update((all) => [
               ...all,
               { id: next++, name: "", value: "", secret: false, saved: false },
-            ])
-          }
+            ]);
+          }}
         />
       </View>
       <View
