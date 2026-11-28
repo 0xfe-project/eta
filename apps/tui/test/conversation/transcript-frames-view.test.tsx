@@ -19,6 +19,7 @@ import { Transcript } from "../../src/ext/conversation/transcript/transcript";
 import { INITIAL_TRANSCRIPT_UI } from "../../src/ext/conversation/transcript/ui";
 import { ConfigContext } from "../../src/extensions/react";
 import { LocaleContext } from "../../src/i18n/react";
+import { clipboardCopies } from "../ui-support/clipboard";
 import { testConfig } from "../ui-support/config";
 import { flush, KEYS, renderInk } from "../ui-support/render";
 
@@ -103,6 +104,8 @@ function scene(benLines = 1): Pick<Source, "items" | "rendered"> {
 const mounted: { unmount: () => void }[] = [];
 afterEach(() => {
   for (const one of mounted.splice(0)) one.unmount();
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 function mount(
@@ -115,7 +118,7 @@ function mount(
   }));
   const seen = {
     ui: { ...INITIAL_TRANSCRIPT_UI, ...options.ui } as TranscriptUi,
-    copies: [] as string[],
+    copies: clipboardCopies(),
   };
   function Harness() {
     const state = useSyncExternalStore(source.subscribe, source.getState);
@@ -134,7 +137,6 @@ function mount(
         loadingOlder={false}
         onReachTop={() => {}}
         onNotify={() => {}}
-        copy={(copied) => seen.copies.push(copied)}
       />
     );
   }
@@ -336,21 +338,6 @@ describe("the search in a frame", () => {
 });
 
 describe("below 40 columns", () => {
-  it("draws no frame: the author's own line, the items as drawn", async () => {
-    const r = mount(scene(), { width: 39 });
-    await flush();
-    expect(r.rows().slice(0, 8)).toEqual([
-      "● Ada",
-      "ada one",
-      "ada two",
-      "",
-      "ada three",
-      "",
-      "● Ben",
-      "ben 0",
-    ]);
-  });
-
   it("keeps the scroll on the same item when the frames come and go", async () => {
     const r = mount(scene(30), { height: 10 });
     await flush();

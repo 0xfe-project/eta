@@ -1,6 +1,6 @@
 /**
- * The tab bar with more tabs than fit: the pinned entries stay whole at the right end. A pinned
- * entry that waits on the user is drawn in the warning colour.
+ * The tab bar with more tabs than fit: the pinned entries stay whole at the right end. The colour
+ * of a pinned entry that waits on the user is checked on a real host in pending/pinned.test.tsx.
  */
 import type { Extension, PinnedTab } from "../../src/extensions/types";
 import type { RenderedApp } from "../ui-support/app";
@@ -50,14 +50,9 @@ async function show(
 }
 
 const bar = (r: RenderedApp) => plain(r).split("\n").at(-1) ?? "";
-const pinned = (
-  id: string,
-  label: string,
-  attention?: () => boolean,
-): PinnedTab => ({
+const pinned = (id: string, label: string): PinnedTab => ({
   id,
   useLabel: () => label,
-  ...(attention === undefined ? {} : { useAttention: attention }),
   onSelect: () => {},
 });
 
@@ -72,8 +67,10 @@ describe("a tab bar too full for the terminal", () => {
     expect(line).toContain("1:tab-number-0");
     expect(line).not.toContain("12:tab-number-11");
     expect([...bar(r)].length).toBeLessThanOrEqual(60);
-    // The bar is still one line.
-    expect(plain(r).split("\n")).toHaveLength(12);
+    // The bar is still one line: no other line carries a piece of it.
+    const all = plain(r).split("\n");
+    expect(all).toHaveLength(12);
+    expect(all.slice(0, -1).join("\n")).not.toMatch(/\d+:tab-number/);
   });
 
   it("keeps the pinned entry whole when even the first tab does not fit beside it", async () => {

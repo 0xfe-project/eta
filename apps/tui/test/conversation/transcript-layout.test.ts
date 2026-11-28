@@ -1,4 +1,4 @@
-/** Items laid out as one column of lines, and the cache that draws each item once. */
+/** The cache that draws each item once, and again only when it or how it is drawn changes. */
 import type {
   RenderedItem,
   RenderItem,
@@ -6,7 +6,6 @@ import type {
   TranscriptItem,
 } from "../../src/ext/conversation/contract";
 import { describe, expect, it } from "vitest";
-import { layoutTranscript } from "../../src/ext/conversation/transcript/layout";
 import { createRenderCache } from "../../src/ext/conversation/transcript/render-cache";
 import { testConfig } from "../ui-support/config";
 
@@ -16,17 +15,6 @@ const text = (key: string): TranscriptItem => ({
   text: key,
   streaming: false,
 });
-const author = (key: string): TranscriptItem => ({
-  kind: "author",
-  key,
-  name: key,
-  agentId: key,
-  members: [],
-});
-
-/** Too narrow for frames, so an author is its own line. */
-const UNFRAMED = 39;
-
 function drawn(...lines: string[]): RenderedItem {
   return {
     lines: lines.map((line) => `\u001B[1m${line}\u001B[22m`),
@@ -36,28 +24,11 @@ function drawn(...lines: string[]): RenderedItem {
   };
 }
 
-describe("layoutTranscript", () => {
-  it("puts no blank line between an author and the items of its reply", () => {
-    const layout = layoutTranscript(
-      [text("u"), author("r1:author"), text("r1:text")],
-      [drawn("u"), drawn("Ada"), drawn("t")],
-      UNFRAMED,
-    );
-    expect(layout.plain).toEqual(["u", "", "Ada", "t"]);
-    expect(layout.owner).toEqual([0, -1, 1, 2]);
-    expect(layout.starts).toEqual([0, 2, 3]);
-  });
-});
-
 const NO_FRAME = {
   name: "",
   border: { open: "", close: "" },
   nameStyle: { open: "", close: "" },
 };
-
-/** Every item at the transcript's width; the widths frames give are in transcript-frames.test.ts. */
-const everyAtWidth = (items: readonly TranscriptItem[], width: number) =>
-  items.map(() => width);
 
 describe("createRenderCache", () => {
   const theme = testConfig().theme;
@@ -73,7 +44,7 @@ describe("createRenderCache", () => {
         frame: NO_FRAME,
       };
     };
-    return { seen, cache: createRenderCache(render, everyAtWidth) };
+    return { seen, cache: createRenderCache(render) };
   }
 
   it("draws again only the item that changed object, fold, or any option", () => {

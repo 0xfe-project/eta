@@ -70,27 +70,6 @@ describe("menuWindow", () => {
       });
   });
 
-  it("draws only entries, no line for more, in fewer than three rows", () => {
-    expect(menuWindow({ count: 20, selected: 0, rows: 1 })).toEqual({
-      start: 0,
-      end: 1,
-      above: 0,
-      below: 0,
-    });
-    expect(menuWindow({ count: 20, selected: 19, rows: 1 })).toEqual({
-      start: 19,
-      end: 20,
-      above: 0,
-      below: 0,
-    });
-    expect(menuWindow({ count: 20, selected: 10, rows: 2 })).toEqual({
-      start: 9,
-      end: 11,
-      above: 0,
-      below: 0,
-    });
-  });
-
   it("for every list, height and selection: fills the rows it may, shows the selection, and counts what it hides", () => {
     for (let count = 1; count <= 24; count++) {
       for (let rows = 1; rows <= 10; rows++) {

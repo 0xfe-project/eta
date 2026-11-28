@@ -1,4 +1,4 @@
-/** A timing value written out as undefined counts as not given. */
+/** A timing value not given, or written out as undefined, is the default. */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TIMING, resolveTiming } from "../../src/connection/controller";
 
@@ -8,5 +8,7 @@ describe("resolveTiming with values set to undefined", () => {
     // 15 seconds: the grace period the architecture document names.
     expect(timing.giveUpMs).toBe(15_000);
     expect(timing).toEqual({ ...DEFAULT_TIMING, maxRetryMs: 50 });
+    expect(resolveTiming(undefined)).toEqual(DEFAULT_TIMING);
+    expect(resolveTiming({})).toEqual(DEFAULT_TIMING);
   });
 });

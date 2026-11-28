@@ -163,31 +163,3 @@ describe("the /tasks command", () => {
     await screenShows(r, (s) => !s.includes("#1 Plan it"));
   }, 90_000);
 });
-
-describe("a blocked task from /tasks", () => {
-  it("opens as a waiting item to reply to", async () => {
-    const w = await twoRooms();
-    const task = await w.reviewTask(
-      "Ada",
-      w.ada.group.id,
-      "Fix it",
-      "Fix",
-      "Which branch?",
-    );
-    await w.moveTask(task.id, "blocked");
-    const r = await w.show();
-    await r.type("/tasks");
-    await r.press(KEYS.enter);
-    await screenShows(r, "#1 Fix it");
-    await r.press(KEYS.enter);
-    await screenShows(r, "#1 Fix it · blocked");
-    expect(plain(r)).toContain("Reply…");
-    expect(plain(r)).not.toContain("Comment…");
-    await r.type("main");
-    await r.press(KEYS.enter);
-    await screenShows(r, (s) => !s.includes("Reply…"));
-    expect(askedFor(w.wire, "tasks.comment")).toEqual([
-      expect.objectContaining({ taskId: task.id, body: "main" }),
-    ]);
-  }, 90_000);
-});

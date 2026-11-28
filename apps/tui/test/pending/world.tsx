@@ -27,7 +27,7 @@ import { call, say, scriptedModels } from "../../../eta/test/support/models";
 import { wireUrl } from "../../src/connection/address";
 import { Wire } from "../../src/connection/wire";
 import { CONVERSATION_VIEW } from "../../src/ext/conversation/kind";
-import { useRegistry, useShell } from "../../src/extensions/react";
+import { useShell } from "../../src/extensions/react";
 import { WITHOUT_SETUP } from "../conversation/view-host-world";
 import { baseUrl, testHost } from "../support/host";
 import { tempDir, until } from "../support/temp";
@@ -415,22 +415,18 @@ export const askedFor = (wire: { asked: Asked[] }, op: string) =>
   wire.asked.filter((asked) => asked.op === op).map((asked) => asked.args);
 
 /**
- * A feature that only watches: what the pending entry's attention hook says on every draw, and
- * the shell's context, to select the entry the way the tab bar does.
+ * A feature that only watches the shell's context, to select the pending entry the way the tab bar
+ * does.
  */
 export function probe() {
-  const attention: boolean[] = [];
   let ctx: ShellContext | undefined;
   function Watch() {
     ctx = useShell();
-    const pinned = useRegistry().pinnedTabs.find((p) => p.id === "pending");
-    attention.push(pinned?.useAttention?.() ?? false);
     return null;
   }
   const extension: Extension = { id: "zz-probe", Background: Watch };
   return {
     extension,
-    attention,
     ctx: () => {
       if (!ctx) throw new Error("the probe is not mounted");
       return ctx;

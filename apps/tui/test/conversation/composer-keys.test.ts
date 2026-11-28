@@ -152,9 +152,16 @@ describe("history and the cursor on up and down", () => {
   });
 
   it("treats a recalled entry whose folded paste changed as typed text, even with the same text", () => {
-    const sentPaste = afterSend(pasteText(withHistory, "1\n2\n3\n4\n5\n6"));
+    const withPaste = pasteText(withHistory, "1\n2\n3\n4\n5\n6");
+    const sentPaste = afterSend(withPaste);
+    // The send recorded the paste folded, as it was in the input.
+    expect(sentPaste.history.at(-1)).toEqual({
+      text: withPaste.text,
+      pastes: withPaste.pastes,
+    });
     const recalled = press(sentPaste, "up");
-    expect(recalled.pastes).toHaveLength(1);
+    expect(recalled.pastes).toEqual(withPaste.pastes);
+    expect(recalled.text).toBe(withPaste.text);
     const changed: ComposerState = {
       ...recalled,
       pastes: recalled.pastes.map((paste) => ({

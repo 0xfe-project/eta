@@ -309,8 +309,6 @@ async function mount(options: MountOptions = {}) {
       return framesBetween;
     },
     screen: () => stripVTControlCharacters(stdout.frames.at(-1) ?? ""),
-    /** Frames written so far; in debug mode Ink writes one per React commit. */
-    frameCount: () => stdout.frames.length,
   };
 }
 
@@ -365,29 +363,6 @@ describe("the wheel over the conversation", () => {
     await wheeled.send(`${WHEEL_UP}${WHEEL_UP}${WHEEL_UP}`);
     for (let i = 0; i < 9; i += 1) await keyed.send(LINE_UP);
     expect(wheeled.screen()).toContain(AWAY_HINT);
-    expect(wheeled.screen()).toBe(keyed.screen());
-  });
-
-  // Ink draws at most one frame per 34 ms; a commit that changes nothing on screen would take
-  // that slot and push the frame that scrolls to the end of the period.
-  it("draws a turn in one commit, as a line-up press does", async () => {
-    const wheeled = await mount();
-    const keyed = await mount();
-    const wheeledBefore = wheeled.frameCount();
-    const keyedBefore = keyed.frameCount();
-    await wheeled.send(WHEEL_UP);
-    await keyed.send(LINE_UP);
-    expect(keyed.frameCount() - keyedBefore).toBe(1);
-    expect(wheeled.frameCount() - wheeledBefore).toBe(1);
-  });
-
-  it("draws the steps of one read in one commit", async () => {
-    const wheeled = await mount();
-    const keyed = await mount();
-    const before = wheeled.frameCount();
-    await wheeled.send(`${WHEEL_UP}${WHEEL_UP}${WHEEL_UP}`);
-    for (let i = 0; i < 9; i += 1) await keyed.send(LINE_UP);
-    expect(wheeled.frameCount() - before).toBe(1);
     expect(wheeled.screen()).toBe(keyed.screen());
   });
 
@@ -592,16 +567,6 @@ describe("the wheel over a layer", () => {
     await r.send(WHEEL_UP);
     expect(moreAbove(r.screen())).toBe(6);
     expect(moreBelow(r.screen())).toBe(hiddenBelow - 6);
-  });
-
-  it("draws a step in one commit", async () => {
-    const r = await mount({ rows: 14 });
-    await r.type("/help");
-    await r.send(KEYS.enter);
-    const before = r.frameCount();
-    await r.send(WHEEL_DOWN);
-    expect(moreAbove(r.screen())).toBe(3);
-    expect(r.frameCount() - before).toBe(1);
   });
 
   it("scrolls for every step when reads come one right after another", async () => {

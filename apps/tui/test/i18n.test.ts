@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chooseLocale } from "../src/i18n/locale";
-import { fillPlaceholders, placeholdersOf } from "../src/i18n/messages";
+import { fillPlaceholders } from "../src/i18n/messages";
 
 describe("chooseLocale", () => {
   it("uses the setting when there is one, whatever the environment says", () => {
@@ -44,11 +44,5 @@ describe("chooseLocale", () => {
 describe("fillPlaceholders", () => {
   it("does not read substituted text as another placeholder", () => {
     expect(fillPlaceholders("{a}{b}", { a: "{b}", b: "B" })).toBe("{b}B");
-  });
-});
-
-describe("placeholdersOf", () => {
-  it("lists each placeholder name once, sorted", () => {
-    expect(placeholdersOf("{b} {a} {b} plain {}")).toEqual(["a", "b"]);
   });
 });

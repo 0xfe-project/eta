@@ -1,5 +1,6 @@
 /**
- * Every interface text exists in both languages with the same placeholders. This walks the
+ * Every interface text has the same placeholders in both languages, and none is empty (that both
+ * languages have the same keys is the type `defineMessages` gives a catalog). This walks the
  * catalogs exported anywhere under `src/` and every extension in the registry, so texts added by
  * later features are held to it without anyone listing them here.
  */
@@ -9,7 +10,13 @@ import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { extensions } from "../src/extensions.gen";
-import { placeholdersOf } from "../src/i18n/messages";
+
+/** The placeholder names in a text, each once, sorted: `{name}`, as `fillPlaceholders` fills them. */
+function placeholdersOf(text: string): string[] {
+  return [
+    ...new Set([...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!)),
+  ].sort();
+}
 
 const srcDir = resolve(import.meta.dirname, "../src");
 // The entry point runs the program when imported.
@@ -113,12 +120,9 @@ describe("interface texts in both languages", () => {
     }
   });
 
-  it.each(all.map((p) => [p.where, p] as const))(
-    "%s: same keys",
-    (_where, pair) => {
-      expect(Object.keys(pair.zh).sort()).toEqual(Object.keys(pair.en).sort());
-    },
-  );
+  it("reads each placeholder name once, sorted", () => {
+    expect(placeholdersOf("{b} {a} {b} plain {}")).toEqual(["a", "b"]);
+  });
 
   it.each(all.map((p) => [p.where, p] as const))(
     "%s: same placeholders per key",

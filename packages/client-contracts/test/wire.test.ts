@@ -262,6 +262,67 @@ describe("hello", () => {
   });
 });
 
+describe("state for a target", () => {
+  it("forgets a target's missing mark once state for it arrives", () => {
+    const { wire, last, state } = setup();
+    last().events.open();
+    last().receive(hello());
+    wire.subscribe("t");
+    last().receive({
+      type: "event",
+      target: "t",
+      name: "target:missing",
+      data: null,
+    });
+    expect(state().missing).toEqual({ t: true });
+    last().receive({
+      type: "state",
+      target: "t",
+      version: 1,
+      snapshot: snapshot("found"),
+    });
+    expect(state().missing).toEqual({});
+    expect(state().targets.t?.sections.s).toBe("found");
+  });
+
+  it("keeps a released eager target still against a frame already on its way, and follows it again on a new subscription", () => {
+    const { wire, last, state } = setup();
+    last().events.open();
+    last().receive(hello({ eager: snapshot("a") }));
+    const release = wire.subscribe("eager");
+    last().receive({
+      type: "state",
+      target: "eager",
+      version: 3,
+      snapshot: snapshot("b", "2"),
+    });
+    release();
+    // The frame the host sent before it heard the unsubscribe.
+    last().receive({
+      type: "state",
+      target: "eager",
+      version: 4,
+      snapshot: snapshot("late", "9"),
+    });
+    expect(state().targets.eager).toMatchObject({
+      version: 0,
+      sections: { s: "b" },
+    });
+
+    wire.subscribe("eager");
+    last().receive({
+      type: "state",
+      target: "eager",
+      version: 1,
+      snapshot: snapshot("c", "3"),
+    });
+    expect(state().targets.eager).toMatchObject({
+      version: 1,
+      sections: { s: "c" },
+    });
+  });
+});
+
 const pings = (socket: Socket) =>
   socket.sent.filter((frame) => frame.op === "ping").length;
 

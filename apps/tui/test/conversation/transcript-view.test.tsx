@@ -15,6 +15,7 @@ import { Transcript } from "../../src/ext/conversation/transcript/transcript";
 import { INITIAL_TRANSCRIPT_UI } from "../../src/ext/conversation/transcript/ui";
 import { ConfigContext } from "../../src/extensions/react";
 import { LocaleContext } from "../../src/i18n/react";
+import { clipboardCopies } from "../ui-support/clipboard";
 import { testConfig } from "../ui-support/config";
 import { flush, KEYS, plain, realDelay, renderInk } from "../ui-support/render";
 
@@ -104,6 +105,8 @@ function withBottomKeys(config: TuiConfig, keys: KeyBinding[]): TuiConfig {
 const mounted: { unmount: () => void }[] = [];
 afterEach(() => {
   for (const one of mounted.splice(0)) one.unmount();
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 function mount(
@@ -127,7 +130,7 @@ function mount(
   const seen = {
     ui: { ...INITIAL_TRANSCRIPT_UI, ...options.ui } as TranscriptUi,
     reachedTop: 0,
-    copies: [] as string[],
+    copies: clipboardCopies(),
     notes: [] as string[],
     modes: [] as string[],
     /** Every update the transcript asked for, oldest first. */
@@ -156,7 +159,6 @@ function mount(
             seen.reachedTop += 1;
           }}
           onNotify={(text) => seen.notes.push(text)}
-          copy={(text) => seen.copies.push(text)}
           onModeChange={(mode) => seen.modes.push(mode)}
         />
       </ConfigContext>
