@@ -19,6 +19,11 @@ import type { SiteLimits } from "./artifacts/files";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
 import type { SshRunner } from "./machines/install";
 import type {
+  ManagedTunnel,
+  TunnelConfig,
+  TunnelSpawn,
+} from "./machines/tunnel";
+import type {
   ComposioTuning,
   McpTuning,
   Product,
@@ -49,9 +54,23 @@ import { llmPlugin } from "./llm/plugin";
 import { openLlm } from "./llm/runtime";
 import { buildsIn, defaultBuilds } from "./machines/builds";
 import { Tailscale } from "./machines/tailscale";
+import {
+  normalizeTunnelPublicUrl,
+  startCloudflaredTunnel,
+} from "./machines/tunnel";
 import { clearMigrationInput, stageMigrationInput } from "./model-backfill";
 import { createProduct } from "./product";
 import { COMPILED } from "./resources";
+import { localOrigin } from "./running";
+
+interface TunnelRunnerOverrides {
+  binary?: string | undefined;
+  startupTimeoutMs?: number | undefined;
+  stopGraceMs?: number | undefined;
+  spawn?: TunnelSpawn | undefined;
+}
+
+export type HostTunnelOption = boolean | (TunnelConfig & TunnelRunnerOverrides);
 
 export interface HostOptions {
   /** Everything the host owns: the database, the sessions, the providers config. */
@@ -139,6 +158,12 @@ export interface HostOptions {
    * build they are; `main.ts` turns it on.
    */
   daemonBuilds?: boolean | string;
+  /**
+   * Managed `cloudflared` tunnel for Tailscale-free remote HTTPS access: `true` starts a Quick
+   * Tunnel, or pass `{ mode: "quick" | "named", ... }` (with optional test overrides). Enabling
+   * a tunnel always forces the token gate on, even when bound to loopback.
+   */
+  tunnel?: HostTunnelOption | undefined;
   /** How a daemon is put on another computer; the user's `ssh` by default (a test fakes it). */
   ssh?: SshRunner;
   /** What the update button works with, for a test. */
@@ -153,6 +178,8 @@ export interface Host {
   readonly webDir: string | undefined;
   /** The token file, when the gate is on. */
   readonly tokenFile: string | undefined;
+  /** The active managed tunnel's external HTTPS origin, when running and known. */
+  readonly tunnelUrl: string | undefined;
   readonly db: Database;
   /** What the product made on the database: its engine and the routines' clock. */
   readonly product: Product;
@@ -164,22 +191,56 @@ export interface Host {
   close: () => Promise<void>;
 }
 
+type ResolvedTunnelOption = TunnelConfig & TunnelRunnerOverrides;
+
+function resolveTunnelOption(
+  tunnel: HostTunnelOption | undefined,
+  publicUrl: string | undefined,
+): ResolvedTunnelOption | undefined {
+  if (tunnel === undefined || tunnel === false) return undefined;
+  if (tunnel === true) return { mode: "quick" };
+  if (tunnel.mode === "quick") return tunnel;
+  const effectivePublicUrl = tunnel.publicUrl ?? publicUrl;
+  // Validate early before opening the database or binding the port.
+  if (tunnel.token.trim() === "") {
+    throw new Error("cloudflared named tunnel requires a non-empty token");
+  }
+  const normalizedPublicUrl =
+    effectivePublicUrl !== undefined && effectivePublicUrl.trim() !== ""
+      ? normalizeTunnelPublicUrl(effectivePublicUrl)
+      : undefined;
+  return {
+    ...tunnel,
+    publicUrl: normalizedPublicUrl,
+  };
+}
+
 export async function startHost(options: HostOptions): Promise<Host> {
   const hostname = options.hostname ?? "127.0.0.1";
+  const tunnelOption = resolveTunnelOption(options.tunnel, options.publicUrl);
   mkdirSync(options.dataDir, { recursive: true });
   // The access check comes first: a token file that cannot be read should stop the host before
-  // it has opened anything.
+  // it has opened anything. Enabling a tunnel always forces token gating even on loopback.
   const access = createAccess({
     hostname,
     dataDir: options.dataDir,
     tokenFile: options.tokenFile,
+    requireToken: tunnelOption !== undefined,
     allowOrigins: options.allowOrigins,
   });
+  if (options.publicUrl !== undefined) access.allowOrigin(options.publicUrl);
+  if (tunnelOption?.mode === "named" && tunnelOption.publicUrl !== undefined) {
+    access.allowOrigin(tunnelOption.publicUrl);
+  }
 
   const db = openDatabase(databasePath(options.dataDir));
   let server: AssembledServer;
   let product: Product;
   let llm: LlmRuntime | undefined;
+  let tunnel: ManagedTunnel | undefined;
+  let activeTunnelUrl: string | undefined =
+    tunnelOption?.mode === "named" ? tunnelOption.publicUrl : undefined;
+  let revokeQuickTunnelOrigin: (() => void) | undefined;
 
   const gatewayModels = new GatewayModels();
   try {
@@ -232,6 +293,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.captain === undefined ? {} : { captain: options.captain }),
       artifactLimits: options.artifactLimits,
       publicUrl: options.publicUrl,
+      tunnelUrl: () => activeTunnelUrl,
       accessToken: access.token,
       ...(options.web === undefined || options.web === false
         ? {}
@@ -316,6 +378,40 @@ export async function startHost(options: HostOptions): Promise<Host> {
     });
     try {
       await product.mount(server);
+      // Start the tunnel once the HTTP server is listening and mounted so the bound port (including
+      // `--port 0`) is live and ready to receive forwarded traffic.
+      if (tunnelOption !== undefined) {
+        const targetUrl = localOrigin(hostname, server.server.port);
+        let tunnelExited = false;
+        tunnel = await startCloudflaredTunnel({
+          config:
+            tunnelOption.mode === "quick"
+              ? { mode: "quick" }
+              : {
+                  mode: "named",
+                  token: tunnelOption.token,
+                  publicUrl: tunnelOption.publicUrl,
+                },
+          targetUrl,
+          binary: tunnelOption.binary,
+          startupTimeoutMs: tunnelOption.startupTimeoutMs,
+          stopGraceMs: tunnelOption.stopGraceMs,
+          spawn: tunnelOption.spawn,
+          warn,
+          onExit: () => {
+            tunnelExited = true;
+            activeTunnelUrl = undefined;
+            revokeQuickTunnelOrigin?.();
+            revokeQuickTunnelOrigin = undefined;
+          },
+        });
+        if (!tunnelExited) {
+          activeTunnelUrl = tunnel.url;
+          if (tunnel.mode === "quick" && tunnel.url !== undefined) {
+            revokeQuickTunnelOrigin = access.allowOrigin(tunnel.url);
+          }
+        }
+      }
       // After the server: it has applied the network settings, which the gateway's own
       // requests to the providers then inherit.
       if (options.llm !== undefined && options.llm !== false) {
@@ -336,7 +432,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
         }
       }
     } catch (error) {
+      await tunnel?.stop();
       await llm?.close();
+      await product.close();
       await server.close();
       throw error;
     }
@@ -352,6 +450,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
     dataDir: options.dataDir,
     webDir: options.webDir,
     tokenFile: access.tokenFile,
+    get tunnelUrl() {
+      return activeTunnelUrl;
+    },
     db,
     product,
     server,
@@ -359,6 +460,10 @@ export async function startHost(options: HostOptions): Promise<Host> {
     // Once: a signal and a caller may both ask, and the second has nothing left to close.
     close() {
       closing ??= (async () => {
+        await tunnel?.stop();
+        activeTunnelUrl = undefined;
+        revokeQuickTunnelOrigin?.();
+        revokeQuickTunnelOrigin = undefined;
         await product.close();
         await server.close();
         await llm?.close();

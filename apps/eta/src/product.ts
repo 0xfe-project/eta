@@ -283,6 +283,8 @@ export function createProduct(options: {
   artifactLimits?: Partial<SiteLimits> | undefined;
   /** The address the user's browser reaches the host at, for MCP sign-in callbacks. */
   publicUrl?: string | undefined;
+  /** The host's active managed tunnel HTTPS URL, when running and known. */
+  tunnelUrl?: (() => string | undefined) | undefined;
   /** The token the gate asks for, when there is a gate. */
   accessToken?: string | undefined;
   /**
@@ -1399,6 +1401,7 @@ export function createProduct(options: {
                 options.hostname ?? "127.0.0.1",
                 server.server.port,
                 options.tailscale,
+                options.tunnelUrl?.(),
               ),
             tailnetUrl: async () =>
               await tailnetDaemonUrl(
@@ -1406,6 +1409,7 @@ export function createProduct(options: {
                 server.server.port,
                 options.tailscale,
               ),
+            tunnelUrl: options.tunnelUrl,
             tailscale: options.tailscale,
             builds: options.daemonBuilds,
             ssh: options.ssh ?? sshRunner(join(dataDir, "run")),
@@ -1565,9 +1569,11 @@ async function defaultDaemonUrl(
   bound: string,
   port: number,
   tailscale: Tailscale | undefined,
+  tunnelUrl?: string | undefined,
 ): Promise<string> {
   const tailnet = await tailnetDaemonUrl(bound, port, tailscale);
   if (tailnet !== undefined) return tailnet;
+  if (tunnelUrl !== undefined) return tunnelUrl;
   if (bound === "0.0.0.0" || bound === "::")
     return `http://${hostname()}:${port}`;
   return `http://${bound.includes(":") ? `[${bound}]` : bound}:${port}`;

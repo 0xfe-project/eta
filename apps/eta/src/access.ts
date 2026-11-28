@@ -58,13 +58,20 @@ export interface AccessOptions {
   dataDir: string;
   /** The token file. Giving one turns the gate on; it is created (0600) when missing. */
   tokenFile?: string | undefined;
-  /** Other origins that may open the socket (the dev page's). */
+  /** Force the token gate on even on loopback (e.g. when exposed through a managed tunnel). */
+  requireToken?: boolean | undefined;
+  /** Other origins that may open the socket (the dev page's, `--public-url`, or active tunnel). */
   allowOrigins?: readonly string[] | undefined;
 }
 
 export interface Access {
   /** The transport's `authorize`: a `Response` refuses, `undefined` lets the request in. */
   authorize: (request: Request) => Response | undefined;
+  /**
+   * Allow an additional origin dynamically (e.g. a Quick Tunnel origin discovered after bind).
+   * Returns a callback that revokes only this grant.
+   */
+  allowOrigin: (origin: string) => () => void;
   /** The token file in use, or `undefined` when the gate is off. */
   readonly tokenFile: string | undefined;
   /** The token itself, or `undefined` when the gate is off: for the phone's connect link. */
@@ -171,10 +178,37 @@ const refuse = (status: number, message: string): Response =>
     headers: { "content-type": "text/plain; charset=utf-8" },
   });
 
+function normalizeOrigin(value: string): string | undefined {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+      return undefined;
+    return parsed.origin;
+  } catch {
+    return undefined;
+  }
+}
+
 export function createAccess(options: AccessOptions): Access {
-  const allowed = new Set(options.allowOrigins ?? []);
+  const allowed = new Map<string, number>();
+  const grantOrigin = (origin: string): (() => void) => {
+    allowed.set(origin, (allowed.get(origin) ?? 0) + 1);
+    let revoked = false;
+    return () => {
+      if (revoked) return;
+      revoked = true;
+      const remaining = (allowed.get(origin) ?? 0) - 1;
+      if (remaining <= 0) allowed.delete(origin);
+      else allowed.set(origin, remaining);
+    };
+  };
+  for (const origin of options.allowOrigins ?? []) {
+    grantOrigin(normalizeOrigin(origin) ?? origin);
+  }
   const gated =
-    options.tokenFile !== undefined || !isLoopback(options.hostname);
+    options.requireToken === true ||
+    options.tokenFile !== undefined ||
+    !isLoopback(options.hostname);
   const tokenFile = gated
     ? (options.tokenFile ?? join(options.dataDir, "access-token"))
     : undefined;
@@ -210,6 +244,11 @@ export function createAccess(options: AccessOptions): Access {
   return {
     tokenFile,
     token,
+    allowOrigin(origin) {
+      const normalized = normalizeOrigin(origin);
+      if (normalized === undefined) return () => undefined;
+      return grantOrigin(normalized);
+    },
     authorize(request) {
       const url = new URL(request.url);
       if (url.pathname === "/up" || isMachineRoute(url.pathname))

@@ -21,6 +21,7 @@ import type { MachineHub } from "./hub";
 import type { SshRunner } from "./install";
 import type { MachineRecord, MachineStore } from "./store";
 import type { Tailscale } from "./tailscale";
+import { isLoopback } from "../access";
 import { Args, productPlugin, publish } from "../wire";
 import { installDaemon } from "./install";
 import { installCommand } from "./install-script";
@@ -35,6 +36,8 @@ export interface MachinesDeps {
   defaultUrl: () => Promise<string>;
   /** This host's tailnet address, when it listens there. */
   tailnetUrl: () => Promise<string | undefined>;
+  /** This host's active tunnel HTTPS URL, when a managed tunnel is active and known. */
+  tunnelUrl?: (() => string | undefined) | undefined;
   /** Tailscale on this host, for discovery; without it the tailnet is never looked at. */
   tailscale?: Tailscale | undefined;
   /** The daemon builds carried, what `install` sends. */
@@ -126,10 +129,23 @@ export function machinesPlugin(deps: MachinesDeps, applied: () => void) {
         }),
         // The token goes to a client that is already in: this socket can do all the token can.
         wire.handle("machines", "phoneLink", async (call) => {
-          const url = await urlFor(
-            new Args(call).optionalString("url"),
-            "phoneLink",
-          );
+          const asked = new Args(call).optionalString("url");
+          let base: string;
+          if (asked !== undefined && asked.trim() !== "") {
+            base = asked.trim();
+          } else {
+            const fallback = await deps.defaultUrl();
+            const tunnel = deps.tunnelUrl?.();
+            base = fallback;
+            if (tunnel !== undefined) {
+              try {
+                if (isLoopback(new URL(fallback).hostname)) base = tunnel;
+              } catch {
+                // Leave fallback for originOf to validate.
+              }
+            }
+          }
+          const url = originOf(base, "phoneLink");
           const query = new URLSearchParams({
             address: url,
             ...(deps.accessToken === undefined
@@ -211,9 +227,13 @@ export function machinesPlugin(deps: MachinesDeps, applied: () => void) {
             },
           };
         }),
-        wire.handle("machines", "addresses", async () => ({
-          result: { tailnet: (await deps.tailnetUrl()) ?? null },
-        })),
+        wire.handle("machines", "addresses", async () => {
+          const tailnet = (await deps.tailnetUrl()) ?? null;
+          const tunnel = deps.tunnelUrl?.();
+          return {
+            result: tunnel === undefined ? { tailnet } : { tailnet, tunnel },
+          };
+        }),
         wire.handle("machines", "install", async (call) => {
           const args = new Args(call);
           const host = args.string("host").trim();

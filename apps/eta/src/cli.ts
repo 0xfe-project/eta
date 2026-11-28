@@ -14,6 +14,8 @@ export const RUN_OPTIONS = {
   "token-file": { type: "string" },
   "allow-origin": { type: "string", multiple: true },
   "public-url": { type: "string" },
+  tunnel: { type: "boolean", default: false },
+  "tunnel-token": { type: "string" },
   "no-llm": { type: "boolean", default: false },
   // Gone with the GitHub connection, still accepted: an older desktop app or an installed service
   // may pass them, and the parser would refuse to start. Not in the usage.
@@ -46,6 +48,9 @@ Flags:
   --token-file <path>     turn the token gate on with this file (created if missing)
   --allow-origin <o>      another page origin that may open the socket, repeatable
   --public-url <url>      the address the browser reaches this host at
+  --tunnel                expose this host via a managed cloudflared Quick Tunnel (forces token auth)
+  --tunnel-token <tok>    run a managed cloudflared Named Tunnel (or ETA_TUNNEL_TOKEN; implies
+                          --tunnel, forces token auth; pair with --public-url)
   --no-llm                do not load the LLM gateway
   --no-web                do not give agents web_fetch and web_search
   --searxng-url <url>     the SearXNG web_search asks
