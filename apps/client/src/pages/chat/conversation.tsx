@@ -53,6 +53,7 @@ import { openComposerDraft, placedNow, retryOutgoing } from "./composer-draft";
 import { PhoneConversationInfo } from "./conversation-info";
 import { ConversationPanel, panelAttention } from "./conversation-panel";
 import { ConversationTimeline } from "./conversation-timeline";
+import { ProjectFilePreview } from "./files/file-preview";
 import { indexInserts, InsertMessage } from "./insert-message";
 import { keptMessages } from "./kept-messages";
 import { InviteAgents, StewardMenu } from "./members";
@@ -112,6 +113,11 @@ export function Conversation(props: {
   const preview = signal<{ artifact: ArtifactView; version?: number }>();
   const openArtifact = (artifact: ArtifactView, version?: number) =>
     preview.set({ artifact, version });
+  const filePreview = signal<string | undefined>(undefined);
+  effect(() => {
+    void props.id;
+    filePreview.set(undefined);
+  });
   const widgetDraft = signal<
     { conversationId: string; text: string } | undefined
   >(undefined);
@@ -447,6 +453,7 @@ export function Conversation(props: {
         artifactFilters={artifactFilters}
         model={model}
         info={info()}
+        project={project()}
         members={members()}
         group={group()}
         memberSteps={memberSteps()}
@@ -462,6 +469,7 @@ export function Conversation(props: {
         onCloseDrawer={() => drawer.set(false)}
         onRoutines={props.onRoutines}
         onArtifact={openArtifact}
+        onOpenFile={(path) => filePreview.set(path)}
         reloadArtifacts={reloadArtifacts}
       />
     );
@@ -824,7 +832,13 @@ export function Conversation(props: {
         </View>
       </If>
       <If
-        when={drawer() && !invite() && !preview() && props.layout !== "desktop"}
+        when={
+          drawer() &&
+          !invite() &&
+          !preview() &&
+          !filePreview() &&
+          props.layout !== "desktop"
+        }
       >
         <Modal
           title={phone() ? uiText("conversationInfo") : uiText("panel")}
@@ -843,6 +857,7 @@ export function Conversation(props: {
               id={props.id}
               name={title()}
               project={project()?.display ?? project()?.path}
+              projectView={project()}
               members={members()}
               onClose={closeDrawer}
               onInspect={member.set}
@@ -851,6 +866,7 @@ export function Conversation(props: {
                 props.onTask(id);
               }}
               onArtifact={openArtifact}
+              onOpenFile={(path) => filePreview.set(path)}
               artifactFilters={artifactFilters}
             />
           </If>
@@ -923,6 +939,20 @@ export function Conversation(props: {
             initialVersion={selection().version}
             layout={props.layout}
             onClose={() => preview.set(undefined)}
+          />
+        )}
+      </If>
+      <If when={filePreview() && project()}>
+        {() => (
+          <ProjectFilePreview
+            project={project()!}
+            path={filePreview()!}
+            layout={props.layout}
+            onMention={(path) => {
+              widgetDraft.set({ conversationId: props.id, text: `@${path} ` });
+              drawer.set(false);
+            }}
+            onClose={() => filePreview.set(undefined)}
           />
         )}
       </If>

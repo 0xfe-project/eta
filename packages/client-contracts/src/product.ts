@@ -806,7 +806,50 @@ export interface UpgradeResults {
 
 /* ------------------------------------------------------------------ projects */
 
-export const PROJECT_ACTIONS = ["create", "update", "files"] as const;
+/** One entry in a project directory listing (`projects.directory`). */
+export interface ProjectFileEntry {
+  /** Base name of the entry within the listed directory. */
+  name: string;
+  /** POSIX-style path relative to the project root (`src/app.ts`). */
+  path: string;
+  kind: "file" | "directory";
+  /** True for dot-prefixed entries. */
+  hidden?: boolean;
+}
+
+/** One directory's immediate children inside a project (`projects.directory`). */
+export interface ProjectDirectoryListing {
+  /** Relative POSIX path of the listed directory (`""` for the project root). */
+  path: string;
+  entries: ProjectFileEntry[];
+  /** More entries exist than were returned. */
+  truncated: boolean;
+}
+
+/** Read-only preview of one file inside a project (`projects.readFile`). */
+export type ProjectFileContent =
+  | {
+      kind: "text";
+      path: string;
+      text: string;
+      size: number;
+      /** True when only the leading window of a large text file was read. */
+      truncated: boolean;
+    }
+  | {
+      kind: "binary";
+      path: string;
+      size: number;
+      reason: "binary";
+    };
+
+export const PROJECT_ACTIONS = [
+  "create",
+  "update",
+  "files",
+  "directory",
+  "readFile",
+] as const;
 export type ProjectAction = (typeof PROJECT_ACTIONS)[number];
 
 export interface ProjectArgs {
@@ -825,6 +868,14 @@ export interface ProjectArgs {
    * files come first; `limit` (default 2000, at most 5000) caps the list.
    */
   files: { projectId: string; limit?: number };
+  /**
+   * Immediate children of one directory inside the project (`""` or omitted for the project root).
+   * Directories come before files, each sorted by name; `limit` (default 500, at most 2000) caps
+   * the list.
+   */
+  directory: { projectId: string; path?: string; limit?: number };
+  /** Read-only preview of one file inside the project, named by a relative POSIX path. */
+  readFile: { projectId: string; path: string };
 }
 export interface ProjectResults {
   /** `existed` when the machine already had a project at that path: that one is returned. */
@@ -832,6 +883,8 @@ export interface ProjectResults {
   update: { project: ProjectView };
   /** `truncated` when more files exist than were returned. */
   files: { files: string[]; truncated: boolean };
+  directory: ProjectDirectoryListing;
+  readFile: ProjectFileContent;
 }
 export type ProjectCall = {
   [A in ProjectAction]: Omit<CallFrame, "target" | "action" | "args"> & {

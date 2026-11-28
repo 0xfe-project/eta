@@ -1,4 +1,9 @@
-import type { ArtifactView, MemberView } from "@eta/client-contracts";
+import type {
+  ArtifactView,
+  MachineView,
+  MemberView,
+  ProjectView,
+} from "@eta/client-contracts";
 import type { JSX, Signal } from "nsh";
 import type { TextVariant } from "../../components";
 import type { ArtifactFilters } from "./artifacts/filter";
@@ -31,6 +36,7 @@ import { useLoadState } from "../../services/load-status";
 import { statusName, TaskGlyph } from "../tasks/status";
 import { ArtifactBrowser } from "./artifacts/conversation-artifacts";
 import { RECENT, recentArtifacts } from "./artifacts/filter";
+import { ConversationFiles } from "./files/conversation-files";
 import { memberStatus } from "./member-status";
 import { messageTime } from "./message-time";
 import { SubtaskProgress, SubtaskToggle } from "./panel-tasks";
@@ -50,11 +56,13 @@ export function PhoneConversationInfo(props: {
   id: string;
   name: string;
   project?: string;
+  projectView?: ProjectView;
   members: MemberView[];
   onClose: () => void;
   onInspect: (value: { id: string; session: string }) => void;
   onTask: (id: string) => void;
   onArtifact: (artifact: ArtifactView) => void;
+  onOpenFile?: (path: string) => void;
   artifactFilters: Signal<ArtifactFilters>;
 }) {
   const host = useHost();
@@ -62,6 +70,17 @@ export function PhoneConversationInfo(props: {
   const artifactsLoad = useLoadState({ targets: () => ["artifacts"] });
   const c = colors();
   const allArtifacts = signal(false);
+  const filesOpen = signal(false);
+  const canBrowseFiles = () =>
+    Boolean(props.projectView) && host.can("projects.directory");
+  const remoteMachineName = () => {
+    const project = props.projectView;
+    if (!project) return undefined;
+    const machine = host
+      .list<MachineView>("machines")
+      .find((entry) => entry.id === project.machineId);
+    return machine && machine.kind !== "primary" ? machine.name : undefined;
+  };
   const tasks = () =>
     host
       .tasks()
@@ -81,7 +100,14 @@ export function PhoneConversationInfo(props: {
   const artifacts = () =>
     host.artifacts().filter((artifact) => artifact.conversationId === props.id);
   return (
-    <If when={!allArtifacts()} else={<AllArtifacts />}>
+    <If
+      when={!allArtifacts() && !(filesOpen() && props.projectView)}
+      else={
+        <If when={allArtifacts()} else={<AllFiles />}>
+          <AllArtifacts />
+        </If>
+      }
+    >
       <View style={grow}>
         <View
           style={{
@@ -238,10 +264,64 @@ export function PhoneConversationInfo(props: {
               style={{ paddingHorizontal: space[16] }}
             />
           </If>
+          <If when={canBrowseFiles()}>
+            <Section label={uiText("chatFiles")} />
+            <InfoRow
+              height={rowHeight.twoLine}
+              title={uiText("filesOpenBrowser")}
+              detail={props.project}
+              onPress={() => filesOpen.set(true)}
+            >
+              <Icon name="folder" size={icon.md} />
+            </InfoRow>
+          </If>
         </SmoothScroll>
       </View>
     </If>
   );
+
+  function AllFiles() {
+    return (
+      <View style={grow}>
+        <View
+          style={{
+            ...row,
+            height: control.touch,
+            gap: space[4],
+            paddingLeft: space[4],
+            paddingRight: space[8],
+            flexShrink: 0,
+            borderBottomWidth: 1,
+            borderColor: c().border,
+          }}
+        >
+          <BackButton
+            size={control.lg}
+            iconSize={icon.md}
+            onPress={() => filesOpen.set(false)}
+          />
+          <Label weight={weight.strong} lines={1} style={{ flex: 1 }}>
+            {uiText("chatFiles")}
+          </Label>
+          <CloseButton
+            size={control.lg}
+            iconSize={icon.md}
+            onPress={props.onClose}
+          />
+        </View>
+        <If when={props.projectView}>
+          {(project) => (
+            <ConversationFiles
+              project={project()}
+              machineName={remoteMachineName()}
+              phone
+              onOpenFile={(path) => props.onOpenFile?.(path)}
+            />
+          )}
+        </If>
+      </View>
+    );
+  }
 
   function AllArtifacts() {
     return (
@@ -288,7 +368,7 @@ export function PhoneConversationInfo(props: {
 
   function Section(section: {
     label: string;
-    count: number;
+    count?: number;
     first?: boolean;
     children?: JSX.Element;
   }) {
@@ -307,9 +387,11 @@ export function PhoneConversationInfo(props: {
         }}
       >
         <Caption text={section.label} />
-        <Label variant="caption" tone="muted">
-          {section.count}
-        </Label>
+        <If when={section.count !== undefined}>
+          <Label variant="caption" tone="muted">
+            {section.count}
+          </Label>
+        </If>
         {section.children}
       </View>
     );
