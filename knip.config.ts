@@ -1,9 +1,8 @@
 import type { KnipConfig } from "knip";
 
-// Dead code check for the TypeScript workspaces (`turbo run knip`). The Python
-// sidecar only uses package.json for Turbo scripts.
+// Dead code check for the workspaces (`turbo run knip`).
 export default {
-  // System tools the scripts call (uv for the Python sidecar).
+  // System tools the code runs at run time: eta-mcp resolves `uvx` MCP servers through uv.
   ignoreBinaries: ["uv"],
   // `packages/TOBEREFR` holds plugins parked until the ESM rework is done (TODO.md there).
   ignore: ["**/test/**/fixtures/**", "packages/TOBEREFR/**"],

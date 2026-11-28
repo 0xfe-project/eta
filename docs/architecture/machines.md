@@ -1,6 +1,6 @@
 # Machines and daemons
 
-The main node hosts the Web, product data, model credentials, and the memory sidecar. Other machines run a lean daemon, not the full eta.
+The main node hosts the Web, product data, and model credentials. Other machines run a lean daemon, not the full eta.
 
 ## machine
 

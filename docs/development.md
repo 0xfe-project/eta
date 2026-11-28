@@ -26,7 +26,6 @@ Architecture notes:
 - [Machines and daemon](architecture/machines.md): pairing, epochs, model and tool proxying, remote sessions
 - [Access control](architecture/access.md): origin checks, token gate, capability routing
 - [LLM gateway](architecture/llm-gateway.md): subscription accounts (Codex, Grok) and Gemini keys, CLIProxyAPI run as a child process of the host
-- [Memory](architecture/memory.md): what is stored, how it is queried per conversation
 - [Web](architecture/web.md): `web_fetch` and `web_search`, in the host process; SSRF guard, paging, the SearXNG it runs
 - [Tasks](architecture/tasks.md): an agent proposes, the user confirms, the same agent executes in a fresh session
 - [Tasks, artifacts and routines](architecture/tasks-artifacts-routines.md)
@@ -36,8 +35,8 @@ UI conventions live in [DESIGN.md](../DESIGN.md).
 
 ## Environment and setup
 
-Needs Bun 1.4.3 (`bun check` is what every package type-checks with), Node 24 and uv (Python 3.13,
-fetched by uv from `.python-version`). The LLM gateway's CLIProxyAPI binary comes with `bun install`.
+Needs Bun 1.4.3 (`bun check` is what every package type-checks with) and Node 24. The LLM gateway's
+CLIProxyAPI binary comes with `bun install`.
 Nothing else to install and no service to stand up.
 
 ### Node
@@ -89,7 +88,7 @@ For bash, use the `cdnvm` function from the same section and put it at the end o
 does the same with `eval "$(fnm env --use-on-cd)"`.
 
 ```sh
-bun run setup     # bun install + uv sync
+bun run setup     # bun install
 bun run dev       # host and client dev server
 bun run check     # everything CI runs
 ```

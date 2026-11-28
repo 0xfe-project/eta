@@ -13,7 +13,7 @@
  *
  *   bun apps/eta/src/main.ts [--port 8787] [--host 127.0.0.1]
  *                            [--web-dir <built web>] [--token-file <path>]
- *                            [--allow-origin <origin>]... [--memory-url <sidecar>] [--no-llm]
+ *                            [--allow-origin <origin>]... [--no-llm]
  *                            [--public-url <the address the browser uses>]
  *                            [--no-web] [--searxng-url <a SearXNG of your own>]
  *
@@ -161,7 +161,6 @@ if (listen === "tailscale") {
   listen = address;
 }
 
-const memoryUrl = values["memory-url"] ?? process.env.ETA_MEMORY_URL;
 const publicUrl = values["public-url"] ?? process.env.ETA_PUBLIC_URL;
 const searxngUrl = values["searxng-url"] ?? process.env.ETA_SEARXNG_URL;
 
@@ -190,7 +189,6 @@ const host = await startHost({
         ? true
         : { searxngUrl },
   // The flag wins over the environment; an empty value means none.
-  ...(memoryUrl === undefined || memoryUrl === "" ? {} : { memoryUrl }),
   ...(publicUrl === undefined || publicUrl === "" ? {} : { publicUrl }),
 });
 

@@ -1,8 +1,6 @@
-import type { MemoryView } from "@eta/client-contracts";
 import type { Database } from "bun:sqlite";
 import type { AgentStore } from "../agents/store";
 import type { ConversationStore } from "../conversations/store";
-import type { MemoryClient } from "../memory/client";
 import type { ProjectStore } from "../projects/store";
 import type { MemorySection } from "./memory-file";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -31,7 +29,6 @@ export class CaptainMemory {
   readonly #agents: AgentStore;
   readonly #projects: ProjectStore;
   readonly #conversations: ConversationStore;
-  readonly #client: MemoryClient | undefined;
 
   constructor(options: {
     db: Database;
@@ -41,14 +38,12 @@ export class CaptainMemory {
     agents: AgentStore;
     projects: ProjectStore;
     conversations: ConversationStore;
-    client?: MemoryClient | undefined;
   }) {
     this.#db = options.db;
     this.#dataDir = options.dataDir ?? options.home ?? "";
     this.#agents = options.agents;
     this.#projects = options.projects;
     this.#conversations = options.conversations;
-    this.#client = options.client;
   }
 
   async list(
@@ -57,34 +52,10 @@ export class CaptainMemory {
   ): Promise<CaptainMemoryItem[]> {
     if (this.#agents.get(agentId) === undefined)
       throw new Error(`no such agent: ${agentId}`);
-    const sidecar =
-      this.#client === undefined
-        ? []
-        : await this.#client
-            .list(agentId, {
-              ...(options.query === undefined ? {} : { query: options.query }),
-              ...(options.includeDeleted === true
-                ? { includeDeleted: true }
-                : {}),
-            })
-            .then((items) =>
-              items.map(
-                (item: MemoryView): CaptainMemoryItem => ({
-                  id: item.id,
-                  agentId,
-                  text: item.text,
-                  source: item.source,
-                  conversationId: item.conversationId,
-                  path: null,
-                  section: null,
-                  deletedAt: item.deletedAt,
-                }),
-              ),
-            );
     const files = await this.#files(agentId);
     const query = options.query?.trim().toLowerCase() ?? "";
     const archived = options.includeDeleted ? this.#archived(agentId) : [];
-    return [...sidecar, ...files, ...archived].filter(
+    return [...files, ...archived].filter(
       (item) => query === "" || item.text.toLowerCase().includes(query),
     );
   }
@@ -93,12 +64,7 @@ export class CaptainMemory {
     const all = await this.list(agentId, { includeDeleted: false });
     const item = all.find((entry) => entry.id === id);
     if (item === undefined) throw new Error("no such memory");
-    if (item.path === null) {
-      if (this.#client === undefined)
-        throw new Error("memory service is not configured");
-      await this.#client.softDelete(agentId, id, actorAgentId);
-      return;
-    }
+    if (item.path === null) throw new Error("memory service is not configured");
     const entries = parseMemoryFile(
       item.path,
       await readFile(item.path, "utf8").catch(() => ""),
@@ -174,8 +140,7 @@ export class CaptainMemory {
         .run(Date.now(), archiveId(agentId, id), agentId);
       return;
     }
-    if (this.#client === undefined) throw new Error("no such memory");
-    await this.#client.restore(agentId, id);
+    throw new Error("no such memory");
   }
 
   async #files(agentId: string): Promise<CaptainMemoryItem[]> {

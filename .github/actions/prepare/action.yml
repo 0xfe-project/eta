@@ -1,13 +1,10 @@
-# What CI (ci.yml) needs before it runs its turbo tasks: optional uv (when @eta/memory
-# is in the plan), workspace packages, and the OS runner's Turborepo cache. Bun itself
-# and the checkout come first, in the workflow, because `plan` needs them.
+# What CI (ci.yml) needs before it runs its turbo tasks: workspace packages and the OS
+# runner's Turborepo cache. Bun itself and the checkout come first, in the workflow,
+# because `plan` needs them.
 name: Prepare a CI runner
-description: Set up uv when needed, install workspace packages, and restore Turborepo cache.
+description: Install workspace packages and restore Turborepo cache.
 
 inputs:
-  setup-uv:
-    description: Whether to install Python/uv and sync apps/memory before Turbo runs.
-    default: "false"
   restore-turbo-cache:
     description: Whether to restore .turbo/cache for this OS runner.
     default: "true"
@@ -20,22 +17,6 @@ outputs:
 runs:
   using: composite
   steps:
-    - if: inputs.setup-uv == 'true'
-      uses: astral-sh/setup-uv@v10.2.0
-      with:
-        # apps/memory/.python-version.
-        python-version: "3.13"
-        cache-python: true
-        enable-cache: true
-        cache-dependency-glob: "**/uv.lock"
-        save-cache: true
-        ignore-nothing-to-cache: true
-
-    - name: Sync apps/memory
-      if: inputs.setup-uv == 'true'
-      shell: bash
-      run: uv sync --project apps/memory --frozen --dev
-
     # No cache of Bun's package store: restoring its 480 MB took longer (10 s, then 2 s
     # to link) than installing from the registry (5-7 s).
     - run: bun install --frozen-lockfile --ignore-scripts
