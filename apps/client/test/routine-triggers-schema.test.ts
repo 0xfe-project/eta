@@ -202,6 +202,7 @@ test("providerLabel formats built-in rss and other trigger provider ids", () => 
   expect(providerLabel("webhook")).toBe("Webhook");
   expect(providerLabel("web-monitor")).toBe("Web Monitor");
   expect(providerLabel("file-watch")).toBe("File Watch");
+  expect(providerLabel("eta-events")).toBe("Eta Events");
   expect(providerLabel("composio")).toBe("Composio");
   expect(providerLabel("custom_hook")).toBe("Custom Hook");
 });
@@ -397,4 +398,74 @@ test("validateTriggerField checks file-watch path, root rejection, glob syntax, 
   expect(
     validateTriggerField(pathField, { path: "D:" }, {}, "file-watch"),
   ).toBe("不能监控整个盘符或文件系统根目录。");
+});
+
+test("parseTriggerConfigSchema, validateTriggerField, and buildTriggerConfigPayload support eta-events enum arrays", () => {
+  const fields = parseTriggerConfigSchema({
+    type: "object",
+    properties: {
+      to: {
+        type: "array",
+        title: "Target statuses",
+        items: {
+          type: "string",
+          enum: ["todo", "in_progress", "in_review", "done", "blocked"],
+        },
+      },
+      assignee: {
+        type: "string",
+        title: "Assignee",
+      },
+    },
+  });
+
+  const toField = fields.find((f) => f.key === "to")!;
+  expect(toField.kind).toBe("array");
+  expect(toField.arrayOptions?.map((o) => o.raw)).toEqual([
+    "todo",
+    "in_progress",
+    "in_review",
+    "done",
+    "blocked",
+  ]);
+
+  const init = initialTriggerConfigState(fields, {
+    to: ["in_review", "done"],
+    assignee: "forge",
+  });
+  expect(init.config).toEqual({
+    to: ["in_review", "done"],
+    assignee: "forge",
+  });
+  expect(init.drafts).toEqual({});
+
+  language.set("en");
+  expect(
+    validateTriggerField(
+      toField,
+      { to: ["in_review", "done"] },
+      {},
+      "eta-events",
+    ),
+  ).toBeUndefined();
+  expect(
+    validateTriggerField(toField, { to: ["invalid"] }, {}, "eta-events"),
+  ).toBe("Select from the allowed options.");
+
+  language.set("zh");
+  expect(
+    validateTriggerField(toField, { to: ["invalid"] }, {}, "eta-events"),
+  ).toBe("请从可选项中选择。");
+
+  expect(
+    buildTriggerConfigPayload(
+      fields,
+      { to: ["in_review", "done"], assignee: "forge" },
+      {},
+    ),
+  ).toEqual({
+    to: ["in_review", "done"],
+    assignee: "forge",
+  });
+  expect(buildTriggerConfigPayload(fields, { to: [] }, {})).toEqual({});
 });

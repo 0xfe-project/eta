@@ -72,8 +72,19 @@ const RECOMPUTED = "recomputed";
 /** A parent whose status moved in a write, and the conversations whose cards it touched. */
 interface Moved {
   id: string;
+  from: BoardTaskStatus;
   status: BoardTaskStatus;
+  reason: string;
   touched: string[];
+}
+
+/** A committed task status transition emitted after SQLite transaction commit. */
+export interface TaskStatusChange {
+  task: TaskRecord;
+  from: BoardTaskStatus;
+  to: BoardTaskStatus;
+  actor: TaskActor;
+  reason: string | null;
 }
 
 /** What the system writes on a status it set because a dependency was cancelled. */
@@ -151,6 +162,8 @@ export interface TaskBoardDeps {
   changed: (conversationIds: readonly string[]) => void;
   /** The files people attach to comments (the conversations' store: a file is a task's or a chat's). */
   attachments?: AttachmentStore | undefined;
+  /** Optional logger for non-fatal listener failures. */
+  warn?: ((message: string) => void) | undefined;
 }
 
 /** A task as the graph needs it. */
@@ -252,6 +265,7 @@ const DAY = 24 * 60 * 60 * 1000;
 export class TaskBoard {
   readonly #deps: TaskBoardDeps;
   readonly #listeners = new Set<(change: BoardChange) => void>();
+  readonly #statusListeners = new Set<(change: TaskStatusChange) => void>();
   #runs: TaskRuns | undefined;
   /** Settling the graph changes statuses, which asks for settling again: once is enough. */
   #settling = false;
@@ -269,6 +283,12 @@ export class TaskBoard {
   onChange(listener: (change: BoardChange) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  /** Be told after a task's status change is committed, until the returned function is called. */
+  onStatusChange(listener: (change: TaskStatusChange) => void): () => void {
+    this.#statusListeners.add(listener);
+    return () => this.#statusListeners.delete(listener);
   }
 
   /* ---------------------------------------------------------------- reads */
@@ -625,9 +645,29 @@ export class TaskBoard {
         below.id,
         `The task is cancelled with #${before.number}.`,
       );
+      const cancelledAfter = this.#deps.tasks.get(below.id);
+      if (
+        cancelledAfter !== undefined &&
+        cancelledAfter.status !== below.status
+      ) {
+        this.#emitStatusChange({
+          task: cancelledAfter,
+          from: below.status,
+          to: cancelledAfter.status,
+          actor,
+          reason: null,
+        });
+      }
     }
     const after = this.#existing(id);
     if (after.status !== before.status) {
+      this.#emitStatusChange({
+        task: after,
+        from: before.status,
+        to: after.status,
+        actor,
+        reason: null,
+      });
       // Done or cancelled work is not worked on any more. Out of the backlog, a task that never
       // ran starts; one that has run already is rerun by hand.
       if (after.status === "done" || after.status === "cancelled") {
@@ -753,6 +793,18 @@ export class TaskBoard {
     );
     // The run ends with no words: the `blocked` entry above says why, in the reader's language.
     this.#runs?.withdraw(taskId);
+    if (task.status !== "blocked") {
+      const after = this.#deps.tasks.get(taskId);
+      if (after !== undefined && after.status !== task.status) {
+        this.#emitStatusChange({
+          task: after,
+          from: task.status,
+          to: after.status,
+          actor: system,
+          reason: DEPENDENCY_CANCELLED,
+        });
+      }
+    }
   }
 
   /**
@@ -1418,7 +1470,9 @@ export class TaskBoard {
       );
       moved.push({
         id: task.id,
+        from: task.status,
         status: derived.status,
+        reason: derived.reason,
         touched: this.#deps.cards.sync(task.id),
       });
       at = task.parentId;
@@ -1428,8 +1482,18 @@ export class TaskBoard {
 
   /** Parents moved in a write that is in: the board hears of them, and so does what waits for them. */
   #derived(moved: readonly Moved[]): void {
-    for (const { id, status, touched } of moved) {
+    for (const { id, from, status, reason, touched } of moved) {
       this.#announce(id, "changed", touched);
+      const task = this.#deps.tasks.get(id);
+      if (task !== undefined && from !== status) {
+        this.#emitStatusChange({
+          task,
+          from,
+          to: status,
+          actor: SYSTEM,
+          reason,
+        });
+      }
       if (status === "done")
         this.#runs?.stop(id, "The task is done: all of its subtasks are.");
       for (const edge of this.graph().dependentsOf(id))
@@ -1467,7 +1531,9 @@ export class TaskBoard {
         );
         out.push({
           id,
+          from: task.status,
           status: derived.status,
+          reason: RECOMPUTED,
           touched: this.#deps.cards.sync(id),
         });
         graph = this.graph();
@@ -1512,6 +1578,16 @@ export class TaskBoard {
           },
           [task.parentId],
         );
+        const after = this.#deps.tasks.get(task.id);
+        if (after !== undefined && after.status !== task.status) {
+          this.#emitStatusChange({
+            task: after,
+            from: task.status,
+            to: after.status,
+            actor: system,
+            reason: null,
+          });
+        }
         this.#runs?.start(task.id);
       }
     } finally {
@@ -1547,6 +1623,18 @@ export class TaskBoard {
   ): void {
     if (conversations.length > 0) this.#deps.changed(conversations);
     for (const listener of this.#listeners) listener({ taskId, kind });
+  }
+
+  #emitStatusChange(change: TaskStatusChange): void {
+    for (const listener of [...this.#statusListeners]) {
+      try {
+        listener(change);
+      } catch (error) {
+        const msg = `[eta] task status listener failed: ${error instanceof Error ? error.message : String(error)}`;
+        if (this.#deps.warn !== undefined) this.#deps.warn(msg);
+        else console.warn(msg);
+      }
+    }
   }
 
   #detailOf(task: TaskRecord): BoardTaskDetail {

@@ -250,6 +250,10 @@ export const routinesMessages = {
     "Glob 模式中的括号或花括号未成对闭合。",
   ],
   triggerFieldArrayRequired: ["Enter at least one item.", "请至少填写一项。"],
+  triggerFieldInvalidChoice: [
+    "Select from the allowed options.",
+    "请从可选项中选择。",
+  ],
   triggerFieldExclusiveMin: [
     "Must be greater than {{value}}",
     "必须大于 {{value}}",

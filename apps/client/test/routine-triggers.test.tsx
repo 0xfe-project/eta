@@ -683,3 +683,100 @@ test("File Watch channel auto-folds selects, validates path/glob, and renders wa
     },
   });
 });
+
+test("Eta Events channel folds single source, lets user pick event & status/assignee filters, and renders event name, lastEventAt, and lastError", async () => {
+  const c = palette("light", "default");
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "en-US",
+  });
+
+  // Detail panel shows event name, lastEventAt, and lastError for eta-events.
+  await app.waitFor("label:Review Notification");
+  await app.press("label:Review Notification");
+  await app.waitFor("text:eta-events / tasks / task.status.changed");
+  expect(app.texts().some((text) => text.startsWith("Last event · "))).toBe(
+    true,
+  );
+  expect(app.shows("text:Unsupported eta-events filter")).toBe(true);
+
+  // Create a new Eta Events routine via editor.
+  await app.press("label:New routine");
+  await app.waitFor("label:Event trigger");
+
+  await app.type("label:Name", "Blocked & Review Digest");
+  await app.type(
+    "label:Brief",
+    "Notify when Forge tasks enter review or blocked.",
+  );
+  await app.press("label:Event trigger");
+
+  await app.waitFor("label:Channel");
+  await app.press("label:Channel");
+  await app.waitFor("label:Eta Events");
+  await app.press("label:Eta Events");
+
+  // Single source ("tasks") auto-folds; Trigger event remains visible for multi-event selection.
+  await app.waitFor("label:Trigger event");
+  expect(app.shows("label:App / source")).toBe(false);
+  expect(app.shows("label:Polling interval (minutes)")).toBe(false);
+  expect(app.shows("label:Delivery mode")).toBe(false);
+
+  await app.press("label:Trigger event");
+  await app.waitFor("label:Task run finished");
+  await app.press("label:Task status changed");
+
+  await app.waitFor("text:task.status.changed");
+  await app.waitFor("label:Target statuses: in_review");
+
+  // Hover and selected background highlight match, with no cursor: pointer.
+  await app.hover("label:Target statuses: in_review");
+  expect(
+    app.viewStyle("label:Target statuses: in_review")?.backgroundColor,
+  ).toBe(rgba(c.selected));
+  expect(
+    Object.hasOwn(
+      app.viewStyle("label:Target statuses: in_review") ?? {},
+      "cursor",
+    ),
+  ).toBe(false);
+
+  await app.press("label:Target statuses: in_review");
+  expect(
+    app.viewStyle("label:Target statuses: in_review")?.backgroundColor,
+  ).toBe(rgba(c.selected));
+  await app.press("label:Target statuses: blocked");
+  await app.press("label:Previous statuses: in_progress");
+  await app.type("label:Assignee", "forge");
+
+  await app.press("label:Create");
+  await app.waitFor("text:Blocked & Review Digest");
+
+  const createLine = app.texts().find((t) => t.startsWith("Create:")) ?? "";
+  const payload = JSON.parse(createLine.slice("Create:".length)) as {
+    trigger: {
+      provider: string;
+      source: string;
+      trigger: string;
+      accountId: string | null;
+      mode: string | null;
+      pollingIntervalMinutes: number | null;
+      config: Record<string, unknown>;
+    };
+  };
+  expect(payload.trigger).toEqual({
+    provider: "eta-events",
+    source: "tasks",
+    trigger: "task.status.changed",
+    accountId: null,
+    mode: null,
+    pollingIntervalMinutes: null,
+    config: {
+      to: ["in_review", "blocked"],
+      from: ["in_progress"],
+      assignee: "forge",
+    },
+  });
+});

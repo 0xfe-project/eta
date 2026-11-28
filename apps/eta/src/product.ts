@@ -111,6 +111,12 @@ import { Plugins } from "./plugins/service";
 import { pluginSessionTools } from "./plugins/tools";
 import { projectsPlugin } from "./projects/plugin";
 import { ProjectStore } from "./projects/store";
+import {
+  EtaEventBus,
+  EtaEventsTriggerProvider,
+  TASK_RUN_FINISHED_TRIGGER,
+  TASK_STATUS_CHANGED_TRIGGER,
+} from "./routines/eta-events-triggers";
 import { FileWatchTriggerProvider } from "./routines/file-watch-triggers";
 import { routinesPlugin } from "./routines/plugin";
 import { RssTriggerProvider } from "./routines/rss-triggers";
@@ -668,10 +674,17 @@ export function createProduct(options: {
       ? {}
       : { backoffMaxMs: options.fileWatch.backoffMaxMs }),
   });
+  const etaEventBus = new EtaEventBus({ warn });
+  const etaEventsTriggers = new EtaEventsTriggerProvider({
+    bus: etaEventBus,
+    now,
+    warn,
+  });
   triggerHub.register(rssTriggers);
   triggerHub.register(webhookTriggers);
   triggerHub.register(webMonitorTriggers);
   triggerHub.register(fileWatchTriggers);
+  triggerHub.register(etaEventsTriggers);
   runner.setRunFinishedListener((routineId) =>
     triggerHub.onRunFinished(routineId),
   );
@@ -842,6 +855,7 @@ export function createProduct(options: {
     agents,
     artifactsOf,
     changed,
+    warn,
   });
   const inbox = new Inbox({
     interactions,
@@ -1008,6 +1022,63 @@ export function createProduct(options: {
     captain.refreshAssignments();
     captainSupervisor.requestTick();
     wire?.pushNow("captain");
+  });
+  board.onStatusChange((change) => {
+    const assigneeId = executorOf(change.task);
+    const assigneeName =
+      assigneeId === null ? null : (agents.get(assigneeId)?.name ?? null);
+    const occurredAt = now();
+    etaEventBus.emit({
+      type: TASK_STATUS_CHANGED_TRIGGER,
+      eventId: `task-status:${change.task.id}:${crypto.randomUUID()}`,
+      occurredAt,
+      payload: {
+        taskId: change.task.id,
+        number: change.task.number,
+        title: change.task.title,
+        from: change.from,
+        to: change.to,
+        assignee: assigneeId,
+        assigneeName,
+        actor: change.actor,
+        reason: change.reason,
+        occurredAt,
+      },
+    });
+  });
+  taskRunner.onRunFinished(({ run, task }) => {
+    if (
+      run.status !== "completed" &&
+      run.status !== "failed" &&
+      run.status !== "interrupted"
+    ) {
+      return;
+    }
+    const assigneeId =
+      run.agentId ?? (task === undefined ? null : executorOf(task));
+    const assigneeName =
+      assigneeId === null ? null : (agents.get(assigneeId)?.name ?? null);
+    const occurredAt = run.finishedAt ?? now();
+    etaEventBus.emit({
+      type: TASK_RUN_FINISHED_TRIGGER,
+      eventId: `task-run:${run.id}:finished`,
+      occurredAt,
+      payload: {
+        taskId: run.taskId,
+        number: task?.number ?? 0,
+        title: task?.title ?? "",
+        runId: run.id,
+        status: run.status,
+        reason: run.error,
+        errorCode: run.errorCode,
+        agentId: run.agentId,
+        assignee: assigneeId,
+        assigneeName,
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt,
+        occurredAt,
+      },
+    });
   });
   // Nothing is running yet, so the runs the last process left going cannot be.
   taskRunner.recover();

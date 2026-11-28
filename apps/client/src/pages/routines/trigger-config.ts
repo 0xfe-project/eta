@@ -27,6 +27,7 @@ export interface TriggerConfigField {
   secret: boolean;
   multiline: boolean;
   options: TriggerEnumOption[];
+  arrayOptions?: TriggerEnumOption[];
   arrayItemKind?: "string" | "number" | "integer" | "other";
   objectValueType?: "string";
   minLength?: number;
@@ -155,6 +156,8 @@ export function parseTriggerConfigSchema(
     else kind = "string";
 
     const itemsType = isPlain(raw.items) ? schemaTypeOf(raw.items) : undefined;
+    const arrayOptions =
+      kind === "array" && isPlain(raw.items) ? enumOptionsOf(raw.items) : [];
     const arrayItemKind =
       itemsType === "string" ||
       itemsType === "number" ||
@@ -185,6 +188,7 @@ export function parseTriggerConfigSchema(
       secret: raw.format === "password" || raw.writeOnly === true,
       multiline: raw.format === "textarea",
       options,
+      ...(arrayOptions.length > 0 ? { arrayOptions } : {}),
       arrayItemKind,
       objectValueType,
       minLength: finiteOrUndefined(raw.minLength),
@@ -226,7 +230,10 @@ export function initialTriggerConfigState(
       config[field.key] = rawValue;
       if (field.kind === "number" || field.kind === "integer") {
         drafts[field.key] = String(rawValue);
-      } else if (field.kind === "array") {
+      } else if (
+        field.kind === "array" &&
+        (field.arrayOptions?.length ?? 0) === 0
+      ) {
         drafts[field.key] = Array.isArray(rawValue)
           ? rawValue.every(
               (item) => typeof item === "string" || typeof item === "number",
@@ -458,6 +465,22 @@ export function validateTriggerField(
       return undefined;
     }
     case "array": {
+      const arrayOptions = field.arrayOptions ?? [];
+      if (arrayOptions.length > 0 && !Object.hasOwn(drafts, field.key)) {
+        const list = Array.isArray(current) ? current : [];
+        if (
+          list.some(
+            (entry) =>
+              !arrayOptions.some((option) => Object.is(option.raw, entry)),
+          )
+        ) {
+          return uiText("triggerFieldInvalidChoice");
+        }
+        if (field.required && list.length === 0) {
+          return uiText("triggerFieldArrayRequired");
+        }
+        return undefined;
+      }
       const raw = Object.hasOwn(drafts, field.key)
         ? drafts[field.key]!
         : Array.isArray(current)
@@ -465,6 +488,16 @@ export function validateTriggerField(
           : "";
       const parsed = parseArrayDraft(field, raw);
       if (!parsed.ok) return parsed.error;
+      if (
+        arrayOptions.length > 0 &&
+        parsed.value &&
+        parsed.value.some(
+          (entry) =>
+            !arrayOptions.some((option) => Object.is(option.raw, entry)),
+        )
+      ) {
+        return uiText("triggerFieldInvalidChoice");
+      }
       if (field.required && (!parsed.value || parsed.value.length === 0)) {
         return uiText("triggerFieldArrayRequired");
       }
@@ -545,6 +578,15 @@ export function buildTriggerConfigPayload(
         break;
       }
       case "array": {
+        if (
+          (field.arrayOptions?.length ?? 0) > 0 &&
+          !Object.hasOwn(drafts, field.key)
+        ) {
+          if (Array.isArray(current) && current.length > 0) {
+            payload[field.key] = current;
+          }
+          break;
+        }
         const raw = Object.hasOwn(drafts, field.key)
           ? drafts[field.key]!
           : Array.isArray(current)

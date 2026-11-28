@@ -286,6 +286,100 @@ const catalogItems: TriggerCatalogItem[] = [
     payloadSchema: {},
     accounts: [],
   },
+  {
+    provider: "eta-events",
+    source: "tasks",
+    sourceName: "eta Tasks",
+    trigger: "task.status.changed",
+    name: "Task status changed",
+    description:
+      "Triggers when a task changes status (for example moving into in_review, done, or blocked).",
+    modes: [],
+    configSchema: {
+      type: "object",
+      properties: {
+        to: {
+          type: "array",
+          title: "Target statuses",
+          description:
+            "Optional target statuses to match (leave empty to match any status change).",
+          items: {
+            type: "string",
+            enum: [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+              "done",
+              "blocked",
+              "cancelled",
+            ],
+          },
+        },
+        from: {
+          type: "array",
+          title: "Previous statuses",
+          description:
+            "Optional previous statuses to match (leave empty to match any).",
+          items: {
+            type: "string",
+            enum: [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+              "done",
+              "blocked",
+              "cancelled",
+            ],
+          },
+        },
+        assignee: {
+          type: "string",
+          title: "Assignee",
+          description:
+            "Optional executor agent id or name to match (leave empty for any assignee).",
+          examples: ["forge"],
+        },
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
+  },
+  {
+    provider: "eta-events",
+    source: "tasks",
+    sourceName: "eta Tasks",
+    trigger: "task.run.finished",
+    name: "Task run finished",
+    description:
+      "Triggers when a task run ends (completed, failed, or interrupted).",
+    modes: [],
+    configSchema: {
+      type: "object",
+      properties: {
+        status: {
+          type: "array",
+          title: "Run statuses",
+          description:
+            "Optional run outcomes to match (leave empty to match any finished run).",
+          items: {
+            type: "string",
+            enum: ["completed", "failed", "interrupted"],
+          },
+        },
+        assignee: {
+          type: "string",
+          title: "Assignee",
+          description:
+            "Optional executor agent id or name to match (leave empty for any assignee).",
+          examples: ["forge"],
+        },
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
+  },
 ];
 
 const eventRoutineRuns: RunView[] = [
@@ -482,6 +576,37 @@ const initialRoutines: RoutineSummary[] = [
       lastError: "Watched file count exceeds limit (5000)",
       lastEventAt: now - 15 * 60_000,
       watchedCount: 12,
+    },
+    timezone: "UTC",
+    enabled: true,
+    nextRunAt: null,
+    revising: false,
+    unseenReports: 0,
+    unseenFailures: 0,
+    createdAt: now - 86_400_000,
+    updatedAt: now,
+    runs: [],
+  },
+  {
+    id: "r-eta-events",
+    name: "Review Notification",
+    schedule: null,
+    trigger: {
+      provider: "eta-events",
+      source: "tasks",
+      trigger: "task.status.changed",
+      accountId: null,
+      config: {
+        to: ["in_review", "blocked"],
+        assignee: "forge",
+      },
+      instanceId: "eta-events:r-eta-events",
+      mode: null,
+      pollingIntervalMinutes: null,
+      fallbackReason: null,
+      status: "error",
+      lastError: "Unsupported eta-events filter",
+      lastEventAt: now - 10 * 60_000,
     },
     timezone: "UTC",
     enabled: true,
@@ -691,6 +816,7 @@ function Fixture() {
       const providers: Record<CatalogScenario, TriggerProviderStatus[]> = {
         ready: [
           { provider: "composio", status: "ready" },
+          { provider: "eta-events", status: "ready" },
           { provider: "file-watch", status: "ready" },
           { provider: "rss", status: "ready" },
           { provider: "web-monitor", status: "ready" },
