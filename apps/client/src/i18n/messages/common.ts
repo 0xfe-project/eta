@@ -66,6 +66,14 @@ export const commonMessages = {
   done2: ["DONE", "完成"],
   download: ["Download", "下载"],
   downloadProgress: ["Download progress", "下载进度"],
+  downloadsOutsideHome: [
+    "Eta can only write inside your home folder, and your Downloads folder is {{path}}, so the share sheet saves it instead.",
+    "Eta 只能写入主目录，而你的下载文件夹在 {{path}}，所以改由分享面板保存。",
+  ],
+  downloadsOutsideHomeStored: [
+    "Eta can only write inside your home folder, and your Downloads folder is {{path}}, so the file stays in Eta's storage.",
+    "Eta 只能写入主目录，而你的下载文件夹在 {{path}}，所以文件留在了 Eta 的存储里。",
+  ],
   edit: ["Edit", "编辑"],
   enterADirectoryOnTheHost: [
     "Enter a directory on the host",
@@ -135,9 +143,13 @@ export const commonMessages = {
   running: ["Running", "运行中"],
   runs: ["Runs · {{length}}", "运行 · {{length}}"],
   saveConfiguration: ["Save configuration", "保存配置"],
+  savedOutsideDownloads: [
+    "Not saved to Downloads · {{name}}",
+    "未保存到下载文件夹 · {{name}}",
+  ],
   savedToDownloads: [
-    "Saved to Downloads · {{name}}",
-    "已保存到「下载」· {{name}}",
+    "Saved to your Downloads folder · {{name}}",
+    "已保存到下载文件夹 · {{name}}",
   ],
   search: ["Search", "搜索"],
   selected: ["Selected", "已选"],

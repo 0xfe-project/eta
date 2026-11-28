@@ -37,7 +37,7 @@ import { readResponseBytes } from "../../../services/attachment-files";
 import { useHost } from "../../../services/host";
 import { problemText } from "../../../services/problem-text";
 import { CopyButton } from "../../../ui";
-import { createArtifactFileSaver, savedToDownloads } from "./file";
+import { createArtifactFileSaver, savedNotice } from "./file";
 import { ArtifactPdfPreview, ArtifactPdfResourcesError } from "./pdf-preview";
 
 import { ArtifactToolbar } from "./toolbar";
@@ -315,8 +315,9 @@ export function ArtifactPreview(props: {
         progress.dismiss();
         return;
       }
-      if (savedFile?.downloads) {
-        progress.complete(savedToDownloads(savedFile));
+      const notice = savedNotice(savedFile);
+      if (notice) {
+        progress.complete(notice);
         return;
       }
       const saved = files.savedPath();
@@ -409,8 +410,9 @@ export function ArtifactPreview(props: {
         progress.dismiss();
         return;
       }
-      if (savedFile?.downloads) {
-        progress.complete(savedToDownloads(savedFile));
+      const notice = savedNotice(savedFile);
+      if (notice) {
+        progress.complete(notice);
         return;
       }
       const saved = files.savedPath();

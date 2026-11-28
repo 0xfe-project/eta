@@ -11,12 +11,13 @@ import {
 } from "fs/promises";
 import { homedir } from "os";
 import { cleanup, platform, Share, signal, WebView } from "nsh";
+import { Directories } from "nsh-directories";
 import { uiText } from "../../../i18n";
 
 // NSH expands these placeholders when its file and share APIs access app storage and the home directory.
 const exportsDirectory = `\${dataDir}/artifact-exports`;
 const downloadDirectory = `\${dataDir}/downloads`;
-const downloadsFolder = `\${homeDir}/Downloads`;
+const homeFolder = `\${homeDir}`;
 const directWriteLimit = 8 * 1024 * 1024;
 const chunkSize = 128 * 1024;
 const transferPage = `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'"><script>
@@ -66,32 +67,92 @@ async function expireShares() {
   }
 }
 
-/** The first of `name`, `name (1).ext`, `name (2).ext`, … that is free in the Downloads folder. */
-async function freeDownloadName(name: string) {
+/** The first of `name`, `name (1).ext`, `name (2).ext`, … that is free in `folder`. */
+async function freeDownloadName(folder: string, name: string) {
   const dot = name.lastIndexOf(".");
   const stem = dot > 0 ? name.slice(0, dot) : name;
   const extension = dot > 0 ? name.slice(dot) : "";
   let candidate = name;
-  for (let n = 1; await exists(`${downloadsFolder}/${candidate}`); n++)
+  for (let n = 1; await exists(`${folder}/${candidate}`); n++)
     candidate = `${stem} (${n})${extension}`;
   return candidate;
 }
 
-/** Where a saved file went: its full path, its name there, and whether that is the Downloads folder. */
+/**
+ * The desktop's Downloads folder: `write` is how the app names it to NSH's file APIs (under
+ * `${homeDir}`, the only part of the disk `nsh.json` lets it write), `shown` is its real path.
+ * `write` is missing when the folder lies outside the home directory.
+ */
+interface DownloadsFolder {
+  write?: string;
+  shown: string;
+  separator: string;
+}
+
+/**
+ * Resolves the system's Downloads folder: the one the platform names (XDG `user-dirs.dirs` on
+ * Linux, the Known Folder on Windows, `~/Downloads` on macOS), else `~/Downloads`.
+ */
+async function downloadsFolder(): Promise<DownloadsFolder> {
+  const windows = platform.os === "windows";
+  const separator = windows ? "\\" : "/";
+  const home = homedir().replace(/[\\/]+$/, "");
+  let named: string | null | undefined;
+  try {
+    // A stand-in answers through a promise even where the module answers at once.
+    if (await Directories.available())
+      named = (await Directories.userDirs())?.downloadDir;
+  } catch {
+    // Not granted or not readable: keep the default below.
+  }
+  if (!named)
+    return {
+      write: `${homeFolder}/Downloads`,
+      shown: `${home}${separator}Downloads`,
+      separator,
+    };
+  const shown = named.replace(/[\\/]+$/, "");
+  // Windows paths compare without case and with either slash.
+  const key = (path: string) =>
+    windows ? path.replace(/\//g, "\\").toLowerCase() : path;
+  const inside =
+    key(shown) === key(home) || key(shown).startsWith(key(home + separator));
+  if (!inside) return { shown, separator };
+  const rest = shown.slice(home.length).replace(/\\/g, "/");
+  return { write: `${homeFolder}${rest}`, shown, separator };
+}
+
+/**
+ * Where a saved file went: its full path (empty when the share sheet took it), its name there,
+ * whether that is the Downloads folder, and the Downloads folder it could not be written into.
+ */
 export interface SavedFile {
   path: string;
   name: string;
   downloads: boolean;
+  outside?: string;
 }
 
-/** The completed download notification for a file saved into the Downloads folder. */
-export function savedToDownloads(saved: SavedFile) {
-  return {
-    title: uiText("savedToDownloads", { name: saved.name }),
-    detail: undefined,
-    path: saved.path,
-    showWhenQuick: true,
-  };
+/** The completed notification for a desktop save, or nothing for the share sheet and app storage elsewhere. */
+export function savedNotice(saved: SavedFile | undefined) {
+  if (saved?.downloads)
+    return {
+      title: uiText("savedToDownloads", { name: saved.name }),
+      detail: undefined,
+      path: saved.path,
+      showWhenQuick: true,
+    };
+  if (saved?.outside)
+    return {
+      title: uiText("savedOutsideDownloads", { name: saved.name }),
+      detail: uiText(
+        saved.path ? "downloadsOutsideHomeStored" : "downloadsOutsideHome",
+        { path: saved.outside },
+      ),
+      path: saved.path || undefined,
+      showWhenQuick: true,
+    };
+  return undefined;
 }
 
 interface Transfer {
@@ -209,8 +270,9 @@ function FileTransfer(props: { job: Transfer }) {
 }
 
 /**
- * Saves files the app holds: on a desktop into the Downloads folder, under a free name; elsewhere
- * through the share sheet where there is one, else into the app's storage. `save` resolves with
+ * Saves files the app holds: on a desktop into the system's Downloads folder, under a free name
+ * (through the share sheet when that folder is outside the home directory); elsewhere through the
+ * share sheet where there is one, else into the app's storage. `save` resolves with
  * where the file went (`savedPath` holds its path too); files over NSH's direct write limit go
  * through a WebView download (`writer` mounts it). One file at a time.
  */
@@ -241,6 +303,7 @@ export function createFileSaver() {
     let directory: string | undefined;
     // A file written into the Downloads folder, removed alone if the save does not finish.
     let download: string | undefined;
+    let folder: DownloadsFolder | undefined;
     let keep = false;
     let job: Transfer | undefined;
     const stopped = () => closed || request?.aborted;
@@ -275,18 +338,21 @@ export function createFileSaver() {
         platform.os === "windows" ||
         platform.os === "linux"
       ) {
-        const home = homedir();
-        await mkdir(downloadsFolder, { recursive: true });
-        const saved = await freeDownloadName(name);
+        folder = await downloadsFolder();
         if (stopped()) return;
-        download = `${downloadsFolder}/${saved}`;
-        await write(download);
-        if (stopped()) return;
-        const separator = platform.os === "windows" ? "\\" : "/";
-        const path = `${home}${separator}Downloads${separator}${saved}`;
-        savedPath.set(path);
-        keep = true;
-        return { path, name: saved, downloads: true };
+        // Outside the home directory the app may not write: the share sheet saves it instead.
+        if (folder.write) {
+          await mkdir(folder.write, { recursive: true });
+          const saved = await freeDownloadName(folder.write, name);
+          if (stopped()) return;
+          download = `${folder.write}/${saved}`;
+          await write(download);
+          if (stopped()) return;
+          const path = `${folder.shown}${folder.separator}${saved}`;
+          savedPath.set(path);
+          keep = true;
+          return { path, name: saved, downloads: true };
+        }
       }
       const sharing = await Share.available();
       if (stopped()) return;
@@ -300,6 +366,8 @@ export function createFileSaver() {
       if (sharing) {
         const result = await Share.show({ title: name, files: [path] });
         keep = platform.os === "android" && result.action === "shared";
+        if (folder)
+          return { path: "", name, downloads: false, outside: folder.shown };
       } else {
         // NSH exposes the storage directory on the VM global.
         // eslint-disable-next-line node/prefer-global/process
@@ -309,7 +377,7 @@ export function createFileSaver() {
         const path = `${dataDir}/artifact-exports/${id}/${name}`;
         savedPath.set(path);
         keep = true;
-        return { path, name, downloads: false };
+        return { path, name, downloads: false, outside: folder?.shown };
       }
     } finally {
       request?.removeEventListener("abort", cancel);

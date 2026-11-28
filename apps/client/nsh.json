@@ -42,7 +42,7 @@
       "write": [
         "${dataDir}/artifact-exports",
         "${dataDir}/downloads",
-        "${homeDir}/Downloads"
+        "${homeDir}"
       ]
     },
     "openUrl": {
@@ -79,6 +79,12 @@
       "NSAppTransportSecurity": {
         "NSAllowsArbitraryLoads": true
       }
+    }
+  },
+  "dependencies": {
+    "nsh-directories": {
+      "github": "AkaraChen/nsh-directories",
+      "version": "^0.1.0"
     }
   }
 }
