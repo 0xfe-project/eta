@@ -35,7 +35,6 @@ function normalize(url: string): string | undefined {
 
 export class ProviderLogos {
   readonly #send: typeof fetch;
-  readonly #now: () => number;
   /** Each catalog entry's endpoint, normalised, to the entry's id. */
   #endpoints: { at: number; map: Promise<Map<string, string>> } | undefined;
   readonly #svgs = new Map<
@@ -43,9 +42,8 @@ export class ProviderLogos {
     { svg: string | undefined; at: number } | Promise<string | undefined>
   >();
 
-  constructor(send: typeof fetch = fetch, now: () => number = Date.now) {
+  constructor(send: typeof fetch = fetch) {
     this.#send = send;
-    this.#now = now;
   }
 
   async logos(
@@ -81,7 +79,7 @@ export class ProviderLogos {
 
   #catalogEndpoints(): Promise<Map<string, string>> {
     const cached = this.#endpoints;
-    if (cached !== undefined && this.#now() - cached.at < CATALOG_TTL_MS)
+    if (cached !== undefined && Date.now() - cached.at < CATALOG_TTL_MS)
       return cached.map;
     const map = fetchModelsDev(this.#send).then((body) => {
       const endpoints = new Map<string, string>();
@@ -95,7 +93,7 @@ export class ProviderLogos {
       }
       return endpoints;
     });
-    this.#endpoints = { at: this.#now(), map };
+    this.#endpoints = { at: Date.now(), map };
     // A failed read is not kept: the next request tries again.
     map.catch(() => {
       if (this.#endpoints?.map === map) this.#endpoints = undefined;
@@ -108,13 +106,13 @@ export class ProviderLogos {
     if (cached instanceof Promise) return await cached;
     if (
       cached !== undefined &&
-      (cached.svg !== undefined || this.#now() - cached.at < MISS_TTL_MS)
+      (cached.svg !== undefined || Date.now() - cached.at < MISS_TTL_MS)
     )
       return cached.svg;
     const pending = this.#fetchSvg(id);
     this.#svgs.set(id, pending);
     const svg = await pending;
-    this.#svgs.set(id, { svg, at: this.#now() });
+    this.#svgs.set(id, { svg, at: Date.now() });
     return svg;
   }
 

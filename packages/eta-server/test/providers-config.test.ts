@@ -104,5 +104,14 @@ describe("the config as a client sees it", () => {
     expect(summary.hasApiKey).toBe(true);
     expect(JSON.stringify(summary)).not.toContain("sk-secret");
     expect(summary.kind).toBe("openai-compatible");
+    // No key saved yet: a preset says it needs one, under its own kind.
+    expect(
+      providerSummary({
+        id: "command-code",
+        kind: "commandcode",
+        baseUrl: "https://api.commandcode.ai/provider/v1",
+        models: [],
+      }),
+    ).toMatchObject({ kind: "commandcode", hasApiKey: false });
   });
 });

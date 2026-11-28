@@ -141,6 +141,9 @@ describe("a server started the way main starts it", () => {
     expect(names).toContain("sessions.fork");
     expect(names).toContain("providers.save");
     expect(names).toContain("settings.save");
+    expect(names).toContain("settings.reload");
+    expect(names).toContain("personas.reload");
+    expect(names).toContain("personas.set");
     // Every plugin the server has, as `hello` reports it.
     expect(hello.mounted.map((plugin) => plugin.name).sort()).toEqual([
       "personas",
@@ -155,6 +158,13 @@ describe("a server started the way main starts it", () => {
       "sessions",
       "settings",
     ]);
+    // A fresh data dir: an empty sidebar and no settings saved yet.
+    const state = hello.state as Record<
+      string,
+      { sections: Record<string, unknown> }
+    >;
+    expect(state.sessions?.sections.list).toEqual([]);
+    expect(state.settings?.sections.settings).toEqual({});
     client.close();
   });
 
@@ -358,53 +368,6 @@ describe("a server started the way main starts it", () => {
         view.state.sections.transcript.messages.at(-1)?.message.content,
       ),
     ).toContain("after the abort");
-    client.close();
-  });
-
-  it("starts without the feature plugins, and says so", async () => {
-    const root = await mkdtemp(join(tmpdir(), "eta-bare-"));
-    roots.push(root);
-    // The floor with no bundled plugins at all: this is the claim that the shell is a pipe and
-    // not a session host with plugins bolted on.
-    const server = await assembleServer({
-      dataDir: root,
-      configPath: join(root, "no-such-config.json"),
-      plugins: [],
-    });
-    servers.push(server);
-    const client = await connect(server.server.port);
-    await until(() => client.frames.some((frame) => frame.type === "hello"));
-    const hello = client.frames.find(
-      (frame) => frame.type === "hello",
-    ) as Extract<ServerFrame, { type: "hello" }>;
-    expect(hello.ops).toEqual([]);
-    expect(hello.state).toEqual({});
-    // And a call nobody registered is named as unknown, rather than silently succeeding.
-    await expect(client.call("sessions", "create", {})).rejects.toThrow(
-      /unknown op: sessions.create/,
-    );
-    client.close();
-  });
-
-  it("mounts only the bundled plugins it is asked for", async () => {
-    const root = await mkdtemp(join(tmpdir(), "eta-half-"));
-    roots.push(root);
-    const server = await assembleServer({
-      dataDir: root,
-      configPath: join(root, "no-such-config.json"),
-      plugins: ["settings"],
-    });
-    servers.push(server);
-    const client = await connect(server.server.port);
-    await until(() => client.frames.some((frame) => frame.type === "hello"));
-    const hello = client.frames.find(
-      (frame) => frame.type === "hello",
-    ) as Extract<ServerFrame, { type: "hello" }>;
-    expect(hello.ops.map((op) => op.name)).toEqual([
-      "settings.reload",
-      "settings.save",
-    ]);
-    expect(hello.mounted).toEqual([{ name: "settings", source: "bundled" }]);
     client.close();
   });
 

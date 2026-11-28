@@ -31,7 +31,6 @@ export {
  * sessions — arriving as a plugin.
  */
 export {
-  PROVIDER_ACTIONS,
   providersPlugin,
   type ProvidersPluginOptions,
 } from "./bundled/providers";
@@ -109,22 +108,13 @@ export {
   type PluginManifest,
 } from "./plugins";
 export { ETA_USER_AGENT } from "./providers/attribution";
+export { type ProviderReference } from "./providers/catalog";
 export {
-  providerModelCatalog,
-  providerModelDefinition,
-  type ProviderReference,
-  resolveConfiguredModels,
-} from "./providers/catalog";
-export {
-  applyProviderHeaders,
-  effectiveModel,
   type EtaConfig,
   type EtaModelConfig,
   type EtaProviderConfig,
   type ModelCapabilities,
   modelThinkingLevels,
-  providerSummary,
-  sanitizeProviderHeaders,
 } from "./providers/config-types";
 export {
   discoverModels,
@@ -143,19 +133,15 @@ export {
   ProviderConfigError,
   ProviderConfigStore,
   type ProviderConfigStoreOptions,
-  publicView,
-  revisionOf,
 } from "./providers/store";
 export { redactionMiddleware } from "./redact";
 export {
-  createTargetRegistry,
   type OpContext,
   type OpHandler,
   type OpMeta,
   type StateProjector,
   type TargetRegistry,
   type TargetSummary,
-  UnknownOpError,
 } from "./registry";
 export {
   createEventRing,
@@ -188,7 +174,6 @@ export {
   type AssembledServer,
   type AssembleOptions,
   assembleServer,
-  type BundledPluginName,
   pluginDirs,
 } from "./server";
 export {

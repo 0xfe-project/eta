@@ -109,15 +109,15 @@ describe("reloading after an edit", () => {
       plugins,
       "watcher",
       `
-			let seen = 0;
 			export default {
 				name: "watcher",
 				inject: ["wire"],
 				apply(ctx) {
-					ctx.wire.handle("watcher", "count", () => ({ result: { seen } }));
-					ctx.wire.stateOf("watcher", { project: () => ({ sections: { seen }, revisions: { seen: String(seen) } }) });
-					// A subscription that would double if the old instance survived.
-					ctx.on("tick", () => { seen += 1; });
+					// A subscription that would double if the old instance survived. The count is
+					// global: each reload imports a fresh module, so a module-level counter could not
+					// see the old instance's listener fire.
+					ctx.on("tick", () => { globalThis.__etaWatcherTicks = (globalThis.__etaWatcherTicks ?? 0) + 1; });
+					ctx.wire.stateOf("watcher", { project: () => ({ sections: { v: 1 }, revisions: { v: "1" } }) });
 				},
 			};
 		`,
@@ -133,14 +133,15 @@ describe("reloading after an edit", () => {
       plugins,
       "watcher",
       `
-			let seen = 0;
 			export default {
 				name: "watcher",
 				inject: ["wire"],
 				apply(ctx) {
-					ctx.wire.handle("watcher", "count", () => ({ result: { seen } }));
-					ctx.wire.stateOf("watcher", { project: () => ({ sections: { seen }, revisions: { seen: String(seen) } }) });
-					ctx.on("tick", () => { seen += 1; });
+					// A subscription that would double if the old instance survived. The count is
+					// global: each reload imports a fresh module, so a module-level counter could not
+					// see the old instance's listener fire.
+					ctx.on("tick", () => { globalThis.__etaWatcherTicks = (globalThis.__etaWatcherTicks ?? 0) + 1; });
+					ctx.wire.stateOf("watcher", { project: () => ({ sections: { v: 2 }, revisions: { v: "2" } }) });
 				},
 			};
 		`,
@@ -148,14 +149,14 @@ describe("reloading after an edit", () => {
     await manager.reloadChanged(ctx);
 
     // Fire one tick. If the old instance's listener survived, the counter moves twice.
+    const ticks = globalThis as { __etaWatcherTicks?: number };
+    ticks.__etaWatcherTicks = 0;
     (ctx as unknown as { emit: (name: string) => void }).emit("tick");
-    const outcome = await wire.dispatch(
-      { op: "call", target: "watcher", action: "count" },
-      {
-        reply: () => undefined,
-      } as never,
-    );
-    expect(outcome.result).toEqual({ seen: 1 });
+    expect(ticks.__etaWatcherTicks).toBe(1);
+    delete ticks.__etaWatcherTicks;
+    // And the new instance is the one state target: its registration was not refused.
+    expect(manager.mounted()).toEqual([{ name: "watcher", source: "user" }]);
+    expect(wire.snapshot("watcher")?.sections).toEqual({ v: 2 });
   });
 
   it("does not reload when nothing changed, and does not reload official plugins", async () => {

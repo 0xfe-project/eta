@@ -9,7 +9,8 @@
  * Nothing about the endpoint is hardcoded: the providers config, the key and the model all come
  * from that file, because what this proves is that the *assembly* works — a config read from
  * disk becomes a model layer, a client over a real socket creates a session, the run streams, the
- * frames arrive, and the session is still there (with its history) after a reopen.
+ * frames arrive, a real usage number reaches the journal, and the session is still there (with
+ * its history, which a second turn answers from) after a restart.
  */
 
 import type { ServerFrame } from "@eta/client-wire-proto";
@@ -18,6 +19,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { FileSessionStore } from "../src/file-store";
 import { buildModels } from "../src/providers/runtime";
 import { ProviderConfigStore } from "../src/providers/store";
 import { assembleServer } from "../src/server";
@@ -140,9 +142,10 @@ describe.skipIf(configPath === undefined)(
           ...(model === undefined ? {} : { model }),
         })) as { session: string };
         client.subscribe(`sessions.${created.session}`);
+        const secret = `POMELO-${Date.now()}`;
         await client.call("sessions", "prompt", {
           session: created.session,
-          text: "Reply with exactly the word: eta",
+          text: `Remember this word: ${secret}. Reply with only the word.`,
         });
         await until(
           () =>
@@ -196,6 +199,32 @@ describe.skipIf(configPath === undefined)(
         expect(
           reopened?.session.log.transcript().length,
         ).toBeGreaterThanOrEqual(2);
+        // A real usage number made it to disk with the journal.
+        const stored = await new FileSessionStore({
+          root: join(root, "sessions"),
+        }).open(created.session);
+        const stats = await stored!.storage.getStats();
+        expect(stats.usage.input).toBeGreaterThan(0);
+        expect(stats.usage.totalTokens).toBeGreaterThan(0);
+
+        // And it keeps working: a second turn answers from the replayed transcript.
+        reopened!.session.kernel.inject({
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "What word did I ask you to remember? Reply with only the word.",
+            },
+          ],
+          timestamp: Date.now(),
+        });
+        const second = await reopened!.session.runner.run();
+        expect(second.status).toBe("completed");
+        const answers = reopened!.session.log
+          .transcript()
+          .filter((message) => message.role === "assistant")
+          .map((message) => JSON.stringify(message.content));
+        expect(answers.at(-1)).toContain(secret);
         await restarted.close();
         await rm(root, { recursive: true, force: true });
       },

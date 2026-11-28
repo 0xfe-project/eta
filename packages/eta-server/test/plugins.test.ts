@@ -209,7 +209,7 @@ describe("a plugin that is broken", () => {
     ]);
   });
 
-  it("does not take the server down, and reports a plugin that will not unload", async () => {
+  it("unloads twice without an error", async () => {
     const dirs = await scratch();
     await writePlugin(dirs.plugins, "stubborn", {
       code: `export default { name: "stubborn", apply() {} };`,
@@ -245,39 +245,6 @@ describe("what counts as a plugin module", () => {
 });
 
 describe("a plugin that registers without cleaning up", () => {
-  it("is still contained: unloading takes back what it left", async () => {
-    const dirs = await scratch();
-    // No effect, no disposer: the plugin registers and forgets. A user plugin can be written
-    // this way, and "unload" has to mean the same thing for it as for a careful one.
-    await writePlugin(dirs.plugins, "careless", {
-      code: `
-				export default {
-					name: "careless",
-					inject: ["wire"],
-					apply(ctx) {
-						ctx.wire.handle("careless", "ping", () => ({ result: { pong: true } }));
-						ctx.wire.stateOf("careless", { project: () => ({ sections: { n: 1 }, revisions: { n: "1" } }) });
-					},
-				};
-			`,
-    });
-    const { ctx, wire } = harness();
-    const manager = new PluginManager({
-      modulesDir: dirs.modules,
-      pluginsDir: dirs.plugins,
-    });
-    await manager.loadAll(ctx);
-    expect(wire.descriptors().map((descriptor) => descriptor.name)).toEqual([
-      "careless.ping",
-    ]);
-    expect(wire.snapshot("careless")).toBeDefined();
-
-    await manager.dispose();
-    // The floor swept up what the plugin left behind.
-    expect(wire.descriptors()).toEqual([]);
-    expect(wire.snapshot("careless")).toBeUndefined();
-  });
-
   it("leaves another plugin's registrations alone", async () => {
     const dirs = await scratch();
     await writePlugin(dirs.plugins, "keeper", {

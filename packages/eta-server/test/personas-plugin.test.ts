@@ -112,20 +112,6 @@ async function harness(): Promise<Harness> {
 }
 
 describe("the personas target", () => {
-  it("registers its actions and an eager state target", async () => {
-    const h = await harness();
-    const unload = await h.load();
-    expect(
-      h.wire
-        .descriptors()
-        .map((descriptor) => descriptor.name)
-        .sort(),
-    ).toEqual(["personas.reload", "personas.set"]);
-    expect(h.wire.registry.eagerTargets()).toContain("personas");
-    await unload();
-    expect(h.wire.descriptors()).toEqual([]);
-  });
-
   it("publishes the cards that apply — built-ins included — and re-reads on reload", async () => {
     const h = await harness();
     const unload = await h.load();
@@ -165,7 +151,7 @@ describe("the personas target", () => {
 });
 
 describe("putting a session on a card", () => {
-  it("switches the card, writes the choice to the session's row, and pushes", async () => {
+  it("switches the card and writes the choice to the session's row, with no card-list frame", async () => {
     const h = await harness();
     const unload = await h.load();
     await card(

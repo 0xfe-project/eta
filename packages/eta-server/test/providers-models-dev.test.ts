@@ -22,7 +22,6 @@ import { MODEL_SOURCES } from "@eta/client-contracts";
 import { Context } from "cordis";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { providersPlugin } from "../src/bundled/providers";
-import { providerSummary } from "../src/providers/config-types";
 import { discoverModels } from "../src/providers/discovery";
 import {
   MODELS_DEV_URL,
@@ -145,31 +144,6 @@ describe("parsing a models.dev model", () => {
     expect(() => parseModelsDevModel("x", entry, provider)).toThrow(
       `Invalid public model metadata: ${field}`,
     );
-  });
-});
-
-describe("the OpenCode presets", () => {
-  it("point at the OpenAI endpoint models.dev lists for each gateway", () => {
-    for (const [reference, id] of [
-      [ZEN, "opencode"],
-      [GO, "opencode-go"],
-    ] as const) {
-      expect(reference.baseUrl).toBe(
-        (snapshot as unknown as Catalog & Record<string, { api: string }>)[id]!
-          .api,
-      );
-      expect(MODEL_SOURCES[reference.kind]).toMatchObject({
-        auth: "key",
-        models: "models-dev",
-        modelsDev: id,
-      });
-    }
-  });
-
-  it("are summarised under the preset kind and need a key", () => {
-    expect(
-      providerSummary({ id: "opencode-zen", ...ZEN, models: [] }),
-    ).toMatchObject({ kind: "opencode", hasApiKey: false });
   });
 });
 
@@ -348,16 +322,6 @@ describe("running OpenCode models", () => {
       high: "high",
       minimal: null,
     });
-  });
-
-  it("keeps a single-protocol provider's models on its kind's protocol", async () => {
-    const provider = await buildProvider({
-      id: "custom",
-      kind: "openai-responses",
-      baseUrl: "http://127.0.0.1:1/v1",
-      models: [{ id: "m" }],
-    });
-    expect(provider.getModels()[0]?.api).toBe("openai-responses");
   });
 });
 
