@@ -112,8 +112,9 @@ describe("model providers", () => {
     // The refused write left the file as the first write made it.
     expect(current.providers.map((entry) => entry.id)).toEqual(["a"]);
     expect(
-      JSON.parse(await readFile(join(host.dataDir, "config.json"), "utf8"))
-        .providers.map((entry: { id: string }) => entry.id),
+      JSON.parse(
+        await readFile(join(host.dataDir, "config.json"), "utf8"),
+      ).providers.map((entry: { id: string }) => entry.id),
     ).toEqual(["a"]);
     await client.call("providers", "delete", {
       revision: current.revision,

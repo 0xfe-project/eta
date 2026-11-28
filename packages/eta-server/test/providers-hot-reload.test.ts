@@ -109,9 +109,7 @@ describe("the model layer, hot", () => {
       provider: {
         ...entry("named", "manual-unknown"),
         kind: "deepseek",
-        models: [
-          { id: "manual-unknown", overrides: { contextWindow: 64000 } },
-        ],
+        models: [{ id: "manual-unknown", overrides: { contextWindow: 64000 } }],
       },
     });
     await until(
