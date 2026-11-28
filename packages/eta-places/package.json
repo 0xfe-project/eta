@@ -18,11 +18,9 @@
   },
   "dependencies": {
     "@eta/client-contracts": "*",
-    "@simple-git/argv-parser": "3.0.0",
     "execa": "10.2.1",
     "fdir": "6.5.0",
     "lru-cache": "11.5.3",
-    "simple-git": "4.1.0",
     "valid-filename": "5.0.0"
   },
   "devDependencies": {
