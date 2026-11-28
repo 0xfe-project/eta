@@ -1,6 +1,6 @@
 import type { RunBlock } from "@eta/client-contracts";
-import type { JSX, ScrollRef } from "nsh";
-import { signal, View } from "nsh";
+import type { JSX, ScrollRef, ViewProps } from "nsh";
+import { context, signal, View } from "nsh";
 import {
   Caption,
   colors,
@@ -11,7 +11,7 @@ import {
   SmoothScroll,
 } from "../../components";
 import { Spinner } from "../../components/spinner";
-import { icon, space, weight } from "../../components/tokens";
+import { icon, layer, space, weight } from "../../components/tokens";
 import { uiText } from "../../i18n";
 import { ToolOutput } from "./run/tool-code";
 import { toolTitle } from "./run/transcript-line";
@@ -19,14 +19,49 @@ import { toolTitle } from "./run/transcript-line";
 /** A step's row in a reply's process. */
 const stepRowHeight = 32;
 
+/** The process window's scroll, for a step folded while it holds the window's top. */
+const ProcessScroll = context<{ reveal: (top: number) => void } | undefined>(
+  undefined,
+);
+
+/**
+ * Where a step's row is in the process window, and folding it: when the
+ * window is scrolled past that row, it scrolls back to it, not to wherever
+ * the shorter content leaves it.
+ */
+function stepRow() {
+  const window = ProcessScroll();
+  let top = 0;
+  return {
+    onLayout: (event: Parameters<NonNullable<ViewProps["onLayout"]>>[0]) => {
+      top = event.bounds.origin.y;
+    },
+    reveal: () => window?.reveal(top),
+  };
+}
+
+/** A step's title row while its content is open: it stays at the top of the window until the step ends. */
+const stuck = (borderColor: string) =>
+  ({
+    position: "sticky",
+    top: 0,
+    zIndex: layer.sticky,
+    borderBottomWidth: 1,
+    borderColor,
+  }) as const;
+
 export function ProcessStep(props: { value: RunBlock }) {
   const c = colors();
+  const rowBox = stepRow();
   const tool = () => (props.value.type === "tool" ? props.value : undefined);
   // A list recycles a step's view for another step: what was opened is kept
   // for the step it was opened on.
   const opened = signal<string | undefined>(undefined);
   const expanded = () => opened() === props.value.id;
-  const toggle = () => opened.set(expanded() ? undefined : props.value.id);
+  const toggle = () => {
+    if (expanded()) rowBox.reveal();
+    opened.set(expanded() ? undefined : props.value.id);
+  };
   const title = () => {
     const step = tool();
     if (!step) return "";
@@ -69,7 +104,7 @@ export function ProcessStep(props: { value: RunBlock }) {
       }
     >
       {(step) => (
-        <View>
+        <View onLayout={rowBox.onLayout}>
           <View
             role={step().output ? "button" : undefined}
             onPress={step().output ? toggle : undefined}
@@ -80,6 +115,9 @@ export function ProcessStep(props: { value: RunBlock }) {
               gap: space[8],
               borderBottomWidth: 1,
               borderColor: c().border,
+              ...(expanded() && step().output
+                ? { ...stuck(c().border), backgroundColor: c().canvas }
+                : {}),
             }}
           >
             <Label variant="small" lines={1} style={{ flex: 1 }}>
@@ -134,26 +172,34 @@ function TextStep(props: {
   text: string;
 }) {
   const c = colors();
+  const rowBox = stepRow();
   // Toggled away from how it starts, for the step it was toggled on.
   const toggled = signal<string | undefined>(undefined);
   const open = () => (props.kind === "note") !== (toggled() === props.id);
   const label = () =>
     uiText(props.kind === "thinking" ? "runThinking" : "processNote");
   return (
-    <View style={{ borderBottomWidth: 1, borderColor: c().border }}>
+    <View
+      onLayout={rowBox.onLayout}
+      style={{ borderBottomWidth: 1, borderColor: c().border }}
+    >
       <View
         role="button"
         accessibilityLabel={label()}
         accessibilityState={{ expanded: open() }}
-        onPress={() =>
-          toggled.set(toggled() === props.id ? undefined : props.id)
-        }
+        onPress={() => {
+          if (open() && props.kind === "thinking") rowBox.reveal();
+          toggled.set(toggled() === props.id ? undefined : props.id);
+        }}
         style={{
           ...row,
           gap: space[4],
           paddingVertical: space[4],
           paddingHorizontal: space[12],
           cursor: "pointer",
+          ...(open() && props.kind === "thinking"
+            ? { ...stuck(c().border), backgroundColor: c().canvas }
+            : {}),
         }}
       >
         <Icon name={open() ? "down" : "right"} size={icon.sm} tone="faint" />
@@ -198,6 +244,7 @@ export function ProcessWindow(props: {
 }) {
   let scroll: ScrollRef | undefined;
   let pinned = true;
+  let offset = 0;
   return (
     <SmoothScroll
       ref={(node) => {
@@ -206,6 +253,7 @@ export function ProcessWindow(props: {
       style={{ height: props.height, flexShrink: 0 }}
       scrollEventThrottle={16}
       onScroll={(event) => {
+        offset = event.offset.y;
         pinned =
           event.contentSize.height - event.offset.y - event.size.height < 16;
       }}
@@ -216,7 +264,17 @@ export function ProcessWindow(props: {
             scroll?.scrollTo({ y: event.bounds.size.height, animated: false });
         }}
       >
-        {props.children}
+        <ProcessScroll.Provider
+          value={{
+            reveal: (top) => {
+              if (offset <= top) return;
+              pinned = false;
+              scroll?.scrollTo({ y: top, animated: false });
+            },
+          }}
+        >
+          {props.children}
+        </ProcessScroll.Provider>
       </View>
     </SmoothScroll>
   );
