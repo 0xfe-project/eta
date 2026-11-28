@@ -188,7 +188,6 @@ export const updatesMessages = {
     "此主机不支持修改通道",
   ],
   updateToVersion: ["Update to {{version}}", "更新到 {{version}}"],
-  advanced: ["Advanced", "高级"],
   cancelUpdate: ["Cancel update", "取消更新"],
   changeWhereUpdatesComeFrom: [
     "Change where updates come from",

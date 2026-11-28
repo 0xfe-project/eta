@@ -1,14 +1,7 @@
 import type { JSX } from "nsh";
 import type { HostUpdate } from "./host-update";
 import { View } from "nsh";
-import {
-  Button,
-  colors,
-  focusRing,
-  Icon,
-  Label,
-  row,
-} from "../../../components";
+import { Button, colors, Icon, Label, row } from "../../../components";
 import { control, icon, space } from "../../../components/tokens";
 import { uiText } from "../../../i18n";
 import { clientPlatform } from "../../../services/client-update";
@@ -83,7 +76,6 @@ function ChannelRow(props: {
 }
 
 export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
-  const c = colors();
   const host = useHost();
   const {
     advanced,
@@ -162,30 +154,33 @@ export function ReleaseSettings(props: { update: HostUpdate; phone: boolean }) {
         <GroupHeading
           title={uiText("whereUpdatesComeFrom")}
           phone={props.phone}
+          expanded={advancedOpen}
+          onPress={() => advanced.set(!advancedOpen())}
         >
-          <View
-            role="button"
-            accessibilityLabel={uiText("advanced")}
-            accessibilityState={{ expanded: advancedOpen() }}
-            onPress={() => advanced.set(!advancedOpen())}
-            hoverStyle={{ backgroundColor: c().selected }}
-            focusVisibleStyle={focusRing(c(), "inset")}
-            style={{
-              ...row,
-              height: props.phone ? control.md : space[24],
-              width: space[24],
-              justifyContent: "center",
-              cursor: "pointer",
-            }}
-          >
+          {(hovered) => (
             <View
               style={{
-                transform: advancedOpen() ? [{ rotate: "180deg" }] : undefined,
+                ...row,
+                height: props.phone ? control.md : space[24],
+                width: space[24],
+                justifyContent: "center",
               }}
             >
-              <Icon name="down" size={icon.sm} tone="muted" />
+              <View
+                style={{
+                  transform: advancedOpen()
+                    ? [{ rotate: "180deg" }]
+                    : undefined,
+                }}
+              >
+                <Icon
+                  name="down"
+                  size={icon.sm}
+                  tone={hovered() ? "ink" : "muted"}
+                />
+              </View>
             </View>
-          </View>
+          )}
         </GroupHeading>
         <If when={advancedOpen() ? source() : undefined}>
           {(upstream) => (
