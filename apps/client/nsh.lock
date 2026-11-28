@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "packages": [
+    {
+      "name": "nsh-directories",
+      "version": "0.1.0",
+      "source": "git+https://github.com/AkaraChen/nsh-directories",
+      "commit": "36bc66b1a3acf0bc012135e9b58a8dfa4519d4ae",
+      "dir": "github.com/AkaraChen/nsh-directories/0.1.0",
+      "module": "nsh-directories"
+    }
+  ]
+}

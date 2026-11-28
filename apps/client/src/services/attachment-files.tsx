@@ -5,10 +5,7 @@ import { Clipboard, context, signal } from "nsh";
 import { startProgress } from "../components/progress-notification";
 import { showToast } from "../components/toast";
 import { uiText } from "../i18n";
-import {
-  createFileSaver,
-  savedToDownloads,
-} from "../pages/chat/artifacts/file";
+import { createFileSaver, savedNotice } from "../pages/chat/artifacts/file";
 import { problemText } from "./problem-text";
 
 // A file a message carried, saved on a press: the host's copy (`GET /attachments/<id>`, served as
@@ -100,8 +97,9 @@ export function createAttachmentFiles(host: ReturnType<typeof useHost>) {
         progress.dismiss();
         return;
       }
-      if (savedFile?.downloads) {
-        progress.complete(savedToDownloads(savedFile));
+      const notice = savedNotice(savedFile);
+      if (notice) {
+        progress.complete(notice);
         return;
       }
       const saved = saver.savedPath();
