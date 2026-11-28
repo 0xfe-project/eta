@@ -20,7 +20,11 @@ import { flavors, paletteIds } from "../../components/palettes";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { control, space } from "../../components/tokens";
 import { languageChoices, LanguageSettings, useText } from "../../i18n";
-import { pictureModes, PictureModes } from "../../services/picture-mode";
+import {
+  pictureModes,
+  PictureModes,
+  PicturePlaces,
+} from "../../services/picture-mode";
 
 /** A choice's menu and a typed value, beside their label off phones. */
 const menuWidth = 160;
@@ -286,6 +290,7 @@ export function Appearance(props: AppearanceProps & { phone: boolean }) {
   const language = LanguageSettings();
   const picker = ElementPicking();
   const pictures = PictureModes();
+  const places = PicturePlaces();
   return (
     <SmoothScroll style={grow} scrollbar={false}>
       <ChoiceRow
@@ -358,6 +363,16 @@ export function Appearance(props: AppearanceProps & { phone: boolean }) {
         }
         set={pictures.set}
       />
+      {/* Compact keeps each name where it was put: only expanded cards have a place to point to. */}
+      <If when={pictures.mode() === "expanded"}>
+        <ToggleRow
+          title={text("picturePlaces")}
+          hint={text("picturePlacesHint")}
+          checked={places.on()}
+          phone={props.phone}
+          set={places.set}
+        />
+      </If>
       <FontRow kind="interface" phone={props.phone} onFonts={props.onFonts} />
       <FontRow kind="mono" phone={props.phone} onFonts={props.onFonts} />
       <ToggleRow
