@@ -22,7 +22,7 @@ import { join } from "node:path";
 import process from "node:process";
 import { antigravityRuntime, createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
-import { createOarRuntimes } from "@eta/runtime-oar";
+import { createOarRuntimes, RUNTIME_IDS } from "@eta/runtime-oar";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
 import { say, scriptedModels } from "./support/models";
@@ -139,17 +139,14 @@ describe("an agent's runtime", () => {
     const { runtimes } = (await w.client.call("agents", "runtimes", {})) as {
       runtimes: AgentRuntimeInfo[];
     };
-    expect(runtimes.map((runtime) => runtime.id)).toEqual([
-      "claude",
-      "codex",
-      "opencode",
-      "pi",
-      "antigravity",
-      "grok",
-      "qwen",
-    ]);
-    // The scripted one is there; the others are not in this registry at all.
+    // Every runtime eta knows is listed, whatever this machine has: none is hidden.
+    expect(runtimes.map((runtime) => runtime.id).sort()).toEqual(
+      [...RUNTIME_IDS].sort(),
+    );
+    // The scripted one is there and comes first; the others are not in this registry at all,
+    // and say so.
     expect(runtimes[0]).toMatchObject({
+      id: "claude",
       label: "Claude Code",
       status: "available",
     });

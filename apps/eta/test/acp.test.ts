@@ -22,6 +22,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
+import { DaemonLink, DaemonNode } from "@eta/daemon";
 import { fakeAgent } from "@eta/runtime-acp/testing";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
@@ -408,19 +409,6 @@ describe("an acp.json that cannot be read whole", () => {
     );
   });
 
-  it("keeps a bad agent: saving the good one beside it is refused", async () => {
-    const w = await host();
-    const good = fakeAgent("good").config;
-    const text = JSON.stringify({
-      agents: [{ id: "Bad Id", command: "x" }, good],
-    });
-    writeFileSync(fileOf(w), text);
-    await expect(save(w, { ...good, label: "Better" }, "good")).rejects.toThrow(
-      /agent 1 \("Bad Id"\): the id "Bad Id" is not valid/,
-    );
-    expect(readFileSync(fileOf(w), "utf8")).toBe(text);
-  });
-
   it("creates the file when there is none, and reads again once it is fixed", async () => {
     const w = await host();
     const one = fakeAgent("one").config;
@@ -733,6 +721,42 @@ describe("one machine at a time: the settings page on a daemon", () => {
           ?.some((a) => a.id === ace.id),
       ).toBe(true);
       expect(readAgents(daemonFile(r))).toEqual([config]);
+
+      // The same daemon back on its own directory: now the cascade goes through, on its file.
+      const node = new DaemonNode({
+        dataDir: r.daemon.dataDir,
+        version: "test",
+        home: r.daemon.dataDir,
+        warn: () => undefined,
+      });
+      await node.start();
+      const link = new DaemonLink({
+        identity: r.daemon.identity,
+        server: node,
+        backoff: { minMs: 20, maxMs: 100 },
+      });
+      link.start();
+      try {
+        await until(
+          () => machineView(r.client, machineId)?.status === "online",
+        );
+        const deleted = (await r.client.call("acp", "delete", {
+          machineId,
+          id: "fake",
+          deleteAgents: true,
+        })) as { deletedAgents?: string[] };
+        expect(deleted.deletedAgents).toEqual([ace.id]);
+        expect(readAgents(daemonFile(r))).toEqual([]);
+        await until(
+          () =>
+            r.client
+              .section<AgentView[]>("agents", "list")
+              ?.every((a) => a.id !== ace.id) === true,
+        );
+      } finally {
+        await link.stop();
+        await node.close();
+      }
     },
     process.platform === "win32" ? 60_000 : undefined,
   );

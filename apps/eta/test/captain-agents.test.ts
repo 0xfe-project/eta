@@ -139,9 +139,11 @@ describe("propose_agent is Captain's", () => {
     const tools = (agent: string) =>
       requests.find((request) => request.agent === agent)!.tools;
     expect(tools("Captain")).toContain("propose_agent");
+    expect(tools("Captain")).toContain("propose_group");
     expect(tools("Captain")).toContain("list_models");
     expect(tools("Captain")).toContain("list_persona_cards");
     expect(tools("Ada")).not.toContain("propose_agent");
+    expect(tools("Ada")).not.toContain("propose_group");
     expect(tools("Ada")).not.toContain("list_models");
     expect(tools("Ada")).not.toContain("list_persona_cards");
   });
@@ -279,32 +281,6 @@ describe("an agent Captain proposes", () => {
     ).toBe("Executor");
   });
 
-  it("makes nothing when rejected", async () => {
-    const { w, propose } = await setup();
-    const start = counts(w);
-    const { operation } = await propose();
-    expect((await decide(w, operation.id, "reject")).status).toBe("rejected");
-    expect(counts(w)).toEqual(start);
-    expect(w.host.product.captain.store.operation(operation.id)).toMatchObject({
-      status: "rejected",
-    });
-    await expect(decide(w, operation.id, "approve")).rejects.toThrow(
-      /rejected/,
-    );
-    expect(counts(w)).toEqual(start);
-  });
-
-  it("stops the confirmation when an agent of that name appeared in the meantime", async () => {
-    const { w, propose } = await setup();
-    const { operation } = await propose();
-    await w.agent("Scout");
-    const start = counts(w);
-    const decided = await decide(w, operation.id, "approve");
-    expect(decided).toMatchObject({ status: "failed" });
-    expect(decided.error).toMatch(/already exists/);
-    expect(counts(w)).toEqual(start);
-  });
-
   it("cannot be made to carry a system role", async () => {
     const { w, captainId, propose } = await setup();
     const { operation } = await propose();
@@ -365,6 +341,11 @@ describe("how a decided proposal reaches Captain", () => {
     expect(told.text).toContain("rejected");
     expect(told.text).toContain("Nothing was created");
     expect(counts(w)).toEqual(start);
+    // A rejected proposal cannot be confirmed after all.
+    await expect(decide(w, operation.id, "approve")).rejects.toThrow(
+      /rejected/,
+    );
+    expect(counts(w)).toEqual(start);
   });
 
   it("says so when the confirmation failed, and not as a creation", async () => {
@@ -372,8 +353,10 @@ describe("how a decided proposal reaches Captain", () => {
     const { operation } = await propose();
     // An agent of that name appears between the proposal and the confirmation.
     await w.agent("Scout");
+    const start = counts(w);
     const decided = await decide(w, operation.id, "approve");
     expect(decided.status).toBe("failed");
+    expect(counts(w)).toEqual(start);
     await until(() => outcomeOf(w, captain) !== undefined);
     const told = outcomeOf(w, captain)!;
     expect(told.data).toMatchObject({
@@ -399,7 +382,7 @@ describe("how a decided proposal reaches Captain", () => {
 });
 describe("what a proposal is refused for", () => {
   it("refuses a name that is empty or taken, a card that is not there, and what cannot be run", async () => {
-    const { w, propose } = await setup();
+    const { w, captain, propose } = await setup();
     await w.agent("Scout");
     const start = counts(w);
     const refused: [Partial<AgentProposalInput>, RegExp][] = [
@@ -447,6 +430,8 @@ describe("what a proposal is refused for", () => {
       ).rejects.toThrow(reason);
     expect(counts(w)).toEqual(start);
     expect(w.host.product.captain.store.operations()).toEqual([]);
+    // Not even a card: a refused proposal is not recorded at all.
+    expect(cardOf(w, captain)).toBeUndefined();
   });
 });
 

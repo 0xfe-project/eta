@@ -29,12 +29,6 @@ const MINUTE = 60_000;
 const TICK = MINUTE;
 const CHANGE_DEBOUNCE_MS = 150;
 
-/** Reserved signal from a future proactive source. No source is enabled in this release. */
-interface CaptainWakeEvent {
-  kind: string;
-  data?: Record<string, unknown> | undefined;
-}
-
 export class CaptainSupervisor {
   readonly #deps: CaptainSupervisorDeps;
   readonly #now: () => number;
@@ -44,7 +38,6 @@ export class CaptainSupervisor {
   #requested = false;
   #stopped = true;
   #lastPatrol = 0;
-  readonly #eventListeners = new Set<(event: CaptainWakeEvent) => void>();
 
   constructor(deps: CaptainSupervisorDeps) {
     this.#deps = deps;
@@ -85,20 +78,6 @@ export class CaptainSupervisor {
       this.tick();
     }, delayMs);
     this.#requestTimer.unref?.();
-  }
-
-  /**
-   * Reserve the proactive-wake seam without enabling a source yet. A future event producer can
-   * deliver a signal here; consumers stay opt-in and ordinary scheduling remains unaffected.
-   */
-  onEvent(listener: (event: CaptainWakeEvent) => void): () => void {
-    this.#eventListeners.add(listener);
-    return () => this.#eventListeners.delete(listener);
-  }
-
-  /** Deliver a reserved event to registered listeners; no built-in producer calls this yet. */
-  wake(event: CaptainWakeEvent): void {
-    for (const listener of [...this.#eventListeners]) listener(event);
   }
 
   /** Look at failures, inactivity, Inbox age and the patrol interval. Re-entrant calls coalesce. */

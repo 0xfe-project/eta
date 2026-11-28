@@ -73,9 +73,8 @@ export function viaProxy(url: string, prefix = githubProxy.prefix): string {
 const through = (repo: string): string =>
   viaProxy(repo) === repo ? "" : " (through the GitHub proxy)";
 
-/** How long one `git` call may take before it is killed and reported. `ms` is changed by tests only. */
-export const GIT_TIMEOUT_MS = 20_000;
-export const gitLimit = { ms: GIT_TIMEOUT_MS };
+/** How long one `git` call may take before it is killed and reported. */
+const GIT_TIMEOUT_MS = 20_000;
 
 /** Stop `child` and what it started: on Windows `git` leaves `git-remote-https` behind otherwise. */
 function stop(child: Bun.Subprocess): void {
@@ -91,6 +90,7 @@ async function run(
   args: string[],
   cwd?: string,
   repo?: string,
+  limitMs = GIT_TIMEOUT_MS,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const child = Bun.spawn(["git", ...args], {
     ...(cwd === undefined ? {} : { cwd }),
@@ -111,7 +111,7 @@ async function run(
   const timer = setTimeout(() => {
     timedOut = true;
     stop(child);
-  }, gitLimit.ms);
+  }, limitMs);
   try {
     const [stdout, stderr, code] = await Promise.all([
       new Response(child.stdout).text(),
@@ -120,7 +120,7 @@ async function run(
     ]);
     if (timedOut)
       throw new PluginError(
-        `git ${args[0]}${repo === undefined ? "" : ` for ${repo}${through(repo)}`} gave no answer in ${gitLimit.ms / 1000} s: the network is slow, or the repository needs credentials`,
+        `git ${args[0]}${repo === undefined ? "" : ` for ${repo}${through(repo)}`} gave no answer in ${limitMs / 1000} s: the network is slow, or the repository needs credentials`,
       );
     return { code, stdout, stderr };
   } finally {
@@ -135,8 +135,9 @@ async function must(
   cwd: string | undefined,
   what: string,
   repo?: string,
+  limitMs?: number,
 ): Promise<string> {
-  const result = await run(args, cwd, repo);
+  const result = await run(args, cwd, repo, limitMs);
   if (result.code !== 0)
     throw new PluginError(`${what}: ${lastLine(result.stderr)}`);
   return result.stdout;
@@ -174,10 +175,11 @@ export function sourceDir(root: string, repo: string, path: string): string {
   return join(root, hash);
 }
 
-/** The commit `rev` is at in the repository now. A commit sha is itself. */
+/** The commit `rev` is at in the repository now. A commit sha is itself. `limitMs` is for tests. */
 export async function resolveRev(
   repo: string,
   rev: string,
+  limitMs?: number,
 ): Promise<{ sha: string; ref: string | null }> {
   if (SHA.test(rev)) return { sha: rev, ref: null };
   const name = rev === "" ? "HEAD" : rev;
@@ -195,6 +197,7 @@ export async function resolveRev(
     undefined,
     `cannot read ${repo}${through(repo)}`,
     repo,
+    limitMs,
   );
   const refs = new Map<string, string>();
   for (const line of listed.split("\n")) {
@@ -222,8 +225,10 @@ export async function fetchInto(options: {
   sha: string;
   ref: string | null;
   path: string;
+  /** How long one `git` call may take; for tests. */
+  limitMs?: number;
 }): Promise<void> {
-  const { dir, sha, ref } = options;
+  const { dir, sha, ref, limitMs } = options;
   const repo = cleanRepo(options.repo);
   const path = cleanPath(options.path);
   const remote = viaProxy(repo);
@@ -239,12 +244,14 @@ export async function fetchInto(options: {
       ["fetch", "-q", "--depth", "1", "--", remote, sha],
       scratch,
       repo,
+      limitMs,
     );
     if (fetched.code !== 0 && ref !== null)
       fetched = await run(
         ["fetch", "-q", "--depth", "1", "--", remote, ref],
         scratch,
         repo,
+        limitMs,
       );
     if (fetched.code !== 0)
       throw new PluginError(

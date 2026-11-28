@@ -395,33 +395,6 @@ describe("the timeline", () => {
     expect(timeline.memberActivity(conv.id).has(bob.id)).toBe(false);
   });
 
-  it("fails what was in flight, and only that", () => {
-    const { timeline, conv, ada } = conversation();
-    const user = timeline.append({
-      conversationId: conv.id,
-      kind: "message",
-      author: "user",
-      text: "hi",
-    });
-    const queued = timeline.queueReply(conv.id, ada.id, user);
-    const done = timeline.queueReply(conv.id, ada.id, user);
-    timeline.finish(done.id, { status: "done", text: "fine" });
-    expect(timeline.failInterrupted("restarted", "stopped here")).toEqual([
-      conv.id,
-    ]);
-    expect(timeline.get(queued.id)).toMatchObject({
-      status: "failed",
-      text: "restarted",
-      data: { code: "restart" },
-    });
-    expect(timeline.get(done.id)).toMatchObject({
-      status: "done",
-      text: "fine",
-    });
-    expect(timeline.get(user.id)?.status).toBe("done");
-    expect(timeline.failInterrupted("again", "stopped here")).toEqual([]);
-  });
-
   it("a reply outlives its agent, which leaves the conversation", () => {
     const { timeline, agents, conversations, ada, conv } = conversation();
     const user = timeline.append({

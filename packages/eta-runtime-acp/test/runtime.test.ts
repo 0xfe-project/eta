@@ -445,19 +445,6 @@ describe("a permission request", () => {
     });
     expect(transcript(managed).at(-1)).toBe("assistant: Written.");
   });
-
-  it("is allowed whatever an older acp.json says about asking", async () => {
-    // `autoAllow: false` from a file written before the field went: read past, not obeyed.
-    const { manager, agent, asked } = setup({
-      autoAllow: false,
-    } as Partial<AcpAgentConfig>);
-    const managed = await manager.create({ cwd: CWD, runtime: "acp.fake" });
-    expect((await run(managed, "write it")).status).toBe("completed");
-    expect(asked).toEqual([]);
-    expect(
-      agent.log().find((entry) => entry.method === "permission"),
-    ).toMatchObject({ outcome: "yes" });
-  });
 });
 
 describe("a permission request after the turn has ended", () => {

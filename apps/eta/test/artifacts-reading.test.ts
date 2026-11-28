@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_LIMITS } from "../src/artifacts/files";
 import { KINDS } from "../src/artifacts/kinds";
-import { htmlText, page, scopeOf } from "../src/artifacts/reading";
+import { scopeOf } from "../src/artifacts/reading";
 import { ArtifactService } from "../src/artifacts/service";
 import { ArtifactStore } from "../src/artifacts/store";
 import { artifactSessionTools } from "../src/artifacts/tools";
@@ -311,7 +311,7 @@ describe("search_artifacts", () => {
       { conversationId: GROUP, taskId: t.id },
       {
         "index.html":
-          '<html><head><style>.pricing{color:red}</style><script>var pricing=1</script></head><body class="pricing"><p>Our <b>PRICING</b> table</p></body></html>',
+          '<html><head><style>.pricing{color:red}</style><script>var pricing=1</script></head><body class="pricing"><p>Our <b>PRICING</b> table &amp; more&#33;</p></body></html>',
       },
     );
     const markupOnly = await b.publish(
@@ -319,7 +319,7 @@ describe("search_artifacts", () => {
       { conversationId: GROUP },
       {
         "index.html":
-          '<div class="pricing" data-pricing="x"><style>.pricing{}</style><script>pricing()</script>nothing here</div>',
+          '<div class="pricing" data-pricing="x"><!-- pricing --><style>.pricing{}</style><script>pricing()</script>nothing here</div>',
       },
     );
     const inMarkdown = await b.publish(
@@ -339,7 +339,8 @@ describe("search_artifacts", () => {
     expect(line).toContain('"Notes" v1');
     expect(line).toContain("by Ada");
     expect(line).toContain("task #7 Task 7");
-    expect(line).toContain("matched index.html: Our PRICING table");
+    // The words, with their entities read: what the page says, not how it is written.
+    expect(line).toContain("matched index.html: Our PRICING table & more!");
     expect(result).toContain("notes/readme.md: See the pricing section");
   });
 
@@ -382,14 +383,6 @@ describe("search_artifacts", () => {
     expect(ids(await b.as(GROUP).search())).toHaveLength(20);
     expect(ids(await b.as(GROUP).search({ limit: 500 }))).toHaveLength(50);
   });
-
-  it("reads the words out of HTML", () => {
-    expect(
-      htmlText(
-        "<!-- hidden --><style>a{}</style><p>Tom &amp; Jerry&#33;</p><script>x()</script>",
-      ).trim(),
-    ).toBe("Tom & Jerry!");
-  });
 });
 
 describe("read_artifact", () => {
@@ -410,6 +403,7 @@ describe("read_artifact", () => {
         "img/shot.png": PNG,
         "font.woff2": new Uint8Array([0, 1, 2, 3, 0, 255]),
         "app.js": "console.log(1)\n",
+        "long.txt": `${"x".repeat(2500)}\nshort\n`,
       },
     );
     return { ...b, a, read: b.as(GROUP).read };
@@ -440,6 +434,10 @@ describe("read_artifact", () => {
     );
     expect(few).toContain("     1\tconsole.log(1)");
     expect(few).toContain("(end of app.js, 1 lines)");
+    // A very long line is cut, and says by how much; the next line is whole.
+    const long = textOf(await s.read({ artifactId: s.a.id, path: "long.txt" }));
+    expect(long).toContain("… (500 more characters on this line)");
+    expect(long).toContain("     2\tshort");
   });
 
   it("gives an image as an image, and only the size of other binaries", async () => {
@@ -515,11 +513,5 @@ describe("read_artifact", () => {
     expect(textOf(await s.read({ artifactId: s.a.id }))).toContain(
       "     1\t<p>line 1</p>",
     );
-  });
-
-  it("cuts a very long line", () => {
-    const shown = page(`${"x".repeat(2500)}\nshort`, 1, 400);
-    expect(shown.text).toContain("… (500 more characters on this line)");
-    expect(shown.text).toContain("     2\tshort");
   });
 });

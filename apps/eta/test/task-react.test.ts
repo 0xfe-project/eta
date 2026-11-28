@@ -83,16 +83,18 @@ const finished = async (r: { w: World; task: BoardTaskDetail }) => {
 const adaRuns = (r: { requests: Request[] }) =>
   r.requests.filter((request) => request.agent === "Ada" && onTask(request));
 
+/** Every comment the system left on the task's timeline, whatever it says. */
 const wakeComments = (r: { w: World; task: BoardTaskDetail }): string[] =>
   r.w.host.product.board
     .activity(r.task.id)
     .filter(
-      (entry) =>
-        entry.kind === "comment" &&
-        entry.actor.kind === "system" &&
-        (entry.body ?? "").includes("was woken to review"),
+      (entry) => entry.kind === "comment" && entry.actor.kind === "system",
     )
     .map((entry) => entry.body ?? "");
+
+const runsOn = (r: { requests: Request[] }, agent: string) =>
+  r.requests.filter((request) => request.agent === agent && onTask(request))
+    .length;
 
 describe("a finished task and the agent that made it", () => {
   it("wakes the maker once, who reads the result, and its reply wakes nobody", async () => {
@@ -105,6 +107,11 @@ describe("a finished task and the agent that made it", () => {
     // The wake is Ada's one run; it leaves no system comment on the timeline.
     expect(wakeComments(r)).toEqual([]);
     expect(r.w.host.product.board.detail(r.task.id)?.status).toBe("in_review");
+    // Ada's reply wakes nobody: not Bea, not Ada again.
+    const bea = runsOn(r, "Bea");
+    await quiet();
+    expect(runsOn(r, "Bea")).toBe(bea);
+    expect(runsOn(r, "Ada")).toBe(1);
   });
 
   it("wakes the maker for a blocked result too", async () => {

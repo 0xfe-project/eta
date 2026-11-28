@@ -105,7 +105,6 @@ export interface ServerCacheEntry {
   outputShapes?: Record<string, ObservedOutputRecord>;
   /** Discovery was tried and failed; it is not retried until the config changes. */
   discoveryFailed?: true;
-  cachedAt: number;
 }
 
 export interface MetadataCacheFile {

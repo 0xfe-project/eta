@@ -6,22 +6,13 @@ import { fileURLToPath } from "node:url";
  * name the same owner in this tree, and none of them name two.
  *
  * The keys are the ones that build wrote: `test/upgrade-seed/0.3.0/data/sessions/<session>/meta.json` and
- * the board that goes with it. Two shapes have no row in a seed — a routine run and a run made
- * before `session_key` existed — so they are taken from that build's own source
- * (`apps/eta/src/routines/session-key.ts`, `0036-run-continuation.sql`) and from the run row the
- * seed does have, cleared the way an old row is.
+ * the board that goes with it. The shapes a seed has no row of (a routine run, a run made before
+ * `session_key` existed, a mentioned agent's session) are pinned byte for byte in
+ * session-owner.test.ts.
  */
 import { Database } from "bun:sqlite";
 import { describe, expect, it } from "vitest";
-import {
-  heldIn,
-  mentionKey,
-  ownerOf,
-  routineKey,
-  sessionKeyOf,
-  taskKey,
-  taskOf,
-} from "../src/session-owner";
+import { heldIn, ownerOf, taskKey, taskOf } from "../src/session-owner";
 
 const SEED = fileURLToPath(
   new URL("../../../test/upgrade-seed/0.3.0/data", import.meta.url),
@@ -93,64 +84,5 @@ describe("the keys a v0.3.0 host left behind", () => {
     // One key per task's session, whichever run of it is looked at.
     expect(owners.size).toBe(new Set(runs.map((run) => run.task_id)).size);
     db.close();
-  });
-
-  it("read a run made before the key named the task through the run", () => {
-    // 0036 added `session_key`; a run from before it recorded none, and its session was held in
-    // `task-run:<its id>`. The real 0.3.0 board this was checked against has exactly one such run.
-    const db = board();
-    const run = db
-      .query<{ id: string; task_id: string }, []>(
-        "SELECT id, task_id FROM task_run LIMIT 1",
-      )
-      .get()!;
-    db.close();
-    const key = sessionKeyOf({ id: run.id, sessionKey: null });
-    expect(key).toBe(`task-run:${run.id}`);
-    // Without the run, the task is unknown — the kind is still a task's, never a conversation's.
-    expect(ownerOf(key)).toEqual({ kind: "task", taskId: undefined });
-    expect(heldIn(key)).toBe("task");
-    const taskOfRun = (id: string) => (id === run.id ? run.task_id : undefined);
-    expect(ownerOf(key, taskOfRun)).toEqual({
-      kind: "task",
-      taskId: run.task_id,
-    });
-    expect(taskOf(key, taskOfRun)).toBe(run.task_id);
-  });
-
-  it("keep a mentioned agent's session the task's, which is how an old mail names it", () => {
-    // A session's id is `<key>:<agentId>` (conversations/engine.ts), and a mail records the
-    // conversation it came from — for a task's session that is this, with the agent still on it.
-    const db = board();
-    const task = db
-      .query<{ id: string }, []>("SELECT id FROM task LIMIT 1")
-      .get()!;
-    db.close();
-    const key = mentionKey(task.id, "agent-ada");
-    expect(key).toBe(`task:${task.id}:agent-ada`);
-    expect(taskOf(key)).toBe(task.id);
-    expect(ownerOf(key)).toEqual({ kind: "task", taskId: task.id });
-    // A conversation's session id is not a task's: no mail from it may claim one.
-    const plain = `4fec816e-db4a-4977-9498-96edb2a8de45:agent-ada`;
-    expect(taskOf(plain)).toBeUndefined();
-    expect(ownerOf(plain)).toEqual({
-      kind: "conversation",
-      conversationId: "4fec816e-db4a-4977-9498-96edb2a8de45:agent-ada",
-    });
-  });
-
-  it("keep a routine run's session the routine's, in the key 0.3.0 made", () => {
-    // 0.3.0's routines/session-key.ts: `routine:` + the run's id, the same string this tree makes.
-    const runId = "6f5e5d5e-93ad-4c13-9d0f-1f0f0d3f7a11";
-    expect(routineKey(runId)).toBe(`routine:${runId}`);
-    expect(ownerOf(`routine:${runId}`)).toEqual({ kind: "routine", runId });
-    expect(heldIn(`routine:${runId}`)).toBe("routine");
-    expect(taskOf(`routine:${runId}`)).toBeUndefined();
-    // A routine run id that happens to hold a task's key is still the routine's: the prefix at the
-    // start decides, and nothing else.
-    expect(ownerOf(`routine:task:${runId}`)).toEqual({
-      kind: "routine",
-      runId: `task:${runId}`,
-    });
   });
 });

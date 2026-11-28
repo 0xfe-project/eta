@@ -218,7 +218,11 @@ describe("the connection test right after a real sign-in", () => {
     const s = await signedIn();
     const result = await s.test();
     expect(result).toMatchObject({ status: "ok", toolCount: 1 });
-    expect(s.rig.seen.some((one) => one.auth && one.length > 7)).toBe(true);
+    // The very token the sign-in stored, as a bearer.
+    const access = await s.access();
+    expect(
+      s.rig.seen.some((one) => one.values.authorization === `Bearer ${access}`),
+    ).toBe(true);
     expect(s.store.has(s.key, "tokens")).toBe(true);
     expect(s.auth.tokenRequests("refresh_token")).toBe(0);
   }, 30_000);
@@ -300,9 +304,8 @@ describe("the connection test right after a real sign-in", () => {
     expect(result.status).toBe("ok");
     const mcp = s.rig.seen.filter((one) => one.auth);
     expect(mcp.length).toBeGreaterThan(0);
-    // Every request that carried the sign-in carried the header too, with its length (never printed).
-    for (const one of mcp)
-      expect(one.headers["x-cursor-auth"]).toBe(value.length);
+    // Every request that carried the sign-in carried the header too, as it was given.
+    for (const one of mcp) expect(one.values["x-cursor-auth"]).toBe(value);
     expect(JSON.stringify(result)).not.toContain(value);
   }, 30_000);
 

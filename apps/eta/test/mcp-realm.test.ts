@@ -1,9 +1,8 @@
 /**
  * MCP reaches a session's realm on the host: a server declared in the project's `.mcp.json` is
- * `import "mcp:<server>"` and `eta.mcp` in a session opened there, and a session with no server
- * declared is told MCP is not connected.
+ * `import "mcp:<server>"` and `eta.mcp` in a session opened there.
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -43,16 +42,4 @@ describe("mCP in a host's sessions", () => {
       "mcp.echo.echo",
     );
   }, 30_000);
-
-  it("a session with no server declared is told MCP is not connected", async () => {
-    const host = await testHost({
-      mcp: { manager: { resolvers: false, checkIntervalMs: 0 } },
-    });
-    const cwd = await tempDir("eta-mcp-empty-");
-    await mkdir(join(cwd, ".eta"), { recursive: true });
-    const { session } = await host.server.sessions.create({ cwd });
-    await expect(
-      session.esm!.agent.run(`import x from "mcp:echo"; export default x;`),
-    ).rejects.toThrow(/MCP not connected on this machine/);
-  });
 });

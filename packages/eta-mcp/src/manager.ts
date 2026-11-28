@@ -99,8 +99,7 @@ export class McpManager {
         ? this.options.cacheFile
         : this.options.cacheFile(owner);
     let cache = this.caches.get(path);
-    if (!cache)
-      this.caches.set(path, (cache = new MetadataCache(path, this.now)));
+    if (!cache) this.caches.set(path, (cache = new MetadataCache(path)));
     return cache;
   }
 
@@ -119,7 +118,7 @@ export class McpManager {
     return outputs;
   }
 
-  private entryOf(connection: Connection): Omit<ServerCacheEntry, "cachedAt"> {
+  private entryOf(connection: Connection): ServerCacheEntry {
     const observed = this.observedFor(connection.owner, connection.definition);
     return {
       configHash: connection.definition.hash,

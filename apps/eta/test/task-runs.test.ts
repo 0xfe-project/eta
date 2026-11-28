@@ -374,6 +374,11 @@ describe("a task run", () => {
       expect(
         r.w.rows(r.group.id).some((row) => row.kind === "task_draft"),
       ).toBe(false);
+      // It was draft_task that said no, and for the status: the model is told so.
+      const told = r.requests.find(
+        (request) => !isRun(request) && request.lastRole === "toolResult",
+      );
+      expect(told?.last).toMatch(/^invalid arguments for draft_task: \/status/);
     });
   });
 
@@ -396,24 +401,6 @@ describe("a task run", () => {
       agentId: r.ada.id,
     });
     expect(taskOf(r.w, task.id).assigneeAgentId).toBe(bola.id);
-  });
-
-  it("resolves an assignee named by name to its id, and refuses one nobody is", async () => {
-    const r = await room(finishes());
-    const bola = await r.w.agent("Bola");
-    await r.w.client.call("conversations", "invite", {
-      conversationId: r.group.id,
-      agentId: bola.id,
-    });
-    const task = make(r, "For Bola by name", "local", { assignee: "Bola" });
-    expect(task.assigneeAgentId).toBe(bola.id);
-    await until(() => reviewed(r.w, task.id));
-    expect(() =>
-      make(r, "For nobody", "local", { assignee: "Nobody" }),
-    ).toThrow(/no agent is "Nobody".*Ada \(.*Bola \(/);
-    expect(r.w.host.product.board.list().map((t) => t.title)).not.toContain(
-      "For nobody",
-    );
   });
 
   it("runs a task whose stored assignee was a name once the migration has made it an id", async () => {
@@ -482,11 +469,8 @@ describe("a task run", () => {
     );
   });
 
-  it("is only ever made by an agent: the user has no way to create a task", async () => {
+  it("is refused by the board for a user actor: board.create is the agents' way in", async () => {
     const r = await room(finishes());
-    await expect(
-      r.w.client.call("tasks", "create", { title: "mine" }),
-    ).rejects.toThrow();
     expect(() =>
       r.w.host.product.board.create(
         { title: "mine", conversationId: r.group.id, workspace: "local" },

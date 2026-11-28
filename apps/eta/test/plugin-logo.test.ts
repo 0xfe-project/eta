@@ -31,6 +31,24 @@ async function serve(handler: http.RequestListener) {
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 
+/** A public address no test connects to: what a fake public name answers. */
+const PUBLIC = "93.184.216.34";
+const portOf = (base: string): string => new URL(base).port;
+
+/**
+ * Logos that take public addresses only, where `public.test` is a public name served by a local
+ * fake and the other names resolve as given.
+ */
+const publicOnly = (
+  names: Record<string, string>,
+  sites?: (server: string) => string[],
+) =>
+  new Logos({
+    resolve: async (host) => [host === "public.test" ? PUBLIC : names[host]!],
+    dial: (address) => (address === PUBLIC ? "127.0.0.1" : address),
+    ...(sites === undefined ? {} : { sites }),
+  });
+
 describe("plugin logos", () => {
   it("refuses private and reserved addresses", () => {
     for (const address of [
@@ -139,24 +157,40 @@ describe("plugin logos", () => {
       target++;
       res.end(PNG);
     });
-    const outer = await serve((_req, res) =>
-      res.writeHead(302, { location: `${inner}/x.png` }).end(),
-    );
-    const logos = new Logos({
-      allowPrivate: false,
-      resolve: async () => ["93.184.216.34"],
+    let asked = 0;
+    const outer = await serve((_req, res) => {
+      asked++;
+      res
+        .writeHead(302, {
+          location: `http://inner.test:${portOf(inner)}/x.png`,
+        })
+        .end();
     });
-    // The name resolves to a public address, so the first hop is tried; it cannot connect, and no logo comes.
-    expect(await logos.find("http://example.test/x.png", null)).toBeNull();
+    const from = `http://public.test:${portOf(outer)}/x.png`;
+    // The first hop is a public name; where it sends the request is a private one.
+    expect(
+      await publicOnly({ "inner.test": "127.0.0.1" }).find(from, null),
+    ).toBeNull();
+    expect(asked).toBe(1);
     expect(target).toBe(0);
-    expect(outer).toBeTruthy();
+    // The same redirect into a public name is followed: it was the address that was refused.
+    expect(
+      (await publicOnly({ "inner.test": PUBLIC }).find(from, null))?.type,
+    ).toBe("image/png");
+    expect(target).toBe(1);
   });
 
   it("does not ask github.com or gitlab.com homepages", async () => {
-    const logos = new Logos({ resolve: async () => ["93.184.216.34"] });
+    const asked: string[] = [];
+    const logos = new Logos({
+      resolve: async (host) => {
+        asked.push(host);
+        return [PUBLIC];
+      },
+    });
     expect(await logos.find(null, "https://github.com/a/b")).toBeNull();
     expect(await logos.find(null, "https://gitlab.com/a/b")).toBeNull();
-    expect(logos.requests).toBe(0);
+    expect(asked).toEqual([]);
   });
 
   it("keeps an answer, and a miss, instead of asking again", async () => {
@@ -165,10 +199,18 @@ describe("plugin logos", () => {
       hits++;
       res.end(PNG);
     });
+    let misses = 0;
+    const none = await serve((_req, res) => {
+      misses++;
+      res.writeHead(404).end();
+    });
     const logos = new Logos({ allowPrivate: true });
     await logos.find(`${base}/a.png`, null);
     await logos.find(`${base}/a.png`, null);
     expect(hits).toBe(1);
+    expect(await logos.find(`${none}/a.png`, null)).toBeNull();
+    expect(await logos.find(`${none}/a.png`, null)).toBeNull();
+    expect(misses).toBe(1);
   });
 
   it("takes the icon of the MCP server's site after the logo and the homepage fail, and sends no credential", async () => {
@@ -217,11 +259,31 @@ describe("plugin logos", () => {
     expect(
       await new Logos().find(null, null, "http://127.0.0.1:9/mcp"),
     ).toBeNull();
-    const target = await serve((_req, res) => res.end(PNG));
-    const site = await serve((_req, res) =>
-      res.writeHead(302, { location: `${target}/x.png` }).end(),
-    );
-    expect(await new Logos().find(null, null, `${site}/mcp`)).toBeNull();
+    // A public site, every page of which is sent on to a private name.
+    let taken = 0;
+    const target = await serve((_req, res) => {
+      taken++;
+      res.end(PNG);
+    });
+    let asked = 0;
+    const site = await serve((_req, res) => {
+      asked++;
+      res
+        .writeHead(302, {
+          location: `http://inner.test:${portOf(target)}/x.png`,
+        })
+        .end();
+    });
+    const at = `http://public.test:${portOf(site)}`;
+    expect(
+      await publicOnly({ "inner.test": "127.0.0.1" }, () => [at]).find(
+        null,
+        null,
+        `${at}/mcp`,
+      ),
+    ).toBeNull();
+    expect(asked).toBeGreaterThan(0);
+    expect(taken).toBe(0);
   });
 
   it("asks the parent site first, then the origin; handles co.uk style suffixes", () => {
@@ -386,6 +448,25 @@ describe("a Composio toolkit's logo (Logos.fromUrl)", () => {
       res.end(SVG.replace("</svg>", `<!--${"x".repeat(300 * 1024)}--></svg>`)),
     );
     expect(await logos().fromUrl(`${big}/a`)).toBeNull();
+  });
+
+  it("does not take a redirect from https to http", async () => {
+    let taken = 0;
+    const plain = await serve((_req, res) => {
+      taken++;
+      res.end(SVG);
+    });
+    const hop = await secure((_req, res) =>
+      res.writeHead(302, { location: `${plain}/p.svg` }).end(),
+    );
+    expect(await logos().fromUrl(`${hop}/a`)).toBeNull();
+    expect(taken).toBe(0);
+    // An https hop to https is followed: it was the http that was refused.
+    const safe = await secure((_req, res) => res.end(SVG));
+    const onward = await secure((_req, res) =>
+      res.writeHead(302, { location: `${safe}/p.svg` }).end(),
+    );
+    expect((await logos().fromUrl(`${onward}/a`))?.type).toBe("image/svg+xml");
   });
 
   it("leaves the other ways to a picture as they were: an SVG is still not taken there, and pictureType does not know it", async () => {

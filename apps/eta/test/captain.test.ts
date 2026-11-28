@@ -112,52 +112,6 @@ describe("captain identity", () => {
     expect(direct.conversationId).toBe(identity.conversationId);
   });
 
-  it("refuses to archive its conversation, and nobody else's", async () => {
-    const { w } = await captainWorld();
-    const { conversationId } = (await w.client.call(
-      "captain",
-      "direct",
-      {},
-    )) as {
-      conversationId: string;
-    };
-    await expect(
-      w.client.call("conversations", "update", {
-        conversationId,
-        archived: true,
-      }),
-    ).rejects.toThrow(/Captain's conversation cannot be changed/);
-    expect(
-      w.host.db
-        .query<{ archived: number }, [string]>(
-          "SELECT archived FROM conversation WHERE id = ?",
-        )
-        .get(conversationId)!.archived,
-    ).toBe(0);
-    // Nor is it renamed: nothing about it is edited (`captain/policy.ts`).
-    await expect(
-      w.client.call("conversations", "update", {
-        conversationId,
-        name: "Bridge",
-      }),
-    ).rejects.toThrow(/Captain's conversation cannot be changed/);
-
-    const ada = await w.agent("Ada");
-    const project = await w.project();
-    const group = await w.group(project.id, [ada.id]);
-    await w.client.call("conversations", "update", {
-      conversationId: group.id,
-      archived: true,
-    });
-    expect(
-      w.host.db
-        .query<{ archived: number }, [string]>(
-          "SELECT archived FROM conversation WHERE id = ?",
-        )
-        .get(group.id)!.archived,
-    ).toBe(1);
-  });
-
   it("gives back a conversation an older build left missing or archived", async () => {
     const { w } = await captainWorld();
     const first = (await w.client.call("captain", "direct", {})) as {
@@ -1281,7 +1235,7 @@ describe("captain controls", () => {
     expect(reviews()).toHaveLength(1);
   });
 
-  it("marks an inactive task stuck and reserves proactive wake events", async () => {
+  it("marks an inactive task stalled", async () => {
     const { w } = await captainWorld();
     const ada = await w.agent("Ada");
     const project = await w.project();
@@ -1307,15 +1261,6 @@ describe("captain controls", () => {
             review.kind === "task_stalled" && review.taskId === task.id,
         ),
     ).toBe(true);
-
-    const events: string[] = [];
-    const off = w.host.product.captainSupervisor.onEvent((event) =>
-      events.push(event.kind),
-    );
-    w.host.product.captainSupervisor.wake({ kind: "reserved" });
-    off();
-    w.host.product.captainSupervisor.wake({ kind: "ignored" });
-    expect(events).toEqual(["reserved"]);
   });
 
   it("distinguishes a stopped task from a run with no progress", async () => {

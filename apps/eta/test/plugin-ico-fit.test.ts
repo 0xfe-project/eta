@@ -50,7 +50,10 @@ function pictures(bytes: Buffer): [number, Buffer][] {
 }
 
 async function boot(favicon: Buffer) {
+  const asked: string[] = [];
+  // The site, and the raw files of the repository too: there is no manifest, so its logo is a miss.
   const server = http.createServer((req, res) => {
+    asked.push(String(req.url));
     if (req.url === "/favicon.ico") res.end(favicon);
     else res.writeHead(404).end();
   });
@@ -63,10 +66,11 @@ async function boot(favicon: Buffer) {
   const logos = new Logos({
     allowPrivate: true,
     timeoutMs: 3000,
+    rawBase: base,
     store: new IconCache(db),
     warn: (message) => warnings.push(message),
   });
-  return { homepage: `${base}/`, logos, warnings };
+  return { homepage: `${base}/`, logos, warnings, asked };
 }
 
 describe("an ico over the limit is cut down to the pictures that fit", () => {
@@ -79,9 +83,11 @@ describe("an ico over the limit is cut down to the pictures that fit", () => {
       [16, 1000],
     ]);
     expect(big.length).toBeGreaterThan(MAX_ICON_BYTES);
-    const { homepage, logos, warnings } = await boot(big);
+    const { homepage, logos, warnings, asked } = await boot(big);
     const logo = await logos.forEntry(REPO, "main", "none", homepage);
     expect(logo?.type).toBe("image/x-icon");
+    // The repository's manifests were looked for here, not on the network.
+    expect(asked.some((url) => url.endsWith("/plugin.json"))).toBe(true);
     const kept = Buffer.from(logo!.data, "base64");
     expect(kept.length).toBeLessThanOrEqual(MAX_ICON_BYTES);
     expect(kept.subarray(0, 4)).toEqual(Buffer.from([0, 0, 1, 0]));

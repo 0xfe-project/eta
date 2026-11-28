@@ -158,7 +158,7 @@ export function sameOriginFetch(base: FetchLike, origin: string): FetchLike {
  * authorize, token, refresh), which can be on another host (Google, for a Cursor server). The
  * headers configured for this server are taken off every request that is not to its own origin.
  */
-export function ownHeadersOnly(
+function ownHeadersOnly(
   base: FetchLike,
   origin: string,
   names: readonly string[],

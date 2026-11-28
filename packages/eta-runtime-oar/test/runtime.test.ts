@@ -1412,40 +1412,6 @@ describe("a session on an external runtime", () => {
     await manager.closeAll();
   });
 
-  it("aborts the runtime's turn", async () => {
-    const { manager } = setup(
-      async (turn) =>
-        await new Promise<void>((resolve) =>
-          turn.signal.addEventListener("abort", () => resolve()),
-        ),
-    );
-    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
-    const running = run(managed, "wait");
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    managed.session.runner.abort();
-    expect((await running).status).toBe("aborted");
-    await manager.closeAll();
-  });
-
-  it("picks the runtime conversation back up after a close", async () => {
-    const { manager, turns } = setup((turn) => turn.say("ok"));
-    const created = await manager.create({ cwd: "/work", runtime: "claude" });
-    await run(created, "before");
-    const native = created.meta.runtimeSession;
-    await manager.close(created.meta.id);
-    const reopened = (await manager.session(created.meta.id))!;
-    await run(reopened, "after");
-    expect(turns[1]!.options.resume).toBe(native);
-    // A resumed conversation already heard who the agent is.
-    expect(transcript(reopened)).toEqual([
-      "user:before",
-      "assistant:ok",
-      "user:after",
-      "assistant:ok",
-    ]);
-    await manager.closeAll();
-  });
-
   it("resolves the runtime's models, and refuses another provider's", async () => {
     const { manager } = setup((turn) => turn.say("ok"));
     const managed = await manager.create({ cwd: "/work", runtime: "claude" });

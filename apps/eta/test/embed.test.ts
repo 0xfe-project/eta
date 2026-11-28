@@ -49,27 +49,6 @@ describe("the generated table", () => {
     ]);
   });
 
-  it("imports each file as a file and maps the original name to it", async () => {
-    const text = embeddedModule(
-      [
-        { name: "web/index.html", path: "/repo/web/index.html" },
-        { name: "Eta-Logo.png", path: "/repo/Eta-Logo.png" },
-      ],
-      { cpa: "abcd" },
-      "/repo/resources.ts",
-    );
-    expect(text).toContain(
-      'import file0 from "/repo/Eta-Logo.png" with { type: "file" };',
-    );
-    expect(text).toContain(
-      'import file1 from "/repo/web/index.html" with { type: "file" };',
-    );
-    expect(text).toContain('"Eta-Logo.png": file0,');
-    expect(text).toContain('"web/index.html": file1,');
-    expect(text).toContain('digests: {"cpa":"abcd"}');
-    expect(text).toContain('from "/repo/resources.ts"');
-  });
-
   it("gives a digest that follows the content and not the order", async () => {
     const dir = await tempDir();
     writeFileSync(join(dir, "a"), "one");

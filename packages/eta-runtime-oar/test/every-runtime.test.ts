@@ -208,6 +208,7 @@ describe.each(RUNTIME_IDS)("%s, scripted", (id) => {
 
     const native = created.meta.runtimeSession;
     expect(native).toBeDefined();
+    const heard = transcript(created);
     await manager.close(created.meta.id);
     const reopened = (await manager.session(created.meta.id))!;
     expect((await run(reopened, "again")).status).toBe("completed");
@@ -216,7 +217,12 @@ describe.each(RUNTIME_IDS)("%s, scripted", (id) => {
     expect(turns.at(-1)!.options.appendSystemPrompt).toBe(
       id === "grok" ? undefined : turns[0]!.options.appendSystemPrompt,
     );
-    expect(transcript(reopened).at(-1)).toBe("assistant:ok again");
+    // The journal survives the close: the reopened session holds everything heard before.
+    expect(transcript(reopened)).toEqual([
+      ...heard,
+      "user:again",
+      "assistant:ok again",
+    ]);
     await manager.closeAll();
   });
 });

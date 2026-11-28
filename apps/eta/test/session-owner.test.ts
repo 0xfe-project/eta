@@ -24,6 +24,10 @@ it.each([
   // A task id that looks like another prefix is still the task's.
   ["task:routine", task("routine"), undefined],
   [owner.routineKey("r1"), { kind: "routine", runId: "r1" }, undefined],
+  // The bytes a 0.3.0 host wrote, as they are on disk: they must keep naming the same owner.
+  ["task-run:r1", task("t1"), "c1"],
+  ["task:t1:a1", task("t1"), "c1"],
+  ["routine:r1", { kind: "routine", runId: "r1" }, undefined],
   ["routine:task:1", { kind: "routine", runId: "task:1" }, undefined],
   // Only a prefix at the very start counts.
   ...["my-task:1", "xroutine:1", " task:1", "Task:1", "task-runner"].map(
@@ -45,4 +49,12 @@ it("keeps a run's recorded key, and reads a legacy key without a lookup", () => 
     "task:t1",
   );
   expect(owner.ownerOf("task-run:r1")).toEqual(task(undefined));
+});
+
+it("makes the keys in the bytes an older host wrote, so its sessions are found again", () => {
+  expect(owner.sessionKeyOf({ id: "r1", sessionKey: null })).toBe(
+    "task-run:r1",
+  );
+  expect(owner.mentionKey("t1", "a1")).toBe("task:t1:a1");
+  expect(owner.routineKey("r1")).toBe("routine:r1");
 });

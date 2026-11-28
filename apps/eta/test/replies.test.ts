@@ -9,6 +9,7 @@ import type {
 } from "@eta/client-contracts";
 import type { World } from "./support/world";
 import { describe, expect, it } from "vitest";
+import { Timeline } from "../src/conversations/timeline";
 import { holdNextDelivery, uploadNote } from "./support/briefing";
 import { until } from "./support/client";
 import { tempDir } from "./support/host";
@@ -537,19 +538,6 @@ describe("a question from the agent", () => {
       "done",
     ]);
   });
-
-  it("can be stopped while it waits", async () => {
-    const { models } = scriptedModels(() =>
-      call("ask_user", { question: "Which colour?" }, "q-1"),
-    );
-    const w = await world({ models });
-    const { group } = await ada(w);
-    const sent = await w.send(group.id, "paint it");
-    await w.settled(group.id, sent.replies[0]!.id, ["waiting_for_input"]);
-    await w.client.call("conversations", "stop", { conversationId: group.id });
-    const ended = await w.settled(group.id, sent.replies[0]!.id);
-    expect(ended.status).toBe("stopped");
-  });
 });
 
 describe("a run that fails", () => {
@@ -635,10 +623,16 @@ describe("a restart", () => {
       restarted.client.section<{ status: string }[]>("agents", "list")![0]!
         .status,
     ).toBe("idle");
-    // And what was said before the crash is still said.
+    // And what was said before the crash is still said, untouched.
+    const said = restarted
+      .rows(group.id)
+      .filter((row) => row.author === "user");
+    expect(said).toHaveLength(3);
+    expect(said.every((row) => row.status === "done")).toBe(true);
+    // Once is enough: asked again, nothing is left in flight to end.
     expect(
-      restarted.rows(group.id).filter((row) => row.author === "user"),
-    ).toHaveLength(3);
+      new Timeline(restarted.host.db).failInterrupted("again", "again"),
+    ).toEqual([]);
   });
 
   it("fails them as it shuts down, too", async () => {

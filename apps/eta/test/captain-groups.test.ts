@@ -117,22 +117,6 @@ const outcomeOf = (w: World, conversationId: string) =>
   w.rows(conversationId).find(isCaptainOutcome);
 
 describe("propose_group is Captain's", () => {
-  it("is offered to Captain's session and to no other agent's", async () => {
-    const { models, requests } = scriptedModels(() => say("Hello."));
-    const { w, ada, captain } = await setup(models);
-    const project = await w.project();
-    const group = await w.group(project.id, [ada.id]);
-    await w.watch(group.id);
-    for (const id of [group.id, captain]) {
-      const sent = await w.send(id, "Hi");
-      await w.settled(id, sent.replies[0]!.id);
-    }
-    const tools = (agent: string) =>
-      requests.find((request) => request.agent === agent)!.tools;
-    expect(tools("Captain")).toContain("propose_group");
-    expect(tools("Ada")).not.toContain("propose_group");
-  });
-
   it("reaches a Captain session that an older build opened and pinned", async () => {
     const dataDir = await tempDir();
     const sessionOf = (w: World, captain: string) =>

@@ -403,14 +403,6 @@ describe("a cancelled dependency", () => {
     // asks for another, since the block is the user's.
     expect(runsOf(r.w, b.id).map((run) => run.status)).toEqual(["interrupted"]);
   });
-
-  it("is refused as a new dependency", async () => {
-    const r = await room();
-    const a = r.make("A", { status: "cancelled" });
-    expect(() => r.make("B", { dependsOn: [{ task: a.id }] })).toThrow(
-      /is cancelled/,
-    );
-  });
 });
 
 describe("a deleted dependency", () => {

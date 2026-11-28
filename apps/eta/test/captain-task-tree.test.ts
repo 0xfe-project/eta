@@ -114,13 +114,6 @@ describe("captain and the task graph", () => {
     expect(w.host.product.board.detail(task.id)!.status).toBe("done");
   });
 
-  it("has no tools of a grant to accept work: it needs none", async () => {
-    const { tools } = await setup();
-    expect(tools.has("accept_task")).toBe(false);
-    expect(
-      [...tools.keys()].filter((name) => name.startsWith("propose_task_")),
-    ).toEqual([]);
-  });
   it("changes or cancels an archived task as asked, and says in the result that it brought it back", async () => {
     const { w, make, use } = await setup();
     const renamed = make("Away");

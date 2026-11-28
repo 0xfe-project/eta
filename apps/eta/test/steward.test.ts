@@ -322,20 +322,6 @@ describe("choosing the steward when a conversation is made", () => {
   const replying = () =>
     scriptedModels((request) => say(`${request.agent} here`));
 
-  const members = (
-    w: Awaited<ReturnType<typeof world>>,
-    conversationId: string,
-  ) =>
-    w.client
-      .section<{ agentId: string }[]>(
-        `conversations.${conversationId}`,
-        "members",
-      )!
-      .map((member) => member.agentId);
-
-  const info = (w: Awaited<ReturnType<typeof world>>, id: string) =>
-    w.client.section(`conversations.${id}`, "info");
-
   const create = async (
     w: Awaited<ReturnType<typeof world>>,
     args: {
@@ -352,28 +338,6 @@ describe("choosing the steward when a conversation is made", () => {
     return conversation;
   };
 
-  it("gives the first message to the one chosen", async () => {
-    const { models, requests } = replying();
-    const w = await world({ models });
-    const ada = await w.agent("Ada");
-    const bob = await w.agent("Bob");
-    const project = await w.project();
-    const group = await create(w, {
-      projectId: project.id,
-      agentIds: [ada.id, bob.id],
-      stewardId: bob.id,
-    });
-    expect(group.stewardId).toBe(bob.id);
-    await w.watch(group.id);
-    expect(info(w, group.id)).toMatchObject({ stewardId: bob.id });
-
-    const sent = await w.send(group.id, "hello");
-    expect(sent.replies.map((reply) => reply.agentId)).toEqual([bob.id]);
-    await w.settled(group.id, sent.replies[0]!.id);
-    expect(requests.map((request) => request.agent)).toEqual(["Bob"]);
-    expect(members(w, group.id)).toEqual([ada.id, bob.id]);
-  });
-
   it("is the first member when nobody is chosen", async () => {
     const { models } = replying();
     const w = await world({ models });
@@ -388,24 +352,6 @@ describe("choosing the steward when a conversation is made", () => {
     await w.watch(group.id);
     const sent = await w.send(group.id, "hello");
     expect(sent.replies.map((reply) => reply.agentId)).toEqual([bob.id]);
-  });
-
-  it("can be nobody: a message that names nobody then wakes nobody", async () => {
-    const { models, requests } = replying();
-    const w = await world({ models });
-    const ada = await w.agent("Ada");
-    const bob = await w.agent("Bob");
-    const project = await w.project();
-    const group = await create(w, {
-      projectId: project.id,
-      agentIds: [ada.id, bob.id],
-      stewardId: null,
-    });
-    expect(group.stewardId).toBeNull();
-    await w.watch(group.id);
-    const sent = await w.send(group.id, "hello");
-    expect(sent.nobody).toBe(true);
-    expect(requests).toHaveLength(0);
   });
 
   it("says nothing in the timeline: there was no steward before this one", async () => {

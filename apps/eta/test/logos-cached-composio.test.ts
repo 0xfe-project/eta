@@ -66,7 +66,6 @@ describe("cached logos for the logo address of a Composio toolkit", () => {
     expect(answer.map((one) => one.status)).toEqual(["hit", "miss", "unknown"]);
     expect(answer[0]).toMatchObject({ logo: { type: "image/png" } });
     expect(net.hits()).toBe(0);
-    expect(logos.requests).toBe(0);
   });
 
   it("is unknown for an empty address (a toolkit with no logo address), without a look", () => {

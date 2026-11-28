@@ -165,9 +165,9 @@ describe("a market entry's own logo from its repository", () => {
       ),
     );
     expect(all.every((one) => one?.type === "image/png")).toBe(true);
+    // Four at once, as many as are allowed, and never more.
     expect(MAX_REPO_LOOKUPS).toBe(4);
-    expect(logos.peak).toBe(4);
-    expect(state.peak).toBeLessThanOrEqual(4);
+    expect(state.peak).toBe(4);
   });
 
   describe("a failed lookup is not an answer", () => {
