@@ -51,11 +51,10 @@ const many = catalogOf([
 
 /**
  * "hit": logosCached answers a picture for the first, a known miss for the second, unknown for the third.
- * "stalled": logosCached never answers. "old": the host has no such call (it throws). Every `logo`
- * call is shown as `logo <path>` and never answers, so a card that asks for its own stays a letter.
+ * Every `logo` call is shown as `logo <path>` and never answers, so a card that asks for its own stays a letter.
  * "many": a market of ${MANY} entries; the sizes of the `logosCached` calls are shown as `batches a+b+…`.
  */
-export function mountMarket(mode: "hit" | "stalled" | "old" | "many") {
+export function mountMarket(mode: "hit" | "many") {
   const batches = signal<number[]>([]);
   const logoPaths = signal<string[]>([]);
   function Fixture() {
@@ -76,11 +75,6 @@ export function mountMarket(mode: "hit" | "stalled" | "old" | "many") {
             ? Promise.resolve(mode === "many" ? many : kept)
             : new Promise<MarketCatalog>(() => undefined);
         if (action === "logosCached") {
-          if (mode === "old")
-            return Promise.reject(
-              new Error("unknown action plugins.logosCached"),
-            );
-          if (mode === "stalled") return new Promise(() => undefined);
           if (mode === "many") {
             const asked = args?.entries ?? [];
             batches.set([...batches(), asked.length]);

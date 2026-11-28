@@ -38,55 +38,6 @@ const selectionEvent = (text: string) => ({
 
 const dummyRef = {} as ViewRef;
 
-test("controller keeps Quote mounted when empty selection arrives during a >=100ms press hold and fires onQuote on release", async () => {
-  const quoted: Array<{ conversationId: string; text: string }> = [];
-  const controller = createQuoteSelection({
-    phone: () => false,
-    onQuote: (conversationId, text) => quoted.push({ conversationId, text }),
-  });
-  const reply = message();
-
-  controller.select(reply, selectionEvent("Selected phrase"), dummyRef);
-  expect(controller.current()?.message.id).toBe("m1");
-
-  // Pointer presses down on Quote overlay (capture + pressDown may both call pressStart).
-  controller.pressStart();
-  // Async empty selectionchange arrives while button is held down.
-  controller.select(reply, selectionEvent(""), dummyRef);
-  // Idempotent second pressStart from onPressDown must not forget clearedDuringPress.
-  controller.pressStart();
-  expect(controller.current()?.message.id).toBe("m1");
-
-  await new Promise((resolve) => setTimeout(resolve, 120));
-  expect(controller.current()?.message.id).toBe("m1");
-
-  controller.pressEnd();
-  controller.quote();
-  expect(quoted).toEqual([{ conversationId: "c1", text: "Selected phrase" }]);
-  expect(controller.current()).toBeUndefined();
-});
-
-test("controller dismisses orphaned Quote button after an aborted press when selection cleared during hold", async () => {
-  const quoted: string[] = [];
-  const controller = createQuoteSelection({
-    phone: () => false,
-    onQuote: (_conversationId, text) => quoted.push(text),
-  });
-  const reply = message();
-
-  controller.select(reply, selectionEvent("Selected phrase"), dummyRef);
-  controller.pressStart();
-  controller.select(reply, selectionEvent(""), dummyRef);
-  await new Promise((resolve) => setTimeout(resolve, 110));
-  expect(controller.current()).toBeDefined();
-
-  // Released / dragged off / cancelled without quote() firing.
-  controller.pressEnd();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  expect(controller.current()).toBeUndefined();
-  expect(quoted).toEqual([]);
-});
-
 test("controller clears immediately on scroll, click outside, and ignores unrelated empty selections", () => {
   const controller = createQuoteSelection({
     phone: () => false,

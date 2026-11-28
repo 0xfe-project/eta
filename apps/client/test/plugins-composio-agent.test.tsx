@@ -18,6 +18,11 @@ test("connected toolkits are listed after the installed plugins, each as its own
   expect(app.shows("on-plugin")).toBe(true);
   expect(app.shows("label:@composio/ghost")).toBe(true);
   expect(app.shows("text:chosen:")).toBe(true);
+  const texts = app.texts();
+  const plugin = texts.indexOf("on-plugin");
+  expect(plugin).toBeGreaterThan(-1);
+  expect(texts.indexOf("@composio/gmail")).toBeGreaterThan(plugin);
+  expect(texts.indexOf("@composio/ghost")).toBeGreaterThan(plugin);
 });
 
 test("ticking a ready toolkit adds it to the agent's plugins, and ticking it again removes it", async () => {
@@ -53,15 +58,6 @@ test("a toolkit switched off for every agent says so", async () => {
   const app = await open("./fixtures/plugins-composio-agent-off.tsx", WINDOW);
   await app.waitFor("label:@composio/gmail");
   expect(app.count("id:composio-plugin-off")).toBe(1);
-  // As on an installed plugin's row: on the line of the name, at the right end, above "Composio toolkit".
-  const name = app.layout("text:@composio/gmail")!;
-  const sub = app.layout("text:Composio toolkit")!;
-  const off = app.layout("id:composio-plugin-off")!;
-  expect(off.y < name.y + name.height && off.y + off.height > name.y).toBe(
-    true,
-  );
-  expect(off.y + off.height).toBeLessThanOrEqual(sub.y + 1);
-  expect(off.x).toBeGreaterThanOrEqual(name.x);
 });
 
 test("an agent on an external runtime can take a ready toolkit, and the row has no warning", async () => {

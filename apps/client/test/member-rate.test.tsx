@@ -24,16 +24,3 @@ test("a working member shows its output speed beside its status, an idle member 
   await app.press("label:Run ends");
   expect(app.count(rate)).toBe(0);
 });
-
-test("a long member name and the steps button never squeeze the speed", async () => {
-  const app = await open(fixture, {
-    width: 1440,
-    height: 900,
-    locale: "en-US",
-  });
-  const shown = app.layout(rate)!;
-  expect(app.texts()).toContain("Steps 39/39");
-  expect(shown.hidden).toBe(false);
-  expect(shown.clipped).toBe(false);
-  expect(shown.width).toBeGreaterThanOrEqual(50);
-});

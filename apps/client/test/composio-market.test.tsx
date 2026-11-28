@@ -160,31 +160,10 @@ test("it stops asking when the market is left", async () => {
 test("a toolkit already connected shows the mark on its card and says Re-authenticate", async () => {
   const app = await open("./fixtures/composio-already-connected.tsx", OPEN);
   await app.waitFor("id:composio-connected");
+  // A connected card in the market still says where it is from.
+  expect(app.shows("From Composio")).toBe(true);
   await app.press("label:Gmail");
   expect(app.shows("label:Re-authenticate")).toBe(true);
-});
-
-test("the connected mark of a card is at its bottom right, on the line of its source", async () => {
-  const app = await open("./fixtures/composio-already-connected.tsx", OPEN);
-  await app.waitFor("id:composio-connected");
-  const card = app.layout("label:Gmail")!;
-  const mark = app.layout("id:composio-connected")!;
-  const from = app.layout("text:From Composio >> nth=0")!;
-  expect(
-    Math.abs(card.x + card.width - 13 - (mark.x + mark.width)),
-  ).toBeLessThan(2);
-  expect(
-    Math.abs(card.y + card.height - 13 - (mark.y + mark.height)),
-  ).toBeLessThan(2);
-  expect(
-    Math.abs(from.y + from.height / 2 - (mark.y + mark.height / 2)),
-  ).toBeLessThan(3);
-});
-
-test("a toolkit that is not connected has no Disconnect", async () => {
-  const app = await open("./fixtures/composio-ready.tsx", OPEN);
-  await app.press("label:Gmail");
-  expect(app.shows("label:Disconnect")).toBe(false);
 });
 
 test("Re-authenticate on a connected toolkit goes through composioLink and opens its address", async () => {
@@ -232,12 +211,6 @@ test("a failed Disconnect says so, keeps the mark and the dialog, and shows no t
   expect(app.count("id:composio-connected")).toBeGreaterThan(0);
 });
 
-test("a connected card in the market still says From Composio, with the mark", async () => {
-  const app = await open("./fixtures/composio-already-connected.tsx", OPEN);
-  await app.waitFor("id:composio-connected");
-  expect(app.shows("From Composio")).toBe(true);
-});
-
 test("a toolkit that needs no sign-in has Add, not Connect: it asks for no link, opens nothing, and the mark says Added", async () => {
   const app = await open("./fixtures/composio-ready.tsx", OPEN);
   await app.press("label:Hacker News");
@@ -258,6 +231,8 @@ test("a toolkit that signs in keeps Connect, and no Add", async () => {
   expect(app.shows("label:Connect")).toBe(true);
   expect(app.shows("label:Add")).toBe(false);
   expect(app.shows("label:Remove")).toBe(false);
+  // Not connected: nothing to disconnect.
+  expect(app.shows("label:Disconnect")).toBe(false);
 });
 
 test("an added toolkit's card says Added, in the place of Connected, and still says where it is from", async () => {

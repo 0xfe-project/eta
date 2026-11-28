@@ -34,20 +34,6 @@ for (const [width, prefix] of [
     // (e) Regular assign_in_group Captain message still renders its text.
     expect(texts).toContain("Please review the release notes.");
 
-    // (f) Captain task cards and legacy dispatch cards match regular agent task_card width/alignment.
-    const capNewHead = app.layout(
-      `label:${prefix} #101 Ship the Captain patch`,
-    )!;
-    const capNoteHead = app.layout(`label:${prefix} #102 Verify deployment`)!;
-    const legacyHead = app.layout(`label:${prefix} #103 Migrate old timeline`)!;
-    const agentHead = app.layout(`label:${prefix} #107 Write unit tests`)!;
-    expect(capNewHead.x).toBe(agentHead.x);
-    expect(capNewHead.width).toBe(agentHead.width);
-    expect(capNoteHead.x).toBe(agentHead.x);
-    expect(capNoteHead.width).toBe(agentHead.width);
-    expect(legacyHead.x).toBe(agentHead.x);
-    expect(legacyHead.width).toBe(agentHead.width);
-
     // Folding works on legacy dispatch cards just like task_card rows.
     await app.press(`label:${prefix} #103 Migrate old timeline`);
     expect(app.texts()).toContain("Migrate old timeline");

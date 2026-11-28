@@ -152,19 +152,6 @@ function Fixture(props: {
     });
   };
 
-  const triggerTitleOnlyToast = () => {
-    showToast({
-      title: "Copied to clipboard",
-    });
-  };
-
-  const triggerWrappingToast = () => {
-    showToast({
-      title:
-        "Copied workspace diagnostics bundle and recent session logs to the system clipboard for bug reporting",
-    });
-  };
-
   const triggerProgress = () => {
     activeProgress = startProgress({
       id: "job",
@@ -273,16 +260,6 @@ function Fixture(props: {
                       {`Undo:${undoCount()} Cancel:${cancelCount()} Open:${openCount()} ModalClosed:${modalClosed()} PhoneInlineClosed:${phoneInlineClosed()} FocusedClosed:${focusedClosed()} NestedOverlayClosed:${nestedOverlayClosed()} NestedFocusedClosed:${nestedFocusedClosed()} ConfigureClosed:${configureClosed()} MembersClosed:${membersClosed()} LightboxClosed:${lightboxClosed()}`}
                     </Label>
                     {triggerControls("Root")}
-                    <View style={{ ...row, flexWrap: "wrap", gap: space[8] }}>
-                      <Button
-                        label="Root Title-only Toast"
-                        onPress={triggerTitleOnlyToast}
-                      />
-                      <Button
-                        label="Root Wrapping Toast"
-                        onPress={triggerWrappingToast}
-                      />
-                    </View>
                     <View style={{ ...row, flexWrap: "wrap", gap: space[8] }}>
                       <Button
                         label="Open overlay modal"

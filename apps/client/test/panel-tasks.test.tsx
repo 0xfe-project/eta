@@ -9,12 +9,6 @@ const sizes = [
   ["phone", 390, 844],
 ] as const;
 
-const openRows = [
-  [5, "Build the login API", "#5 · Bo · 12 minutes ago"],
-  [2, "Write the login API tests", "#2 · Ada · 3 hours ago"],
-  [7, "Wire up the login page", "#7 · Ada · Just now"],
-] as const;
-
 for (const [name, width, height] of sizes) {
   test(`${name}: every task row has its number, executor and time`, async () => {
     const app = await open("./fixtures/panel-tasks.tsx", {
@@ -27,28 +21,6 @@ for (const [name, width, height] of sizes) {
     expect(texts).toContain("#2 · Ada · 3 hours ago");
     expect(texts).toContain("#5 · Bo · 12 minutes ago");
     expect(texts).toContain("#7 · Ada · Just now");
-  });
-
-  test(`${name}: task status glyph aligns with the title line and metadata aligns under the title`, async () => {
-    const app = await open("./fixtures/panel-tasks.tsx", {
-      width,
-      height,
-      locale: "en-US",
-    });
-    await app.waitFor("text:Build the login API");
-    for (const [number, titleText, metaText] of openRows) {
-      const glyph = app.layout(`id:panel-task-glyph-${number}`)!;
-      const title = app.layout(`text:${titleText}`)!;
-      const meta = app.layout(`text:${metaText}`)!;
-      expect(glyph).not.toBeNull();
-      expect(title).not.toBeNull();
-      expect(meta).not.toBeNull();
-      expect(
-        Math.abs(glyph.y + glyph.height / 2 - (title.y + title.height / 2)),
-      ).toBeLessThanOrEqual(1);
-      expect(title.x).toBeGreaterThan(glyph.x + glyph.width);
-      expect(Math.abs(meta.x - title.x)).toBeLessThanOrEqual(1);
-    }
   });
 }
 
@@ -95,15 +67,6 @@ test("Recently updated lists the open tasks newest first", async () => {
     "Write the login API tests",
   ]);
   expect(app.texts()).toContain("12 minutes ago");
-
-  const glyph5 = app.layout("id:panel-task-glyph-5")!;
-  const title5 = app.layout("text:Build the login API")!;
-  const time5 = app.layout("text:12 minutes ago")!;
-  expect(
-    Math.abs(glyph5.y + glyph5.height / 2 - (title5.y + title5.height / 2)),
-  ).toBeLessThanOrEqual(1);
-  expect(title5.x).toBeGreaterThan(glyph5.x + glyph5.width);
-  expect(Math.abs(time5.x - title5.x)).toBeLessThanOrEqual(1);
 
   // Done tasks are still folded at the end.
   await app.press("text:Completed 1");

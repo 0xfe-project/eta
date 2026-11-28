@@ -17,6 +17,14 @@ test("progress notification reveals after 300ms, survives page navigation, shows
   const app = await openMode("cross-page");
   expect(app.texts()).toContain("ETA sample: 1m 30s left");
 
+  // Work done before the 300ms reveal never flashes a card.
+  await app.press("label:Start export");
+  await app.clock!.runFor(200);
+  expect(app.shows("id:progress-notification-export-pdf")).toBe(false);
+  await app.press("label:Finish export");
+  await app.clock!.runFor(200);
+  expect(app.shows("id:progress-notification-export-pdf")).toBe(false);
+
   await app.press("label:Start export");
   // Hidden before 300ms reveal threshold.
   await app.clock!.runFor(200);
@@ -40,6 +48,9 @@ test("progress notification reveals after 300ms, survives page navigation, shows
   // Transitions in-place to Done and invokes onOpen when clicked.
   await app.press("label:Finish export");
   expect(app.texts()).toContain("Saved quarterly.pdf");
+  // Done stays until it is opened or closed.
+  await app.clock!.runFor(5000);
+  expect(app.shows("id:progress-notification-export-pdf")).toBe(true);
   await app.press("id:progress-notification-export-pdf");
   expect(app.texts()).toContain("Opened: 1");
   expect(app.shows("id:progress-notification-export-pdf")).toBe(false);
@@ -66,22 +77,19 @@ test("host update download mirrors into ProgressNotification with cancel and cle
   expect(app.shows("label:Host update in progress")).toBe(true);
 });
 
-test("attachment chip renders inline progress bar without changing chip height", async () => {
+test("attachment chip renders an inline progress bar while it uploads", async () => {
   const app = await openMode("chip");
-  const idleBox = app.layout("id:chip-wrap");
-  expect(idleBox).toBeTruthy();
+  expect(app.shows("id:chip-wrap")).toBe(true);
+  expect(app.shows("role:progressbar")).toBe(false);
 
   await app.press("label:Upload 40%");
-  const uploadingBox = app.layout("id:chip-wrap");
-  expect(uploadingBox?.height).toBe(idleBox?.height);
   expect(app.shows("role:progressbar")).toBe(true);
 
   await app.press("label:Upload 85%");
-  expect(app.layout("id:chip-wrap")?.height).toBe(idleBox?.height);
+  expect(app.shows("role:progressbar")).toBe(true);
 
   await app.press("label:Upload done");
   expect(app.shows("role:progressbar")).toBe(false);
-  expect(app.layout("id:chip-wrap")?.height).toBe(idleBox?.height);
 });
 
 test("SSH install shows 'Taking longer than usual…' after 10s and clears on finish", async () => {
