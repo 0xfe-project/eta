@@ -7,18 +7,28 @@
  * building, which is cheaper than a client that receives frames it cannot read.
  */
 
-import type { GoalState, StoredTask } from "@eta/client-contracts";
+import type {
+  GoalState,
+  SessionViewSections,
+  StoredTask,
+} from "@eta/client-contracts";
 import type { StatePatch, StateSnapshot } from "@eta/client-wire-proto";
 import type {
   GoalState as RuntimeGoal,
   StoredTask as RuntimeTask,
 } from "@eta/core";
-import { stateSection } from "@eta/client-contracts";
 import { stateDiff } from "@eta/client-wire-proto";
 import { MemoryStorage } from "@eta/core/storage";
 import { fakeModels } from "@eta/core/testing";
 import { openSession } from "@eta/harness";
 import { describe, expect, it } from "vitest";
+
+/** Read one section with its type, admitting that it may be absent. */
+const stateSection = <K extends keyof SessionViewSections>(
+  state: StateSnapshot,
+  name: K,
+): SessionViewSections[K] | undefined =>
+  state.sections[name as string] as SessionViewSections[K] | undefined;
 
 describe("the harness snapshot is what the wire says a view is", () => {
   it("assigns, reads by section name, and diffs", async () => {

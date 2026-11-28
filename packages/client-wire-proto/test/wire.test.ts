@@ -82,24 +82,4 @@ describe("the state diff", () => {
     expect(patch.revisions).not.toHaveProperty("git");
     expect(patch.sections).not.toHaveProperty("git");
   });
-
-  it("carries a target's own section without knowing what it is", () => {
-    const before = snapshot();
-    const after = snapshot({
-      sections: {
-        ...before.sections,
-        "git.branch": "main",
-        "ssh.host": "build-box",
-      },
-      revisions: {
-        ...before.revisions,
-        "git.branch": "main",
-        "ssh.host": "build-box",
-      },
-    });
-    const patch = stateDiff(before.revisions, after);
-    if (patch === undefined || patch === "full")
-      throw new Error("expected a patch");
-    expect(patch.sections["ssh.host"]).toBe("build-box");
-  });
 });

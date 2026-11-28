@@ -18,14 +18,14 @@ export interface TaskRunFacts {
 }
 
 /** 0 while the newest run starts or runs, 1 while it is queued, 2 otherwise (none, or over). */
-export function taskRunRank(runStatus: TaskRunStatus | null): 0 | 1 | 2 {
+function taskRunRank(runStatus: TaskRunStatus | null): 0 | 1 | 2 {
   if (runStatus === "running" || runStatus === "starting") return 0;
   if (runStatus === "queued") return 1;
   return 2;
 }
 
 /** Running before queued before the rest; 0 between two of one rank, for the list to decide. */
-export function compareTaskRuns(a: TaskRunFacts, b: TaskRunFacts): number {
+function compareTaskRuns(a: TaskRunFacts, b: TaskRunFacts): number {
   return taskRunRank(a.runStatus) - taskRunRank(b.runStatus);
 }
 

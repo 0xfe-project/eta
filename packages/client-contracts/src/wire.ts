@@ -187,35 +187,6 @@ export function fromWebSocket(
   return socket;
 }
 
-/** The part of a page (`window`, `document`) `wakeOnPageEvents` listens to. */
-export interface PageEventSource {
-  addEventListener: (type: string, listener: () => void) => void;
-  removeEventListener: (type: string, listener: () => void) => void;
-}
-
-/**
- * Wake a wire when a browser page says the network may be back: it became visible again, or the
- * browser went online. Returns what stops listening.
- */
-export function wakeOnPageEvents(
-  wire: Pick<Wire, "wake">,
-  page: {
-    window: PageEventSource;
-    document: PageEventSource & { visibilityState: string };
-  },
-): () => void {
-  const visible = () => {
-    if (page.document.visibilityState === "visible") wire.wake();
-  };
-  const online = () => wire.wake();
-  page.document.addEventListener("visibilitychange", visible);
-  page.window.addEventListener("online", online);
-  return () => {
-    page.document.removeEventListener("visibilitychange", visible);
-    page.window.removeEventListener("online", online);
-  };
-}
-
 /** The pause after `current`: doubled, up to `max`. */
 export function nextRetryMs(current: number, max: number): number {
   return Math.min(current * 2, max);

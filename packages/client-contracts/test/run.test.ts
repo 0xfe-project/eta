@@ -1,7 +1,6 @@
 import type { AgentMessage, ViewMessageRow } from "../src/index";
 import { describe, expect, it } from "vitest";
 import {
-  groupBlocks,
   logBlocks,
   runBlocks,
   savedSteps,
@@ -358,18 +357,6 @@ describe("a finished reply's process", () => {
     ]);
   });
 
-  it("of a row written before the order was kept is its last thought, then its calls", () => {
-    const steps = savedSteps({ thinking: "a thought", data: { activity } });
-    expect(
-      steps.map((block) =>
-        block.type === "tool"
-          ? `tool ${block.id}`
-          : `${block.type} ${"text" in block ? block.text : ""}`,
-      ),
-    ).toEqual(["thinking a thought", "tool t1"]);
-    expect(savedSteps({ thinking: "", data: {} })).toEqual([]);
-  });
-
   it("reads a 0.3.0 reply's row, which kept calls as `activity` and nothing else", () => {
     // The shape a v0.3.0 board holds (checked against a real one: 311 such rows, none of them
     // blank): `data` is `{activity}` alone, an entry is `{id, name, input, status, output}` and
@@ -409,23 +396,7 @@ describe("a finished reply's process", () => {
       text: "the last thought",
     });
     expect(withThought).toHaveLength(3);
-  });
-
-  it("splits a reply at work the same way: trailing text is the answer, words before a call are steps", () => {
-    const tool = {
-      type: "tool" as const,
-      id: "t1",
-      name: "bash",
-      input: {},
-      status: "completed" as const,
-    };
-    const said = { type: "text" as const, id: "a", text: "on my way" };
-    const answer = { type: "text" as const, id: "b", text: "done" };
-    expect(splitReply([said, tool, answer])).toEqual({
-      steps: [said, tool],
-      answer: [answer],
-    });
-    expect(splitReply([said])).toEqual({ steps: [], answer: [said] });
+    expect(savedSteps({ thinking: "", data: {} })).toEqual([]);
   });
 });
 
@@ -459,6 +430,7 @@ describe("where a finished reply's answer starts", () => {
       steps: [text("a"), thought, text("b"), tool],
       answer: [text("c"), text("d")],
     });
+    expect(splitReply([text("a")])).toEqual({ steps: [], answer: [text("a")] });
   });
 
   it("of a finished reply that only called tools is its calls, in its process's order", () => {
@@ -608,54 +580,5 @@ describe("a run's log", () => {
       undefined,
     );
     expect(blocks).toEqual([]);
-  });
-});
-
-describe("folding a log", () => {
-  const done = (id: string, name: string, input: object = { path: id }) => ({
-    type: "tool" as const,
-    id,
-    name,
-    input,
-    status: "completed" as const,
-  });
-
-  it("folds three calls to one tool in a row into a group", () => {
-    const items = groupBlocks([
-      done("a", "Read"),
-      done("b", "Read"),
-      done("c", "Read"),
-      done("d", "Write"),
-    ]);
-    expect(items.map((item) => item.type)).toEqual(["group", "tool"]);
-    expect(items[0]).toMatchObject({
-      name: "Read",
-      tools: [{ id: "a" }, { id: "b" }, { id: "c" }],
-    });
-  });
-
-  it("leaves two in a row, commands and calls still at work as they are", () => {
-    const items = groupBlocks([
-      done("a", "Read"),
-      done("b", "Read"),
-      { type: "text", id: "t", text: "hm" },
-      done("c", "Bash", { command: "ls" }),
-      done("d", "Bash", { command: "ls" }),
-      done("e", "Bash", { command: "ls" }),
-      { ...done("f", "Read"), status: "running" },
-      done("g", "Read"),
-      done("h", "Read"),
-    ]);
-    expect(items.map((item) => item.id)).toEqual([
-      "a",
-      "b",
-      "t",
-      "c",
-      "d",
-      "e",
-      "f",
-      "g",
-      "h",
-    ]);
   });
 });

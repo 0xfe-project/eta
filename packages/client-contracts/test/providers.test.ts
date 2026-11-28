@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  isCustomKind,
-  keyMissing,
-  providerLabel,
-  signsIn,
-} from "../src/providers";
+import { isCustomKind, keyMissing, providerLabel } from "../src/providers";
 
 describe("what a provider is called", () => {
   it("prefers its own name, then its kind's, then its id", () => {
@@ -49,8 +44,6 @@ describe("kinds", () => {
       "openai-responses",
     ] as const)
       expect(keyMissing({ kind, hasApiKey: false }), kind).toBe(false);
-    expect(signsIn({ kind: "openai-codex" })).toBe(true);
-    expect(signsIn({ kind: "deepseek" })).toBe(false);
   });
 
   it("reads nothing off the object prototype for a kind it does not know", () => {

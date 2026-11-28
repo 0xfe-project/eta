@@ -284,11 +284,6 @@ export function isCustomKind(kind: ProviderKind | undefined): boolean {
   return source !== undefined && source.baseUrl === undefined;
 }
 
-/** A source signed into with an account (Codex) rather than a key. */
-export function signsIn(provider: Pick<ProviderSummary, "kind">): boolean {
-  return modelSource(provider.kind)?.auth === "sign-in";
-}
-
 /** Whether the provider cannot be used until a key is set. */
 export function keyMissing(
   provider: Pick<ProviderSummary, "hasApiKey" | "kind">,
