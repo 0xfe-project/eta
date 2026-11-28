@@ -1,4 +1,8 @@
-import type { PluginAuditView, PluginView } from "@eta/client-contracts";
+import type {
+  PluginAuditView,
+  PluginBundledAgentView,
+  PluginView,
+} from "@eta/client-contracts";
 import { Clipboard, signal, View } from "nsh";
 import {
   Button,
@@ -50,9 +54,11 @@ interface DetailProps {
   phone?: boolean;
   onBack?: () => void;
   onConfigure: () => void;
+  onServers?: () => void;
   onUpdate: () => Promise<boolean>;
   onRemove: () => void;
   onRefresh: () => Promise<void>;
+  onImportAgent?: (pluginName: string, agent: PluginBundledAgentView) => void;
 }
 
 // A read shows how long ago it happened; "now" and dates read as they are.
@@ -86,13 +92,23 @@ export function PluginDetail(props: DetailProps) {
       .filter((entry) => entry.plugin === props.item.name)
       .slice()
       .sort((a, b) => b.at - a.at);
-  const configure = () => props.item.fields.length > 0;
+  const bundledAgents = () => props.item.bundledAgents ?? [];
+  const hasFields = () => props.item.fields.length > 0;
+  const hasMissingEnv = () =>
+    props.item.servers.some((server) => (server.missingEnv?.length ?? 0) > 0);
+  const needsConfig = () => props.item.state === "needs_config";
+  const configure = () =>
+    hasFields() ||
+    (props.onServers !== undefined && (needsConfig() || hasMissingEnv()));
+  const openConfigure = () => {
+    if (hasFields()) props.onConfigure();
+    else props.onServers?.();
+  };
   // On a phone each block carries the design's own top spacing.
   const section = (top: number) =>
     props.phone
       ? { gap: space[4], paddingHorizontal: space[16], paddingTop: top }
       : { gap: space[4] };
-  const needsConfig = () => props.item.state === "needs_config";
   const enabledSwitch = () => <PluginEnabled item={props.item} />;
   function update() {
     if (updating()) return;
@@ -151,9 +167,9 @@ export function PluginDetail(props: DetailProps) {
             <If when={configure()}>
               <Button
                 label={uiText("configure")}
-                tone={needsConfig() ? "primary" : "plain"}
+                tone={needsConfig() || hasMissingEnv() ? "primary" : "plain"}
                 labelVariant="caption"
-                onPress={props.onConfigure}
+                onPress={openConfigure}
               />
             </If>
           </View>
@@ -253,11 +269,11 @@ export function PluginDetail(props: DetailProps) {
               <If when={props.phone && configure()}>
                 <Button
                   label={uiText("configure")}
-                  tone={needsConfig() ? "primary" : "plain"}
+                  tone={needsConfig() || hasMissingEnv() ? "primary" : "plain"}
                   size={control.touch}
                   labelVariant="body"
                   style={{ marginHorizontal: space[16] }}
-                  onPress={props.onConfigure}
+                  onPress={openConfigure}
                 />
               </If>
               <If when={pluginWarnings(props.item).length}>
@@ -351,6 +367,17 @@ export function PluginDetail(props: DetailProps) {
               </Label>
             </View>
           </View>
+          <If when={bundledAgents().length}>
+            <View testID="plugin-bundled-agents" style={section(space[16])}>
+              <Caption text={uiText("pluginBundledAgents")} />
+              <BundledAgentRows
+                pluginName={props.item.name}
+                agents={bundledAgents()}
+                phone={props.phone}
+                onImportAgent={props.onImportAgent}
+              />
+            </View>
+          </If>
           <If when={reads().length}>
             <View style={section(16)}>
               <Caption text={text("audit")} />
@@ -446,6 +473,59 @@ function ActionRow(props: {
           {props.hint}
         </Label>
       </View>
+    </View>
+  );
+}
+
+/** Bundled bot definitions shipped by a plugin (`agents/*.md`). Untrusted text is rendered as plain text. */
+export function BundledAgentRows(props: {
+  pluginName: string;
+  agents: PluginBundledAgentView[];
+  phone?: boolean;
+  onImportAgent?: (pluginName: string, agent: PluginBundledAgentView) => void;
+}) {
+  const c = colors();
+  return (
+    <View style={{ borderWidth: 1, borderColor: c().border }}>
+      <Each of={props.agents} key={(agent) => agent.id}>
+        {(agent, index) => (
+          <View
+            testID={`bundled-agent:${agent().id}`}
+            style={{
+              ...row,
+              gap: space[12],
+              alignItems: "center",
+              paddingHorizontal: space[12],
+              paddingVertical: space[8],
+              borderTopWidth: index() ? 1 : 0,
+              borderColor: c().border,
+            }}
+          >
+            <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+              <Label variant="small" weight={weight.strong} lines={1}>
+                {agent().name}
+              </Label>
+              <If when={agent().description}>
+                <Label variant="caption" tone="muted" lines={2}>
+                  {agent().description}
+                </Label>
+              </If>
+            </View>
+            <If when={props.onImportAgent}>
+              <Button
+                label={uiText("pluginImportAgent")}
+                accessibilityLabel={uiText("pluginImportAgentNamed", {
+                  name: agent().name,
+                })}
+                tone="plain"
+                size={props.phone ? control.lg : control.sm}
+                labelVariant={props.phone ? "small" : "caption"}
+                onPress={() => props.onImportAgent?.(props.pluginName, agent())}
+              />
+            </If>
+          </View>
+        )}
+      </Each>
     </View>
   );
 }

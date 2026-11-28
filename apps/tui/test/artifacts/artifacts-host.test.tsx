@@ -35,7 +35,9 @@ async function publishing() {
   const plan: { title: string }[] = [];
   let next: { title: string } | undefined;
   const w = await manageWorld((request) => {
-    if (request.lastRole === "toolResult") return say("done");
+    // Ignore background `completeSimple` calls (e.g. run-boundary memory extraction with no agent/user prompt).
+    if (request.lastRole !== "user" || request.agent !== "Ada")
+      return say("done");
     next = plan.shift();
     if (next === undefined) return say("nothing to publish");
     const artifactId = published.get(next.title);
@@ -60,7 +62,7 @@ async function publishing() {
     await w.send(group.id, `publish ${title}`);
     await until(
       () => list().find((a) => a.title === title)?.versions.length === versions,
-      20_000,
+      process.platform === "win32" ? 30_000 : 20_000,
       `${title} v${versions}`,
     );
     published.set(title, list().find((a) => a.title === title)!.id);

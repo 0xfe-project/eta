@@ -1,5 +1,4 @@
 import { expect, open, test } from "nsh/test";
-import { motion } from "../src/components/motion";
 
 // A member's Inspect has two tabs: Trace (its run, where it opens) and Context (its session's
 // system prompt block by block and its tools, the old web Inspect). The members of
@@ -117,7 +116,6 @@ test("a view still on its way is being read", async () => {
   });
   await app.press(inspect(4));
   await app.press(tab("Context"));
-  await app.wait(motion.reveal + 50);
-  expect(app.shows("label:Reading the context…")).toBe(true);
+  await app.waitFor("label:Reading the context…");
   expect(app.texts()).not.toContain("Could not read this session's context.");
 });

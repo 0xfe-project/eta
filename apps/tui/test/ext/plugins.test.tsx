@@ -106,6 +106,7 @@ async function openDetail(
   steps: number,
   description: string,
 ) {
+  await r.waitFor("Enter open");
   for (let i = 0; i < steps; i += 1) await r.press(KEYS.down);
   await r.press(KEYS.enter);
   await r.waitFor(description);

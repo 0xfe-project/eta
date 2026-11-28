@@ -2,20 +2,32 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
 import { afterEach } from "vitest";
 
 const roots: string[] = [];
 
-afterEach(async () => {
-  for (const root of roots.splice(0)) {
-    // A child process that just ended may still hold a file for a moment on Windows.
-    await rm(root, {
-      recursive: true,
-      force: true,
-      maxRetries: 10,
-      retryDelay: 100,
-    });
+/** Bun's `rm` ignores `maxRetries` on Windows EBUSY, so retry brief locks explicitly. */
+export async function removeWithRetry(path: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rm(path, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (
+        process.platform !== "win32" ||
+        (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") ||
+        attempt >= 20
+      )
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
   }
+}
+
+afterEach(async () => {
+  for (const root of roots.splice(0)) await removeWithRetry(root);
 });
 
 /** A fresh empty directory, removed after the test. */

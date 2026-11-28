@@ -1,0 +1,232 @@
+# `eta-host upgrade` from a real build to a real build, on each platform's real service manager:
+# launchd on macOS, a Windows service on Windows.
+#
+# NOT A TEST ACROSS VERSIONS. The two `upgrade` jobs a pull request shows come from here, and what
+# they upgrade between are hosts built from the pull request itself and stamped 0.9.0 to 0.9.4
+# (scripts/upgrade-e2e/build.ts), some of them made to break. A green run proves that
+# this code's upgrade machinery works on launchd and on a Windows service: it swaps the file,
+# restarts the service, runs the migration, keeps a backup, rolls back a build that does not hold,
+# and the page's button and `--cancel` do what they say. It does not prove that a person's data
+# comes through from the last release: no published build is run, no `test/upgrade-seed` is read,
+# no release candidate is the target, and Linux is not run at all.
+#
+# That is upgrade-cross.yml ("Upgrade across versions"): a published build holding the seed, up to
+# another, on systemd, launchd or a Windows service. release.yml runs it on Linux before publishing
+# a tag; for a pull request that changes the upgrade or a migration, run it by hand against the
+# branch, with releases that exist:
+#
+#   gh workflow run upgrade-cross.yml --ref <branch> -f from=0.3.0 -f to=0.4.0-rc.2 -f platforms=linux
+#
+# (platforms: linux, macos, windows or all; macOS and Windows cost ten and two times as much). Its
+# runs are listed apart from the pull request's checks: `gh run list --workflow upgrade-cross.yml`.
+#
+# It runs unconditionally via workflow_dispatch or workflow_call (Nightly), and on pull_request /
+# push to main only when a changed file matches `trigger_pattern` (host upgrade, service, daemon
+# swap, and update-UI files).
+name: Host upgrade E2E
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  trigger_pattern: ^(\.github/(workflows/host-upgrade-e2e\.yml|actions/setup-nsh/)|apps/daemon/src/(service|swap|windows-)|apps/eta/src/(stop\.ts|upgrade/)|apps/client/src/(pages/settings/updates/|pages/connection/host-restart|services/upgrade-watch|i18n/messages/updates)|scripts/(nsh-client|upgrade-e2e/))
+
+# A newer push to the same pull request, or a newer merge to main, makes the older run's answer
+# moot, and its macOS and Windows legs take over ten minutes. Runs started by hand or Nightly
+# get a group of their own.
+concurrency:
+  group: host-upgrade-e2e-${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && github.run_id || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  match:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run: ${{ steps.match.outputs.run }}
+    steps:
+      - id: match
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.number }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          case "$GITHUB_EVENT_NAME" in
+            pull_request)
+              files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
+              pattern=$trigger_pattern
+              ;;
+            push)
+              files=$(gh api "repos/$REPO/compare/$BEFORE...$SHA" --jq '.files[].filename')
+              pattern=$trigger_pattern
+              ;;
+            *)
+              files=
+              pattern=
+              ;;
+          esac
+          if [ -z "$pattern" ] || grep -Eq "$pattern" <<< "$files"; then
+            run=true
+          else
+            run=false
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+  upgrade:
+    needs: match
+    if: needs.match.outputs.run == 'true'
+    permissions:
+      contents: read
+      actions: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: darwin-arm64
+          - os: windows-latest
+            platform: windows-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+    env:
+      BUILDS: ${{ github.workspace }}/e2e-builds
+    steps:
+      - run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile --ignore-scripts
+
+      # Five hosts take a while and only change with the code they are built from, not with the
+      # scenarios: a rerun for a scenario should not wait for them.
+      - name: Find the builds
+        id: builds
+        uses: actions/cache/restore@v6
+        with:
+          path: e2e-builds
+          key: host-upgrade-e2e-${{ matrix.platform }}-${{ hashFiles('bun.lock', 'apps/daemon/src/**', 'apps/eta/scripts/**', 'apps/eta/src/**', 'apps/client/**', 'packages/client-contracts/src/**', 'packages/client-wire-proto/src/**', 'scripts/nsh-client.ts', '.github/actions/setup-nsh/action.yml', 'scripts/upgrade-e2e/build.ts') }}
+
+      - uses: ./.github/actions/setup-nsh
+        if: steps.builds.outputs.cache-hit != 'true'
+
+      - name: Build the hosts
+        if: steps.builds.outputs.cache-hit != 'true'
+        run: |
+          bun run --cwd apps/client package:web
+          bun scripts/upgrade-e2e/build.ts "$BUILDS"
+
+      # Now, not at the end of the job: a run that fails is the one that gets rerun.
+      - name: Keep the builds
+        if: steps.builds.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: e2e-builds
+          key: ${{ steps.builds.outputs.cache-primary-key }}
+
+      # Bound GitHub Actions cache bloat by deleting superseded build caches for this ref/platform.
+      - name: Prune older host-upgrade-e2e caches
+        if: steps.builds.outputs.cache-hit != 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PLATFORM: ${{ matrix.platform }}
+          CURRENT_KEY: ${{ steps.builds.outputs.cache-primary-key }}
+          REF: ${{ github.ref }}
+        run: |
+          for prefix in "host-upgrade-e2e-${PLATFORM}-" "upgrade-e2e-${PLATFORM}-"; do
+            if [[ "$prefix" == upgrade-e2e-* && "$REF" != "refs/heads/main" ]]; then
+              continue
+            fi
+            gh api --paginate "repos/${REPO}/actions/caches?key=${prefix}&per_page=100" \
+              --jq '.actions_caches[] | "\(.id)\t\(.key)\t\(.ref)"' |
+            while IFS=$'\t' read -r id key ref; do
+              [[ -z "$id" ]] && continue
+              if [[ "$prefix" == upgrade-e2e-* || ( "$ref" == "$REF" && "$key" != "$CURRENT_KEY" ) ]]; then
+                gh api -X DELETE "repos/${REPO}/actions/caches/${id}" || true
+              fi
+            done
+          done
+
+      # A password this run makes up: the runner's account has none anyone knows, and a Windows
+      # service cannot log on without one.
+      - name: Give the account a password
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $password = "Eta-" + [guid]::NewGuid().ToString("N") + "-1a"
+          Write-Output "::add-mask::$password"
+          net user $env:USERNAME $password | Out-Null
+          "ETA_E2E_PASSWORD=$password" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      # To press the real button in the runner's Chrome, for this run only.
+      - run: bun add --no-save playwright-core@1
+
+      # On Windows every host it runs reads Win32 error codes through a shim compiled at run time
+      # (apps/daemon/src/windows-api.ts): this makes a build without it fail, not go back quietly.
+      - name: Run it
+        env:
+          ETA_REQUIRE_WIN32_SHIM: "1"
+        run: bun scripts/upgrade-e2e/drive.ts "$BUILDS"
+
+      # For people testing on a real Windows computer: the fake server is compiled so they need
+      # nothing but this (uploaded only on manual workflow_dispatch runs).
+      - name: Pack what a tester needs
+        if: runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p e2e-pack/builds
+          cp -r "$BUILDS/0.9.0" "$BUILDS/0.9.1" "$BUILDS/0.9.2" "$BUILDS/0.9.3" e2e-pack/builds/
+          bun build --compile scripts/upgrade-e2e/fake-releases.ts --outfile e2e-pack/fake-releases.exe
+
+      - uses: actions/upload-artifact@v7
+        if: runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
+        with:
+          name: eta-host-windows-test
+          path: e2e-pack
+          retention-days: 30
+          compression-level: 1
+
+      - name: What the service left
+        if: always()
+        run: |
+          mkdir -p e2e-logs
+          cp upgrade-e2e-results.json e2e-logs/ || true
+          cp -r e2e-shots e2e-logs/ || true
+          cp ~/.eta/upgrade-status.json e2e-logs/ || true
+          cp ~/.eta/service/*.log e2e-logs/ || true
+          cp ~/Library/Logs/eta/*.log e2e-logs/ || true
+
+      - name: What Windows said
+        if: always() && runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 40 |
+            Format-List TimeCreated,Id,Message | Out-File e2e-logs/scm-events.txt
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: host-upgrade-e2e-${{ matrix.platform }}
+          path: e2e-logs
+          retention-days: 14

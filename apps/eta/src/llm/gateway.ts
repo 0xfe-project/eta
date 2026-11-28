@@ -482,7 +482,7 @@ export class Gateway {
    * and record each read as the account's latest check. A login the provider rejects is
    * refreshed once (as CPA does when a request gets a 401) before the check says so.
    */
-  async usage(): Promise<LlmQuota[]> {
+  async usage(options?: { force?: boolean }): Promise<LlmQuota[]> {
     const connections = await this.#connections();
     const enabled = connections.filter(
       (connection) => connection.state !== "disabled",
@@ -494,7 +494,15 @@ export class Gateway {
     const reads = enabled.flatMap((connection) => {
       const connector = this.#byId.get(connection.connector);
       if (!connector?.usage) return [];
-      return [this.#readUsage(connection, connector)];
+      return [
+        this.#readUsage(
+          connection,
+          connector,
+          undefined,
+          undefined,
+          options?.force,
+        ),
+      ];
     });
     const result = await Promise.all(reads.map((entry) => entry.reading));
     return result.filter(
@@ -612,8 +620,12 @@ export class Gateway {
     connector: Connector,
     schedule?: (read: () => Promise<LlmQuota>) => Promise<LlmQuota>,
     warn?: (message: string) => void,
+    force = false,
   ): AccountRead {
-    if (this.#usage.get(connection.id)?.revision !== connection.quotaRevision)
+    if (
+      force ||
+      this.#usage.get(connection.id)?.revision !== connection.quotaRevision
+    )
       this.#forgetUsage(connection.id);
     const current = this.#usage.get(connection.id);
     if (
@@ -763,7 +775,7 @@ export class Gateway {
   refresh(): Promise<GatewayStatus & { quota: LlmQuota[] }> {
     this.#refreshing ??= (async () => {
       try {
-        const quota = await this.usage();
+        const quota = await this.usage({ force: true });
         return { ...(await this.status()), quota };
       } finally {
         this.#refreshing = undefined;

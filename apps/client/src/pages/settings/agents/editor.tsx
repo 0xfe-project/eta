@@ -59,7 +59,7 @@ export function AgentEditor(props: AgentEditorProps) {
     saved,
   } = form;
   const tab = signal<AgentTab>("general");
-  const step = signal<1 | 2>(1);
+  const step = signal<1 | 2 | 3>(1);
   const deleting = signal(false);
   const title = () => saved?.name ?? localizedText("New agent", "新建智能体");
   /** Wide editors pin the row under the Instructions and Plugins tabs; the phone lists it after them. */
@@ -282,7 +282,11 @@ export function AgentEditor(props: AgentEditorProps) {
                   <AgentInstructions form={form} />
                 </If>
                 <If when={tab() === "plugins"}>
-                  <AgentPlugins form={form} />
+                  <AgentPlugins
+                    form={form}
+                    onOpenMarket={props.onOpenMarket}
+                    onOpenPlugins={props.onOpenPlugins}
+                  />
                 </If>
                 <If when={!pinned() && tab() !== "general"}>{deleteRow()}</If>
               </SmoothScroll>
@@ -307,11 +311,13 @@ export function AgentEditor(props: AgentEditorProps) {
               tracking="caps"
               variant="caption"
               tone="muted"
-            >{`${step()}/2`}</Label>
+            >{`${step()}/3`}</Label>
             <Label variant="small" weight={weight.strong}>
               {step() === 1
                 ? localizedText("Name and model", "名称与模型")
-                : uiText("instructions")}
+                : step() === 2
+                  ? uiText("instructions")
+                  : uiText("plugins")}
             </Label>
           </View>
           <Label
@@ -321,36 +327,50 @@ export function AgentEditor(props: AgentEditorProps) {
           >
             {step() === 1
               ? localizedText("Next: Instructions", "下一步：指令")
-              : uiText("lastStep")}
+              : step() === 2
+                ? localizedText("Next: Plugins", "下一步：插件")
+                : uiText("lastStep")}
           </Label>
           <View style={{ ...row, gap: space[4] }}>
-            <View
-              style={{
-                width: space[8],
-                height: space[8],
-                backgroundColor: step() === 1 ? c().ink : c().faint,
-              }}
-            />
-            <View
-              style={{
-                width: space[8],
-                height: space[8],
-                borderWidth: step() === 2 ? 0 : 1,
-                borderColor: c().strong,
-                backgroundColor: step() === 2 ? c().ink : undefined,
-              }}
-            />
+            <Each of={[1, 2, 3] as const}>
+              {(item) => (
+                <View
+                  style={{
+                    width: space[8],
+                    height: space[8],
+                    borderWidth: step() >= item() ? 0 : 1,
+                    borderColor: c().strong,
+                    backgroundColor:
+                      step() === item()
+                        ? c().ink
+                        : step() > item()
+                          ? c().faint
+                          : undefined,
+                  }}
+                />
+              )}
+            </Each>
           </View>
         </View>
         <SmoothScroll
           style={props.phone ? grow : { flexShrink: 1 }}
           scrollbar={false}
         >
-          <If when={step() === 1} else={<AgentInstructions form={form} />}>
+          <If when={step() === 1}>
             <AgentGeneral
               form={form}
               onModelServices={props.onModelServices}
               onRuntimes={props.onRuntimes}
+            />
+          </If>
+          <If when={step() === 2}>
+            <AgentInstructions form={form} />
+          </If>
+          <If when={step() === 3}>
+            <AgentPlugins
+              form={form}
+              onOpenMarket={props.onOpenMarket}
+              onOpenPlugins={props.onOpenPlugins}
             />
           </If>
         </SmoothScroll>
@@ -385,18 +405,18 @@ export function AgentEditor(props: AgentEditorProps) {
           }
           tone={creating ? "ghost" : undefined}
         />
-        <If when={creating && step() === 2}>
+        <If when={creating && step() > 1}>
           <View style={{ flex: 1 }} />
           <Button
             label={localizedText("Previous", "上一步")}
-            onPress={() => step.set(1)}
+            onPress={() => step.set(step() === 3 ? 2 : 1)}
             disabled={busy()}
             size={phoneEditor() ? control.lg : undefined}
             style={phoneEditor() ? { paddingHorizontal: space[16] } : undefined}
           />
         </If>
         <If
-          when={creating && step() === 1}
+          when={creating && step() < 3}
           else={
             <Button
               label={
@@ -420,10 +440,10 @@ export function AgentEditor(props: AgentEditorProps) {
           <Button
             label={uiText("next")}
             tone="primary"
-            disabled={!name().trim()}
+            disabled={step() === 1 && !name().trim()}
             size={phoneEditor() ? control.lg : undefined}
             style={phoneEditor() ? { paddingHorizontal: space[16] } : undefined}
-            onPress={() => step.set(2)}
+            onPress={() => step.set(step() === 1 ? 2 : 3)}
           />
         </If>
       </View>

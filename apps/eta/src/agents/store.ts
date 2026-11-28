@@ -109,10 +109,12 @@ export class AgentStore {
 
   create(input: AgentInput, id: string = crypto.randomUUID()): AgentRecord {
     const now = Date.now();
+    const avatarSeed = input.avatarSeed ?? null;
+    const avatarSeeds = avatarSeed === null ? [] : [avatarSeed];
     this.#db
       .query(
-        `INSERT INTO agent (id, name, instructions, persona, runtime, model, thinking_level, machine_id, system_role, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agent (id, name, instructions, persona, runtime, model, thinking_level, machine_id, system_role, avatar_seed, avatar_seeds, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -124,6 +126,8 @@ export class AgentStore {
         input.thinkingLevel ?? null,
         input.machineId ?? null,
         input.systemRole ?? null,
+        avatarSeed,
+        JSON.stringify(avatarSeeds),
         now,
         now,
       );

@@ -1,6 +1,7 @@
 /** A wire client for tests: a real WebSocket, and the frames it has received. */
 import type { ServerFrame } from "@eta/client-contracts";
 import type { ClientFrame } from "@eta/client-wire-proto";
+import process from "node:process";
 
 export interface Client {
   frames: ServerFrame[];
@@ -15,9 +16,9 @@ export interface Client {
 
 export async function until(
   predicate: () => boolean | Promise<boolean>,
-  // Long enough for a loaded machine (every package's tests run at once); a wait that is
+  // Long enough for a loaded Windows machine (every package's tests run at once); a wait that is
   // going to succeed does not wait for it.
-  timeoutMs = 15_000,
+  timeoutMs = process.platform === "win32" ? 45_000 : 15_000,
 ): Promise<void> {
   const started = Date.now();
   while (!(await predicate())) {

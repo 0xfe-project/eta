@@ -20,23 +20,12 @@ import {
   desktopHostProcessGrants,
 } from "../packages/client-contracts/src/host-launcher";
 import { writeClientIcons } from "./client-icons";
+import { resolveNshClientArgs } from "./nsh-client-args";
 
 const root = resolve(import.meta.dir, "..");
 const cwd = join(root, "apps", "client");
-const args = process.argv.slice(2);
+const args = resolveNshClientArgs(process.argv.slice(2), process.env);
 const nsh = process.env.ETA_NSH ?? "nsh";
-// Every test file opens an engine of its own, and nsh runs one per core by default: on a
-// loaded machine they oversubscribe it, and a test whose app renders in a second elsewhere
-// runs out its 5 s "the app rendered nothing" wait and fails. Two at a time is what the
-// suite is measured to hold, on a laptop and on a runner alike.
-const jobsGiven = args.some(
-  (arg) =>
-    arg === "-j" ||
-    arg === "--jobs" ||
-    arg.startsWith("--jobs=") ||
-    /^-j\d/.test(arg),
-);
-if (args[0] === "test" && !jobsGiven) args.push("-j", "2");
 const fromClient = createRequire(join(cwd, "package.json"));
 const meta = (await Bun.file(join(cwd, "nsh.json")).json()) as {
   id: string;

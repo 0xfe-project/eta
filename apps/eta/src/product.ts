@@ -100,8 +100,9 @@ import { placesPlugin } from "./places/plugin";
 import { PlaceStore } from "./places/store";
 import { Composio } from "./plugins/composio";
 import { ComposioTriggerProvider } from "./plugins/composio-triggers";
+import { githubProxy } from "./plugins/git";
 import { IconCache } from "./plugins/icon-cache";
-import { Market } from "./plugins/market";
+import { Market, PROXY_KEY } from "./plugins/market";
 import { CatalogCache } from "./plugins/market-cache";
 import { pluginsPlugin } from "./plugins/plugin";
 import { Plugins } from "./plugins/service";
@@ -1182,6 +1183,7 @@ export function createProduct(options: {
       mirrors.detach();
       plugins.close();
       await mcp.close();
+      await captainAudit.close();
       await web?.close();
     },
     async mount(server) {
@@ -1228,8 +1230,13 @@ export function createProduct(options: {
         if (pending.size === 0) ready();
       };
       const shared = { agents, machines, projects, conversations, timeline };
+      const savedProxy = new SettingStore(db).get(PROXY_KEY);
+      githubProxy.prefix = typeof savedProxy === "string" ? savedProxy : "";
       await plugins.start();
-      const catalogCache = new CatalogCache(db, { maxRowBytes: 1024 * 1024 });
+      const catalogCache = new CatalogCache(db, {
+        maxRowBytes: 8 * 1024 * 1024,
+        maxTotalBytes: 16 * 1024 * 1024,
+      });
       const composio = new Composio({
         db,
         key: secretKey,

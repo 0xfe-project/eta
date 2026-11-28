@@ -231,4 +231,28 @@ describe("agents.create and agents.update over the wire", () => {
       w.client.call("agents", "update", { agentId: bob.id, name: "CAPTAIN" }),
     ).rejects.toThrow(/reserved for Captain/);
   });
+
+  it("supports optional avatarSeed atomically on agents.create and validates it", async () => {
+    const w = await world();
+    const created = await w.agent("Seeded", { avatarSeed: "custom-seed_1" });
+    expect(created).toMatchObject({
+      avatarSeed: "custom-seed_1",
+      avatarSeeds: ["custom-seed_1"],
+    });
+    const { agent: updated } = (await w.client.call("agents", "update", {
+      agentId: created.id,
+      avatarSeed: "next-seed",
+    })) as { agent: { avatarSeed: string; avatarSeeds: string[] } };
+    expect(updated).toMatchObject({
+      avatarSeed: "next-seed",
+      avatarSeeds: ["next-seed", "custom-seed_1"],
+    });
+    await expect(
+      w.client.call("agents", "create", {
+        name: "BadSeed",
+        model: "fake:model",
+        avatarSeed: "bad seed!",
+      }),
+    ).rejects.toThrow(/avatarSeed/);
+  });
 });

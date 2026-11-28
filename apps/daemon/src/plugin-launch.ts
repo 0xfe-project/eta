@@ -32,15 +32,19 @@ import type { RuntimeExtras } from "@eta/server";
 import type { PluginPackage, PluginServer } from "./plugin-package";
 import { mkdirSync, realpathSync, symlinkSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import process from "node:process";
 import { isCursorServer } from "@eta/client-contracts";
 import { effectiveValue } from "@eta/client-contracts/plugin-fields";
 import { renderSkillDirs } from "@eta/server";
-import { fillTemplate, isWithin } from "./plugin-package";
+import { localWindowsProbe, windowsShell } from "@eta/ssh";
+import { fillTemplate, foreignVarNames, isWithin } from "./plugin-package";
 
 /** The values one server gets, by name: resolved on the primary, kept in memory everywhere. */
 interface ServerConfig {
   env?: Record<string, string>;
   headers?: Record<string, string>;
+  /** Resolved field values needed by deferred `${VAR}` templates (foreign `args` or rooted `env`). */
+  templateValues?: Record<string, string>;
   /** Some of `headers` were attached by the user, not by the plugin: no sign-in is offered instead. */
   userHeaders?: boolean;
   /** The sign-in token goes in this header too (from the user's choice for this server). */
@@ -94,6 +98,28 @@ function textOf(value: PluginValue): string {
   return Array.isArray(value) ? value.join(",") : String(value);
 }
 
+const hasBuiltinPlaceholder = (text: string): boolean =>
+  text.includes("${PLUGIN_ROOT}") || text.includes("${PLUGIN_DATA}");
+
+/** Expand a foreign `${VAR}` / `${VAR:-default}` template without touching `${PLUGIN_ROOT}` / `${PLUGIN_DATA}`. */
+function fillForeignEnvTemplate(
+  template: string,
+  values: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  let complete = true;
+  const filled = template.replace(/\$\{([^}]*)\}/g, (match, expr: string) => {
+    const sep = expr.indexOf(":-");
+    const name = sep === -1 ? expr : expr.slice(0, sep);
+    const value = values[name];
+    if (value === undefined) {
+      complete = false;
+      return match;
+    }
+    return value;
+  });
+  return complete ? filled : undefined;
+}
+
 /** What the extension makes of these values, for each server that has a binding. */
 export function serversConfig(
   plugin: Pick<PluginPackage, "bindings" | "fields"> &
@@ -115,16 +141,39 @@ export function serversConfig(
   const config: ServersConfig = {};
   for (const [server, binding] of Object.entries(plugin.bindings)) {
     const env: Record<string, string> = {};
-    for (const [name, field] of Object.entries(binding.env)) {
-      const text = texts[field];
-      if (text !== undefined) env[name] = text;
+    const deferredVars = new Set<string>();
+    for (const [name, spec] of Object.entries(binding.env)) {
+      if (!spec.includes("${")) {
+        const text = texts[spec];
+        if (text !== undefined) env[name] = text;
+      } else if (hasBuiltinPlaceholder(spec)) {
+        for (const variable of foreignVarNames(spec))
+          deferredVars.add(variable);
+      } else {
+        const filled = fillForeignEnvTemplate(spec, texts);
+        if (filled !== undefined) env[name] = filled;
+      }
+    }
+    if (binding.args !== undefined) {
+      for (const template of Object.values(binding.args))
+        for (const variable of foreignVarNames(template))
+          deferredVars.add(variable);
     }
     const headers: Record<string, string> = {};
     for (const [name, template] of Object.entries(binding.headers)) {
       const filled = fillTemplate(template, texts);
       if (filled !== undefined) headers[name] = filled;
     }
-    config[server] = { env, headers };
+    const templateValues: Record<string, string> = {};
+    for (const variable of deferredVars) {
+      const text = texts[variable];
+      if (text !== undefined) templateValues[variable] = text;
+    }
+    config[server] = {
+      env,
+      headers,
+      ...(Object.keys(templateValues).length === 0 ? {} : { templateValues }),
+    };
   }
   // The user's headers go on top, whatever the case of a name the file or a binding set already.
   for (const header of userHeaders) {
@@ -168,6 +217,34 @@ function expand(text: string, root: string, data: string): string {
   return text.replace(/\$\{PLUGIN_(ROOT|DATA)\}/g, (_, which: string) =>
     which === "ROOT" ? root : data,
   );
+}
+
+/**
+ * Single-pass expansion for a foreign server's template (args or rooted env): expands
+ * `${PLUGIN_ROOT}`, `${PLUGIN_DATA}` and `${VAR}` / `${VAR:-default}` once without re-scanning
+ * replacement text.
+ */
+function expandForeign(
+  text: string,
+  root: string,
+  data: string,
+  values: Readonly<Record<string, string>> | undefined,
+  requireAll: boolean,
+): string | undefined {
+  let complete = true;
+  const filled = text.replace(/\$\{([^}]*)\}/g, (match, expr: string) => {
+    if (expr === "PLUGIN_ROOT") return root;
+    if (expr === "PLUGIN_DATA") return data;
+    const sep = expr.indexOf(":-");
+    const name = sep === -1 ? expr : expr.slice(0, sep);
+    const fallback = sep === -1 ? undefined : expr.slice(sep + 2);
+    if (values !== undefined && Object.hasOwn(values, name))
+      return values[name]!;
+    if (!requireAll && fallback === "") return "";
+    complete = false;
+    return match;
+  });
+  return requireAll && !complete ? undefined : filled;
 }
 
 const sanitizeServerPart = (part: string): string =>
@@ -323,13 +400,34 @@ function resolveStdio(
   const dataRooted = cwd?.startsWith("${PLUGIN_DATA}") === true;
   if (!isWithin(dataRooted ? resolvedPathSync(data) : root, dir))
     throw new Error(`cwd of ${server.name} resolves outside its directory`);
+  const binding = plugin.bindings[server.name];
+  const deferredEnv: Record<string, string> = {};
+  if (binding !== undefined) {
+    for (const [name, spec] of Object.entries(binding.env)) {
+      if (!spec.includes("${") || !hasBuiltinPlaceholder(spec)) continue;
+      const filled = expandForeign(
+        spec,
+        root,
+        data,
+        config?.templateValues,
+        true,
+      );
+      if (filled !== undefined) deferredEnv[name] = filled;
+    }
+  }
   return {
     name: sessionServerName(plugin.manifest.name, server.name),
     plugin: plugin.manifest.name,
     server: server.name,
     type: "stdio",
     command: command.startsWith("./") ? resolve(root, command) : command,
-    args: args.map((arg) => expand(arg, root, data)),
+    args: args.map((arg, index) => {
+      const template = binding?.args?.[index];
+      return template !== undefined
+        ? (expandForeign(template, root, data, config?.templateValues, false) ??
+            arg)
+        : expand(arg, root, data);
+    }),
     env: {
       ...Object.fromEntries(
         Object.entries(env).map(([name, value]) => [
@@ -337,6 +435,7 @@ function resolveStdio(
           expand(value, root, data),
         ]),
       ),
+      ...deferredEnv,
       ...config?.env,
       PLUGIN_ROOT: root,
       PLUGIN_DATA: data,
@@ -405,6 +504,9 @@ export function resolvePluginServers(
   return resolved;
 }
 
+const sessionShell = (): string =>
+  process.platform === "win32" ? windowsShell(localWindowsProbe) : "/bin/sh";
+
 /**
  * The shape an external runtime takes (oar's `SessionMcpServer`). A runtime has no working
  * directory for a stdio server, so it is started through `sh`; sse is left out.
@@ -435,7 +537,7 @@ export function toSessionServers(
     return [
       {
         name: server.name,
-        command: "/bin/sh",
+        command: sessionShell(),
         args: [
           "-c",
           'cd "$0" && exec "$@"',

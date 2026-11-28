@@ -11,7 +11,7 @@ import type { HostService } from "../src/upgrade/service";
 import { existsSync, realpathSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { releaseSource } from "../src/upgrade/command";
 import {
   savedPrerelease,
@@ -529,6 +529,30 @@ describe("the update button's target", () => {
 
   describe("a token saved on the page", () => {
     const { findToken: _, ...real } = options;
+    const tokenEnvKeys = [
+      "GH_TOKEN",
+      "GITHUB_TOKEN",
+      "GH_ENTERPRISE_TOKEN",
+      "GITHUB_ENTERPRISE_TOKEN",
+      "ETA_RELEASES_TOKEN",
+    ] as const;
+    let savedEnv: Record<string, string | undefined> = {};
+
+    beforeEach(() => {
+      savedEnv = {};
+      for (const key of tokenEnvKeys) {
+        savedEnv[key] = process.env[key];
+        delete process.env[key];
+      }
+    });
+
+    afterEach(() => {
+      for (const key of tokenEnvKeys) {
+        if (savedEnv[key] === undefined) delete process.env[key];
+        else process.env[key] = savedEnv[key];
+      }
+    });
+
     const dbText = async (dataDir: string) =>
       await readFile(join(dataDir, "eta.sqlite"), "latin1").then(
         async (db) =>
@@ -717,8 +741,20 @@ describe("the update button's target", () => {
 
   it.each([
     ["source", { compiled: false }],
-    ["no-service", { findService: () => Promise.resolve(undefined) }],
-    ["no-service", { findService: () => Promise.resolve(service(false)) }],
+    [
+      "no-service",
+      {
+        findService: () => Promise.resolve(undefined),
+        platform: "linux" as const,
+      },
+    ],
+    [
+      "no-service",
+      {
+        findService: () => Promise.resolve(service(false)),
+        platform: "linux" as const,
+      },
+    ],
     [
       "no-windows-service",
       {

@@ -59,6 +59,10 @@ export function Settings(
     onTask: (id: string) => void;
     /** Start from a template instead: the workspace opens the template gallery; no link without it. */
     onTemplates?: () => void;
+    /** Jump to the Plugins marketplace tab; no link without it. */
+    onOpenMarket?: () => void;
+    /** Jump to the Plugins page (optionally on a specific plugin); no link without it. */
+    onOpenPlugins?: (plugin?: string) => void;
     onClose: () => void;
   },
 ) {
@@ -473,6 +477,20 @@ export function Settings(
               (() => {
                 agent.set(undefined);
                 props.onTemplates?.();
+              })
+            }
+            onOpenMarket={
+              props.onOpenMarket &&
+              (() => {
+                agent.set(undefined);
+                props.onOpenMarket?.();
+              })
+            }
+            onOpenPlugins={
+              props.onOpenPlugins &&
+              ((plugin) => {
+                agent.set(undefined);
+                props.onOpenPlugins?.(plugin);
               })
             }
           />

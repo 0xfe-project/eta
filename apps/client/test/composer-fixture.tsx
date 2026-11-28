@@ -1,12 +1,71 @@
 import type { MemberView, MessageView } from "@eta/client-contracts";
-import { mount, signal, Text, View, windowSize } from "nsh";
+import { readFile, stat } from "fs/promises";
+import { platform } from "os";
+import { cleanup, mount, signal, Text, View, windowSize } from "nsh";
 import { Button } from "../src/components";
+import { setLocalFileFsForTest } from "../src/components/eta-editor/local-file";
 import { NotificationHost } from "../src/components/notifications";
 import { Composer } from "../src/pages/chat/composer";
 import { resumeComposerOutbox } from "../src/pages/chat/composer-draft";
 import { createHost, Host } from "../src/services/host";
 
+const PIXEL_PNG = Uint8Array.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+  0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x08, 0x02,
+  0x00, 0x00, 0x00, 0x3b, 0x96, 0x39, 0x91, 0x00, 0x00, 0x00, 0x10, 0x49, 0x44,
+  0x41, 0x54, 0x78, 0x9c, 0x63, 0x70, 0x68, 0x38, 0x00, 0x47, 0x0c, 0x38, 0x39,
+  0x00, 0x59, 0x36, 0x12, 0x01, 0xd3, 0x5e, 0xf9, 0x63, 0x00, 0x00, 0x00, 0x00,
+  0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+]);
+
 function Fixture() {
+  if (platform() === "windows") {
+    cleanup(
+      setLocalFileFsForTest({
+        stat: async (path) => {
+          try {
+            return await stat(path);
+          } catch (error) {
+            if (
+              !/capabilities\.fs\.read/.test(String(error)) ||
+              !/^[a-z]:\//i.test(path)
+            )
+              throw error;
+            const normalized = path.replace(/\/+$/, "");
+            if (normalized.endsWith("/apps/client/test/fixtures")) {
+              return { isDirectory: () => true, size: 0 };
+            }
+            if (normalized.endsWith("/apps/client/test/fixtures/pixel.png")) {
+              return { isDirectory: () => false, size: PIXEL_PNG.byteLength };
+            }
+            if (normalized.endsWith("/apps/client/test/composer-fixture.tsx")) {
+              return { isDirectory: () => false, size: 11 };
+            }
+            throw error;
+          }
+        },
+        readFile: async (path) => {
+          try {
+            return await readFile(path);
+          } catch (error) {
+            if (
+              !/capabilities\.fs\.read/.test(String(error)) ||
+              !/^[a-z]:\//i.test(path)
+            )
+              throw error;
+            const normalized = path.replace(/\/+$/, "");
+            if (normalized.endsWith("/apps/client/test/fixtures/pixel.png")) {
+              return PIXEL_PNG;
+            }
+            if (normalized.endsWith("/apps/client/test/composer-fixture.tsx")) {
+              return new TextEncoder().encode("// fixture\n");
+            }
+            throw error;
+          }
+        },
+      }),
+    );
+  }
   const host = createHost();
   host.address.set({ origin: "http://example.invalid" });
   host.state.update((state) => ({ ...state, status: "open" }));

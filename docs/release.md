@@ -185,7 +185,7 @@ Host upgrades are available in Settings → Update when the host is managed by t
 
 There are two workflows, both reuse `scripts/upgrade-e2e/`, both can only prove what can be tested on runner: auto-start after restart and real logged-in user credentials must be tested on real machine.
 
-- `upgrade-e2e.yml`: on real macOS and Windows runners, using fake Release server (`fake-releases.ts`) upgrade between several variants of this build, covers success, various failure fallbacks and uninstall, about 15 minutes. Only runs on PRs that change service or upgrade-related code, not a release gate.
+- `host-upgrade-e2e.yml` (`Host upgrade E2E`): on real macOS and Windows runners, using fake Release server (`fake-releases.ts`) upgrade between several variants of this build, covers success, various failure fallbacks and uninstall, about 15 minutes. Tightly scoped on PRs and pushes to `main` that touch service, daemon swap, or upgrade/update-UI code, and runs unconditionally on Nightly (`nightly.yml`); not a release gate.
 - `upgrade-cross.yml`: upgrade between two real versions.
 
 ### Cross-version upgrade testing

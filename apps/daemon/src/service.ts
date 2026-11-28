@@ -169,7 +169,7 @@ export function installedEnv(
 
 /** Where launchd puts what a job prints: it keeps no log of its own. */
 export const launchdLog = (home: string, name: string): string =>
-  join(home, "Library", "Logs", "eta", `${name}.log`);
+  posix.join(home, "Library", "Logs", "eta", `${name}.log`);
 
 export function serviceDefinition(
   command: ServiceCommand,

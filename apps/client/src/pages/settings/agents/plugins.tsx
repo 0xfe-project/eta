@@ -1,32 +1,70 @@
 import type { PluginView } from "@eta/client-contracts";
 import type { AgentForm } from "./form";
-import { View } from "nsh";
-import { colors, Label, row } from "../../../components";
+import { signal, View } from "nsh";
+import { Button, colors, Label, row } from "../../../components";
 import { EmptyState } from "../../../components/empty-state";
-import { icon, opacity, space, weight } from "../../../components/tokens";
+import {
+  control,
+  icon,
+  opacity,
+  space,
+  weight,
+} from "../../../components/tokens";
 import { localizedText, uiText } from "../../../i18n";
-
 import { useHost } from "../../../services/host";
 import { useLoadState } from "../../../services/load-status";
 import { CheckControl } from "../../../ui";
 import { useComposioPlugins } from "../../plugins/composio-plugins";
+import { ConfigurePlugin } from "../../plugins/configure";
+import { ServersDialog } from "../../plugins/servers-panel";
 import { SectionHeader, StatusLane, StatusLine, WarningLine } from "../section";
 
 /** A plugin's status column: room for "Needs setup" and its dot. */
 const pluginLaneWidth = 108;
 
-export function AgentPlugins(props: { form: AgentForm }) {
+/** Pick which inline setup modal resolves a `needs_config` plugin (fields vs stdio `missingEnv`). */
+export function pluginSetupModal(item: PluginView): "configure" | "servers" {
+  const needsFields = item.fields.some(
+    (field) => (field.required && !field.set) || field.issue !== null,
+  );
+  if (needsFields) return "configure";
+  const needsEnv = item.servers.some(
+    (server) => (server.missingEnv?.length ?? 0) > 0,
+  );
+  if (needsEnv || item.fields.length === 0) return "servers";
+  return "configure";
+}
+
+export function AgentPlugins(props: {
+  form: AgentForm;
+  onOpenMarket?: () => void;
+  onOpenPlugins?: (plugin?: string) => void;
+}) {
   const { plugins, phoneEditor } = props.form;
   const host = useHost();
   const c = colors();
+  const phone = () => Boolean(props.form.phone);
+  const tablet = () => Boolean(props.form.tablet);
   const activePlugins = () => host.list<PluginView>("plugins");
   /** The connected Composio toolkits, as plugins of their own after the installed ones. */
   const composio = useComposioPlugins();
   const shown = () => activePlugins().length + composio.list().length;
   const load = useLoadState({ targets: () => ["plugins"] });
+  const configuring = signal<string | undefined>(undefined);
+  const servers = signal<string | undefined>(undefined);
+  const configuringItem = () =>
+    activePlugins().find((item) => item.name === configuring());
+  const serversItem = () =>
+    activePlugins().find((item) => item.name === servers());
+
+  function openSetup(item: PluginView) {
+    if (pluginSetupModal(item) === "configure") configuring.set(item.name);
+    else servers.set(item.name);
+  }
+
   const transports = { stdio: "stdio", "streamable-http": "HTTP", sse: "SSE" };
   const meta = (item: PluginView) => {
-    const servers = item.servers
+    const serversText = item.servers
       .map((server) => `${transports[server.transport]} ${server.name}`)
       .join(", ");
     return [
@@ -37,7 +75,7 @@ export function AgentPlugins(props: { form: AgentForm }) {
       localizedText(
         `${item.servers.length} MCP server${item.servers.length === 1 ? "" : "s"}`,
         `${item.servers.length} 个 MCP 服务器`,
-      ) + (servers ? ` (${servers})` : ""),
+      ) + (serversText ? ` (${serversText})` : ""),
     ].join(" · ");
   };
   /** The phone lists the counts and the servers on lines of their own. */
@@ -71,7 +109,17 @@ export function AgentPlugins(props: { form: AgentForm }) {
           title={uiText("plugins")}
           count={shown()}
           description={uiText("pluginsHint")}
-        />
+        >
+          <If when={props.onOpenMarket}>
+            <Button
+              label={uiText("browseMarket")}
+              tone="ghost"
+              size={control.sm}
+              style={{ paddingHorizontal: space[8] }}
+              onPress={() => props.onOpenMarket?.()}
+            />
+          </If>
+        </SectionHeader>
       </If>
       <If
         when={shown()}
@@ -89,6 +137,14 @@ export function AgentPlugins(props: { form: AgentForm }) {
               art: "plugins",
               title: uiText("noPluginsInstalled"),
               description: uiText("noPluginsInstalledHint"),
+              actions: props.onOpenMarket
+                ? [
+                    {
+                      label: uiText("browseMarket"),
+                      onPress: () => props.onOpenMarket?.(),
+                    },
+                  ]
+                : undefined,
             }}
           />
         }
@@ -97,21 +153,10 @@ export function AgentPlugins(props: { form: AgentForm }) {
           {(item) => {
             const checked = () => plugins().includes(item().name);
             const ready = () => item().state === "ready";
+            const needsSetup = () =>
+              item().enabled && item().state === "needs_config";
             return (
-              <CheckControl
-                label={item().name}
-                checked={checked()}
-                disabled={!ready() && !checked()}
-                onChange={(enabled) =>
-                  plugins.update((list) =>
-                    enabled
-                      ? [...new Set([...list, item().name])]
-                      : list.filter((entry) => entry !== item().name),
-                  )
-                }
-                size={icon.md}
-                markSize={icon.sm}
-                indicatorStyle={{ margin: phoneEditor() ? space[8] : space[4] }}
+              <View
                 style={{
                   ...row,
                   alignItems: "flex-start",
@@ -120,62 +165,97 @@ export function AgentPlugins(props: { form: AgentForm }) {
                   gap: space[8],
                   borderBottomWidth: 1,
                   borderColor: c().border,
-                  cursor: ready() || checked() ? "pointer" : "default",
                   opacity: item().enabled ? 1 : opacity.muted,
                 }}
               >
-                <If
-                  when={phoneEditor()}
-                  else={
-                    <>
-                      <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-                        <Label weight={weight.regular}>{item().name}</Label>
-                        <If
-                          when={checked() && !ready()}
-                          else={
-                            <Label variant="small" tone="muted">
-                              {meta(item())}
-                            </Label>
-                          }
-                        >
-                          <WarningLine
-                            text={localizedText(
-                              "Its configuration no longer fits. Sessions skip it.",
-                              "其配置已不适用，会话会跳过此插件。",
-                            )}
-                          />
-                        </If>
-                      </View>
-                      <If when={status(item())}>
-                        {(shown) => (
-                          <StatusLane
-                            width={pluginLaneWidth}
-                            status={shown()}
-                          />
-                        )}
-                      </If>
-                    </>
+                <CheckControl
+                  label={item().name}
+                  checked={checked()}
+                  disabled={!ready() && !checked()}
+                  onChange={(enabled) =>
+                    plugins.update((list) =>
+                      enabled
+                        ? [...new Set([...list, item().name])]
+                        : list.filter((entry) => entry !== item().name),
+                    )
                   }
+                  size={icon.md}
+                  markSize={icon.sm}
+                  indicatorStyle={{
+                    margin: phoneEditor() ? space[8] : space[4],
+                  }}
+                  style={{
+                    ...row,
+                    flex: 1,
+                    minWidth: 0,
+                    alignItems: "flex-start",
+                    gap: space[8],
+                    cursor: ready() || checked() ? "pointer" : "default",
+                  }}
                 >
-                  <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
-                    <Label weight={weight.regular}>{item().name}</Label>
-                    <If when={status(item())}>
-                      {(shown) => <StatusLine status={shown()} />}
-                    </If>
-                    <Label variant="small" tone="muted">
-                      {counts(item())}
-                    </Label>
-                    <If when={serverLine(item())}>
+                  <If
+                    when={phoneEditor()}
+                    else={
+                      <>
+                        <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+                          <Label weight={weight.regular}>{item().name}</Label>
+                          <If
+                            when={checked() && !ready()}
+                            else={
+                              <Label variant="small" tone="muted">
+                                {meta(item())}
+                              </Label>
+                            }
+                          >
+                            <WarningLine
+                              text={localizedText(
+                                "Its configuration no longer fits. Sessions skip it.",
+                                "其配置已不适用，会话会跳过此插件。",
+                              )}
+                            />
+                          </If>
+                        </View>
+                        <If when={status(item())}>
+                          {(shownStatus) => (
+                            <StatusLane
+                              width={pluginLaneWidth}
+                              status={shownStatus()}
+                            />
+                          )}
+                        </If>
+                      </>
+                    }
+                  >
+                    <View style={{ flex: 1, minWidth: 0, gap: space[2] }}>
+                      <Label weight={weight.regular}>{item().name}</Label>
+                      <If when={status(item())}>
+                        {(shownStatus) => <StatusLine status={shownStatus()} />}
+                      </If>
                       <Label variant="small" tone="muted">
-                        {serverLine(item())}
+                        {counts(item())}
                       </Label>
-                    </If>
-                    <If when={checked() && !ready()}>
-                      <WarningLine text={uiText("pluginConfigurationStale")} />
-                    </If>
-                  </View>
+                      <If when={serverLine(item())}>
+                        <Label variant="small" tone="muted">
+                          {serverLine(item())}
+                        </Label>
+                      </If>
+                      <If when={checked() && !ready()}>
+                        <WarningLine
+                          text={uiText("pluginConfigurationStale")}
+                        />
+                      </If>
+                    </View>
+                  </If>
+                </CheckControl>
+                <If when={needsSetup()}>
+                  <Button
+                    label={uiText("configure")}
+                    size={control.sm}
+                    style={{ paddingHorizontal: space[8], flexShrink: 0 }}
+                    onPress={() => openSetup(item())}
+                  />
                 </If>
-              </CheckControl>
+              </View>
             );
           }}
         </Each>
@@ -233,13 +313,52 @@ export function AgentPlugins(props: { form: AgentForm }) {
                 <If when={!phoneEditor() && !item().enabled}>
                   <View testID="composio-plugin-off" style={{ flexShrink: 0 }}>
                     {/* design-value: the status lane's own width, as on the installed plugin row */}
-                    <StatusLane width={108} status={off()} />
+                    <StatusLane width={pluginLaneWidth} status={off()} />
                   </View>
                 </If>
               </CheckControl>
             );
           }}
         </Each>
+        <If when={phoneEditor() && props.onOpenMarket}>
+          <View
+            style={{
+              paddingHorizontal: space[16],
+              paddingVertical: space[12],
+            }}
+          >
+            <Button
+              label={uiText("browseMarket")}
+              size={control.md}
+              style={{ paddingHorizontal: space[12] }}
+              onPress={() => props.onOpenMarket?.()}
+            />
+          </View>
+        </If>
+      </If>
+      <If when={configuringItem()}>
+        {(item) => (
+          <ConfigurePlugin
+            item={item()}
+            phone={phone()}
+            tablet={tablet()}
+            onClose={() => configuring.set(undefined)}
+            onServers={() => {
+              const pluginName = item().name;
+              configuring.set(undefined);
+              servers.set(pluginName);
+            }}
+          />
+        )}
+      </If>
+      <If when={serversItem()}>
+        {(item) => (
+          <ServersDialog
+            item={item()}
+            phone={phone()}
+            onClose={() => servers.set(undefined)}
+          />
+        )}
       </If>
     </View>
   );

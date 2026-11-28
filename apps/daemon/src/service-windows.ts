@@ -23,7 +23,7 @@ import type {
 import { existsSync, readFileSync } from "node:fs";
 import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, win32 } from "node:path";
+import { basename, dirname, isAbsolute, join, win32 } from "node:path";
 import process from "node:process";
 import { createInterface } from "node:readline/promises";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -206,6 +206,14 @@ async function stopAndWait(api: Api, name: string): Promise<void> {
 const serveCommand = (exe: string, name: string, config: string): string =>
   commandLine([exe, SERVICE_COMMAND, "--name", name, "--config", config]);
 
+function isServiceDir(dir: string): boolean {
+  return (
+    isAbsolute(dir) &&
+    basename(dir) === "service" &&
+    basename(dirname(dir)) === ".eta"
+  );
+}
+
 export function windowsManager(
   unit: ServiceUnit,
   options: WindowsOptions,
@@ -362,6 +370,10 @@ export function windowsManager(
     },
     uninstall: async (command) => {
       if (!api.isElevated()) throw adminError("uninstall-service");
+      if (!isServiceDir(dir))
+        throw new Error(
+          `refusing to remove unexpected service directory: ${dir}`,
+        );
       const removing = definition(command);
       for (const service of [worker.name, name]) {
         if (!api.queryService(service).installed) continue;

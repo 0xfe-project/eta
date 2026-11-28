@@ -3,6 +3,7 @@ import type { Connection } from "../src/llm/state";
 import { describe, expect, it, vi } from "vitest";
 import { Codex } from "../src/llm/codex";
 import { Gateway } from "../src/llm/gateway";
+import { Gemini } from "../src/llm/gemini";
 import { LlmError } from "../src/llm/problems";
 import { selectSourceQuota } from "../src/llm/source-quota";
 import { XAI } from "../src/llm/xai";
@@ -187,5 +188,53 @@ describe("source quota selection", () => {
     expect(selectSourceQuota([week, week, month], now)).toBeNull();
     expect(selectSourceQuota([{ ...week, used: NaN }, month], now)).toBeNull();
     expect(selectSourceQuota([week, month], Date.parse(resetsAt))).toBeNull();
+  });
+});
+
+describe("gateway refresh", () => {
+  it("re-checks accounts immediately even inside the 15s usage cooldown", async () => {
+    const cpa = {
+      credentials: { list: async () => ({ files: [] }) },
+      config: {
+        getPath: async () => ({
+          data: {
+            gemini: [{ keys: [{ "api-key": "key-1", auth_index: "idx-1" }] }],
+          },
+        }),
+      },
+      routing: {
+        modelDefinitions: async () => ({ models: [] }),
+      },
+    } as unknown as CpaClient;
+    const connector = new Gemini({ cpa: () => cpa, warn: vi.fn() });
+    let valid = true;
+    const usage = vi.spyOn(connector, "usage").mockImplementation(async () => {
+      if (!valid) throw new LlmError("invalid_api_key", "Rejected.");
+      return { windows: [] };
+    });
+    const gateway = new Gateway({
+      cpa: () => cpa,
+      connectors: [connector],
+      catalogPath: "/unused-eta-test-catalog",
+      now: () => 1_000,
+    });
+
+    await gateway.usage();
+    expect(usage).toHaveBeenCalledTimes(1);
+    expect((await gateway.connections())[0]?.state).toBe("active");
+
+    // Normal `usage()` reuses the cached check inside the 15s cooldown window.
+    valid = false;
+    await gateway.usage();
+    expect(usage).toHaveBeenCalledTimes(1);
+    expect((await gateway.connections())[0]?.state).toBe("active");
+
+    // Explicit `refresh()` bypasses the cooldown and surfaces the rejected key immediately.
+    const refreshed = await gateway.refresh();
+    expect(usage).toHaveBeenCalledTimes(2);
+    expect(refreshed.connections[0]).toMatchObject({
+      state: "needs_login",
+      error: { code: "invalid_api_key" },
+    });
   });
 });

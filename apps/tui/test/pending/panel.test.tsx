@@ -70,7 +70,10 @@ describe("the panel's lines", () => {
     await w.askIn("Ada", w.ada.group.id, "Which size?");
 
     const r = await w.showConversations([w.ben.group.id]);
-    await screenShows(r, () => tabBar(r).endsWith("Pending 3"));
+    await screenShows(
+      r,
+      (s) => tabBar(r).endsWith("Pending 3") && !s.includes("Loading"),
+    );
     await r.press(KEYS.left);
     await screenShows(r, PANEL);
 

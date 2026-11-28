@@ -67,13 +67,14 @@ const FOREIGN_FIELDS = new Set(["displayName", "logo", "category", "tags"]);
 /** Components of those plugins that eta does not load. */
 const FOREIGN_COMPONENTS = [
   "commands",
-  "agents",
   "hooks",
   "rules",
   "lspServers",
   "outputStyles",
   "themes",
 ];
+const MAX_AGENT_FILE_BYTES = 256 * 1024;
+const MAX_PLUGIN_AGENTS = 64;
 const RESERVED_ENV = new Set(["PLUGIN_ROOT", "PLUGIN_DATA"]);
 const ENV_NAME = /^[A-Z_]\w*$/i;
 /** RFC 9110's `token`. */
@@ -122,15 +123,25 @@ export interface PluginServer {
 
 /** What the extension says about one server: where the configuration goes. */
 interface PluginServerBinding {
-  /** Environment variable to field. */
+  /** Environment variable to field name, or a foreign `${VAR}` template for mixed env values. */
   env: Record<string, string>;
   /** Header name to template (`Bearer {api_key}`). */
   headers: Record<string, string>;
+  /** Foreign argument templates by index (`{ 1: "--token=${TOKEN}" }`), when args hold `${VAR}`. */
+  args?: Record<number, string>;
   /**
    * A remote server's sign-in on eta's own loop: `false` never signs in (a 401 is an error),
    * `"oauth"` always may. Left out, it is inferred (`toMcpEntries`). Ignored on stdio.
    */
   auth?: false | "oauth";
+}
+
+export interface LoadedPluginAgent {
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+  instructions: string;
 }
 
 export interface PluginPackage {
@@ -142,6 +153,7 @@ export interface PluginPackage {
   /** The manifest path of a Claude Code or Cursor layout; absent for a native plugin.json. Information, not a problem. */
   layout?: string;
   skills: PluginSkill[];
+  agents: LoadedPluginAgent[];
   servers: PluginServer[];
   fields: PluginField[];
   /** Why `config` is invalid, when it is; the plugin cannot be configured until it is fixed. */
@@ -221,7 +233,7 @@ function parseManifest(
     if (MANIFEST_FIELDS.has(field)) continue;
     if (foreign && FOREIGN_FIELDS.has(field)) continue;
     // Claude and Cursor manifests carry fields eta does not know; that is normal, not a problem.
-    if (foreign && field === "mcpServers") continue;
+    if (foreign && (field === "mcpServers" || field === "agents")) continue;
     if (foreign && field === "skills") {
       if (!skillsInPlace(raw.skills, root))
         reports.push(
@@ -473,7 +485,7 @@ async function loadServers(
   return servers;
 }
 
-/** `${NAME}` in a Claude Code or Cursor MCP file. */
+/** `${NAME}` or `${NAME:-default}` in a Claude Code or Cursor MCP file. */
 const FOREIGN_VAR = /\$\{([^}]*)\}/g;
 /** A variable that is a secret by its name. */
 const SECRET_NAME = /key|token|secret|auth|password|credential/i;
@@ -487,34 +499,95 @@ const FOREIGN_SERVER_KEYS = new Set([
   "cwd",
   "url",
   "headers",
+  "auth",
 ]);
+
+interface ForeignVarRef {
+  name: string;
+  defaultValue?: string;
+}
 
 interface ForeignServer {
   /** The server as eta's own `mcp.json` writes it. */
   raw: Record<string, unknown>;
-  /** Environment variable to the variable of the file that fills it. */
+  /** Environment variable to the field name, or a `${VAR}` template for mixed values. */
   env: Record<string, string>;
   /** Header name to template (`Bearer {TOKEN}`). */
   headers: Record<string, string>;
+  /** Argument templates by index, when args reference `${VAR}`. */
+  args?: Record<number, string>;
+  /** Remote server auth mode mapped from foreign `auth`, when declared. */
+  auth?: false | "oauth";
+  /** Every foreign variable referenced by this server, in order. */
+  vars: ForeignVarRef[];
   ignored: string[];
+  notices: string[];
 }
 
-/** The variables of `text` other than the plugin's own directory, or why it cannot be used. */
-function foreignVars(text: string): string[] | string {
-  const names: string[] = [];
-  for (const [, name] of text.matchAll(FOREIGN_VAR)) {
-    if (name === "PLUGIN_ROOT") continue;
-    if (!ENV_NAME.test(name!)) return `\${${name}} is not a plain variable`;
-    names.push(name!);
+/** Parse one `${...}` body (`NAME` or `NAME:-default`), or `null` for built-in placeholders. */
+function parseForeignExpr(expr: string): ForeignVarRef | null | string {
+  if (expr.includes("${")) return `\${${expr}} is not a plain variable`;
+  const sep = expr.indexOf(":-");
+  const name = sep === -1 ? expr : expr.slice(0, sep);
+  const defaultValue = sep === -1 ? undefined : expr.slice(sep + 2);
+  if (name === "PLUGIN_ROOT" || name === "PLUGIN_DATA")
+    return defaultValue === undefined
+      ? null
+      : `\${${expr}} is not a plain variable`;
+  if (!ENV_NAME.test(name)) return `\${${expr}} is not a plain variable`;
+  return defaultValue === undefined ? { name } : { name, defaultValue };
+}
+
+/** The variables of `text` other than built-in placeholders, or why it cannot be used. */
+function foreignVars(text: string): ForeignVarRef[] | string {
+  const vars: ForeignVarRef[] = [];
+  for (const [, expr] of text.matchAll(FOREIGN_VAR)) {
+    const parsed = parseForeignExpr(expr!);
+    if (typeof parsed === "string") return parsed;
+    if (parsed !== null) vars.push(parsed);
   }
-  return names;
+  return vars;
+}
+
+/** Variable names referenced by a foreign `${VAR}` / `${VAR:-default}` template. */
+export function foreignVarNames(text: string): string[] {
+  const parsed = foreignVars(text);
+  return typeof parsed === "string" ? [] : parsed.map((one) => one.name);
+}
+
+/** Whether `text` is a single `${VAR}` or `${VAR:-default}` placeholder with no surrounding text. */
+function singleForeignPlaceholder(text: string): string | undefined {
+  const matches = [...text.matchAll(FOREIGN_VAR)];
+  if (matches.length !== 1 || matches[0]![0] !== text) return undefined;
+  const parsed = parseForeignExpr(matches[0]![1]!);
+  return parsed !== null && typeof parsed !== "string"
+    ? parsed.name
+    : undefined;
+}
+
+/** Map a foreign server's `auth` field for remote or stdio servers. */
+function parseForeignAuth(
+  auth: unknown,
+  stdio: boolean,
+): { auth?: false | "oauth"; notice?: string; error?: string } {
+  if (auth === undefined) return {};
+  if (stdio) return { notice: "auth is for remote servers; ignored" };
+  if (auth === false) return { auth: false };
+  if (typeof auth === "string") {
+    if (/^oauth2?$/i.test(auth)) return { auth: "oauth" };
+    return { error: `unsupported auth mode ${JSON.stringify(auth)}` };
+  }
+  if (isPlain(auth) && typeof auth.type === "string") {
+    if (/^oauth2?$/i.test(auth.type)) return { auth: "oauth" };
+    if (auth.type.toLowerCase() === "none") return { auth: false };
+    return { error: `unsupported auth type ${JSON.stringify(auth.type)}` };
+  }
+  return { error: "unsupported auth configuration" };
 }
 
 /** One server of a Claude Code or Cursor file, in the shape eta's own file has, or why it is skipped. */
 function mapForeignServer(entry: unknown): ForeignServer | string {
   if (!isPlain(entry)) return "must be an object";
-  if (entry.auth !== undefined)
-    return "it signs in with OAuth, which eta does not do for these plugins";
   const swap = (text: string): string =>
     text.replaceAll("${CLAUDE_PLUGIN_ROOT}", "${PLUGIN_ROOT}");
   const ignored = Object.keys(entry).filter(
@@ -526,6 +599,13 @@ function mapForeignServer(entry: unknown): ForeignServer | string {
   };
   const env: Record<string, string> = {};
   const headers: Record<string, string> = {};
+  const argTemplates: Record<number, string> = {};
+  const vars: ForeignVarRef[] = [];
+  const notices: string[] = [];
+
+  const authMapped = parseForeignAuth(entry.auth, raw.type === "stdio");
+  if (authMapped.error !== undefined) return authMapped.error;
+  if (authMapped.notice !== undefined) notices.push(authMapped.notice);
 
   if (raw.type === "stdio") {
     if (typeof entry.command !== "string") return "command must be a string";
@@ -537,10 +617,13 @@ function mapForeignServer(entry: unknown): ForeignServer | string {
     if (entry.args !== undefined) {
       if (!isStrings(entry.args)) return "args must be strings";
       const args = entry.args.map(swap);
-      for (const arg of args) {
-        const names = foreignVars(arg);
-        if (typeof names === "string" || names.length > 0)
-          return "args hold a variable eta cannot fill in";
+      for (const [index, arg] of args.entries()) {
+        const found = foreignVars(arg);
+        if (typeof found === "string") return `args: ${found}`;
+        if (found.length > 0) {
+          argTemplates[index] = arg;
+          vars.push(...found);
+        }
       }
       raw.args = args;
     }
@@ -553,12 +636,18 @@ function mapForeignServer(entry: unknown): ForeignServer | string {
       const fixed: Record<string, string> = {};
       for (const [name, value] of Object.entries(entry.env)) {
         const text = swap(value);
-        const names = foreignVars(text);
-        if (typeof names === "string") return `env ${name}: ${names}`;
-        if (names.length === 0) fixed[name] = text;
-        else if (names.length === 1 && text === `\${${names[0]}}`)
-          env[name] = names[0]!;
-        else return `env ${name} mixes text with a variable`;
+        const found = foreignVars(text);
+        if (typeof found === "string") return `env ${name}: ${found}`;
+        if (found.length === 0) fixed[name] = text;
+        else {
+          if (RESERVED_ENV.has(name.toUpperCase()))
+            return `env must not contain ${name}`;
+          if (!ENV_NAME.test(name))
+            return `${name} cannot be set from configuration`;
+          vars.push(...found);
+          const whole = singleForeignPlaceholder(text);
+          env[name] = whole ?? text;
+        }
       }
       raw.env = fixed;
     }
@@ -568,29 +657,77 @@ function mapForeignServer(entry: unknown): ForeignServer | string {
     raw.url = entry.url;
     if (entry.headers !== undefined) {
       if (!isStringMap(entry.headers)) return "headers must be strings";
+      if (!validHeaders(entry.headers))
+        return "headers are not valid HTTP headers";
       const fixed: Record<string, string> = {};
       for (const [name, value] of Object.entries(entry.headers)) {
-        const names = foreignVars(value);
-        if (typeof names === "string") return `header ${name}: ${names}`;
-        if (value.includes("${PLUGIN_ROOT}"))
+        const text = swap(value);
+        if (text.includes("${PLUGIN_ROOT}") || text.includes("${PLUGIN_DATA}"))
           return `header ${name} holds the plugin directory`;
-        if (names.length === 0) fixed[name] = value;
-        else
-          headers[name] = value.replace(
-            FOREIGN_VAR,
-            (_, field: string) => `{${field}}`,
-          );
+        const found = foreignVars(text);
+        if (typeof found === "string") return `header ${name}: ${found}`;
+        if (found.length === 0) fixed[name] = value;
+        else {
+          vars.push(...found);
+          headers[name] = text.replace(FOREIGN_VAR, (_, expr: string) => {
+            const parsed = parseForeignExpr(expr);
+            return parsed !== null && typeof parsed !== "string"
+              ? `{${parsed.name}}`
+              : _;
+          });
+        }
       }
       raw.headers = fixed;
     }
   }
-  return { raw, env, headers, ignored };
+  return {
+    raw,
+    env,
+    headers,
+    ...(Object.keys(argTemplates).length === 0 ? {} : { args: argTemplates }),
+    ...(authMapped.auth === undefined ? {} : { auth: authMapped.auth }),
+    vars,
+    ignored,
+    notices,
+  };
+}
+
+interface ForeignVarMeta {
+  servers: string[];
+  hasUndefaulted: boolean;
+  defaultValue?: string;
+  secret: boolean;
+  hasNonEmptySecretDefault: boolean;
+}
+
+function foreignFieldSpec(
+  variable: string,
+  meta: ForeignVarMeta,
+): Record<string, unknown> {
+  const description =
+    meta.servers.length === 1
+      ? `Used by the MCP server ${meta.servers[0]}.`
+      : `Used by the MCP servers ${meta.servers.join(", ")}.`;
+  const required = meta.secret
+    ? meta.hasUndefaulted || meta.hasNonEmptySecretDefault
+    : meta.hasUndefaulted;
+  const attachDefault =
+    !meta.secret && !meta.hasUndefaulted && meta.defaultValue !== undefined;
+  return {
+    type: "string",
+    title: variable,
+    description,
+    required,
+    secret: meta.secret,
+    ...(attachDefault ? { default: meta.defaultValue } : {}),
+  };
 }
 
 /**
- * The MCP servers of a Cursor or Claude Code plugin: `.mcp.json` and a root `mcp.json`, both
- * `{ "mcpServers": { ... } }`. They become the servers eta's own file has; a `${VAR}` becomes a
- * field the user fills in after installing, and nothing runs before that.
+ * The MCP servers of a Cursor or Claude Code plugin: `.mcp.json` and a root `mcp.json`, either
+ * `{ "mcpServers": { ... } }` or a flat top-level server map. They become the servers eta's own
+ * file has; a `${VAR}` (or `${VAR:-default}`) becomes a field the user fills in after installing,
+ * and nothing runs before that.
  */
 async function loadForeignServers(
   root: string,
@@ -600,6 +737,7 @@ async function loadForeignServers(
   const servers: PluginServer[] = [];
   const bindings: Record<string, PluginServerBinding> = {};
   const specs: Record<string, unknown> = {};
+  const varMeta = new Map<string, ForeignVarMeta>();
   // What plugin.json's mcpServers names (a path, a list of paths, or the servers themselves),
   // then the conventional files; a file named twice is read once.
   const sources: { file: string; inline?: unknown; declared: boolean }[] = [];
@@ -657,11 +795,29 @@ async function loadForeignServers(
         continue;
       }
     }
-    if (!isPlain(raw) || !isPlain(raw.mcpServers)) {
-      refused("it has no mcpServers object");
+    if (!isPlain(raw)) {
+      refused("it is not an object");
       continue;
     }
-    for (const [name, entry] of Object.entries(raw.mcpServers)) {
+    let serverMap: Record<string, unknown>;
+    if (Object.hasOwn(raw, "mcpServers")) {
+      if (!isPlain(raw.mcpServers)) {
+        refused("it has no mcpServers object");
+        continue;
+      }
+      serverMap = raw.mcpServers;
+    } else {
+      // Claude Code plugins may ship a flat top-level server map in `.mcp.json`.
+      const entries = Object.entries(raw).filter(
+        ([key, value]) => !(key === "$schema" && typeof value === "string"),
+      );
+      if (entries.length > 0 && entries.every(([, value]) => !isPlain(value))) {
+        refused("it has no mcpServers object");
+        continue;
+      }
+      serverMap = Object.fromEntries(entries);
+    }
+    for (const [name, entry] of Object.entries(serverMap)) {
       const skip = (why: string): void => {
         reports.push(`${file}: server ${name} skipped: ${why}`);
       };
@@ -679,21 +835,30 @@ async function loadForeignServers(
         skip(config);
         continue;
       }
-      const names = [
-        ...Object.values(mapped.env),
-        ...Object.values(mapped.headers).flatMap((t) =>
-          [...t.matchAll(/\{([^}]*)\}/g)].map((m) => m[1]!),
-        ),
-      ];
+      const nextMeta = new Map<string, ForeignVarMeta>();
+      for (const { name: variable, defaultValue } of mapped.vars) {
+        const existing = nextMeta.get(variable) ?? varMeta.get(variable);
+        const secret = existing?.secret ?? SECRET_NAME.test(variable);
+        const merged: ForeignVarMeta = existing
+          ? { ...existing, servers: [...existing.servers] }
+          : {
+              servers: [],
+              hasUndefaulted: false,
+              secret,
+              hasNonEmptySecretDefault: false,
+            };
+        if (!merged.servers.includes(name)) merged.servers.push(name);
+        if (defaultValue === undefined) merged.hasUndefaulted = true;
+        else if (secret) {
+          if (defaultValue !== "") merged.hasNonEmptySecretDefault = true;
+        } else if (merged.defaultValue === undefined) {
+          merged.defaultValue = defaultValue;
+        }
+        nextMeta.set(variable, merged);
+      }
       const fresh: Record<string, unknown> = {};
-      for (const variable of names)
-        fresh[variable] = {
-          type: "string",
-          title: variable,
-          description: `Used by the MCP server ${name}.`,
-          required: true,
-          secret: SECRET_NAME.test(variable),
-        };
+      for (const [variable, meta] of nextMeta)
+        fresh[variable] = foreignFieldSpec(variable, meta);
       const { problems } = parseConfigFields({ ...specs, ...fresh });
       if (problems.length > 0) {
         skip(
@@ -701,13 +866,23 @@ async function loadForeignServers(
         );
         continue;
       }
+      for (const [variable, meta] of nextMeta) varMeta.set(variable, meta);
       Object.assign(specs, fresh);
       servers.push({ name, config });
       if (
         Object.keys(mapped.env).length > 0 ||
-        Object.keys(mapped.headers).length > 0
+        Object.keys(mapped.headers).length > 0 ||
+        mapped.args !== undefined ||
+        mapped.auth !== undefined
       )
-        bindings[name] = { env: mapped.env, headers: mapped.headers };
+        bindings[name] = {
+          env: mapped.env,
+          headers: mapped.headers,
+          ...(mapped.args === undefined ? {} : { args: mapped.args }),
+          ...(mapped.auth === undefined ? {} : { auth: mapped.auth }),
+        };
+      for (const notice of mapped.notices)
+        reports.push(`${file}: server ${name}: ${notice}`);
       if (mapped.ignored.length > 0)
         reports.push(
           `${file}: server ${name}: ${mapped.ignored.join(", ")} not supported by eta; ignored`,
@@ -840,6 +1015,7 @@ function parseExtension(
   raw: unknown,
   servers: PluginServer[],
   reports: string[],
+  extraFields: readonly PluginField[] = [],
 ): Pick<
   PluginPackage,
   "fields" | "configProblems" | "bindings" | "requires" | "servers"
@@ -854,7 +1030,12 @@ function parseExtension(
     if (!["config", "mcp", "requires"].includes(key))
       reports.push(`extensions.${ETA_EXTENSION}.${key} is unknown; ignored`);
   const { fields, problems: configProblems } = parseConfigFields(raw.config);
-  const known = new Set(fields.map((field) => field.name));
+  const known = new Set([
+    ...fields.map((field) => field.name),
+    ...(configProblems.length === 0
+      ? extraFields.map((field) => field.name)
+      : []),
+  ]);
 
   let requires: string[] = [];
   if (raw.requires !== undefined) {
@@ -957,6 +1138,524 @@ export function fillTemplate(
   return complete ? filled : undefined;
 }
 
+/** Merge a foreign server's auto-mapped binding with an explicit eta extension binding. */
+function mergeBindings(
+  base: PluginServerBinding | undefined,
+  over: PluginServerBinding | undefined,
+): PluginServerBinding | undefined {
+  if (base === undefined) return over;
+  if (over === undefined) return base;
+  const overHeaderNames = new Set(
+    Object.keys(over.headers).map((name) => name.toLowerCase()),
+  );
+  const headers: Record<string, string> = {
+    ...Object.fromEntries(
+      Object.entries(base.headers).filter(
+        ([name]) => !overHeaderNames.has(name.toLowerCase()),
+      ),
+    ),
+    ...over.headers,
+  };
+  const auth = over.auth !== undefined ? over.auth : base.auth;
+  return {
+    env: { ...base.env, ...over.env },
+    headers,
+    ...(base.args === undefined ? {} : { args: { ...base.args } }),
+    ...(auth === undefined ? {} : { auth }),
+  };
+}
+
+const toPosixRelative = (root: string, path: string): string =>
+  relative(root, path).split(sep).join("/");
+
+function slugifyAgentId(stem: string): string {
+  const slug = stem
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug === ""
+    ? "agent"
+    : slug.slice(0, 64).replace(/-+$/, "") || "agent";
+}
+
+function humanizeStem(stem: string): string {
+  const words = stem.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (words === "") return stem;
+  return words.replace(/\b[a-z]/g, (char) => char.toUpperCase());
+}
+
+function hasClosingQuote(text: string, quote: "'" | '"'): boolean {
+  if (text.length < 2 || !text.endsWith(quote)) return false;
+  if (quote === "'") {
+    let count = 0;
+    for (let i = text.length - 1; i >= 1 && text[i] === "'"; i--) count++;
+    return count % 2 === 1;
+  }
+  let backslashes = 0;
+  for (let i = text.length - 2; i >= 1 && text[i] === "\\"; i--) backslashes++;
+  return backslashes % 2 === 0;
+}
+
+function unquoteYamlScalar(raw: string): string {
+  const trimmed = raw.trim();
+  if (
+    trimmed.length >= 2 &&
+    trimmed.startsWith("'") &&
+    hasClosingQuote(trimmed, "'")
+  )
+    return trimmed.slice(1, -1).replaceAll("''", "'");
+  if (
+    trimmed.length >= 2 &&
+    trimmed.startsWith('"') &&
+    hasClosingQuote(trimmed, '"')
+  )
+    return trimmed.slice(1, -1).replace(/\\(.)/g, (_, escaped: string) => {
+      if (escaped === "n") return "\n";
+      if (escaped === "r") return "\r";
+      if (escaped === "t") return "\t";
+      if (escaped === '"') return '"';
+      if (escaped === "\\") return "\\";
+      return escaped;
+    });
+  if (trimmed === "null" || trimmed === "~") return "";
+  return trimmed;
+}
+
+function parseBlockScalar(lines: string[], style: "|" | ">"): string {
+  let end = lines.length - 1;
+  while (end >= 0 && lines[end]!.trim() === "") end--;
+  if (end < 0) return "";
+  const slice = lines.slice(0, end + 1);
+  let minIndent = Number.POSITIVE_INFINITY;
+  for (const line of slice) {
+    if (line.trim() === "") continue;
+    const indent = /^[ \t]*/.exec(line)![0].length;
+    if (indent < minIndent) minIndent = indent;
+  }
+  const dedented = slice.map((line) =>
+    line.trim() === "" ? "" : line.slice(minIndent),
+  );
+  if (style === "|") return dedented.join("\n").trim();
+  const paragraphs: string[] = [];
+  let current: string[] = [];
+  for (const line of dedented) {
+    if (line === "") {
+      if (current.length > 0) {
+        paragraphs.push(current.join(" "));
+        current = [];
+      }
+    } else {
+      current.push(line.trim());
+    }
+  }
+  if (current.length > 0) paragraphs.push(current.join(" "));
+  return paragraphs.join("\n\n").trim();
+}
+
+function parseAgentFrontmatter(lines: string[]): {
+  name: string;
+  description: string;
+} {
+  let name = "";
+  let description = "";
+  const assign = (key: string, value: string): void => {
+    const clean = value.trim();
+    if (key === "name") name = clean;
+    else if (key === "description") description = clean;
+  };
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i]!;
+    if (line.trim() === "" || line.trimStart().startsWith("#")) {
+      i++;
+      continue;
+    }
+    const match = /^([a-z_][\w-]*)[ \t]*:(.*)$/i.exec(line);
+    if (match === null) {
+      i++;
+      continue;
+    }
+    const key = match[1]!;
+    const rest = match[2]!.trim();
+    i++;
+    const blockHeader = /^([|>])(?:[+-]?\d*|\d*[+-]?)[ \t]*(?:#.*)?$/.exec(
+      rest,
+    );
+    if (blockHeader !== null) {
+      const blockLines: string[] = [];
+      while (
+        i < lines.length &&
+        (lines[i]!.trim() === "" || /^[ \t]/.test(lines[i]!))
+      ) {
+        blockLines.push(lines[i]!);
+        i++;
+      }
+      if (key === "name" || key === "description")
+        assign(key, parseBlockScalar(blockLines, blockHeader[1] as "|" | ">"));
+      continue;
+    }
+    if (rest === "") {
+      const indented: string[] = [];
+      while (
+        i < lines.length &&
+        (lines[i]!.trim() === "" || /^[ \t]/.test(lines[i]!))
+      ) {
+        indented.push(lines[i]!);
+        i++;
+      }
+      if (key === "name" || key === "description") {
+        const firstNonEmpty = indented.find((item) => item.trim() !== "");
+        if (
+          firstNonEmpty !== undefined &&
+          !firstNonEmpty.trimStart().startsWith("- ")
+        )
+          assign(key, unquoteYamlScalar(parseBlockScalar(indented, ">")));
+      }
+      continue;
+    }
+    const quote = rest.startsWith('"')
+      ? '"'
+      : rest.startsWith("'")
+        ? "'"
+        : undefined;
+    if (quote !== undefined) {
+      let combined = rest;
+      while (!hasClosingQuote(combined, quote) && i < lines.length) {
+        combined = `${combined}\n${lines[i]!.trim()}`;
+        i++;
+      }
+      if (key === "name" || key === "description")
+        assign(key, unquoteYamlScalar(combined));
+      continue;
+    }
+    const parts = [rest];
+    while (i < lines.length && /^[ \t]+\S/.test(lines[i]!)) {
+      parts.push(lines[i]!.trim());
+      i++;
+    }
+    if (key === "name" || key === "description")
+      assign(key, unquoteYamlScalar(parts.join(" ")));
+  }
+  return { name, description };
+}
+
+function extractFirstParagraph(lines: string[]): string {
+  const isBlockStart = (line: string): boolean =>
+    /^(?:#{1,6}[ \t]|```|~~~|>|[*+-][ \t]|\d+\.[ \t]|(?:---|\*\*\*|___)[ \t]*$|\|)/.test(
+      line,
+    );
+  let i = 0;
+  while (i < lines.length && lines[i]!.trim() === "") i++;
+  const collected: string[] = [];
+  while (i < lines.length) {
+    const line = lines[i]!.trim();
+    if (line === "" || isBlockStart(line)) break;
+    collected.push(line);
+    i++;
+  }
+  return collected.join(" ").trim();
+}
+
+function parseAgentMarkdown(
+  text: string,
+  stem: string,
+): { name: string; description: string; instructions: string } | null {
+  const normalized = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+  if (/^---[ \t]*(?:\n|$)/.test(normalized)) {
+    const lines = normalized.split("\n");
+    const closeIndex = lines.findIndex(
+      (line, index) => index > 0 && /^---[ \t]*$/.test(line),
+    );
+    if (closeIndex !== -1) {
+      const meta = parseAgentFrontmatter(lines.slice(1, closeIndex));
+      const instructions = lines
+        .slice(closeIndex + 1)
+        .join("\n")
+        .trim();
+      if (instructions === "") return null;
+      return {
+        name: meta.name || humanizeStem(stem),
+        description: meta.description,
+        instructions,
+      };
+    }
+  }
+  const trimmed = normalized.trim();
+  if (trimmed === "") return null;
+  const lines = trimmed.split("\n");
+  const firstLine = lines[0]!;
+  if (/^#[ \t]+\S/.test(firstLine)) {
+    const title = firstLine
+      .slice(1)
+      .trim()
+      .replace(/[ \t]+#+$/, "")
+      .trim();
+    const name = title || humanizeStem(stem);
+    const description = extractFirstParagraph(lines.slice(1));
+    return { name, description, instructions: trimmed };
+  }
+  return {
+    name: humanizeStem(stem),
+    description: "",
+    instructions: trimmed,
+  };
+}
+
+interface AgentCandidate {
+  relPath: string;
+  fullPath: string;
+  realPath: string;
+  stem: string;
+  size: number;
+}
+
+async function scanAgentDir(
+  dir: string,
+  root: string,
+  reports: string[],
+  candidates: AgentCandidate[],
+  seenReal: Set<string>,
+): Promise<void> {
+  for (const entryName of readdirSync(dir).sort()) {
+    if (entryName.startsWith(".")) continue;
+    const entryPath = join(dir, entryName);
+    const relEntry = toPosixRelative(root, entryPath);
+    let linkStat;
+    try {
+      linkStat = lstatSync(entryPath);
+    } catch {
+      continue;
+    }
+    const real = await resolvedPath(entryPath);
+    const stat = statSync(entryPath, { throwIfNoEntry: false });
+    if (!isWithin(root, real)) {
+      if (
+        /\.md$/i.test(entryName) ||
+        stat?.isDirectory() === true ||
+        linkStat.isSymbolicLink()
+      )
+        reports.push(`${relEntry}: resolves outside the plugin; skipped`);
+      continue;
+    }
+    if (stat === undefined) continue;
+    if (stat.isFile()) {
+      if (!/\.md$/i.test(entryName)) continue;
+      if (seenReal.has(real)) continue;
+      seenReal.add(real);
+      candidates.push({
+        relPath: relEntry,
+        fullPath: entryPath,
+        realPath: real,
+        stem: entryName.replace(/\.md$/i, ""),
+        size: stat.size,
+      });
+    } else if (stat.isDirectory()) {
+      const nestedFile = join(entryPath, "AGENT.md");
+      try {
+        lstatSync(nestedFile);
+      } catch {
+        continue;
+      }
+      const relNested = toPosixRelative(root, nestedFile);
+      const nestedReal = await resolvedPath(nestedFile);
+      if (!isWithin(root, nestedReal)) {
+        reports.push(`${relNested}: resolves outside the plugin; skipped`);
+        continue;
+      }
+      const nestedStat = statSync(nestedFile, { throwIfNoEntry: false });
+      if (nestedStat?.isFile() !== true) continue;
+      if (seenReal.has(nestedReal)) continue;
+      seenReal.add(nestedReal);
+      candidates.push({
+        relPath: relNested,
+        fullPath: nestedFile,
+        realPath: nestedReal,
+        stem: entryName,
+        size: nestedStat.size,
+      });
+    }
+  }
+}
+
+async function loadPluginAgents(
+  root: string,
+  reports: string[],
+  declared?: unknown,
+): Promise<LoadedPluginAgent[]> {
+  const candidates: AgentCandidate[] = [];
+  const seenReal = new Set<string>();
+  const scannedDirs = new Set<string>();
+  const badPaths = new Set<string>();
+
+  const scanOnce = async (dir: string, realDir: string): Promise<void> => {
+    if (scannedDirs.has(realDir)) return;
+    scannedDirs.add(realDir);
+    await scanAgentDir(dir, root, reports, candidates, seenReal);
+  };
+
+  const defaultDir = join(root, "agents");
+  let hasDefault = false;
+  try {
+    lstatSync(defaultDir);
+    hasDefault = true;
+  } catch {
+    hasDefault = false;
+  }
+  if (hasDefault) {
+    const resolved = await resolvedPath(defaultDir);
+    if (
+      !isWithin(root, resolved) ||
+      statSync(defaultDir, { throwIfNoEntry: false })?.isDirectory() !== true
+    ) {
+      badPaths.add("agents");
+      reports.push("agents: not a directory inside the plugin; ignored");
+    } else {
+      await scanOnce(defaultDir, resolved);
+    }
+  }
+
+  if (declared !== undefined) {
+    const items =
+      typeof declared === "string"
+        ? [declared]
+        : Array.isArray(declared)
+          ? declared
+          : null;
+    if (items === null) {
+      reports.push(
+        "plugin.json: agents must be a path or list of paths; ignored",
+      );
+    } else {
+      for (const item of items) {
+        if (typeof item !== "string" || item.trim() === "") {
+          reports.push(
+            "plugin.json: agents must be a path or list of paths; ignored",
+          );
+          continue;
+        }
+        if (isAbsolute(item) || item.split(/[\\/]/).includes("..")) {
+          reports.push(
+            `plugin.json: agents path ${item}: must be relative and stay inside the plugin; ignored`,
+          );
+          continue;
+        }
+        const target = join(root, item);
+        const relTarget = toPosixRelative(root, target);
+        if (badPaths.has(relTarget)) continue;
+        let exists = false;
+        try {
+          lstatSync(target);
+          exists = true;
+        } catch {
+          exists = false;
+        }
+        if (!exists) {
+          reports.push(
+            `plugin.json: agents path ${item}: does not exist; ignored`,
+          );
+          continue;
+        }
+        const real = await resolvedPath(target);
+        if (!isWithin(root, real)) {
+          reports.push(
+            `plugin.json: agents path ${item}: resolves outside the plugin; ignored`,
+          );
+          continue;
+        }
+        const stat = statSync(target, { throwIfNoEntry: false });
+        if (stat === undefined) {
+          reports.push(
+            `plugin.json: agents path ${item}: does not exist; ignored`,
+          );
+          continue;
+        }
+        if (stat.isDirectory()) {
+          await scanOnce(target, real);
+        } else if (stat.isFile()) {
+          const fileName = basename(target);
+          if (fileName.startsWith(".") || !/\.md$/i.test(fileName)) {
+            reports.push(
+              `plugin.json: agents path ${item}: must be a markdown file; ignored`,
+            );
+            continue;
+          }
+          if (seenReal.has(real)) continue;
+          seenReal.add(real);
+          candidates.push({
+            relPath: relTarget,
+            fullPath: target,
+            realPath: real,
+            stem: fileName.replace(/\.md$/i, ""),
+            size: stat.size,
+          });
+        } else {
+          reports.push(
+            `plugin.json: agents path ${item}: not a file or directory; ignored`,
+          );
+        }
+      }
+    }
+  }
+
+  candidates.sort((a, b) =>
+    a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0,
+  );
+
+  const agents: LoadedPluginAgent[] = [];
+  const usedIds = new Set<string>();
+  const uniqueId = (base: string): string => {
+    if (!usedIds.has(base)) {
+      usedIds.add(base);
+      return base;
+    }
+    for (let n = 2; ; n++) {
+      const suffix = `-${n}`;
+      const candidate =
+        base.slice(0, Math.max(1, 64 - suffix.length)).replace(/-+$/, "") +
+        suffix;
+      if (!usedIds.has(candidate)) {
+        usedIds.add(candidate);
+        return candidate;
+      }
+    }
+  };
+
+  for (const candidate of candidates) {
+    if (candidate.size > MAX_AGENT_FILE_BYTES) {
+      reports.push(`${candidate.relPath}: exceeds 256 KiB limit; skipped`);
+      continue;
+    }
+    let text: string;
+    try {
+      text = readFileSync(candidate.fullPath, "utf8");
+    } catch (error) {
+      reports.push(
+        `${candidate.relPath}: could not be read (${messageOf(error)}); skipped`,
+      );
+      continue;
+    }
+    const parsed = parseAgentMarkdown(text, candidate.stem);
+    if (parsed === null) {
+      reports.push(`${candidate.relPath}: empty instructions; skipped`);
+      continue;
+    }
+    if (agents.length >= MAX_PLUGIN_AGENTS) {
+      reports.push(
+        `agents: limit of ${MAX_PLUGIN_AGENTS} agents reached; remaining files skipped`,
+      );
+      break;
+    }
+    agents.push({
+      id: uniqueId(slugifyAgentId(candidate.stem)),
+      name: parsed.name,
+      description: parsed.description,
+      path: candidate.relPath,
+      instructions: parsed.instructions,
+    });
+  }
+  return agents;
+}
+
 /** Read and validate the plugin at `dir`; throws `PluginError` when the spec rejects it. */
 export async function loadPlugin(dir: string): Promise<PluginPackage> {
   const root = await resolvedPath(dir);
@@ -977,6 +1676,11 @@ export async function loadPlugin(dir: string): Promise<PluginPackage> {
   const reports: string[] = [];
   const { manifest, extensions } = parseManifest(raw, reports, foreign, root);
   const skills = await loadSkillDirs(root, reports);
+  const agents = await loadPluginAgents(
+    root,
+    reports,
+    foreign && isPlain(raw) ? raw.agents : undefined,
+  );
   if (!foreign) {
     const listed = await loadServers(root, reports);
     const extension = parseExtension(
@@ -984,7 +1688,7 @@ export async function loadPlugin(dir: string): Promise<PluginPackage> {
       listed,
       reports,
     );
-    return { root, manifest, reports, skills, ...extension };
+    return { root, manifest, reports, skills, agents, ...extension };
   }
   const mapped = await loadForeignServers(
     root,
@@ -996,16 +1700,34 @@ export async function loadPlugin(dir: string): Promise<PluginPackage> {
     extensions[ETA_EXTENSION],
     mapped.servers,
     reports,
+    mapped.fields,
   );
+  const extFieldsByName = new Map(
+    extension.fields.map((field) => [field.name, field]),
+  );
+  const mappedFieldNames = new Set(mapped.fields.map((field) => field.name));
+  const fields: PluginField[] = [
+    ...mapped.fields.map((field) => extFieldsByName.get(field.name) ?? field),
+    ...extension.fields.filter((field) => !mappedFieldNames.has(field.name)),
+  ];
+  const bindings: Record<string, PluginServerBinding> = {};
+  for (const server of extension.servers) {
+    const merged = mergeBindings(
+      mapped.bindings[server.name],
+      extension.bindings[server.name],
+    );
+    if (merged !== undefined) bindings[server.name] = merged;
+  }
   return {
     root,
     manifest,
     reports,
     layout: found,
     skills,
+    agents,
     ...extension,
-    fields: [...mapped.fields, ...extension.fields],
-    bindings: { ...mapped.bindings, ...extension.bindings },
+    fields,
+    bindings,
   };
 }
 

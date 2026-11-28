@@ -5,7 +5,7 @@
  */
 import type { HostProgram } from "../../src/connection/types";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
@@ -19,7 +19,7 @@ import {
 import { launchTemporaryHost } from "../../src/connection/temporary-host";
 import { script } from "../support/fake-programs";
 import { childEnv, SOURCE_HOST } from "../support/host";
-import { tempDir, until } from "../support/temp";
+import { removeWithRetry, tempDir, until } from "../support/temp";
 
 function alive(pid: number): boolean {
   try {
@@ -41,9 +41,9 @@ async function processesMentioning(text: string): Promise<number[]> {
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:ETA_TEST_MENTION) } | ForEach-Object { $_.ProcessId }",
+        "Get-CimInstance Win32_Process -Property ProcessId,CommandLine | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:ETA_TEST_MENTION) } | ForEach-Object { $_.ProcessId }",
       ],
-      { env },
+      { env, timeout: 45_000 },
     );
     return stdout
       .split(/\r?\n/)
@@ -219,21 +219,43 @@ setInterval(() => undefined, 1_000);
         .filter((pid) => pid > 0);
     // Also when the test times out, which skips the rest of its body.
     onTestFinished(async () => {
+      const killed = new Set<number>();
+      const killAll = (targets: number[]) => {
+        for (const pid of targets) {
+          killed.add(pid);
+          try {
+            if (alive(pid)) process.kill(pid, "SIGKILL");
+          } catch {
+            // Already exited.
+          }
+        }
+      };
+      const sweepRemaining = async () => {
+        const remaining = await processesMentioning(dir);
+        if (remaining.length > 0) {
+          killAll(remaining);
+          await until(
+            () => [...killed].every((pid) => !alive(pid)),
+            10_000,
+            `the processes left behind in ${dir} to end`,
+          );
+        }
+      };
       try {
-        for (const pid of await pids())
-          if (alive(pid)) process.kill(pid, "SIGKILL");
+        killAll(await pids());
         await until(
-          async () => (await processesMentioning(dir)).length === 0,
+          () => [...killed].every((pid) => !alive(pid)),
           10_000,
-          `the processes left behind in ${dir} to end`,
+          "the recorded orphan processes to end",
         );
+        if (process.platform !== "win32" || killed.size < pidFiles.length) {
+          await sweepRemaining();
+        }
       } finally {
-        // A process that just ended may still hold a file for a moment on Windows.
-        await rm(dir, {
-          recursive: true,
-          force: true,
-          maxRetries: 10,
-          retryDelay: 100,
+        await removeWithRetry(dir).catch(async (error: unknown) => {
+          if (process.platform !== "win32") throw error;
+          await sweepRemaining();
+          await removeWithRetry(dir);
         });
       }
     });
