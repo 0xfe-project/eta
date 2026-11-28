@@ -73,6 +73,8 @@ export class JsonlStorage implements StorageService {
   private opening: Promise<Awaited<ReturnType<typeof open>>> | undefined;
   private closing: Promise<void> | undefined;
   private readonly pendingWrites = new Set<Promise<unknown>>();
+  /** Commits run one after another, so the journal's line order is the seq order. */
+  private writeTail: Promise<unknown> = Promise.resolve();
   private dirty = false;
   private closed = false;
   private journalBytes = 0;
@@ -147,7 +149,7 @@ export class JsonlStorage implements StorageService {
   /** Apply one atomic batch: assign seqs, append one line, fsync. */
   async commit(writes: StorageWrite[]): Promise<CommitResult> {
     this.assertOpen();
-    const write = (async () => {
+    const write = this.writeTail.then(async () => {
       const handle = await this.appendHandle();
       const result = this.state.commit(writes);
       const line = `${JSON.stringify({ w: writes, t: result.timestamp } satisfies JournalLine)}\n`;
@@ -159,7 +161,8 @@ export class JsonlStorage implements StorageService {
       }
       this.journalBytes += new TextEncoder().encode(line).length;
       return result;
-    })();
+    });
+    this.writeTail = write.catch(() => undefined);
     this.pendingWrites.add(write);
     try {
       return await write;
