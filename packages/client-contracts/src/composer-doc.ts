@@ -3,7 +3,12 @@
 // blocks among it — a folded paste, a file, a mention. Everything here is plain data, so the
 // rules can be tested without an editor; the client's plugins only call them.
 
-import type { Draft, DraftPart, PasteRange } from "./composer-draft";
+import type {
+  AttachmentAnchor,
+  Draft,
+  DraftPart,
+  PasteRange,
+} from "./composer-draft";
 import type { AttachmentView } from "./product";
 import {
   charCount,
@@ -147,6 +152,8 @@ export type UploadState =
 export interface SerializedDraft {
   text: string;
   blocks: PasteRange[];
+  /** Where each attachment block stood in `text`, in document order. */
+  anchors: AttachmentAnchor[];
   /** Mentioned member ids, in the order they appear, without repeats. */
   mentions: string[];
   /** Attachment block ids, in document order. */

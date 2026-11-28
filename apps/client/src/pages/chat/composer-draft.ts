@@ -3,7 +3,10 @@ import type {
   ConversationResults,
 } from "@eta/client-contracts";
 import type { DocNode, UploadState } from "@eta/client-contracts/composer-doc";
-import type { PasteRange } from "@eta/client-contracts/composer-draft";
+import type {
+  AttachmentAnchor,
+  PasteRange,
+} from "@eta/client-contracts/composer-draft";
 import type { StickyTarget } from "@eta/client-contracts/composer-target";
 import type { Uploads } from "../../components/eta-editor";
 import type { useHost } from "../../services/host";
@@ -23,6 +26,8 @@ export interface Outgoing {
   mentions?: string[];
   attachments: AttachmentView[];
   blocks?: PasteRange[];
+  /** Where each attachment stood in `text`. */
+  anchors?: AttachmentAnchor[];
   failure?: string;
   /** When it was sent, for its row in the transcript. */
   at?: number;
@@ -275,6 +280,7 @@ export async function drainOutbox(
             mode: "queue",
             mentions: message.mentions,
             blocks: message.blocks,
+            anchors: message.anchors,
             attachments: message.attachments.map((file) => file.id),
           },
         );

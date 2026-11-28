@@ -145,6 +145,25 @@ export class Args {
     return this.#values[key] === undefined ? undefined : this.strings(key);
   }
 
+  /** A list of `{ attachmentId, at }` entries (a string and an integer); absent is empty. */
+  anchors(key: string): { attachmentId: string; at: number }[] {
+    const value = this.#values[key];
+    if (value === undefined) return [];
+    if (
+      !Array.isArray(value) ||
+      !value.every(
+        (item) =>
+          typeof item?.attachmentId === "string" &&
+          typeof item.at === "number" &&
+          Number.isInteger(item.at),
+      )
+    )
+      throw new TypeError(
+        `${this.#call}: ${key} must be a list of { attachmentId, at } with an integer at`,
+      );
+    return value.map(({ attachmentId, at }) => ({ attachmentId, at }));
+  }
+
   /** A list of `[start, end]` integer pairs; absent is empty. */
   integerPairs(key: string): [number, number][] {
     const value = this.#values[key];

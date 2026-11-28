@@ -599,6 +599,12 @@ export class Engine {
      */
     blocks?: readonly (readonly [number, number])[] | undefined;
     /**
+     * Where the sender's files stood in `text` (`ConversationArgs["send"]["anchors"]`): each an
+     * attachment of this message at an offset inside the trimmed text, or the send is refused.
+     * Written verbatim into the row's `data.anchors`, for renderers.
+     */
+    anchors?: readonly { attachmentId: string; at: number }[] | undefined;
+    /**
      * Host-only marks merged into the row's `data`, for renderers (e.g. `captainOutcome`). The
      * public conversations.send action never sets it, and it never reaches the prompt.
      */
@@ -656,6 +662,14 @@ export class Engine {
       { conversationId: conversation.id },
       input.attachments ?? [],
     );
+    for (const { attachmentId, at } of input.anchors ?? []) {
+      if (!files.some((file) => file.id === attachmentId))
+        throw new Error(
+          `anchor ${attachmentId} is not an attachment of this message`,
+        );
+      if (at < 0 || at > text.length)
+        throw new Error(`anchor ${attachmentId} is outside the text`);
+    }
     const planned: { agentId: string; join: boolean }[] = [];
     const replies: MessageView[] = [];
     let message!: MessageView;
@@ -719,6 +733,9 @@ export class Engine {
           // Where the sender's folded pastes sit in `text`, kept as sent (see `send`'s input).
           ...(input.blocks && input.blocks.length > 0
             ? { blocks: input.blocks }
+            : {}),
+          ...(input.anchors && input.anchors.length > 0
+            ? { anchors: input.anchors }
             : {}),
           ...(files.length === 0
             ? {}

@@ -73,6 +73,17 @@ export function draftText(draft: Draft) {
 export type PasteRange = [start: number, end: number];
 
 /**
+ * Where an attachment stood in the text it was sent with: `at` is a UTF-16 offset into the sent
+ * text (counted as `PasteRange` is), the place the file's block had among the words. The same
+ * list goes out on the wire (`conversations.send`'s `anchors`) and comes back on the row
+ * (`data.anchors`).
+ */
+export interface AttachmentAnchor {
+  attachmentId: string;
+  at: number;
+}
+
+/**
  * `draftText` with the place of every paste block in it, for the message's `data.blocks`.
  * The text comes out trimmed — the host trims what it stores, and the row is what a renderer
  * slices — so the ranges are cut from the leading whitespace with it and agree with the row
@@ -82,11 +93,16 @@ export type PasteRange = [start: number, end: number];
 export function draftWithBlocks(draft: Draft): {
   text: string;
   blocks: PasteRange[];
+  anchors: AttachmentAnchor[];
 } {
   let text = "";
   const blocks: PasteRange[] = [];
+  const placed: AttachmentAnchor[] = [];
   for (const part of draft) {
-    if (part.type === "file") continue;
+    if (part.type === "file") {
+      placed.push({ attachmentId: part.id, at: text.length });
+      continue;
+    }
     if (part.type === "paste")
       blocks.push([text.length, text.length + part.text.length]);
     text += part.text;
@@ -98,6 +114,11 @@ export function draftWithBlocks(draft: Draft): {
     blocks: blocks.map(
       ([start, end]) => [start - lead, end - lead] as PasteRange,
     ),
+    // A file in the whitespace around the words stands at the edge of the text.
+    anchors: placed.map(({ attachmentId, at }) => ({
+      attachmentId,
+      at: Math.min(trimmed.length, Math.max(0, at - lead)),
+    })),
   };
 }
 
@@ -127,6 +148,28 @@ export function pasteBlocksOf(
     end = stop;
   }
   return blocks;
+}
+
+/**
+ * The anchors of a rendered message: `data.anchors` validated against its text and its
+ * attachments — an attachment's id and an offset inside the text. An entry that is neither is
+ * left out, so an old row (or a hand-made one) shows as it always did.
+ */
+export function anchorsOf(
+  data: Record<string, unknown>,
+  text: string,
+): AttachmentAnchor[] {
+  const raw = data.anchors;
+  const files = data.attachments;
+  if (!Array.isArray(raw) || !Array.isArray(files)) return [];
+  return raw.filter(
+    (item): item is AttachmentAnchor =>
+      typeof item?.attachmentId === "string" &&
+      Number.isInteger(item.at) &&
+      item.at >= 0 &&
+      item.at <= text.length &&
+      files.some((file) => file?.id === item.attachmentId),
+  );
 }
 
 /** The files in a draft, in order. */

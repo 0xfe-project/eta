@@ -242,6 +242,7 @@ export function conversationsPlugin(
             conversationId: args.string("conversationId"),
             text: args.optionalString("text") ?? "",
             blocks: args.integerPairs("blocks"),
+            anchors: args.anchors("anchors"),
             mentions: args.strings("mentions"),
             mode,
             into: args.optionalString("into"),

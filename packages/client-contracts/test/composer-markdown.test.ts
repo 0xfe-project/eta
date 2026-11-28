@@ -32,6 +32,122 @@ const file = (id: string): DocNode => ({
   attrs: { id, name: "a.png", contentType: "image/png", size: 3 },
 });
 
+describe("docToMarkdown anchors", () => {
+  it("puts each file where it stood in the text, in document order", () => {
+    const sent = docToMarkdown(
+      doc(
+        p(text("look at "), file("a"), text(" and "), file("b")),
+        p(text("then "), file("c"), text("done")),
+      ),
+    );
+    expect(sent.text).toBe("look at  and \nthen done");
+    expect(sent.anchors).toEqual([
+      { attachmentId: "a", at: 8 },
+      { attachmentId: "b", at: 13 },
+      { attachmentId: "c", at: 19 },
+    ]);
+    expect(sent.files).toEqual(["a", "b", "c"]);
+  });
+
+  it("leaves the text as it was without the files: blank edges still trim away", () => {
+    const withFiles = docToMarkdown(
+      doc(p(file("a")), p(text("  words  "), file("b")), p(file("c"))),
+    );
+    const without = docToMarkdown(doc(p(), p(text("  words  ")), p()));
+    expect(withFiles.text).toBe(without.text);
+    expect(withFiles.text).toBe("words");
+    expect(withFiles.anchors).toEqual([
+      { attachmentId: "a", at: 0 },
+      { attachmentId: "b", at: 5 },
+      { attachmentId: "c", at: 5 },
+    ]);
+  });
+
+  it("counts a paste before a file in the offset, and keeps the paste's range", () => {
+    const sent = docToMarkdown(
+      doc(p(text("x "), paste("1\n2\n3\n4"), file("a"), text(" y"))),
+    );
+    expect(sent.text).toBe("x 1\n2\n3\n4 y");
+    expect(sent.blocks).toEqual([[2, 9]]);
+    expect(sent.anchors).toEqual([{ attachmentId: "a", at: 9 }]);
+  });
+
+  it("is empty for a document with no files", () => {
+    expect(docToMarkdown(doc(p(text("hi")))).anchors).toEqual([]);
+  });
+});
+
+describe("markdownSource inserts", () => {
+  it("stands each insert at its offset, around pastes and mentions", () => {
+    const { source, stands } = markdownSource({
+      text: "ab 1\n2\n3\n4 @Ada cd",
+      blocks: [[3, 10]],
+      mentions: [{ id: "ada", label: "Ada" }],
+      inserts: [
+        { at: 0, node: { type: "attachment", attrs: { id: "first" } } },
+        { at: 3, node: { type: "attachment", attrs: { id: "before-paste" } } },
+        { at: 10, node: { type: "attachment", attrs: { id: "after-paste" } } },
+        { at: 18, node: { type: "attachment", attrs: { id: "last" } } },
+      ],
+    });
+    const kinds = (source: string) =>
+      [...source].map((char) => {
+        const stand = stands[char.charCodeAt(0) - 0xe000];
+        return stand ? (stand.attrs?.id ?? stand.type) : char;
+      });
+    expect(kinds(source)).toEqual([
+      "first",
+      "a",
+      "b",
+      " ",
+      "before-paste",
+      "paste-3",
+      "after-paste",
+      " ",
+      "ada",
+      " ",
+      "c",
+      "d",
+      "last",
+    ]);
+  });
+
+  it("gives an insert a line of its own where a mark would change the line it stands on", () => {
+    const insert = (at: number) => [
+      { at, node: { type: "attachment", attrs: { id: "x" } } },
+    ];
+    const lines = (text: string, at: number) =>
+      markdownSource({ text, inserts: insert(at) })
+        .source.replace(/[\uE000-\uF8FF]/g, "#")
+        .split("\n");
+    // Before a list item, a heading, a quote: a line before it.
+    expect(lines("- one\n- two", 0)).toEqual(["#", "", "- one", "- two"]);
+    expect(lines("a\n# Title", 2)).toEqual(["a", "#", "", "# Title"]);
+    // After a closing fence: a line after it.
+    expect(lines("```\ncode\n```", 12)).toEqual([
+      "```",
+      "code",
+      "```",
+      "",
+      "#",
+    ]);
+    // Inside a line of words it is where it was put.
+    expect(lines("a - b", 2)).toEqual(["a #- b"]);
+    expect(lines("one two", 3)).toEqual(["one# two"]);
+  });
+
+  it("puts an insert inside a paste after it", () => {
+    const { source, stands } = markdownSource({
+      text: "1\n2\n3\n4!",
+      blocks: [[0, 7]],
+      inserts: [{ at: 3, node: { type: "attachment", attrs: { id: "in" } } }],
+    });
+    expect(
+      [...source].map((char) => stands[char.charCodeAt(0) - 0xe000]?.type),
+    ).toEqual(["pasteBlock", "attachment", undefined]);
+  });
+});
+
 describe("docToMarkdown", () => {
   it("writes plain lines as they were typed, the same text a plain draft sent", () => {
     const plain = doc(

@@ -8,6 +8,7 @@ import type { MenuItem } from "@eta/client-contracts/composer-menu";
 import type { Outgoing } from "./composer-draft";
 import { MAX_ATTACHMENTS } from "@eta/client-contracts";
 import { DOC_NODES, isBlankDoc } from "@eta/client-contracts/composer-doc";
+import { anchorsOf } from "@eta/client-contracts/composer-draft";
 import {
   composerTarget,
   mentionLabel,
@@ -335,6 +336,7 @@ function ComposerBody(
           id: crypto.randomUUID(),
           text: sent.text,
           blocks: sent.blocks,
+          anchors: sent.anchors,
           mentions,
           attachments: sent.attachments,
           at: Date.now(),
@@ -354,18 +356,27 @@ function ComposerBody(
   /** A failed send back in the box to edit, above what is there. */
   function restore(message: Outgoing) {
     store.remember(message.attachments);
-    // Its words as they were written (formatting, folded pastes, mentions), its files after them.
+    // Its words as they were written (formatting, folded pastes, mentions), its files where they
+    // stood, or after them.
+    const anchors = anchorsOf(
+      { anchors: message.anchors, attachments: message.attachments },
+      message.text,
+    );
     const nodes = blocksOf(
       chatText.read({
         text: message.text,
         blocks: message.blocks,
         mentions: mentionRefs(),
+        files: message.attachments,
+        anchors,
       }),
     );
-    if (message.attachments.length)
+    const placed = new Set(anchors.map((anchor) => anchor.attachmentId));
+    const unplaced = message.attachments.filter((file) => !placed.has(file.id));
+    if (unplaced.length)
       nodes.push({
         type: DOC_NODES.paragraph,
-        content: message.attachments.map((file) => ({
+        content: unplaced.map((file) => ({
           type: DOC_NODES.file,
           attrs: {
             id: file.id,

@@ -285,7 +285,8 @@ export interface MessageView {
    * `joined` (agents whose turn it steered), `into` (the message or card row it was put into, see
    * `ConversationArgs["send"]["into"]`) and, when files came with it, `attachments`
    * (`AttachmentView[]`) and, when the sender folded pastes in it, `blocks` (the
-   * `ConversationArgs["send"]["blocks"]` pairs it sent, verbatim); a system row has the `event`
+   * `ConversationArgs["send"]["blocks"]` pairs it sent, verbatim) and, when it said where the files
+   * stood among the words, `anchors` (`ConversationArgs["send"]["anchors"]`, verbatim); a system row has the `event`
    * it records (`steward` with `from`/`to`, `wake_budget`); a failed reply has the `code` it
    * failed with (`restart`, `run_failed`, `unavailable`, `gone`) and, like any reply that ran,
    * the `activity` of its tool calls (`ToolActivity[]`, absent when it made none) and the
@@ -920,6 +921,14 @@ export interface ConversationArgs {
      * they change nothing the agent is told. The host stores them without looking at them.
      */
     blocks?: [number, number][];
+    /**
+     * Where each attachment stood among the words when it was written: an attachment of this
+     * message (`attachmentId`) and the offset in `text` it stood at (UTF-16, `0..text.length`,
+     * as `blocks` count). Recorded on the row as `data.anchors` for renderers to mark the place;
+     * the agent reads `text` and the files as before. An id the message does not carry, or an
+     * offset outside the text, refuses the send.
+     */
+    anchors?: { attachmentId: string; at: number }[];
     /**
      * Files uploaded with `attach`, by id (at most `MAX_ATTACHMENTS`). The text may be empty when
      * there are some. They are handed to every agent the message wakes, as files it can open.

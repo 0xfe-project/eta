@@ -1,8 +1,12 @@
+import type { AttachmentView } from "@eta/client-contracts";
 import type {
   DocNode,
   SerializedDraft,
 } from "@eta/client-contracts/composer-doc";
-import type { PasteRange } from "@eta/client-contracts/composer-draft";
+import type {
+  AttachmentAnchor,
+  PasteRange,
+} from "@eta/client-contracts/composer-draft";
 import type { MentionRef } from "@eta/client-contracts/composer-markdown";
 import type { RichNodeJSON, RichSchema } from "nsh/base";
 import { DOC_NODES } from "@eta/client-contracts/composer-doc";
@@ -27,6 +31,10 @@ export interface StoredText {
   blocks?: readonly PasteRange[];
   /** The members `text` mentions, as it names them. */
   mentions?: readonly MentionRef[];
+  /** Files sent with the text. */
+  files?: readonly AttachmentView[];
+  /** Where each of `files` stood in `text`: `markdownToDoc` puts it back there. */
+  anchors?: readonly AttachmentAnchor[];
 }
 
 /**
@@ -35,7 +43,10 @@ export interface StoredText {
  * paragraph, as a message's lines are lines.
  */
 export function markdownToDoc(input: StoredText): DocNode {
-  const { source, stands } = markdownSource(input);
+  const { source, stands } = markdownSource({
+    ...input,
+    inserts: fileInserts(input),
+  });
   schema ??= starterSchema();
   let parsed: DocNode;
   try {
@@ -53,6 +64,30 @@ export function markdownToDoc(input: StoredText): DocNode {
     };
   }
   return restoreDoc(parsed, stands);
+}
+
+/** The files that have an anchor, as file blocks at their offsets (the first anchor of each). */
+function fileInserts(input: StoredText) {
+  const placed = new Set<string>();
+  return (input.anchors ?? []).flatMap(({ attachmentId, at }) => {
+    const file = input.files?.find((item) => item.id === attachmentId);
+    if (!file || placed.has(file.id)) return [];
+    placed.add(file.id);
+    return [
+      {
+        at,
+        node: {
+          type: DOC_NODES.file,
+          attrs: {
+            id: file.id,
+            name: file.name,
+            contentType: file.contentType,
+            size: file.size,
+          },
+        },
+      },
+    ];
+  });
 }
 
 /** The mentions a document holds, as `markdownToDoc` needs them to read its Markdown back. */
@@ -99,7 +134,7 @@ const MAX_TRIED_ESCAPES = 120;
 /**
  * `out` with each backslash escape it can do without taken out, left to right: one taken out
  * stays out when the text still reads the same (`reads`). Pastes are never touched; their ranges
- * move with the text.
+ * and the files' anchors move with the text.
  */
 function fewerEscapes(
   out: SerializedDraft,
@@ -120,6 +155,9 @@ function fewerEscapes(
       blocks: current.blocks.map(
         ([start, stop]) =>
           (start > at ? [start - 1, stop - 1] : [start, stop]) as PasteRange,
+      ),
+      anchors: current.anchors.map((anchor) =>
+        anchor.at > at ? { ...anchor, at: anchor.at - 1 } : anchor,
       ),
     };
     if (reads(candidate)) current = candidate;

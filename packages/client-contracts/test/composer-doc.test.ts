@@ -138,10 +138,12 @@ describe("document and draft", () => {
     expect(sent).toEqual({
       text: "look at  and a\nb\nc\nd\n@Opus please @Opus",
       blocks: [[13, 20]],
+      anchors: [{ attachmentId: "f1", at: 8 }],
       mentions: ["agent-1"],
       files: ["f1"],
     });
     expect(sent.text.slice(...sent.blocks[0]!)).toBe("a\nb\nc\nd");
+    expect(sent.text.slice(0, sent.anchors[0]!.at)).toBe("look at ");
   });
 
   it("goes to a draft and back unchanged, mentions read as their text", () => {
@@ -171,6 +173,7 @@ describe("document and draft", () => {
     expect(serializeDoc(read)).toEqual({
       text: "before 1\n2\n3\n4and the rest",
       blocks: [[7, 14]],
+      anchors: [{ attachmentId: "a1", at: 0 }],
       mentions: [],
       files: ["a1"],
     });
