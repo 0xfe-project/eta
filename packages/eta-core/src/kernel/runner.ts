@@ -20,7 +20,6 @@ import type {
   SimpleStreamOptions,
   ToolCall,
 } from "@earendil-works/pi-ai";
-import type { Entry } from "../types/entries";
 import type { Emit } from "../types/events";
 import type { AgentMessage, ThinkingLevel } from "../types/messages";
 import type { CompactionDriver } from "./compaction";
@@ -84,12 +83,6 @@ export interface RunnerOptions {
    * request time (eta-agent's `Config.toolContext`).
    */
   toolContext?: unknown | (() => unknown | Promise<unknown>);
-  /**
-   * Project plugin-added entry kinds into messages when replaying a journal
-   * (eta-agent's `entryProjectors`). The kernel's own kinds are built in; this
-   * is how an extension teaches the transcript about its own entries.
-   */
-  entryProjectors?: Record<string, (entry: Entry) => AgentMessage | undefined>;
   /**
    * Project the transcript into provider messages. Required once the context
    * holds a message the provider has no vocabulary for — a compaction or branch

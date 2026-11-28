@@ -19,7 +19,7 @@ export interface ForkOptions {
   position?: "before" | "at";
 }
 
-export interface ForkSelection {
+interface ForkSelection {
   /** Selected entry ids, root included. */
   entryIds: ReadonlySet<string>;
   /** Where the destination's tip points: the entry itself, or its parent. */
@@ -27,7 +27,7 @@ export interface ForkSelection {
 }
 
 /** Select the prefix of the current tip's ancestry that a fork copies. */
-export function selectBranchFork(
+function selectBranchFork(
   graph: EntryGraph,
   options: ForkOptions = {},
 ): ForkSelection {

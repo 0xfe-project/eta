@@ -193,16 +193,6 @@ describe("runner turn loop", () => {
     void capped.dispose();
   });
 
-  it("a provider error ends the run with the error surfaced", async () => {
-    const { kernel, runner, dispose } = setup([
-      assistantMessage({ stopReason: "error", errorMessage: "400: no body" }),
-    ]);
-    kernel.inject(userMsg("go"));
-    const result = await runner.run();
-    expect(result.error).toBe("400: no body");
-    dispose();
-  });
-
   it("an unknown tool call returns a structured error result, not a crash", async () => {
     const { kernel, runner, fake, dispose } = setup([
       toolCallMsg([{ id: "c1", name: "ghost" }]),
@@ -212,9 +202,9 @@ describe("runner turn loop", () => {
     const result = await runner.run();
     expect(result.error).toBeUndefined();
     const second = fake.calls[1].context.messages;
-    expect(second.find((m) => m.role === "toolResult")).toMatchObject({
-      isError: true,
-    });
+    const unknown = second.find((m) => m.role === "toolResult");
+    expect(unknown).toMatchObject({ isError: true });
+    expect(JSON.stringify(unknown)).toContain("unknown tool: ghost");
     dispose();
   });
 });

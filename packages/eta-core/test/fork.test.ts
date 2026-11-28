@@ -1,5 +1,5 @@
 import type { Entry, MessageEntry, NewEntry } from "@eta/core/session";
-import { EntryGraph, forkChain, selectBranchFork } from "@eta/core/session";
+import { EntryGraph, forkChain } from "@eta/core/session";
 import { describe, expect, it } from "vitest";
 
 const msg = (
@@ -37,33 +37,40 @@ function chain4() {
   return { g, a, b, c, d };
 }
 
-describe("selectBranchFork", () => {
+/** The ids a fork copies, sorted, and where its tip points. */
+const selection = (
+  graph: EntryGraph,
+  options?: Parameters<typeof forkChain>[1],
+) => {
+  const fork = forkChain(graph, options);
+  return { tip: fork.tipId, ids: fork.entries.map((e) => e.id).sort() };
+};
+
+// "position before" and an unknown entry id are pinned through
+// SessionManager.fork (eta-server manager.test.ts "forking").
+describe("fork selection", () => {
   it("defaults to the tip, position at: the whole branch is copied", () => {
     const { g, a, b, c, d } = chain4();
-    const sel = selectBranchFork(g);
-    expect(sel.destinationTip).toBe(d.id);
-    expect([...sel.entryIds].sort()).toEqual([a.id, b.id, c.id, d.id].sort());
+    expect(selection(g)).toEqual({
+      tip: d.id,
+      ids: [a.id, b.id, c.id, d.id].sort(),
+    });
   });
 
   it("position at keeps the selected entry as the destination tip", () => {
     const { g, a, b, c } = chain4();
-    const sel = selectBranchFork(g, { entryId: c.id });
-    expect(sel.destinationTip).toBe(c.id);
-    expect([...sel.entryIds].sort()).toEqual([a.id, b.id, c.id].sort());
-  });
-
-  it("position before stops at the parent of the selected entry", () => {
-    const { g, a, b, c } = chain4();
-    const sel = selectBranchFork(g, { entryId: c.id, position: "before" });
-    expect(sel.destinationTip).toBe(b.id);
-    expect([...sel.entryIds].sort()).toEqual([a.id, b.id].sort());
+    expect(selection(g, { entryId: c.id })).toEqual({
+      tip: c.id,
+      ids: [a.id, b.id, c.id].sort(),
+    });
   });
 
   it("forking at the root with position before yields an empty destination", () => {
     const { g, a } = chain4();
-    const sel = selectBranchFork(g, { entryId: a.id, position: "before" });
-    expect(sel.destinationTip).toBeNull();
-    expect(sel.entryIds.size).toBe(0);
+    expect(selection(g, { entryId: a.id, position: "before" })).toEqual({
+      tip: null,
+      ids: [],
+    });
   });
 
   it("rejects an entry that is not on the current branch", () => {
@@ -73,24 +80,17 @@ describe("selectBranchFork", () => {
     // where it was. The tip chain is now d -> c -> b -> a again.
     g.setTip(d.id);
     expect(g.tipId()).toBe(d.id);
-    expect(() => selectBranchFork(g, { entryId: side.id })).toThrow(
+    expect(() => forkChain(g, { entryId: side.id })).toThrow(
       "not on the current branch",
     );
     // …but the side entry is still reachable and forkable from its own chain.
     g.setTip(side.id);
-    expect(selectBranchFork(g, { entryId: a.id }).destinationTip).toBe(a.id);
-  });
-
-  it("rejects an unknown entry id", () => {
-    const { g } = chain4();
-    expect(() => selectBranchFork(g, { entryId: "ghost" })).toThrow(
-      "not on the current branch",
-    );
+    expect(forkChain(g, { entryId: a.id }).tipId).toBe(a.id);
   });
 
   it("rejects forking an empty branch", () => {
     const g = new EntryGraph();
-    expect(() => selectBranchFork(g)).toThrow("source branch is empty");
+    expect(() => forkChain(g)).toThrow("source branch is empty");
   });
 });
 

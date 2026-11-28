@@ -1,13 +1,13 @@
 /**
  * Session operations are durable (REFACTOR.md §K4 + §K5).
  *
- * fork/merge/rollback were pure graph operations: a merge entry never reached
- * the journal, and a rollback moved the tip in memory only — so a reload
- * rebuilt the wrong branch. What is pinned here: a merge is a journaled entry,
- * a rollback writes the branch tip as a value, and a reload resumes exactly
- * where the session was — including the new tip a later run hangs off.
+ * fork/rollback were pure graph operations: a rollback moved the tip in memory
+ * only — so a reload rebuilt the wrong branch. What is pinned here: a rollback
+ * writes the branch tip as a value, and a reload resumes exactly where the
+ * session was — including the new tip a later run hangs off.
  */
 
+import type { MergeEntry, NewEntry } from "@eta/core/session";
 import type { StorageService } from "@eta/core/storage";
 import { SESSION_TIP, SessionLog } from "@eta/core/session";
 import { MemoryStorage, setValue, value } from "@eta/core/storage";
@@ -56,61 +56,18 @@ async function withBranches(storage: StorageService = new MemoryStorage()) {
   return { log, storage, root, main, side };
 }
 
-describe("merge is durable", () => {
-  it("journals the merge entry, and a reload reads the merged history", async () => {
-    const { log, storage, root, main, side } = await withBranches();
-    const merge = await log.merge(side.id, { summary: "merge side into main" });
-
-    expect(merge.type).toBe("merge");
-    expect(merge.mergedParentId).toBe(side.id);
-    expect(textsOf(log)).toEqual(["shared history", "main work", "side work"]);
-
-    const reloaded = await SessionLog.load(storage);
-    expect(reloaded.graph.tipId()).toBe(merge.id);
-    expect(reloaded.graph.pathOldestFirst().map((entry) => entry.id)).toEqual([
-      root.id,
-      main.id,
-      side.id,
-      merge.id,
-    ]);
-    expect(textsOf(reloaded)).toEqual([
-      "shared history",
-      "main work",
-      "side work",
-    ]);
-    // The transcript the model would be sent sees the merged history too.
-    expect(JSON.stringify(reloaded.transcript())).toContain("side work");
-  });
-
-  it("refuses the merges that make no sense, without writing anything", async () => {
-    const { log, storage, side } = await withBranches();
-    const before = (await storage.scanEntries({})).length;
-    await expect(log.merge("ghost", { summary: "nothing" })).rejects.toThrow(
-      "not in this journal",
-    );
-    await expect(
-      log.merge(side.id, { summary: "first" }),
-    ).resolves.toBeDefined();
-    // The side branch is visible now, so merging it a second time is refused.
-    await expect(log.merge(side.id, { summary: "again" })).rejects.toThrow(
-      "already part of this history",
-    );
-    expect((await storage.scanEntries({})).length).toBe(before + 1);
-  });
-
-  it("a merge of the current tip is refused", async () => {
-    const { log } = await withBranches();
-    const tip = log.graph.tipId()!;
-    await expect(log.merge(tip, { summary: "self" })).rejects.toThrow(
-      "cannot merge into itself",
-    );
-  });
-});
-
 describe("rollback is durable", () => {
   it("writes the tip as a value, and a reload resumes at the rolled-back entry", async () => {
     const { log, storage, root, main, side } = await withBranches();
-    const merge = await log.merge(side.id, { summary: "merge side into main" });
+    // A merge entry (an imported eta-agent journal can hold one) joins the side in.
+    const merge = log.record<MergeEntry>({
+      parentId: main.id,
+      type: "merge",
+      mergedParentId: side.id,
+      summary: "merge side into main",
+    } as NewEntry<MergeEntry>);
+    await log.commit();
+    expect(textsOf(log)).toEqual(["shared history", "main work", "side work"]);
 
     const result = await log.rollback(main.id);
     expect(result).toEqual({

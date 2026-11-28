@@ -183,6 +183,11 @@ describe("retrying generation", () => {
       journal: journaling,
       dispose,
     } = setup([transient(), ok("recovered")]);
+    // Each attempt assembles its own context: a cut between them would show here.
+    let assembled = 0;
+    const off = kernelOn(kernel.ctx)("prompt:assembled", () => {
+      assembled += 1;
+    });
     kernel.inject(userMsg("go"));
     const run = runner.run();
     await vi.advanceTimersByTimeAsync(5_000);
@@ -210,6 +215,8 @@ describe("retrying generation", () => {
     ).toHaveLength(1);
     expect(JSON.stringify(transcript)).toContain("recovered");
     expect(JSON.stringify(transcript)).not.toContain("500");
+    expect(assembled).toBe(2);
+    off();
     dispose();
   });
 

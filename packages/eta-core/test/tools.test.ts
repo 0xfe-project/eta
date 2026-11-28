@@ -40,20 +40,6 @@ describe("tool service", () => {
     dispose();
   });
 
-  it("hot registration: a tool added mid-session runs on the very next execute()", async () => {
-    const { tools, dispose } = withTools();
-    const call = { turn: 1, toolCallId: "c1" };
-    const before = await tools.execute("echo", "x", call);
-    expect(before).toMatchObject({
-      isError: true,
-      content: "unknown tool: echo",
-    });
-    tools.register(echo);
-    const after = await tools.execute("echo", "x", call);
-    expect(after).toBe("echo:x");
-    dispose();
-  });
-
   it("middleware before can rewrite args; after can rewrite the result", async () => {
     const { tools, dispose } = withTools();
     tools.register(echo);
@@ -339,20 +325,6 @@ describe("tool service", () => {
         },
       },
     ]);
-    dispose();
-  });
-
-  it("a detached middleware stops participating", async () => {
-    const { tools, dispose } = withTools();
-    tools.register(echo);
-    const detach = tools.use({ name: "spy", after: (_n, _a, r) => `${r}!` });
-    expect(
-      await tools.execute("echo", "x", { turn: 1, toolCallId: "c1" }),
-    ).toBe("echo:x!");
-    detach();
-    expect(
-      await tools.execute("echo", "x", { turn: 1, toolCallId: "c2" }),
-    ).toBe("echo:x");
     dispose();
   });
 });

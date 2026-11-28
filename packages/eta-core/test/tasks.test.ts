@@ -136,12 +136,14 @@ describe("task store fidelity against eta-agent's TaskStore", () => {
     const { tasks, dispose } = withTasks();
     tasks.create("a");
     tasks.create("b", { deps: ["t1"] });
-    const updated = tasks.update("t1", { deps: ["t2"] });
+    tasks.create("c", { deps: ["t2"] });
+    // t1 -> t3 -> t2 -> t1: the loop only closes two hops away.
+    const updated = tasks.update("t1", { deps: ["t3"] });
     expect(updated).toBeDefined();
     if (updated === undefined) throw new Error("unreachable");
     expect(updated.warnings.join(" ")).toContain("dependency cycle");
     // The edge is kept: a cycle is reported, not silently broken.
-    expect(tasks.get("t1")?.dependsOn).toEqual(["t2"]);
+    expect(tasks.get("t1")?.dependsOn).toEqual(["t3"]);
     dispose();
   });
 
