@@ -196,11 +196,11 @@ docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token
 │                                                           │
 │  作战室 · Captain · 任务 DAG · 例程 · 产物 · 收件箱       │
 │  模型与订阅 · 插件市场 · 每 Agent 独立 MCP · 审批门禁     │
-└──────────────┬───────────────────────────────┬────────────┘
-               │ 工作节点安全连接              │ 可选
-               ▼                               ▼
-     eta-daemon 远程节点                  Memory Sidecar
-     （远程 worktree、本地 CLI、MCP）      （语义记忆增强）
+└──────────────┬────────────────────────────────────────────┘
+               │ 工作节点安全连接
+               ▼
+     eta-daemon 远程节点
+     （远程 worktree、本地 CLI、MCP）
 ```
 
 ---
