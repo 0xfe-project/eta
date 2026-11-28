@@ -236,8 +236,9 @@ jobs:
           if [[ -n $CERTIFICATE ]]; then
             keychain="$RUNNER_TEMP/eta.keychain-db"
             password=$(openssl rand -hex 16)
-            base64 --decode <<< "$CERTIFICATE" > "$RUNNER_TEMP/eta.p12"
-            base64 --decode <<< "$PROFILE" > "$RUNNER_TEMP/eta.mobileprovision"
+            # macOS base64 is BSD and rejects `--decode`. The secret is one line from `openssl base64 -A`.
+            printf '%s' "$CERTIFICATE" | openssl base64 -d -A -out "$RUNNER_TEMP/eta.p12"
+            printf '%s' "$PROFILE" | openssl base64 -d -A -out "$RUNNER_TEMP/eta.mobileprovision"
             security create-keychain -p "$password" "$keychain"
             security set-keychain-settings -lut 3600 "$keychain"
             security unlock-keychain -p "$password" "$keychain"
@@ -491,6 +492,34 @@ jobs:
           if [[ -n $ETA_CLIENT_UPDATE_URL && ${#updates[@]} -gt 0 ]]; then
             gh release upload "$TAG" "${updates[@]}" --clobber
           fi
+
+      # App Store profile: the IPA is not installed on devices from the GitHub release. Upload it
+      # and return; Apple finishes processing on its own. `--no-wait` so this job does not sit
+      # through that. Not submitted for App Review.
+      - name: Upload to TestFlight
+        if: matrix.target == 'ios'
+        env:
+          APP_ID: ${{ secrets.NSH_APP_STORE_APP_ID }}
+          ISSUER_ID: ${{ secrets.NSH_APP_STORE_ISSUER_ID }}
+          KEY_ID: ${{ secrets.NSH_APP_STORE_KEY_ID }}
+          PRIVATE_KEY: ${{ secrets.NSH_APP_STORE_PRIVATE_KEY }}
+        run: |
+          if [[ -z ${IOS_IDENTITY:-} || -z $APP_ID || -z $ISSUER_ID || -z $KEY_ID || -z $PRIVATE_KEY ]]; then
+            echo "::warning::iOS signing or the App Store Connect API key is missing; the IPA is on the GitHub release only."
+            exit 0
+          fi
+          # nsh treats NSH_APP_STORE_PRIVATE_KEY as a file path, and the secret holds the .p8 text.
+          key="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$PRIVATE_KEY" > "$key"
+          chmod 600 "$key"
+          nsh publish ios "$RUNNER_TEMP/try/$DESKTOP" \
+            --app-id "$APP_ID" \
+            --issuer-id "$ISSUER_ID" \
+            --key-id "$KEY_ID" \
+            --private-key "$key" \
+            --entry "$GITHUB_WORKSPACE/apps/client" \
+            --testflight-only \
+            --no-wait
 
   publish:
     needs: [prepare, check, build]
