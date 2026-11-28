@@ -11,7 +11,6 @@ export {
 } from "./client";
 export { enroll } from "./enroll";
 export {
-  fingerprintOf,
   groupFingerprint,
   type Identity,
   loadIdentity,

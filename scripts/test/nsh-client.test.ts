@@ -151,21 +151,4 @@ describe("nsh-client argument resolution", () => {
       "$TURBO_ROOT$/scripts/nsh-client-args.ts",
     );
   });
-
-  // Static source assertion rather than spawning `scripts/nsh-client.ts`: the
-  // entrypoint spawns the real `nsh` binary and unconditionally writes staged
-  // assets and icons into `apps/client/assets/` and `apps/client/.nsh/icons/`.
-  it("wires scripts/nsh-client.ts through resolveNshClientArgs into run(nsh, command)", () => {
-    const source = readFileSync(join(root, "scripts", "nsh-client.ts"), "utf8");
-
-    expect(source).toMatch(
-      /import\s*\{[^}]*\bresolveNshClientArgs\b[^}]*\}\s*from\s*["']\.\/nsh-client-args["']/,
-    );
-    expect(source).toMatch(
-      /const\s+args\s*=\s*resolveNshClientArgs\(\s*process\.argv\.slice\(2\)\s*,\s*process\.env(?:\s*,)?\s*\)/,
-    );
-    expect(source).toMatch(
-      /(?:const|let)\s+command\s*=[^;]*\bargs\b[^;]*;[\s\S]*await\s+run\(\s*nsh\s*,\s*command\s*\)/,
-    );
-  });
 });

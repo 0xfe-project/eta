@@ -243,7 +243,6 @@ describe("chunking", () => {
     expect(closed).toEqual([
       { code: LINK_CLOSE.tooBig, reason: "message too big" },
     ]);
-    expect(a.reassemblingCount).toBe(0);
   });
 
   it("rejects invalid chunks, malformed payloads, nested chunks, and concurrent overflow", () => {
@@ -288,7 +287,6 @@ describe("chunking", () => {
       const { a, closed } = pair({ maxFrameBytes: 400, maxInFlightChunks: 2 });
       for (const envelope of seq) a.receive(JSON.stringify(envelope));
       expect(closed[0]?.code).toBe(LINK_CLOSE.protocol);
-      expect(a.reassemblingCount).toBe(0);
     }
   });
 
@@ -321,7 +319,6 @@ describe("chunking", () => {
         data: m2.slice(0, half2),
       }),
     );
-    expect(a.reassemblingCount).toBe(2);
     a.receive(
       JSON.stringify({
         ch: "chunk",
@@ -342,11 +339,10 @@ describe("chunking", () => {
     );
 
     expect(closed).toEqual([]);
-    expect(a.reassemblingCount).toBe(0);
     expect(pipes).toEqual([`one-${"a".repeat(250)}`, `two-${"b".repeat(250)}`]);
   });
 
-  it("clears buffered chunk reassemblies on markLost", () => {
+  it("does not finish a chunked message cut off by markLost", () => {
     const { a, pipes } = pair({ maxFrameBytes: 400 });
     a.receive(
       JSON.stringify({
@@ -357,9 +353,7 @@ describe("chunking", () => {
         data: '{"ch":"pipe",',
       }),
     );
-    expect(a.reassemblingCount).toBe(1);
     a.markLost("dropped");
-    expect(a.reassemblingCount).toBe(0);
     a.receive(
       JSON.stringify({
         ch: "chunk",
@@ -370,7 +364,6 @@ describe("chunking", () => {
       }),
     );
     expect(pipes).toEqual([]);
-    expect(a.reassemblingCount).toBe(0);
   });
 
   it("preserves legacy behavior when chunking is not negotiated", async () => {

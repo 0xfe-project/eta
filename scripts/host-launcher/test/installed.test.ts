@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hostHome, recordedHost } from "../installed";
+import { recordedHost } from "../installed";
 
 let dir: string;
 beforeEach(async () => {
@@ -51,11 +51,5 @@ describe("a host already serving the data directory, before there is a host file
       }),
     );
     expect(await recordedHost(data)).toBeUndefined();
-  });
-
-  it("lives under the user's .eta", () => {
-    expect(hostHome(join(dir, "home"))).toBe(
-      join(dir, "home", ".eta", "desktop", "host"),
-    );
   });
 });

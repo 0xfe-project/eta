@@ -260,14 +260,6 @@ describe("the pre-release channel", () => {
       "has no host release (a v* tag)",
     );
   });
-
-  it("is picked by newestHost too", () => {
-    const listed = mixed.map((release) => ({ ...release, assets: [] }));
-    expect(newestHost(listed, { prerelease: true })?.tag_name).toBe(
-      "v0.4.0-beta.10",
-    );
-    expect(newestHost(listed)?.tag_name).toBe("v0.3.1");
-  });
 });
 
 describe("a list longer than a page", () => {

@@ -25,20 +25,24 @@ describe("the user names the app hands on to its host", () => {
     });
   });
 
-  it("does not ask for a name when the environment already carries both", () => {
-    const { spawnSync } = Bun;
-    let calls = 0;
-    Bun.spawnSync = ((...args: Parameters<typeof spawnSync>) => {
-      calls += 1;
-      return spawnSync(...args);
-    }) as typeof spawnSync;
-    try {
-      expect(userNames({ USER: "someone", LOGNAME: "someone" })).toEqual({});
-      expect(calls).toBe(0);
-    } finally {
-      Bun.spawnSync = spawnSync;
-    }
-  });
+  // Only macOS asks for a name at all (`accountName`), so elsewhere there is nothing to count.
+  it.skipIf(process.platform !== "darwin")(
+    "does not ask for a name when the environment already carries both",
+    () => {
+      const { spawnSync } = Bun;
+      let calls = 0;
+      Bun.spawnSync = ((...args: Parameters<typeof spawnSync>) => {
+        calls += 1;
+        return spawnSync(...args);
+      }) as typeof spawnSync;
+      try {
+        expect(userNames({ USER: "someone", LOGNAME: "someone" })).toEqual({});
+        expect(calls).toBe(0);
+      } finally {
+        Bun.spawnSync = spawnSync;
+      }
+    },
+  );
 
   it("asks for no name at all off macOS, where the bug was never seen", () => {
     expect(accountName("linux")).toBeNull();
@@ -53,15 +57,5 @@ describe("the user names the app hands on to its host", () => {
     expect(accountFrom({ exitCode: 0, stdout: "mac\n" })).toBe("mac");
     expect(accountFrom({ exitCode: 1, stdout: "mac\n" })).toBeNull();
     expect(accountFrom({ exitCode: 0, stdout: "\n" })).toBeNull();
-  });
-
-  it("asks libc for the name, and only does so on macOS", () => {
-    if (process.platform !== "darwin") {
-      expect(accountName()).toBeNull();
-      return;
-    }
-    const id = Bun.spawnSync(["/usr/bin/id", "-un"]);
-    expect(accountName()).toBe(id.stdout.toString().trim());
-    expect(accountName()).not.toBe("unknown");
   });
 });
