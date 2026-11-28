@@ -601,9 +601,24 @@ export class DaemonNode {
       config: async ({ session }) => {
         const { managed } = await this.#service().open(session);
         const config = managed.session.kernel.config;
+        // What the session's own layer says its model takes — a runtime session's models are
+        // its runtime's catalogue, not the primary's provider list. When a runtime session runs
+        // on its runtime's default (no explicit model chosen), resolve `<runtime>:default`.
+        const raw = config.read("model");
+        const identity =
+          managed.meta.runtime !== undefined &&
+          raw.provider !== managed.meta.runtime
+            ? { provider: managed.meta.runtime, modelId: "default" }
+            : raw;
+        const model = managed.session.models.getModel(
+          identity.provider,
+          identity.modelId,
+        );
+        const input = model === undefined ? null : (model.input ?? ["text"]);
         return {
-          model: formatModelId(config.read("model")),
+          model: formatModelId(identity),
           thinkingLevel: config.read("thinkingLevel"),
+          input,
         };
       },
       lastSeq: async ({ session }) => {

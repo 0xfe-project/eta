@@ -95,6 +95,13 @@ export function runtimeModels(
     getModel: (provider: string, id: string) => {
       if (provider !== runtime) return undefined;
       const info = catalog.peek(runtime);
+      // The runtime's own default model (when the session did not pick one explicitly).
+      if (id === "default")
+        return modelOf(
+          runtime,
+          id,
+          info?.models.find((model) => model.default),
+        );
       const listed = info?.models.find((model) => model.id === id);
       if (
         listed === undefined &&

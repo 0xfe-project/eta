@@ -95,4 +95,17 @@ describe("a runtime model's thinking levels", () => {
     );
     expect(thinkingLevelsFor(short)).not.toContain("ultra");
   });
+
+  it("resolves `default` to the runtime's default model even for closed-name runtimes", () => {
+    const closed = {
+      peek: () => ({
+        id: "pi",
+        label: "Pi",
+        status: "available",
+        models: [{ id: "sonnet", name: "Sonnet", default: true, efforts: [] }],
+      }),
+    } as unknown as RuntimeCatalog;
+    const model = runtimeModels("pi", closed).getModel("pi", "default");
+    expect(model?.input).toEqual(["text", "image"]);
+  });
 });
