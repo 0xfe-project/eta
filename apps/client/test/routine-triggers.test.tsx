@@ -514,3 +514,83 @@ test("Webhook channel auto-folds single source/trigger and detail panel supports
   await app.waitFor("text:http://127.0.0.1:4100/hooks/tok_rot_2");
   expect(app.shows("text:WebhookAction:rotate:r-created")).toBe(true);
 });
+
+test("Web Monitor channel auto-folds selects, validates selector vs jsonPath conflict, and renders lastCheckedAt/lastEventAt/lastError", async () => {
+  const app = await open(fixture, {
+    platform: "macos",
+    width: 1280,
+    height: 860,
+    locale: "en-US",
+  });
+
+  // Detail panel shows lastCheckedAt, lastEventAt (last changed), and lastError for web-monitor.
+  await app.waitFor("label:Pricing Page Watch");
+  await app.press("label:Pricing Page Watch");
+  await app.waitFor("text:web-monitor / http / WEB_CONTENT_CHANGED");
+  expect(app.texts().some((text) => text.startsWith("Last checked · "))).toBe(
+    true,
+  );
+  expect(app.texts().some((text) => text.startsWith("Last changed · "))).toBe(
+    true,
+  );
+  expect(app.shows('text:CSS selector ".plan-price" matched no elements')).toBe(
+    true,
+  );
+
+  // Create a new Web Monitor routine via editor.
+  await app.press("label:New routine");
+  await app.waitFor("label:Event trigger");
+
+  await app.type("label:Name", "API Release Monitor");
+  await app.type("label:Brief", "Notify when release version changes.");
+  await app.press("label:Event trigger");
+
+  await app.waitFor("label:Channel");
+  await app.press("label:Channel");
+  await app.waitFor("label:Web Monitor");
+  await app.press("label:Web Monitor");
+
+  await app.waitFor("text:Web / JSON content changed");
+  expect(app.shows("text:WEB_CONTENT_CHANGED")).toBe(true);
+  expect(app.shows("label:App / source")).toBe(false);
+  expect(app.shows("label:Trigger event")).toBe(false);
+  expect(app.shows("label:Polling interval (minutes)")).toBe(true);
+  expect(app.shows("text:15")).toBe(true);
+
+  await app.type("label:URL", "https://api.example.com/version");
+  await app.type("label:CSS selector", ".version");
+  await app.type("label:JSON path", "$.version");
+  expect(
+    app.shows("text:Specify either CSS selector or JSON path, not both."),
+  ).toBe(true);
+
+  await app.clear("label:CSS selector");
+  await app.type("label:Polling interval (minutes)", "10");
+  await app.press("label:Create");
+  await app.waitFor("text:API Release Monitor");
+
+  const createLine = app.texts().find((t) => t.startsWith("Create:")) ?? "";
+  const payload = JSON.parse(createLine.slice("Create:".length)) as {
+    trigger: {
+      provider: string;
+      source: string;
+      trigger: string;
+      mode: string;
+      pollingIntervalMinutes: number | null;
+      config: Record<string, unknown>;
+    };
+  };
+  expect(payload.trigger).toEqual({
+    provider: "web-monitor",
+    source: "http",
+    trigger: "WEB_CONTENT_CHANGED",
+    accountId: null,
+    mode: "poll",
+    pollingIntervalMinutes: 10,
+    config: {
+      url: "https://api.example.com/version",
+      jsonPath: "$.version",
+      method: "GET",
+    },
+  });
+});

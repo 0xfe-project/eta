@@ -106,6 +106,7 @@ export interface RoutineTriggerView extends RoutineTrigger {
   status: RoutineTriggerStatus;
   lastError: string | null;
   lastEventAt: number | null;
+  lastCheckedAt?: number | null;
 }
 
 /** One connected account available for a trigger source. */

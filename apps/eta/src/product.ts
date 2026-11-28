@@ -31,6 +31,7 @@ import type { SshRunner } from "./machines/install";
 import type { MachineRecord } from "./machines/store";
 import type { Tailscale } from "./machines/tailscale";
 import type { RssFetch } from "./routines/rss-triggers";
+import type { WebMonitorFetch } from "./routines/web-monitor-triggers";
 import type { SessionHooks } from "./session-hooks";
 import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
@@ -116,6 +117,7 @@ import { Scheduler } from "./routines/scheduler";
 import { RoutineService } from "./routines/service";
 import { RoutineStore } from "./routines/store";
 import { TriggerHub } from "./routines/triggers";
+import { WebMonitorTriggerProvider } from "./routines/web-monitor-triggers";
 import { WebhookTriggerProvider } from "./routines/webhook-triggers";
 import { loadSecretKey } from "./secret";
 import { combineSessionHooks } from "./session-hooks";
@@ -204,6 +206,18 @@ export interface WebhookTuning {
   maxBodyBytes?: number | undefined;
   rateLimitMax?: number | undefined;
   rateLimitWindowMs?: number | undefined;
+}
+
+/** Test-only overrides for `WebMonitorTriggerProvider` polling and HTTP transport. */
+export interface WebMonitorTuning {
+  fetch?: WebMonitorFetch | undefined;
+  allowPrivateNetwork?: boolean | undefined;
+  timeoutMs?: number | undefined;
+  maxBytes?: number | undefined;
+  now?: (() => number) | undefined;
+  timer?: boolean | undefined;
+  backoffBaseMs?: number | undefined;
+  backoffMaxMs?: number | undefined;
 }
 
 /** What a test sets to move a reply's stop along; a real host leaves it alone. */
@@ -339,6 +353,8 @@ export function createProduct(options: {
   rss?: RssTuning | undefined;
   /** Test tuning for built-in inbound webhook triggers. */
   webhook?: WebhookTuning | undefined;
+  /** Test tuning for built-in webpage / JSON API change-monitoring triggers. */
+  webMonitor?: WebMonitorTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const captainOn = options.captain !== false;
@@ -586,8 +602,33 @@ export function createProduct(options: {
       ? {}
       : { rateLimitWindowMs: options.webhook.rateLimitWindowMs }),
   });
+  const webMonitorTriggers = new WebMonitorTriggerProvider({
+    settings: new SettingStore(db),
+    now: options.webMonitor?.now ?? now,
+    timer: options.webMonitor?.timer ?? options.routines?.timer ?? true,
+    warn,
+    ...(options.webMonitor?.fetch === undefined
+      ? {}
+      : { fetch: options.webMonitor.fetch }),
+    ...(options.webMonitor?.allowPrivateNetwork === undefined
+      ? {}
+      : { allowPrivateNetwork: options.webMonitor.allowPrivateNetwork }),
+    ...(options.webMonitor?.timeoutMs === undefined
+      ? {}
+      : { timeoutMs: options.webMonitor.timeoutMs }),
+    ...(options.webMonitor?.maxBytes === undefined
+      ? {}
+      : { maxBytes: options.webMonitor.maxBytes }),
+    ...(options.webMonitor?.backoffBaseMs === undefined
+      ? {}
+      : { backoffBaseMs: options.webMonitor.backoffBaseMs }),
+    ...(options.webMonitor?.backoffMaxMs === undefined
+      ? {}
+      : { backoffMaxMs: options.webMonitor.backoffMaxMs }),
+  });
   triggerHub.register(rssTriggers);
   triggerHub.register(webhookTriggers);
+  triggerHub.register(webMonitorTriggers);
   runner.setRunFinishedListener((routineId) =>
     triggerHub.onRunFinished(routineId),
   );
@@ -1170,6 +1211,7 @@ export function createProduct(options: {
     setPrivateNetwork: (privateNetwork) => {
       web?.setPrivateNetwork(privateNetwork);
       rssTriggers.setPrivateNetwork(privateNetwork);
+      webMonitorTriggers.setPrivateNetwork(privateNetwork);
     },
     close: async () => {
       // The runs stop first: they work through the links and the session host.

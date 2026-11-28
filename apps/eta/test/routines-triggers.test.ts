@@ -445,6 +445,7 @@ describe("triggerHub catalog, lifecycle, and error isolation", () => {
     expect(catalog.triggers.map((i) => `${i.provider}:${i.trigger}`)).toEqual([
       "composio:GITHUB_COMMIT_EVENT",
       "rss:RSS_NEW_ITEM",
+      "web-monitor:WEB_CONTENT_CHANGED",
       "webhook:HTTP_POST",
     ]);
     expect(catalog.triggers[0]?.accounts).toEqual([

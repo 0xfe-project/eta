@@ -200,8 +200,74 @@ test("validateTriggerField and buildTriggerConfigPayload enforce schema constrai
 test("providerLabel formats built-in rss and other trigger provider ids", () => {
   expect(providerLabel("rss")).toBe("RSS");
   expect(providerLabel("webhook")).toBe("Webhook");
+  expect(providerLabel("web-monitor")).toBe("Web Monitor");
   expect(providerLabel("composio")).toBe("Composio");
   expect(providerLabel("custom_hook")).toBe("Custom Hook");
+});
+
+test("validateTriggerField checks web-monitor selector/jsonPath conflict and string-valued headers", () => {
+  const fields = parseTriggerConfigSchema({
+    type: "object",
+    required: ["url"],
+    properties: {
+      url: { type: "string", title: "URL" },
+      selector: { type: "string", title: "CSS selector" },
+      jsonPath: { type: "string", title: "JSON path" },
+      headers: {
+        type: "object",
+        title: "Request headers",
+        additionalProperties: { type: "string" },
+      },
+    },
+  });
+
+  const selectorField = fields.find((f) => f.key === "selector")!;
+  const jsonPathField = fields.find((f) => f.key === "jsonPath")!;
+  const headersField = fields.find((f) => f.key === "headers")!;
+
+  language.set("en");
+  expect(
+    validateTriggerField(
+      selectorField,
+      { url: "https://example.com", selector: ".price", jsonPath: "$.price" },
+      {},
+      "web-monitor",
+    ),
+  ).toBe("Specify either CSS selector or JSON path, not both.");
+  expect(
+    validateTriggerField(
+      jsonPathField,
+      { url: "https://example.com", selector: ".price" },
+      {},
+      "web-monitor",
+    ),
+  ).toBeUndefined();
+  expect(
+    validateTriggerField(
+      headersField,
+      {},
+      { headers: '{"X-Num": 42}' },
+      "web-monitor",
+    ),
+  ).toBe("All object values must be strings.");
+  expect(
+    validateTriggerField(
+      headersField,
+      {},
+      { headers: '{"Accept": "application/json"}' },
+      "web-monitor",
+    ),
+  ).toBeUndefined();
+
+  language.set("zh");
+  expect(
+    validateTriggerField(
+      selectorField,
+      { url: "https://example.com", selector: ".price", jsonPath: "$.price" },
+      {},
+      "web-monitor",
+    ),
+  ).toBe("CSS 选择器和 JSON 路径不能同时填写。");
 });
 
 test("webhook URL, loopback detection, and curl command helpers handle all auth modes", () => {

@@ -217,6 +217,14 @@ export const routinesMessages = {
     "格式不符合要求。",
   ],
   triggerFieldJsonInvalid: ["Enter valid JSON.", "请输入有效的 JSON。"],
+  triggerFieldStringValuesOnly: [
+    "All object values must be strings.",
+    "对象的所有值都必须是字符串。",
+  ],
+  triggerWebMonitorSelectorConflict: [
+    "Specify either CSS selector or JSON path, not both.",
+    "CSS 选择器和 JSON 路径不能同时填写。",
+  ],
   triggerFieldArrayRequired: ["Enter at least one item.", "请至少填写一项。"],
   triggerFieldExclusiveMin: [
     "Must be greater than {{value}}",
@@ -275,6 +283,10 @@ export const routinesMessages = {
   triggerLastEvent: ["Last event {{ago}}", "最近事件 {{ago}}"],
   triggerLastEventAt: ["Last event · {{time}}", "最近事件 · {{time}}"],
   triggerNoEventsYet: ["No events yet", "尚未收到事件"],
+  triggerLastCheckedAt: ["Last checked · {{time}}", "上次抓取 · {{time}}"],
+  triggerNotCheckedYet: ["Not checked yet", "尚未抓取"],
+  triggerLastChangeAt: ["Last changed · {{time}}", "上次变化 · {{time}}"],
+  triggerNoChangesYet: ["No changes yet", "尚未变化"],
   triggerWaitingForEvents: [
     "Listening for external events",
     "等待外部触发事件",

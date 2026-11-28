@@ -351,7 +351,9 @@ export function RoutineEditor(props: {
     const config = triggerConfig();
     const drafts = triggerDrafts();
     return fields.every(
-      (field) => validateTriggerField(field, config, drafts) === undefined,
+      (field) =>
+        validateTriggerField(field, config, drafts, triggerProvider()) ===
+        undefined,
     );
   };
 

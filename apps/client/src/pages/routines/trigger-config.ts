@@ -28,6 +28,7 @@ export interface TriggerConfigField {
   multiline: boolean;
   options: TriggerEnumOption[];
   arrayItemKind?: "string" | "number" | "integer" | "other";
+  objectValueType?: "string";
   minLength?: number;
   maxLength?: number;
   pattern?: string;
@@ -161,6 +162,13 @@ export function parseTriggerConfigSchema(
         ? itemsType
         : "other";
 
+    const objectValueType =
+      kind === "object" &&
+      isPlain(raw.additionalProperties) &&
+      schemaTypeOf(raw.additionalProperties) === "string"
+        ? ("string" as const)
+        : undefined;
+
     fields.push({
       key,
       title:
@@ -178,6 +186,7 @@ export function parseTriggerConfigSchema(
       multiline: raw.format === "textarea",
       options,
       arrayItemKind,
+      objectValueType,
       minLength: finiteOrUndefined(raw.minLength),
       maxLength: finiteOrUndefined(raw.maxLength),
       pattern: typeof raw.pattern === "string" ? raw.pattern : undefined,
@@ -284,6 +293,7 @@ function parseArrayDraft(
 
 function parseObjectDraft(
   rawText: string,
+  field?: TriggerConfigField,
 ):
   | { ok: true; value: Record<string, unknown> | undefined }
   | { ok: false; error: string } {
@@ -293,6 +303,12 @@ function parseObjectDraft(
     const parsed: unknown = JSON.parse(trimmed);
     if (!isPlain(parsed))
       return { ok: false, error: uiText("triggerFieldJsonInvalid") };
+    if (
+      field?.objectValueType === "string" &&
+      Object.values(parsed).some((value) => typeof value !== "string")
+    ) {
+      return { ok: false, error: uiText("triggerFieldStringValuesOnly") };
+    }
     return { ok: true, value: parsed };
   } catch {
     return { ok: false, error: uiText("triggerFieldJsonInvalid") };
@@ -303,8 +319,21 @@ export function validateTriggerField(
   field: TriggerConfigField,
   config: Record<string, unknown>,
   drafts: Record<string, string>,
+  provider?: string,
 ): string | undefined {
   const current = config[field.key];
+  if (
+    provider === "web-monitor" &&
+    (field.key === "selector" || field.key === "jsonPath")
+  ) {
+    const selectorText =
+      typeof config.selector === "string" ? config.selector.trim() : "";
+    const jsonPathText =
+      typeof config.jsonPath === "string" ? config.jsonPath.trim() : "";
+    if (selectorText !== "" && jsonPathText !== "") {
+      return uiText("triggerWebMonitorSelectorConflict");
+    }
+  }
   switch (field.kind) {
     case "enum":
       if (field.required && (current === undefined || current === null)) {
@@ -375,7 +404,7 @@ export function validateTriggerField(
         : isPlain(current)
           ? JSON.stringify(current)
           : "";
-      const parsed = parseObjectDraft(raw);
+      const parsed = parseObjectDraft(raw, field);
       if (!parsed.ok) return parsed.error;
       if (field.required && parsed.value === undefined) {
         return uiText("triggerFieldEnterValue");
@@ -461,7 +490,7 @@ export function buildTriggerConfigPayload(
           : isPlain(current)
             ? JSON.stringify(current)
             : "";
-        const parsed = parseObjectDraft(raw);
+        const parsed = parseObjectDraft(raw, field);
         if (parsed.ok && parsed.value !== undefined) {
           payload[field.key] = parsed.value;
         }

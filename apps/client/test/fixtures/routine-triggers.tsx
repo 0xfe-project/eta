@@ -187,6 +187,57 @@ const catalogItems: TriggerCatalogItem[] = [
     payloadSchema: {},
     accounts: [],
   },
+  {
+    provider: "web-monitor",
+    source: "http",
+    sourceName: "Web / JSON Monitor",
+    trigger: "WEB_CONTENT_CHANGED",
+    name: "Web / JSON content changed",
+    description:
+      "Polls an HTTP/HTTPS webpage or JSON API and triggers when extracted content changes.",
+    modes: ["poll"],
+    configSchema: {
+      type: "object",
+      required: ["url"],
+      properties: {
+        url: {
+          type: "string",
+          format: "uri",
+          title: "URL",
+          description: "HTTP or HTTPS URL to monitor.",
+          examples: ["https://example.com/status"],
+        },
+        selector: {
+          type: "string",
+          title: "CSS selector",
+          description:
+            "Optional CSS selector for HTML pages (leave empty when using JSON path or monitoring the whole page).",
+          examples: ["main .status, #version"],
+        },
+        jsonPath: {
+          type: "string",
+          title: "JSON path",
+          description:
+            "Optional JSON path for JSON APIs (e.g. $.data.version or items[0].title).",
+          examples: ["$.data.version"],
+        },
+        method: {
+          type: "string",
+          title: "HTTP method",
+          enum: ["GET", "POST"],
+          default: "GET",
+        },
+        headers: {
+          type: "object",
+          title: "Request headers",
+          additionalProperties: { type: "string" },
+          examples: ['{"Accept": "application/json"}'],
+        },
+      },
+    },
+    payloadSchema: {},
+    accounts: [],
+  },
 ];
 
 const eventRoutineRuns: RunView[] = [
@@ -317,6 +368,39 @@ const initialRoutines: RoutineSummary[] = [
       status: "error",
       lastError: "Webhook registration failed (403)",
       lastEventAt: null,
+    },
+    timezone: "UTC",
+    enabled: true,
+    nextRunAt: null,
+    revising: false,
+    unseenReports: 0,
+    unseenFailures: 0,
+    createdAt: now - 86_400_000,
+    updatedAt: now,
+    runs: [],
+  },
+  {
+    id: "r-web-monitor",
+    name: "Pricing Page Watch",
+    schedule: null,
+    trigger: {
+      provider: "web-monitor",
+      source: "http",
+      trigger: "WEB_CONTENT_CHANGED",
+      accountId: null,
+      config: {
+        url: "https://example.com/pricing",
+        selector: ".plan-price",
+        method: "GET",
+      },
+      instanceId: "web-monitor:r-web-monitor",
+      mode: "poll",
+      pollingIntervalMinutes: 15,
+      fallbackReason: null,
+      status: "error",
+      lastError: 'CSS selector ".plan-price" matched no elements',
+      lastEventAt: now - 20 * 60_000,
+      lastCheckedAt: now - 5 * 60_000,
     },
     timezone: "UTC",
     enabled: true,
@@ -527,6 +611,7 @@ function Fixture() {
         ready: [
           { provider: "composio", status: "ready" },
           { provider: "rss", status: "ready" },
+          { provider: "web-monitor", status: "ready" },
           { provider: "webhook", status: "ready" },
         ],
         needs_key: [{ provider: "composio", status: "needs_key" }],

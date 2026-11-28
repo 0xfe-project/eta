@@ -36,6 +36,7 @@ export interface TriggerProvisionResult {
   pollingIntervalMinutes: number | null;
   fallbackReason: string | null;
   active: boolean;
+  lastCheckedAt?: number | null;
 }
 
 export interface IncomingTriggerEvent {
@@ -63,6 +64,7 @@ export interface TriggerProviderHost {
   onBindingsChanged: () => void;
   onTriggerError?: (routineId: string, error: string) => void;
   onTriggerRecovered?: (routineId: string) => void;
+  onTriggerChecked?: (routineId: string, checkedAt: number) => void;
 }
 
 export interface TriggerProvider {
@@ -224,6 +226,18 @@ export class TriggerHub {
         this.#store.updateTriggerState(routineId, {
           status: "active",
           lastError: null,
+        });
+        this.#changed(routineId);
+      },
+      onTriggerChecked: (routineId, checkedAt) => {
+        const routine = this.#store.get(routineId);
+        const current = this.#store.trigger(routineId);
+        if (routine === undefined || current?.provider !== provider.id) {
+          return;
+        }
+        if (current.lastCheckedAt === checkedAt) return;
+        this.#store.updateTriggerState(routineId, {
+          lastCheckedAt: checkedAt,
         });
         this.#changed(routineId);
       },
@@ -566,6 +580,9 @@ export class TriggerHub {
       fallbackReason: result.fallbackReason,
       status: result.active ? "active" : "disabled",
       lastError: null,
+      ...(result.lastCheckedAt === undefined
+        ? {}
+        : { lastCheckedAt: result.lastCheckedAt }),
     });
   }
 

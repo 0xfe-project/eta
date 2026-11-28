@@ -784,7 +784,12 @@ export function TriggerSection(props: {
     !props.selectedItem;
 
   const fieldError = (field: TriggerConfigField) => {
-    const err = validateTriggerField(field, props.config, props.drafts);
+    const err = validateTriggerField(
+      field,
+      props.config,
+      props.drafts,
+      props.provider,
+    );
     if (!err) return "";
     const emptyRequired =
       err === uiText("triggerFieldEnterValue") ||
@@ -1099,7 +1104,11 @@ export function TriggerSection(props: {
           </Label>
           <Field
             label={uiText("triggerPollingInterval")}
-            placeholder={props.provider === "rss" ? "15" : "5"}
+            placeholder={
+              props.provider === "rss" || props.provider === "web-monitor"
+                ? "15"
+                : "5"
+            }
             value={props.pollingIntervalText}
             invalid={Boolean(props.pollingError)}
             onChange={props.onChangePollingInterval}

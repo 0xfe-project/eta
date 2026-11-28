@@ -415,13 +415,38 @@ function TriggerSummaryDetail(props: {
         <If when={modeText()}>
           {(mode) => <Badge label={mode()} tone="neutral" size="caption" />}
         </If>
-        <Label variant="caption" tone="muted">
-          {props.trigger.lastEventAt
-            ? uiText("triggerLastEventAt", {
-                time: feedTime(props.trigger.lastEventAt),
-              })
-            : uiText("triggerNoEventsYet")}
-        </Label>
+        <If when={props.trigger.provider === "web-monitor"}>
+          <Label variant="caption" tone="muted">
+            {props.trigger.lastCheckedAt != null
+              ? uiText("triggerLastCheckedAt", {
+                  time: feedTime(props.trigger.lastCheckedAt),
+                })
+              : uiText("triggerNotCheckedYet")}
+          </Label>
+          <Label variant="caption" tone="muted">
+            {props.trigger.lastEventAt
+              ? uiText("triggerLastChangeAt", {
+                  time: feedTime(props.trigger.lastEventAt),
+                })
+              : uiText("triggerNoChangesYet")}
+          </Label>
+        </If>
+        <If when={props.trigger.provider !== "web-monitor"}>
+          <If when={props.trigger.lastCheckedAt != null}>
+            <Label variant="caption" tone="muted">
+              {uiText("triggerLastCheckedAt", {
+                time: feedTime(props.trigger.lastCheckedAt!),
+              })}
+            </Label>
+          </If>
+          <Label variant="caption" tone="muted">
+            {props.trigger.lastEventAt
+              ? uiText("triggerLastEventAt", {
+                  time: feedTime(props.trigger.lastEventAt),
+                })
+              : uiText("triggerNoEventsYet")}
+          </Label>
+        </If>
       </View>
       <If when={configSummary()}>
         {(summary) => (
